@@ -21,7 +21,6 @@ import {
   SIMPLE_TRANSITIONS, REVIEW_TRANSITIONS, ADVANCED_TRANSITIONS,
   SIMPLE_LOCKED, REVIEW_LOCKED, ADVANCED_LOCKED,
   COMPLIANCE_OPTIONS, FREQUENCY_OPTIONS, RISK_OPTIONS,
-  AUTOMATION_OPTIONS, DURATION_OPTIONS,
   countByLevel, hasRequiredPath, getRequiredNextLevel,
   type ProcessNode, type NodeLevel,
   type FlowRelationship, type TagEntry,
@@ -458,20 +457,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   })()}
                   {viewMode === 'advanced' && (
                     <>
-                      <DocDropdown label="Automation" value={node.automationLevel || ''} options={AUTOMATION_OPTIONS} onSave={(v) => onUpdate(node.id, { automationLevel: v })} disabled={isLocked} placeholder="Automation level..." />
-                      <DocDropdown
-                        label="Est. Duration"
-                        value={node.estimatedDuration || ''}
-                        /* Append any legacy free-text value so it remains
-                           visible in the dropdown until the user picks a
-                           canonical bucket. */
-                        options={node.estimatedDuration && !DURATION_OPTIONS.includes(node.estimatedDuration)
-                          ? [...DURATION_OPTIONS, node.estimatedDuration]
-                          : DURATION_OPTIONS}
-                        onSave={(v) => onUpdate(node.id, { estimatedDuration: v })}
-                        disabled={isLocked}
-                        placeholder="Pick a duration..."
-                      />
+                      {/* Automation and Est. Duration removed from the panel
+                          (rarely filled); their columns are retained. */}
                       {/* BCM: business-continuity tier + RTO. Value maps
                          between the display label ("Tier 1") and the
                          stored enum ("TIER_1") so the picker reads
@@ -486,8 +473,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         onSave={(v) => onUpdate(node.id, { rtoHours: v })}
                         disabled={isLocked}
                       />
-                      <DocField label="Success Measure" value={node.successMeasure || ''} onSave={(v) => onUpdate(node.id, { successMeasure: v })} disabled={isLocked} placeholder="Measurable target, e.g. resolve outage tickets within 4h P95" />
-                      <DocField label="SLA Target" value={node.slaTarget || ''} onSave={(v) => onUpdate(node.id, { slaTarget: v })} disabled={isLocked} placeholder="e.g. P95 4h, 99.9% monthly, Same business day" />
+                      {/* Target / SLA — the former "Success Measure" and
+                          "SLA Target" fields, merged: both expressed the same
+                          "what does good look like" target. Stored in
+                          successMeasure; any legacy slaTarget was folded in by
+                          the merge_sla_into_success_measure migration. */}
+                      <DocField label="Target / SLA" value={node.successMeasure || ''} onSave={(v) => onUpdate(node.id, { successMeasure: v })} disabled={isLocked} placeholder="Measurable target / SLA, e.g. resolve within 4h P95, 99.9% monthly" />
                       <ControlsPicker
                         selected={node.controlIds || []}
                         options={controlsList}

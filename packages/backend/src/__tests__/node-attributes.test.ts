@@ -117,8 +117,11 @@ describe('activity attributes — criticality, RTO, SLA, controls', () => {
       const node = processNodes.find((n: any) => n.id === actId);
       assert.strictEqual(node.criticalityTier, 'TIER_1');
       assert.strictEqual(node.rtoHours, 4);
-      assert.strictEqual(node.successMeasure, 'Field crew on site within 30 min');
-      assert.strictEqual(node.slaTarget, 'P95 30min');
+      // successMeasure + slaTarget were merged into one "Target / SLA"
+      // field: a client sending both gets them folded into successMeasure,
+      // and slaTarget is no longer persisted separately.
+      assert.strictEqual(node.successMeasure, 'Field crew on site within 30 min\n\nP95 30min');
+      assert.ok(!node.slaTarget);
       assert.deepStrictEqual(node.controlIds, [ctlA]);
     });
 
