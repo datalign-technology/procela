@@ -208,6 +208,24 @@ export function isGovernanceNode(n: { domain?: string; name?: string }): boolean
   return /governance|data management/i.test(name);
 }
 
+/**
+ * Purpose and the former Business Outcome were merged into a single
+ * "Purpose" field. This folds any incoming/stored businessOutcome into
+ * purpose so no content is lost: both present → two paragraphs; only one
+ * present → that one; neither → undefined. Callers write the result to
+ * `purpose` and stop persisting `businessOutcome` (the column is kept but
+ * deprecated).
+ */
+export function combinePurpose(
+  purpose?: string | null,
+  businessOutcome?: string | null,
+): string | undefined {
+  const p = (purpose || '').trim();
+  const b = (businessOutcome || '').trim();
+  if (p && b) return p === b ? p : `${p}\n\n${b}`;
+  return p || b || undefined;
+}
+
 export interface FlowRelationship {
   id: string;
   fromNodeId: string;
@@ -826,8 +844,8 @@ router.post('/nodes', async (req: Request, res: Response) => {
     // create, so they can subsequently edit it.
     ownerId: ownerOnCreate((req as AuthenticatedRequest).user, ownerId),
     version: 1,
-    ...(purpose ? { purpose } : {}),
-    ...(businessOutcome ? { businessOutcome } : {}),
+    // Purpose + former Business Outcome are merged into one field.
+    ...(combinePurpose(purpose, businessOutcome) ? { purpose: combinePurpose(purpose, businessOutcome) } : {}),
     ...(stakeholders ? { stakeholders } : {}),
     ...(complianceTags?.length ? { complianceTags } : {}),
     ...(inputsOutputs ? { inputsOutputs } : {}),
@@ -945,7 +963,12 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (orgIds !== undefined) node.orgIds = orgIds;
   if (ownerId !== undefined) node.ownerId = ownerId;
   if (purpose !== undefined) node.purpose = purpose;
-  if (businessOutcome !== undefined) node.businessOutcome = businessOutcome;
+  // Business Outcome merged into Purpose: fold any incoming value into
+  // purpose. The deprecated field is never written back (existing rows
+  // were cleared by the merge_business_outcome_into_purpose migration).
+  if (businessOutcome !== undefined) {
+    node.purpose = combinePurpose(node.purpose, businessOutcome);
+  }
   if (stakeholders !== undefined) node.stakeholders = stakeholders;
   if (complianceTags !== undefined) node.complianceTags = complianceTags;
   if (inputsOutputs !== undefined) node.inputsOutputs = inputsOutputs;
@@ -1706,8 +1729,7 @@ router.post('/apply-template', async (req: Request, res: Response) => {
         orderIndex: vsOrderIndex++,
         orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
         version: 1, domain: 'OPERATIONAL',
-        ...(tvs.purpose ? { purpose: tvs.purpose } : {}),
-        ...(tvs.businessOutcome ? { businessOutcome: tvs.businessOutcome } : {}),
+        ...(combinePurpose(tvs.purpose, tvs.businessOutcome) ? { purpose: combinePurpose(tvs.purpose, tvs.businessOutcome) } : {}),
         createdAt: now, updatedAt: now,
       };
       await processNodesRepo.create(vsNode);
@@ -1922,7 +1944,7 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
       orderIndex: nodeSource().filter((n) => n.level === 'VALUE_STREAM').length,
       orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
       version: 1, domain: 'GOVERNANCE',
-      purpose: tvs.purpose, businessOutcome: tvs.businessOutcome,
+      purpose: combinePurpose(tvs.purpose, tvs.businessOutcome),
       createdAt: now, updatedAt: now,
     };
     await processNodesRepo.create(vsNode);

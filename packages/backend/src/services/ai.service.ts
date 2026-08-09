@@ -256,8 +256,7 @@ Return ONLY a valid JSON object — no markdown, no code fences, no explanation:
     {
       "name": "Value Stream Name",
       "description": "What value this stream delivers and to whom",
-      "purpose": "What this value stream accomplishes for the business (one sentence)",
-      "businessOutcome": "The tangible value or result this delivers (one sentence)",
+      "purpose": "What this value stream accomplishes for the business and the tangible value or result it delivers (one or two sentences)",
       "processes": [
         {
           "name": "Process Name",

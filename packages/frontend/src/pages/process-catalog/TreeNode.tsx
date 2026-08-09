@@ -360,15 +360,15 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 const govHint = 'Locked until at least one person is given a governance role on the Governance Roles page.';
                 return (
                   <>
-                    {/* Purpose and Business Outcome sit above Owner
-                        on value streams because they're the "what
-                        does this stream actually deliver" framing —
-                        users want to read or set the strategic
-                        intent first, then assign accountability for
-                        it. Process nodes keep Owner-first since
-                        their fields are more operational. */}
-                    <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                    <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
+                    {/* Purpose sits above Owner on value streams because
+                        it's the "what does this stream actually deliver"
+                        framing — users read or set the strategic intent
+                        first, then assign accountability. Process nodes
+                        keep Owner-first since their fields are more
+                        operational. (Purpose absorbed the former separate
+                        "Business Outcome" field — one field for what this
+                        accomplishes and the value it delivers.) */}
+                    <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What this accomplishes and the value it delivers…" />
                     <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     {viewMode === 'advanced' && (
