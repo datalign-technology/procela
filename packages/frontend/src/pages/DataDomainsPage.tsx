@@ -37,8 +37,8 @@ const btnPrimary: React.CSSProperties = { padding: '8px 16px', background: 'var(
 const btnSecondary: React.CSSProperties = { padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer' };
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
 
-interface FormData { name: string; description: string; status: string; scopeDefinition: string; }
-const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', scopeDefinition: '' };
+interface FormData { name: string; description: string; status: string; }
+const emptyForm: FormData = { name: '', description: '', status: 'DRAFT' };
 
 const SIMPLE_TRANSITIONS: Record<string, string[]> = { DRAFT: ['ACTIVE'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 const ADVANCED_TRANSITIONS: Record<string, string[]> = { DRAFT: ['PROPOSED'], PROPOSED: ['UNDER_REVIEW', 'DRAFT'], UNDER_REVIEW: ['APPROVED', 'DRAFT'], APPROVED: ['ACTIVE', 'DRAFT'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
@@ -183,7 +183,7 @@ export default function DataDomainsPage() {
     setForm(emptyForm); setEditingId(null); setCreateStewardshipTeam(true); setShowForm(true);
   };
   const openEdit = (domain: DataDomain) => {
-    setForm({ name: domain.name, description: domain.description, status: domain.status, scopeDefinition: (domain as any).scopeDefinition || '' });
+    setForm({ name: domain.name, description: domain.description, status: domain.status });
     setEditingId(domain.id); setShowForm(true);
   };
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
@@ -446,10 +446,9 @@ export default function DataDomainsPage() {
                 <select style={selectStyle} value="DRAFT" disabled><option value="DRAFT">Draft</option></select>
               )}
             </div>
+            {/* Description absorbed the former "Scope Definition" field. */}
             <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Purpose and scope of this domain" /></div>
-            <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Scope Definition</label>
-              <input style={inputStyle} value={form.scopeDefinition} onChange={(e) => setForm({ ...form, scopeDefinition: e.target.value })} placeholder="What data falls in/out of this domain?" /></div>
+              <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" /></div>
           </div>
           {!editingId && (
             <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -636,9 +635,6 @@ export default function DataDomainsPage() {
                       <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, ...(() => { const c = getStatusColor(selectedDomain.status); return { background: c.bg, color: c.color }; })() }}>{selectedDomain.status}</span>
                     </div>
                     {selectedDomain.description && <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6, margin: 0 }}>{selectedDomain.description}</p>}
-                    {(selectedDomain as any).scopeDefinition && (
-                      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6, fontStyle: 'italic' }}>Scope: {(selectedDomain as any).scopeDefinition}</p>
-                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>
                     {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(selectedDomain)} />}
