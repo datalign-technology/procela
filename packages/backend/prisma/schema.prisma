@@ -451,7 +451,6 @@ model DataAsset {
   // extend the taxonomy on their side without a schema migration.
   // The current codebase uses fixed vocabularies but treating them
   // as strings keeps the door open.
-  dataClassification      String?
   dataType                String?
   refreshFrequency        String?
   origin                  String?

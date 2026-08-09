@@ -150,15 +150,6 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M8 8 H13" />
     </NavSvg>
   ),
-  '/data-dictionary': (
-    <NavSvg>
-      <rect x="5" y="3.5" width="14" height="17" rx="1.5" />
-      <path d="M9 3.5 V20.5" />
-      <path d="M12 8 H16" />
-      <path d="M12 12 H16" />
-      <path d="M12 16 H15" />
-    </NavSvg>
-  ),
   '/data-lineage': (
     <NavSvg>
       <circle cx="4.5" cy="12" r="2.2" />

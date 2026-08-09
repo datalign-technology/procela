@@ -44,12 +44,11 @@ export interface StoredDataAsset {
   sourceAsset?: string;
   /** @deprecated see `bindings` */
   sourceColumn?: string;
-  dataClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED';
   /** Sensitivity classifications (PII/PHI/PCI/FINANCIAL/CREDENTIAL/…).
-   *  Distinct axis from dataClassification: a dataset can carry a
-   *  sensitivity tag without being CONFIDENTIAL (e.g. PII in an
-   *  INTERNAL asset), and vice versa. Populated by the AI classifier
-   *  route (POST /suggest-sensitivity → user accept →
+   *  The single sensitivity axis for a data asset: the tags express both
+   *  regulatory categories (PII/PHI/PCI/FINANCIAL/CREDENTIAL) and the
+   *  broad confidentiality level (CONFIDENTIAL / PUBLIC). Populated by the
+   *  AI classifier route (POST /suggest-sensitivity → user accept →
    *  PUT /sensitivity). Empty / undefined = untagged. */
   sensitivityTags?: Array<'PII' | 'PHI' | 'PCI' | 'FINANCIAL' | 'CREDENTIAL' | 'CONFIDENTIAL' | 'PUBLIC'>;
   /** Content classification of the data, not how it's used.
@@ -185,10 +184,9 @@ const VALID_REFRESH_FREQUENCIES = [
   'EVENT_DRIVEN', 'STREAMING', 'AD_HOC',
 ] as const;
 const VALID_RETENTION_UNITS = ['DAYS', 'MONTHS', 'YEARS'] as const;
-const VALID_CLASSIFICATIONS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'] as const;
 
 // Request-body schemas — Zod at the API boundary. Silent-fallback fields
-// (governanceTier, dataType, refreshFrequency, dataClassification,
+// (governanceTier, dataType, refreshFrequency,
 // retentionDuration) use `.catch(undefined)` so invalid values are
 // dropped rather than 400'd, matching the existing runtime fallback
 // semantics. `origin` on create rejects invalid values (mirrors the
@@ -206,7 +204,6 @@ const createDataAssetBodySchema = z.object({
   sourceConnectionId: z.string().optional(),
   sourceAsset: z.string().optional(),
   sourceColumn: z.string().optional(),
-  dataClassification: z.enum(VALID_CLASSIFICATIONS).optional().catch(undefined),
   dataType: z.enum(VALID_DATA_TYPES).optional().catch(undefined),
   category: z.enum(['OPERATIONAL', 'GOVERNANCE', 'REFERENCE', 'ANALYTICAL', 'MASTER']).optional().catch(undefined),
   retentionPolicy: z.string().optional(),
@@ -230,7 +227,6 @@ const updateDataAssetBodySchema = z.object({
   sourceConnectionId: z.string().optional(),
   sourceAsset: z.string().optional(),
   sourceColumn: z.string().optional(),
-  dataClassification: z.enum(VALID_CLASSIFICATIONS).optional().catch(undefined),
   dataType: z.enum(VALID_DATA_TYPES).optional().catch(undefined),
   category: z.enum(['OPERATIONAL', 'GOVERNANCE', 'REFERENCE', 'ANALYTICAL', 'MASTER']).optional().catch(undefined),
   retentionPolicy: z.string().optional(),
@@ -472,7 +468,7 @@ const HEALTH_SCORE_THRESHOLD = 80;
  * attestation meaning. Used by the UI to surface a "Promote?" prompt.
  *
  * Eligibility ladder (each rung includes the rungs below):
- *   SILVER   needs: owner, ≥1 steward, classification
+ *   SILVER   needs: owner, ≥1 steward, ≥1 sensitivity tag
  *   GOLD     needs: SILVER + ≥1 binding + healthScore ≥ threshold
  *
  * BRONZE is the floor; everyone is eligible for it.
@@ -480,8 +476,8 @@ const HEALTH_SCORE_THRESHOLD = 80;
 function computeSuggestedTier(asset: StoredDataAsset): 'BRONZE' | 'SILVER' | 'GOLD' {
   const hasOwner = !!asset.ownerPersonId;
   const hasSteward = Array.isArray(asset.stewardIds) && asset.stewardIds.length > 0;
-  const hasClassification = !!asset.dataClassification;
-  const silverEligible = hasOwner && hasSteward && hasClassification;
+  const hasSensitivity = Array.isArray(asset.sensitivityTags) && asset.sensitivityTags.length > 0;
+  const silverEligible = hasOwner && hasSteward && hasSensitivity;
   if (!silverEligible) return 'BRONZE';
 
   const hasBinding = dataAssetBindings.some((b) => b.dataAssetId === asset.id);
@@ -850,7 +846,7 @@ router.post('/', async (req: Request, res: Response) => {
   }
   const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore, orgId,
     sourceConnectionId, sourceAsset, sourceColumn,
-    dataClassification, dataType, category,
+    dataType, category,
     retentionPolicy, retentionDuration, retentionReason,
     refreshFrequency, origin } = parsed.data;
   // Ownership-level guard: data assets attach to one org, but only
@@ -892,7 +888,6 @@ router.post('/', async (req: Request, res: Response) => {
     ...(sourceConnectionId ? { sourceConnectionId } : {}),
     ...(sourceAsset ? { sourceAsset } : {}),
     ...(sourceColumn ? { sourceColumn } : {}),
-    ...(dataClassification ? { dataClassification } : {}),
     ...(resolvedDataType ? { dataType: resolvedDataType } : {}),
     ...(category ? { category } : {}),
     ...(retentionPolicy ? { retentionPolicy } : {}),
@@ -921,7 +916,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const rawBody = req.body as Record<string, unknown> | undefined;
   const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore,
     sourceConnectionId, sourceAsset, sourceColumn,
-    dataClassification, dataType, category,
+    dataType, category,
     retentionPolicy, retentionDuration, retentionReason,
     refreshFrequency } = parsed.data;
   const now = new Date().toISOString();
@@ -949,9 +944,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   // (`if (field !== undefined) { ... }`) required distinguishing
   // "explicitly sent" from "omitted", so we consult the raw body for the
   // presence bit while still using the parsed (validated) value.
-  if (rawBody && 'dataClassification' in rawBody) {
-    asset.dataClassification = dataClassification;
-  }
   if (rawBody && 'dataType' in rawBody) {
     asset.dataType = dataType;
   } else if (category !== undefined && CATEGORY_TO_DATA_TYPE[category]) {

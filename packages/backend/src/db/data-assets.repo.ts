@@ -7,7 +7,7 @@
 //   - JSONB payload for retentionDuration ({ value, unit }). Kept
 //     structured so future WHERE clauses on retention duration are
 //     queryable rather than string-parsed.
-//   - Multiple string-enum fields (dataClassification, dataType,
+//   - Multiple string-enum fields (dataType,
 //     refreshFrequency, origin) stored as plain String — a customer
 //     can extend the vocabulary on their side without a schema
 //     migration. The current codebase's fixed lists live in
@@ -51,7 +51,6 @@ type PrismaAssetRow = {
   healthScore: number;
   healthScoreAt: Date | null;
   sensitivityTags: string[];
-  dataClassification: string | null;
   dataType: string | null;
   refreshFrequency: string | null;
   origin: string | null;
@@ -94,7 +93,6 @@ function fromPrisma(r: PrismaAssetRow): StoredDataAsset {
     healthScore: r.healthScore,
     ...(r.healthScoreAt ? { healthScoreAt: r.healthScoreAt.toISOString() } : {}),
     ...(r.sensitivityTags.length > 0 ? { sensitivityTags: r.sensitivityTags as StoredDataAsset['sensitivityTags'] } : {}),
-    ...(r.dataClassification ? { dataClassification: r.dataClassification as StoredDataAsset['dataClassification'] } : {}),
     ...(r.dataType ? { dataType: r.dataType as StoredDataAsset['dataType'] } : {}),
     ...(r.refreshFrequency ? { refreshFrequency: r.refreshFrequency as StoredDataAsset['refreshFrequency'] } : {}),
     ...(r.origin ? { origin: r.origin as StoredDataAsset['origin'] } : {}),
@@ -123,7 +121,6 @@ function toPrismaData(row: Partial<StoredDataAsset>): Record<string, unknown> {
     data.healthScoreAt = row.healthScoreAt ? new Date(row.healthScoreAt) : null;
   }
   if (row.sensitivityTags !== undefined) data.sensitivityTags = row.sensitivityTags ?? [];
-  if (row.dataClassification !== undefined) data.dataClassification = row.dataClassification ?? null;
   if (row.dataType !== undefined) data.dataType = row.dataType ?? null;
   if (row.refreshFrequency !== undefined) data.refreshFrequency = row.refreshFrequency ?? null;
   if (row.origin !== undefined) data.origin = row.origin ?? null;
