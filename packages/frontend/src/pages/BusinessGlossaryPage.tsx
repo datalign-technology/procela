@@ -740,10 +740,9 @@ export default function BusinessGlossaryPage() {
                   <label style={labelStyle}>Synonyms (comma-separated)</label>
                   <input style={inputStyle} value={form.synonyms} onChange={(e) => setForm({ ...form, synonyms: e.target.value })} placeholder="e.g. CLV, LTV" />
                 </div>
-                <div>
-                  <label style={labelStyle}>Source of Truth</label>
-                  <input style={inputStyle} value={form.sourceOfTruth} onChange={(e) => setForm({ ...form, sourceOfTruth: e.target.value })} placeholder="e.g. Salesforce CRM" />
-                </div>
+                {/* Source of Truth removed: a free-text "system of record"
+                    duplicated the structured System registry / sync. Stored
+                    values are retained on the record. */}
                 <div>
                   <label style={labelStyle}>Primary Domain</label>
                   <select style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
