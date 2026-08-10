@@ -51,7 +51,6 @@ interface DashboardStats {
     /** Total Phase 3 suggestion dismissals recorded for this scope.
      *  Informational, not severity-bearing — a high number is
      *  expected once the learning loop has been in use for a while. */
-    dismissedSuggestions?: number;
   };
 }
 

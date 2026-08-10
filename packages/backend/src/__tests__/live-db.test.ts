@@ -66,7 +66,6 @@ import { prismaAgentExecutionsRepository } from '../db/agent-executions.repo';
 import { prismaConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
 import { prismaGapSnapshotsRepository } from '../db/gap-snapshots.repo';
 import { prismaProcessVersionsRepository } from '../db/process-versions.repo';
-import { prismaSuggestionDismissalsRepository } from '../db/suggestion-dismissals.repo';
 
 // Converted-service imports — the "business flow" suite below exercises the
 // cutover-migrated services end-to-end against Postgres, not just the raw
@@ -119,7 +118,7 @@ async function truncateAll(): Promise<void> {
     'connector_events', 'connectors',
     'dbt_cloud_connections',
     'agent_executions', 'agent_schedules', 'agents',
-    'maturity_snapshots', 'gap_snapshots', 'suggestion_dismissals',
+    'maturity_snapshots', 'gap_snapshots',
     'app_settings',
     'organizations',
   ];
@@ -751,7 +750,7 @@ suite('live-db repository round-trips', () => {
     assert.strictEqual((await exec.list({ orgId })).length, 1);
   });
 
-  it('MaturitySnapshot / GapSnapshot / ProcessVersion / SuggestionDismissal: no updatedAt entities', async () => {
+  it('MaturitySnapshot / GapSnapshot / ProcessVersion: no updatedAt entities', async () => {
     const { orgId } = await seedFixture();
     const now = new Date().toISOString();
     const client = loadPrisma() as unknown as {
@@ -763,7 +762,6 @@ suite('live-db repository round-trips', () => {
     const maturity = prismaMaturitySnapshotsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaMaturitySnapshotsRepository>[0] extends () => infer C ? C : never);
     const gap = prismaGapSnapshotsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaGapSnapshotsRepository>[0] extends () => infer C ? C : never);
     const pv = prismaProcessVersionsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaProcessVersionsRepository>[0] extends () => infer C ? C : never);
-    const dismiss = prismaSuggestionDismissalsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaSuggestionDismissalsRepository>[0] extends () => infer C ? C : never);
 
     await maturity.create({
       id: randomUUID(), orgId, timestamp: now, overall: 72,
@@ -783,16 +781,10 @@ suite('live-db repository round-trips', () => {
       },
       changedBy: null, changedAt: now, status: 'DRAFT', note: '',
     });
-    await dismiss.create({
-      id: randomUUID(), orgId, nodeId: node.id,
-      kind: 'asset', targetId: randomUUID(),
-      dismissedBy: null, dismissedAt: now,
-    });
     assert.strictEqual((await maturity.list({ orgId })).length, 1);
     const gaps = await gap.list({ orgId });
     assert.strictEqual(gaps[0].metrics.coveragePct, 60);
     assert.strictEqual((await pv.list()).length, 1);
-    assert.strictEqual((await dismiss.list({ orgId })).length, 1);
   });
 });
 

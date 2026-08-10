@@ -1353,20 +1353,6 @@ model ProcessVersion {
   @@map("process_versions")
 }
 
-model SuggestionDismissal {
-  id          String  @id @default(uuid()) @db.Uuid
-  orgId       String  @db.Uuid
-  nodeId      String  @db.Uuid
-  kind        String
-  targetId    String
-  dismissedBy String?
-  dismissedAt DateTime
-
-  @@index([orgId])
-  @@index([nodeId, kind])
-  @@map("suggestion_dismissals")
-}
-
 model Agent {
   id            String   @id @default(uuid()) @db.Uuid
   orgIds        String[] @default([])

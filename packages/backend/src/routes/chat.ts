@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { aiService } from '../services/ai.service';
 import { ChatMessage } from '../types';
 import logger from '../lib/logger';
-import { processNodes, suggestionDismissals } from './process-catalog';
+import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { systems } from './systems';
 import { mappings } from './mappings';
@@ -28,7 +28,6 @@ import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
 import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
 import { getConnectionsRepository } from '../db/connections.repo';
 import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
-import { getSuggestionDismissalsRepository } from '../db/suggestion-dismissals.repo';
 
 // Repositories — read Postgres when DATABASE_URL is set, else the JSON arrays.
 // The AI snapshot is read-only; each request loads a fresh catalog picture.
@@ -45,7 +44,6 @@ const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
 const dataQualityRulesRepo = getDataQualityRulesRepository(dataQualityRules);
 const connectionsRepo = getConnectionsRepository(connections);
 const connectionSystemLinksRepo = getConnectionSystemLinksRepository(connectionSystemLinks);
-const suggestionDismissalsRepo = getSuggestionDismissalsRepository(suggestionDismissals);
 
 const router = Router();
 
@@ -67,13 +65,13 @@ export async function buildOrgSnapshot(orgId: string): Promise<string | undefine
   const [
     allNodes, allAssets, allSystems, allMappings, allPeople, allDomains,
     allTerms, allPolicies, allIssues, allTasks, allDqRules, allConns,
-    allSysLinks, allDismissals,
+    allSysLinks,
   ] = await Promise.all([
     processNodesRepo.list(), dataAssetsRepo.list(), systemsRepo.list(),
     mappingsRepo.list(), peopleRepo.list(), dataDomainsRepo.list(),
     glossaryTermsRepo.list(), governancePoliciesRepo.list(), governanceIssuesRepo.list(),
     governanceTasksRepo.list(), dataQualityRulesRepo.list(), connectionsRepo.list(),
-    connectionSystemLinksRepo.list(), suggestionDismissalsRepo.list(),
+    connectionSystemLinksRepo.list(),
   ]);
 
   const org = getCachedOrgList().find((o) => o.id === orgId);
@@ -245,11 +243,6 @@ export async function buildOrgSnapshot(orgId: string): Promise<string | undefine
   // but aren't referenced by any mapping. These are candidates to
   // retire or to map to a step that uses them.
   const orphanAssets = assets.filter((a) => !linkedAssetIds.has(a.id));
-  // Phase 3 learning-loop signal: how many suggestions the user has
-  // told Procela to stop suggesting. Informational — useful when the
-  // assistant is asked "why isn't X being suggested for Y" because
-  // the answer is often "you dismissed it".
-  const dismissalsInOrg = (allDismissals || []).filter((d) => d.orgId === orgId).length;
   lines.push('', '## KNOWN GAPS');
   lines.push(`  - Activities with no data mapped (${unmappedActivities.length}): `
     + (unmappedActivities.slice(0, 25).map((n) => n.name).join('; ') || 'none'));
@@ -263,9 +256,6 @@ export async function buildOrgSnapshot(orgId: string): Promise<string | undefine
     + (ownerlessDomains.slice(0, 25).map((d) => d.name).join('; ') || 'none'));
   lines.push(`  - Orphan data assets — exist in the catalog but no process step uses them (${orphanAssets.length}): `
     + (orphanAssets.slice(0, 25).map((a) => a.name).join('; ') || 'none'));
-  if (dismissalsInOrg > 0) {
-    lines.push(`  - Suggestions the user has dismissed via the learning loop: ${dismissalsInOrg} (these won't be suggested again until the user restores them).`);
-  }
 
   lines.push('', `## PEOPLE\n  ${ppl.length} people in this organization.`);
 
