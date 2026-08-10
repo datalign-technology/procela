@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bot, Paperclip } from 'lucide-react';
+import { Bot, Paperclip, Lock } from 'lucide-react';
 import StatusBadge from '../../components/StatusBadge';
 import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
@@ -308,6 +308,32 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
              type / status; children must not add their own margins. */}
           {isExpanded && (
             <FieldStack style={{ marginTop: 'var(--space-section)', paddingLeft: 2 }}>
+              {/* Locked-state notice. When a node's status locks editing,
+                  every field renders disabled with no explanation — so a
+                  user opening it to make a change hits dead inputs and no
+                  hint at why. Surface the reason and a one-click way out:
+                  "Reopen for editing" reuses the normal status-change
+                  confirm (setPendingStatus('DRAFT')) rather than a raw
+                  dropdown hunt. Only offered when Draft is actually a
+                  reachable transition from this status. */}
+              {isLocked && (STATUS_TRANSITIONS[node.status] || []).includes('DRAFT') && (
+                <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, flexWrap: 'wrap' }}>
+                  <Lock size={12} strokeWidth={2} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                  <span style={{ color: 'var(--color-text-secondary)' }}>
+                    This {config.label.toLowerCase()} is <strong>{node.status.replace('_', ' ').toLowerCase()}</strong> and locked for editing.
+                  </span>
+                  <button
+                    onClick={() => setPendingStatus('DRAFT')}
+                    disabled={pendingStatus === 'DRAFT'}
+                    title={statusMode === 'simple'
+                      ? 'Move back to Draft to edit'
+                      : 'Move back to Draft to edit — it will need to be re-approved to become Active again'}
+                    style={{ marginLeft: 'auto', background: 'var(--color-surface)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 4, padding: '2px 10px', fontSize: 11, fontWeight: 500, cursor: pendingStatus === 'DRAFT' ? 'default' : 'pointer', opacity: pendingStatus === 'DRAFT' ? 0.5 : 1 }}
+                  >
+                    Reopen for editing
+                  </button>
+                </div>
+              )}
               {/* "Where it runs" connection summary — read-only one-liner
                  above the editable fields so the connection landscape
                  (owner · role · systems · data) is visible at a glance.
@@ -956,14 +982,21 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
             setReviewCommentDraft('');
           };
           const cancel = () => { setPendingStatus(null); setReviewCommentDraft(''); };
-          const saveLabel = statusMode === 'review'
+          // Reopening a locked item back to Draft — label it as such, and
+          // in governed modes warn that it drops out of the approved state
+          // and must be re-approved to return to Active.
+          const isReopen = pendingStatus === 'DRAFT' && LOCKED_STATUSES.has(node.status);
+          const reopenWarn = isReopen && statusMode !== 'simple';
+          const saveLabel = isReopen ? 'Reopen for editing'
+            : statusMode === 'review'
             ? (pendingStatus === 'PENDING_REVIEW' ? 'Submit for review'
               : pendingStatus === 'ACTIVE' && node.status === 'PENDING_REVIEW' ? 'Approve'
               : pendingStatus === 'DRAFT' && node.status === 'PENDING_REVIEW' ? 'Request changes'
               : 'Save')
             : 'Save';
+          const stacked = needsComment || reopenWarn;
           return (
-            <div style={{ display: 'flex', flexDirection: needsComment ? 'column' : 'row', alignItems: needsComment ? 'stretch' : 'center', gap: 4, background: '#fffbeb', border: '1px solid #f59e0b44', borderRadius: 4, padding: '4px 6px', minWidth: needsComment ? 260 : undefined }}>
+            <div style={{ display: 'flex', flexDirection: stacked ? 'column' : 'row', alignItems: stacked ? 'stretch' : 'center', gap: 4, background: '#fffbeb', border: '1px solid #f59e0b44', borderRadius: 4, padding: '4px 6px', minWidth: stacked ? 260 : undefined }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
                   {node.status.replace('_', ' ')} {'\u2192'}
@@ -972,6 +1005,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   {pendingStatus.replace('_', ' ')}
                 </span>
               </div>
+              {reopenWarn && (
+                <span style={{ fontSize: 10, color: '#92400e' }}>
+                  Reopening drops this out of {node.status.replace('_', ' ').toLowerCase()}; it'll need to be re-approved to become active again.
+                </span>
+              )}
               {needsComment && (
                 <input
                   autoFocus

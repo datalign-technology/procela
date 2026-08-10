@@ -139,7 +139,15 @@ export const ADVANCED_TRANSITIONS: Record<string, string[]> = {
   ACTIVE:       ['DRAFT', 'DEPRECATED'],
   DEPRECATED:   ['DRAFT'],
 };
-export const SIMPLE_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+// Simple mode has no approval gate, so demoting an Active item to Draft
+// just to edit it and promoting it straight back is empty ceremony — it
+// buys no review and only flickers the item out of "Active" while you
+// type. So Active stays editable inline here; only Deprecated (retired)
+// is locked, and reopening it to Draft is the deliberate revive step.
+// The governed modes keep Active locked — there the reopen-to-Draft
+// round-trip is the point, because it forces the change back through the
+// review gate before it can be Active again.
+export const SIMPLE_LOCKED = new Set(['DEPRECATED']);
 export const REVIEW_LOCKED = new Set(['PENDING_REVIEW', 'ACTIVE', 'DEPRECATED']);
 export const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
