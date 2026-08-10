@@ -461,7 +461,10 @@ export function DocSystemsField({ selected, options, onSave, disabled }: {
               padding: '1px 6px', borderRadius: 10, fontSize: 10, fontWeight: 500,
               background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd',
             }}>
-              {s?.name || id}
+              <Link to={`/systems?highlight=${id}`} title={`Open ${s?.name || 'system'}`}
+                style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}>
+                {s?.name || id}
+              </Link>
               {!disabled && (
                 <button onClick={() => onSave(selected.filter((sid) => sid !== id))}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#1e40af', padding: 0, lineHeight: 1 }}>&times;</button>
