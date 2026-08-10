@@ -146,7 +146,11 @@ function DependenciesPanel({ nodeId, valueStreamName, allActivities, disabled, g
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {/* Predecessors */}
-        <div>
+        {/* minWidth:0 lets the track shrink below its content's intrinsic
+            width so a long successor/predecessor row truncates via the
+            row's own ellipsis instead of forcing the track wider than the
+            card and spilling out the right edge. */}
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4 }}>Predecessors ({predecessors.length})</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {predecessors.length === 0 && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None</div>}
@@ -173,7 +177,7 @@ function DependenciesPanel({ nodeId, valueStreamName, allActivities, disabled, g
           )}
         </div>
         {/* Successors */}
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4 }}>Successors ({successors.length})</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {successors.length === 0 && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None</div>}
