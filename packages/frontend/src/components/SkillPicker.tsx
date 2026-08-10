@@ -88,22 +88,40 @@ export default function SkillPicker({
     onChange(next);
   };
 
+  // In compact mode the loaded picker is a two-column "Label: value" row
+  // (matching the sibling Systems/Inputs rows). The loading and empty
+  // states must use that SAME row layout, else the message renders
+  // full-width with no label column and breaks the row rhythm.
+  const compactRow = (content: JSX.Element | string) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 2 }}>{label}:</span>
+      <div style={{ flex: 1, color: 'var(--color-text-muted)', paddingTop: 2 }}>{content}</div>
+    </div>
+  );
+
   if (loading) {
+    if (compact) return compactRow('Loading skills...');
     return (
-      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', padding: compact ? 0 : '8px 0' }}>
+      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', padding: '8px 0' }}>
         Loading skills...
       </div>
     );
   }
 
   if (skills.length === 0) {
-    return (
-      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', padding: compact ? 0 : '8px 0' }}>
+    const body = (
+      <>
         No skills defined. Go to{' '}
         <Link to="/skills" style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontWeight: 500 }}>
           Admin &gt; Skills
         </Link>{' '}
         to create them.
+      </>
+    );
+    if (compact) return compactRow(body);
+    return (
+      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', padding: '8px 0' }}>
+        {body}
       </div>
     );
   }
