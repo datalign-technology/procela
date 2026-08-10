@@ -235,14 +235,26 @@ describe('connector routes', () => {
       assert.ok(seeded.lastSyncedAt);
       // Fresh assets get a higher healthScore than stale ones.
       assert.ok(seeded.healthScore >= 90);
+      // The reported row count is persisted on the asset.
+      assert.strictEqual(seeded.rowCount, 1000);
+      const seededB = dataAssets.find((d: any) => d.name === PREFIX + 'asset-b');
+      assert.strictEqual(seededB.rowCount, 500);
 
-      // Second report updates instead of creating.
+      // Second report updates instead of creating, and refreshes rowCount.
       const second = await request(port, 'POST', '/connectors/report', {
         body: { assets: [{ name: PREFIX + 'asset-a', description: 'first', rowCount: 1200 }] },
         bearer: token,
       });
       assert.strictEqual(second.body.data.updated, 1);
       assert.strictEqual(second.body.data.created, 0);
+      assert.strictEqual(dataAssets.find((d: any) => d.name === PREFIX + 'asset-a').rowCount, 1200);
+
+      // A later scan that omits rowCount must NOT null the stored value.
+      await request(port, 'POST', '/connectors/report', {
+        body: { assets: [{ name: PREFIX + 'asset-a', description: 'first' }] },
+        bearer: token,
+      });
+      assert.strictEqual(dataAssets.find((d: any) => d.name === PREFIX + 'asset-a').rowCount, 1200);
     });
 
     it('POST /report upserts column-level metadata, audit-only', async () => {

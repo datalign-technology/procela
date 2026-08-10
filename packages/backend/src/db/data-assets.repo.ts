@@ -58,6 +58,9 @@ type PrismaAssetRow = {
   retentionReason: string | null;
   lastSyncedByConnectorId: string | null;
   lastSyncedAt: Date | null;
+  // Prisma returns BigInt columns as JS bigint; the app layer narrows it
+  // back to a plain number (row counts are far below 2^53).
+  rowCount: bigint | null;
   createdAt: Date;
   updatedAt: Date;
   stewards?: Array<{ personId: string }>;
@@ -100,6 +103,7 @@ function fromPrisma(r: PrismaAssetRow): StoredDataAsset {
     ...(r.retentionReason ? { retentionReason: r.retentionReason } : {}),
     ...(r.lastSyncedByConnectorId ? { lastSyncedByConnectorId: r.lastSyncedByConnectorId } : {}),
     ...(r.lastSyncedAt ? { lastSyncedAt: r.lastSyncedAt.toISOString() } : {}),
+    ...(r.rowCount !== null && r.rowCount !== undefined ? { rowCount: Number(r.rowCount) } : {}),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -129,6 +133,11 @@ function toPrismaData(row: Partial<StoredDataAsset>): Record<string, unknown> {
   if (row.lastSyncedByConnectorId !== undefined) data.lastSyncedByConnectorId = row.lastSyncedByConnectorId ?? null;
   if (row.lastSyncedAt !== undefined) {
     data.lastSyncedAt = row.lastSyncedAt ? new Date(row.lastSyncedAt) : null;
+  }
+  if (row.rowCount !== undefined) {
+    // BigInt column — coerce the app-layer number, truncating any
+    // fractional noise. null clears it.
+    data.rowCount = row.rowCount === null ? null : BigInt(Math.trunc(row.rowCount));
   }
   if (row.createdAt !== undefined) data.createdAt = new Date(row.createdAt);
   // updatedAt is Prisma-managed via @updatedAt.

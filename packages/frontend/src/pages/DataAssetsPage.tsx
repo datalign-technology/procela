@@ -76,6 +76,10 @@ interface DataAssetEntity {
    *  glance whether the metadata reflects reality. */
   lastSyncedByConnectorId?: string | null;
   lastSyncedAt?: string | null;
+  /** Latest connector-reported row count (approximate — engine
+   *  statistics). Rendered as a compact "N rows" chip next to the sync
+   *  freshness chip. Undefined for manually-created assets. */
+  rowCount?: number | null;
   /** @deprecated use bindings */
   sourceConnectionId?: string;
   /** @deprecated use bindings */
@@ -283,6 +287,26 @@ function SyncFreshnessChip({ lastSyncedAt }: { lastSyncedAt?: string | null }) {
       style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 500, background: bg, color }}
     >
       {label}
+    </span>
+  );
+}
+
+// Compact "N rows" pill — the latest connector-reported row count. The
+// count is approximate (engine statistics, not a live COUNT(*)), so the
+// label is abbreviated (2.4M rows) with the exact figure in the tooltip.
+// Renders only when a connector has reported one.
+function RowCountChip({ rowCount }: { rowCount?: number | null }) {
+  if (rowCount === null || rowCount === undefined) return null;
+  const n = rowCount;
+  const label = n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
+    : n >= 1_000 ? `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`
+    : String(n);
+  return (
+    <span
+      title={`${n.toLocaleString()} rows (approximate — last connector scan)`}
+      style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 500, background: 'var(--color-bg)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}
+    >
+      {label} rows
     </span>
   );
 }
@@ -1773,6 +1797,7 @@ export default function DataAssetsPage() {
                           </button>
                           <OriginBadge origin={asset.origin} />
                           <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
+                          <RowCountChip rowCount={asset.rowCount} />
                           {asset.sensitivityTags && asset.sensitivityTags.length > 0 && (
                             <span
                               title={`Sensitivity: ${asset.sensitivityTags.join(', ')}`}

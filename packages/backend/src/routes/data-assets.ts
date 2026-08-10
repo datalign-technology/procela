@@ -83,6 +83,11 @@ export interface StoredDataAsset {
    *  manual entry. */
   lastSyncedByConnectorId?: string | null;
   lastSyncedAt?: string | null;
+  /** Latest row count reported by an on-prem connector scan. Approximate
+   *  (engine statistics, not a live COUNT(*)); refreshed each scan and
+   *  timestamped by `lastSyncedAt`. Undefined until a connector reports
+   *  one — manually-created assets have no row count. */
+  rowCount?: number | null;
   createdAt: string;
   updatedAt: string;
 }
