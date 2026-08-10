@@ -94,6 +94,7 @@ describe('prismaDataAssetsRepository (stubbed Prisma)', () => {
         retentionReason: 'PUC record retention',
         lastSyncedByConnectorId: 'conn-1',
         lastSyncedAt: new Date('2026-07-15T12:00:00.000Z'),
+        rowCount: 4200n,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),
         stewards: [{ personId: 'p-steward-a' }, { personId: 'p-steward-b' }],
@@ -110,6 +111,7 @@ describe('prismaDataAssetsRepository (stubbed Prisma)', () => {
     assert.strictEqual(r.governanceTier, 'SILVER');
     assert.strictEqual(r.healthScoreAt, '2026-07-14T00:00:00.000Z');
     assert.strictEqual(r.lastSyncedAt, '2026-07-15T12:00:00.000Z');
+    assert.strictEqual(r.rowCount, 4200);                     // BigInt → number
   });
 
   it('update rewrites stewardIds via delete-all + createMany on the join table', async () => {
@@ -123,6 +125,7 @@ describe('prismaDataAssetsRepository (stubbed Prisma)', () => {
         dataType: null,
         refreshFrequency: null, origin: null, retentionDuration: null,
         retentionReason: null, lastSyncedByConnectorId: null, lastSyncedAt: null,
+        rowCount: null,
         createdAt: new Date(), updatedAt: new Date(),
       }),
       findUnique: async () => ({
@@ -132,6 +135,7 @@ describe('prismaDataAssetsRepository (stubbed Prisma)', () => {
         dataType: null,
         refreshFrequency: null, origin: null, retentionDuration: null,
         retentionReason: null, lastSyncedByConnectorId: null, lastSyncedAt: null,
+        rowCount: null,
         createdAt: new Date(), updatedAt: new Date(),
         stewards: [{ personId: 'p-new' }],
       }),

@@ -394,6 +394,10 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
     const existing = allAssets.find((d) => d.orgId === row.orgId && d.name === name);
     let assetId: string;
     if (existing) {
+      // Persist the reported row count. Only overwrite when this scan
+      // actually reported one, so an older agent that omits rowCount
+      // never nulls a value a newer scan recorded.
+      if (rowCount !== null) (existing as any).rowCount = rowCount;
       if (lastWriteAt) (existing as any).healthScoreAt = lastWriteAt;
       // Refresh a coarse health signal: 90 if recently written, 60
       // otherwise. v2 will replace this with a real freshness model
@@ -422,6 +426,7 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
         createdAt: now, updatedAt: now,
         lastSyncedByConnectorId: row.id,
         lastSyncedAt: now,
+        ...(rowCount !== null ? { rowCount } : {}),
       } as any;
       await dataAssetsRepo.create(newAsset);
       allAssets.push(newAsset);

@@ -460,6 +460,10 @@ model DataAsset {
   retentionReason         String?        @db.Text
   lastSyncedByConnectorId String?        @db.Uuid
   lastSyncedAt            DateTime?
+  // Latest row count reported by an on-prem connector scan (approximate —
+  // engine statistics, not a live COUNT(*)). BigInt so billion-row fact
+  // tables don't overflow. Null until a connector reports one.
+  rowCount                BigInt?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 
