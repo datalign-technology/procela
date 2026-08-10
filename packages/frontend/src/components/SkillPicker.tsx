@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -98,7 +99,11 @@ export default function SkillPicker({
   if (skills.length === 0) {
     return (
       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', padding: compact ? 0 : '8px 0' }}>
-        No skills defined. Go to Admin &gt; Skills to create them.
+        No skills defined. Go to{' '}
+        <Link to="/skills" style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontWeight: 500 }}>
+          Admin &gt; Skills
+        </Link>{' '}
+        to create them.
       </div>
     );
   }
