@@ -445,17 +445,6 @@ export default function DataQualityPage() {
       <PageHeader
         title="Data Quality"
         subtitle="Monitor and improve the quality and reliability of your data assets."
-        meta={fullAssets.length > 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{fullAssets.length} assets</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{rules.length} rules</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{fullAssets.filter((a) => a.healthScore != null && a.healthScore >= 80).length} healthy</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{fullAssets.filter((a) => a.healthScore != null && a.healthScore < 80).length} below 80%</span>
-          </div>
-        ) : undefined}
       >
         <HelpPopover id="dq-overview" title="Data Quality">
           Define quality rules per data asset, compute health scores, and track

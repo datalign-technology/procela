@@ -294,20 +294,12 @@ export default function SopsPage() {
     return true;
   });
 
-  const activeCount = sops.filter((s) => s.status === 'ACTIVE').length;
 
   return (
     <div>
       <PageHeader
         title="Standard Operating Procedures"
         subtitle="Step-by-step procedures for common governance activities."
-        meta={sops.length > 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{sops.length} procedures</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{activeCount} active</span>
-          </div>
-        ) : undefined}
         actions={
           <>
             <ColumnPicker state={sopCols} />

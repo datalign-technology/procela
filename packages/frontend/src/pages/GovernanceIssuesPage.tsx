@@ -44,12 +44,6 @@ interface GovernanceIssue {
   updatedAt: string;
 }
 
-interface IssueSummary {
-  total: number;
-  byStatus: Record<string, number>;
-  bySeverity: Record<string, number>;
-  byIssueType: Record<string, number>;
-}
 
 interface Person {
   id: string;
@@ -156,7 +150,6 @@ export default function GovernanceIssuesPage() {
 
   const issueCols = useColumnPicker<IssueColId>('procela.governanceIssues.visibleCols.v1', ISSUE_COLUMN_DEFS);
   const [issues, setIssues] = useState<GovernanceIssue[]>([]);
-  const [summary, setSummary] = useState<IssueSummary | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,14 +169,12 @@ export default function GovernanceIssuesPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [issuesRes, summaryRes, peopleRes, domainsRes] = await Promise.all([
+      const [issuesRes, peopleRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GovernanceIssue[] }>(`/governance-issues${query}`),
-        apiClient.get<{ success: boolean; data: IssueSummary }>(`/governance-issues/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
         apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
       ]);
       setIssues(issuesRes.data || []);
-      setSummary(summaryRes.data || null);
       setPeople(peopleRes.data || []);
       setDomains(domainsRes.data || []);
     } catch { /* API may not be running */ }
@@ -319,8 +310,6 @@ export default function GovernanceIssuesPage() {
     return new Date(d).toLocaleDateString();
   };
 
-  const openCount = summary ? (summary.byStatus['OPEN'] || 0) : 0;
-  const criticalCount = summary ? (summary.bySeverity['CRITICAL'] || 0) : 0;
 
   return (
     <div>
@@ -328,15 +317,6 @@ export default function GovernanceIssuesPage() {
       <PageHeader
         title="Governance Issues"
         subtitle="Track and resolve data governance issues across your organization."
-        meta={summary ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{summary.total} issues</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{openCount} open</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span style={{ color: criticalCount > 0 ? '#dc2626' : undefined }}>{criticalCount} critical</span>
-          </div>
-        ) : undefined}
         actions={
           <>
             <ColumnPicker state={issueCols} />
