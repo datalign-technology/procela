@@ -566,7 +566,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   };
 
   return (
-    <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--color-border)' }}>
+    <div style={{ marginTop: 'var(--space-section)', padding: '8px 10px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--color-border)' }}>
       {/* The original free-text inputsOutputs prose used to live as an
           editable note above this panel. The structured Expected
           placeholders below now make the prose redundant for action,

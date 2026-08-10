@@ -70,6 +70,37 @@ point smaller than every other page. Both now use PageHeader.
 
 ---
 
+### `<FieldStack>`
+
+The vertical-rhythm primitive. A flex column that owns the spacing
+between its children from a single spacing token, so the gap between
+fields is uniform no matter which fields render (a detail panel that
+shows different fields per entity type / status no longer has its gaps
+jump around).
+
+```tsx
+import FieldStack from '@/components/FieldStack';
+
+<FieldStack gap="section">        {/* stacked panels — 16px */}
+  <FieldStack>                     {/* form/detail rows — 8px (default) */}
+    <DocField … />
+    <DocRoleField … />
+    <DocSystemsField … />
+  </FieldStack>
+  <IOPanel … />
+  <DependenciesPanel … />
+</FieldStack>
+```
+
+Gaps map to the `--space-*` tokens: `tight` (4px, dense chip rows /
+sub-notes), `field` (8px, the default — between form fields), `section`
+(16px, between panels). **Children must not add their own vertical
+`margin`** — the stack owns that axis. If a child needs to sit tighter
+or looser, it belongs in a different gap tier, not an ad-hoc margin.
+Reference adoption: `pages/process-catalog/TreeNode.tsx`.
+
+---
+
 ## Content containers
 
 ### `<Card>`

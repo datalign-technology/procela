@@ -405,6 +405,13 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
 - `<PageHeader>` — the standard title + subtitle + actions row.
   Title renders at `1.625rem` (26px). Do NOT hand-roll an `<h1>` at
   the top of a page.
+- `<FieldStack>` — the vertical-rhythm primitive: a flex column that
+  owns the spacing between stacked fields/panels from the `--space-*`
+  tokens (`tight` 4px / `field` 8px / `section` 16px). Compose it
+  instead of hand-rolling per-field `marginTop`/`marginBottom`, which
+  drift apart and make inter-field gaps jump around depending on which
+  fields render. Children must NOT add their own vertical margin — the
+  stack owns that axis.
 
 **Content primitives:**
 
