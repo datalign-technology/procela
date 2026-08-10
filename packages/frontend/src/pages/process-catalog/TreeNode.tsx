@@ -816,13 +816,16 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {isExpanded && node.level === 'ACTIVITY' && (
             <div style={{ marginTop: 'var(--space-section)' }}>
               <SectionLabel>Flow</SectionLabel>
-              {/* Two panels side by side to cut the section's height — I/O
-                  (data flow) on the left, Dependencies (sequence flow) on
-                  the right. auto-fit collapses them back to a single
-                  stacked column when the node is too narrow to hold both.
-                  alignItems:start lets each keep its natural height rather
-                  than stretching to the taller neighbour. */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--space-field)', alignItems: 'start' }}>
+              {/* Both panels are full-width and stacked. They are NOT
+                  coupled — I/O is data flow (assets/policies this step
+                  consumes/produces), Dependencies is sequence flow (which
+                  other activities run before/after). Height is kept down
+                  by IOPanel laying its own Inputs|Outputs side by side
+                  internally, and by Dependencies' Predecessors|Successors
+                  columns — not by squeezing the two panels into one row,
+                  which cramped the dependency rows and implied a link
+                  between the two that doesn't exist. */}
+              <FieldStack gap="field">
                 <IOPanel
                   grouped
                   nodeId={node.id}
@@ -844,7 +847,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   allActivities={activitiesFlat}
                   disabled={isLocked}
                 />
-              </div>
+              </FieldStack>
             </div>
           )}
           {/* Approved agent drafts that haven't yet been promoted to a
