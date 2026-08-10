@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import FieldStack from '../components/FieldStack';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -1266,9 +1267,13 @@ export default function PeoplePage() {
                   <span style={roleBadge(previewData.person.role)}>{ROLE_LABELS[previewData.person.role] || previewData.person.role}</span>
                 </div>
 
+                {/* Preview sections + CTA share one section-level rhythm
+                   (--space-section) via FieldStack, so the gaps stay
+                   uniform no matter which sections this person has. */}
+                <FieldStack gap="section">
                 {/* Organizations */}
                 {previewData.orgAssignments.length > 0 && (
-                  <div style={{ marginBottom: 14 }}>
+                  <div>
                     <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Organizations</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                       {previewData.orgAssignments.map((o) => (
@@ -1280,7 +1285,7 @@ export default function PeoplePage() {
 
                 {/* Governance Roles */}
                 {previewData.damaRoles.length > 0 && (
-                  <div style={{ marginBottom: 14 }}>
+                  <div>
                     <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Governance Roles</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {previewData.damaRoles.map((r) => (
@@ -1295,7 +1300,7 @@ export default function PeoplePage() {
 
                 {/* Governance Groups */}
                 {previewData.governanceGroups.length > 0 && (
-                  <div style={{ marginBottom: 14 }}>
+                  <div>
                     <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Groups</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {previewData.governanceGroups.map((g) => (
@@ -1310,7 +1315,7 @@ export default function PeoplePage() {
 
                 {/* Owned Processes */}
                 {previewData.ownedProcessNodes.length > 0 && (
-                  <div style={{ marginBottom: 14 }}>
+                  <div>
                     <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Owned Processes</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {previewData.ownedProcessNodes.slice(0, 8).map((p) => (
@@ -1328,7 +1333,7 @@ export default function PeoplePage() {
 
                 {/* Data Assets */}
                 {previewData.dataAssets.length > 0 && (
-                  <div style={{ marginBottom: 14 }}>
+                  <div>
                     <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Data Assets</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {previewData.dataAssets.slice(0, 6).map((a) => (
@@ -1351,6 +1356,7 @@ export default function PeoplePage() {
                 >
                   Open Full Detail
                 </button>
+                </FieldStack>
               </div>
             ) : (
               <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>Person not found.</div>
