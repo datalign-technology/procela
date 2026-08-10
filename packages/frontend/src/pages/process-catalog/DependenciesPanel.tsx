@@ -26,7 +26,7 @@ interface DependencyFlow {
   other: DependencyOtherEnd | null;
 }
 
-function DependenciesPanel({ nodeId, valueStreamName, allActivities, disabled }: {
+function DependenciesPanel({ nodeId, valueStreamName, allActivities, disabled, grouped }: {
   nodeId: string;
   /** Value-stream name for this activity — used to detect cross-stream
    *  picks in the "add" dropdown so we can flag them with a warning
@@ -34,6 +34,9 @@ function DependenciesPanel({ nodeId, valueStreamName, allActivities, disabled }:
   valueStreamName: string | null;
   allActivities: Array<{ id: string; name: string; valueStreamName: string }>;
   disabled: boolean;
+  /** When rendered inside the shared "Flow" group the wrapper owns the
+   *  top spacing, so the panel drops its own `--space-section` margin. */
+  grouped?: boolean;
 }) {
   const addToast = useToastStore((s) => s.addToast);
   const onToast = useCallback(
@@ -136,7 +139,7 @@ function DependenciesPanel({ nodeId, valueStreamName, allActivities, disabled }:
   if (disabled && predecessors.length === 0 && successors.length === 0) return null;
 
   return (
-    <div style={{ marginTop: 'var(--space-section)', padding: '10px 12px', background: '#fafbfc', border: '1px solid var(--color-border)', borderRadius: 6 }}>
+    <div style={{ marginTop: grouped ? 0 : 'var(--space-section)', padding: '10px 12px', background: '#fafbfc', border: '1px solid var(--color-border)', borderRadius: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Dependencies</span>
         <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>· what has to run before, and what this unblocks</span>

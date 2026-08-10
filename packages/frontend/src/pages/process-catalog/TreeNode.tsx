@@ -5,6 +5,7 @@ import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
 import AttachmentsPanel from '../../components/AttachmentsPanel';
 import FieldStack from '../../components/FieldStack';
+import SectionLabel from '../../components/SectionLabel';
 import Modal from '../../components/Modal';
 import {
   InlineEdit, DocField, DocDropdown, TierField, RtoField,
@@ -805,28 +806,40 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               (and disagrees with how the governance template, the
               agent execution model, and the mappings already work).
               Higher-level nodes get a quiet pointer instead. */}
+          {/* Flow — the activity's data flow (Inputs / Outputs) and its
+              sequence flow (Predecessors / Successors) grouped under one
+              header so they read as one unit. They stay distinct panels:
+              I/O is what the step consumes/produces, dependencies are what
+              runs before/after — related but deliberately not merged (an
+              output auto-becoming a successor's input is the
+              two-sources-of-truth trap these panels already warn about). */}
           {isExpanded && node.level === 'ACTIVITY' && (
-            <IOPanel
-              nodeId={node.id}
-              mappings={mappingsByStep[node.id] || []}
-              assetsList={assetsList}
-              policiesList={policiesList}
-              orgId={activePageOrgId}
-              disabled={isLocked}
-              isGovernance={node.domain === 'GOVERNANCE'}
-              onAdd={onAddMapping}
-              onRemove={onRemoveMapping}
-              onRestore={onRestoreMapping}
-              nodeInputsOutputs={node.inputsOutputs}
-            />
-          )}
-          {isExpanded && node.level === 'ACTIVITY' && (
-            <DependenciesPanel
-              nodeId={node.id}
-              valueStreamName={valueStreamName || null}
-              allActivities={activitiesFlat}
-              disabled={isLocked}
-            />
+            <div style={{ marginTop: 'var(--space-section)' }}>
+              <SectionLabel>Flow</SectionLabel>
+              <FieldStack gap="field">
+                <IOPanel
+                  grouped
+                  nodeId={node.id}
+                  mappings={mappingsByStep[node.id] || []}
+                  assetsList={assetsList}
+                  policiesList={policiesList}
+                  orgId={activePageOrgId}
+                  disabled={isLocked}
+                  isGovernance={node.domain === 'GOVERNANCE'}
+                  onAdd={onAddMapping}
+                  onRemove={onRemoveMapping}
+                  onRestore={onRestoreMapping}
+                  nodeInputsOutputs={node.inputsOutputs}
+                />
+                <DependenciesPanel
+                  grouped
+                  nodeId={node.id}
+                  valueStreamName={valueStreamName || null}
+                  allActivities={activitiesFlat}
+                  disabled={isLocked}
+                />
+              </FieldStack>
+            </div>
           )}
           {/* Approved agent drafts that haven't yet been promoted to a
              Governance Document — surfaced here in the Outputs area so

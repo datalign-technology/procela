@@ -32,7 +32,7 @@ export type AddMappingTarget = {
   fulfillsExpected?: string;
 };
 
-function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, isGovernance, onAdd, onRemove, onRestore, nodeInputsOutputs }: {
+function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, isGovernance, onAdd, onRemove, onRestore, nodeInputsOutputs, grouped }: {
   nodeId: string;
   mappings: MappingInfo[];
   assetsList: DataAssetRef[];
@@ -57,6 +57,10 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
    *  Parsed into structured placeholder slots so the panel can show
    *  the *expected* inputs/outputs with fulfilled/unfulfilled status. */
   nodeInputsOutputs?: string;
+  /** When rendered inside the shared "Flow" group the wrapper owns the
+   *  top spacing, so the panel drops its own `--space-section` margin to
+   *  read as one unit with the Dependencies panel below it. */
+  grouped?: boolean;
 }) {
   const addToast = useToastStore((s) => s.addToast);
   const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
@@ -566,7 +570,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   };
 
   return (
-    <div style={{ marginTop: 'var(--space-section)', padding: '8px 10px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--color-border)' }}>
+    <div style={{ marginTop: grouped ? 0 : 'var(--space-section)', padding: '8px 10px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--color-border)' }}>
       {/* The original free-text inputsOutputs prose used to live as an
           editable note above this panel. The structured Expected
           placeholders below now make the prose redundant for action,
