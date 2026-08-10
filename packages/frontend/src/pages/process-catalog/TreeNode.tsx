@@ -28,7 +28,7 @@ import {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -54,6 +54,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   policiesList: PolicyRef[];
   systemsList: SystemRef[];
   mappingsByStep: Record<string, MappingInfo[]>;
+  /** Per-node attachment counts (bulk-fetched once by the page) so every
+   *  node's "Attach (n)" badge is populated without a per-node request. */
+  attachmentCountByNode: Record<string, number>;
   /** Per-node skill-coverage lookup. Populated for activity nodes
    *  whose responsible person is missing one or more required
    *  skills. Drives a warning chip next to the Required Skills
@@ -117,11 +120,13 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [reviewCommentDraft, setReviewCommentDraft] = useState('');
   // Attachments live behind the "Attach" button in the action row (the
-  // same affordance at every level). The panel opens in a modal; while the
-  // node is expanded a single hidden instance stays mounted so the button's
-  // count badge is accurate without opening the modal.
+  // same affordance at every level), opened in a modal. The badge count
+  // comes from the page's bulk fetch (attachmentCountByNode); after an
+  // upload/delete in the modal we override it locally for this node so the
+  // badge updates immediately, without re-fetching the whole tree.
   const [showAttachments, setShowAttachments] = useState(false);
-  const [attachmentCount, setAttachmentCount] = useState<number | null>(null);
+  const [attachmentCountOverride, setAttachmentCountOverride] = useState<number | null>(null);
+  const attachmentCount = attachmentCountOverride ?? attachmentCountByNode[node.id] ?? 0;
   // Which available agent to run on this activity, and whether the produced
   // draft is expanded for review.
   const [runAgentId, setRunAgentId] = useState('');
@@ -854,11 +859,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
             );
           })()}
           {/* Attachments window — reachable from the "Attach" button in the
-              action row at every level. Single instance: shown in a modal
-              when open, otherwise (when the node is expanded) mounted hidden
-              purely to keep the button's count badge fresh. Toggling remounts
-              it, so the count re-syncs after uploads / deletes. */}
-          {showAttachments ? (
+              action row at every level. The badge count comes from the
+              page's bulk fetch; the panel's onCount keeps this node's badge
+              live after uploads / deletes while the modal is open. */}
+          {showAttachments && (
             <Modal
               open
               onClose={() => setShowAttachments(false)}
@@ -873,20 +877,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 orgId={node.orgIds?.[0]}
                 disabled={isLocked}
                 hideHeader
-                onCount={setAttachmentCount}
+                onCount={setAttachmentCountOverride}
               />
             </Modal>
-          ) : isExpanded ? (
-            <div style={{ display: 'none' }}>
-              <AttachmentsPanel
-                entityType="ProcessNode"
-                entityId={node.id}
-                orgId={node.orgIds?.[0]}
-                disabled={isLocked}
-                onCount={setAttachmentCount}
-              />
-            </div>
-          ) : null}
+          )}
           {/* Guided prompt for missing required children */}
           {warning && (
             <div style={{ fontSize: 10, color: 'var(--color-warning)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, background: '#fef3c7', padding: '2px 8px', borderRadius: 4, width: 'fit-content' }}>
@@ -1016,22 +1010,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
         </button>
 
         {/* Actions — smart + button */}
-        {/* Reorder buttons */}
-        <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 0, flexShrink: 0 }}>
-          {siblingIndex > 0 ? (
-            <button style={{ ...btnIcon, fontSize: 10, padding: '0 4px', lineHeight: 1, color: 'var(--color-text-muted)' }}
-              onClick={() => onReorder(node.id, 'up')} title="Move up">{'\u25B2'}</button>
-          ) : (
-            <span style={{ display: 'inline-block', width: 22, height: 14 }} />
-          )}
-          {siblingIndex < siblingCount - 1 ? (
-            <button style={{ ...btnIcon, fontSize: 10, padding: '0 4px', lineHeight: 1, color: 'var(--color-text-muted)' }}
-              onClick={() => onReorder(node.id, 'down')} title="Move down">{'\u25BC'}</button>
-          ) : (
-            <span style={{ display: 'inline-block', width: 22, height: 14 }} />
-          )}
-        </span>
-
         {/* Tags display */}
         {nodeTags.length > 0 && (
           <span style={{ display: 'inline-flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1082,6 +1060,22 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
         {node.level === 'VALUE_STREAM' && (
           <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onClone(node.id)} title="Clone Value Stream">Clone</button>
         )}
+        {/* Reorder — move up / down among siblings. Kept at the far end of
+            the row so no arrow sits beside the Attach button. */}
+        <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 0, flexShrink: 0 }}>
+          {siblingIndex > 0 ? (
+            <button style={{ ...btnIcon, fontSize: 10, padding: '0 4px', lineHeight: 1, color: 'var(--color-text-muted)' }}
+              onClick={() => onReorder(node.id, 'up')} title="Move up">{'▲'}</button>
+          ) : (
+            <span style={{ display: 'inline-block', width: 22, height: 14 }} />
+          )}
+          {siblingIndex < siblingCount - 1 ? (
+            <button style={{ ...btnIcon, fontSize: 10, padding: '0 4px', lineHeight: 1, color: 'var(--color-text-muted)' }}
+              onClick={() => onReorder(node.id, 'down')} title="Move down">{'▼'}</button>
+          ) : (
+            <span style={{ display: 'inline-block', width: 22, height: 14 }} />
+          )}
+        </span>
         {!isLocked && (
           <button type="button" style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 14 }} onClick={() => onDelete(node.id)} title="Delete" aria-label={`Delete ${node.name || 'node'}`}><span aria-hidden="true">&times;</span></button>
         )}
@@ -1107,6 +1101,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           policiesList={policiesList}
           systemsList={systemsList}
           mappingsByStep={mappingsByStep}
+          attachmentCountByNode={attachmentCountByNode}
           skillCoverageByNode={skillCoverageByNode}
           activePageOrgId={activePageOrgId}
           onAddMapping={onAddMapping}

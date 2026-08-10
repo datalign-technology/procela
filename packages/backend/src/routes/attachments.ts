@@ -101,6 +101,33 @@ router.get('/', async (req: Request, res: Response) => {
   res.json({ success: true, data: filtered });
 });
 
+/**
+ * GET /api/v1/attachments/counts?entityType=Y[&orgId=Z][&entityIds=a,b,c]
+ *
+ * Returns a { [entityId]: count } map in a single round-trip so a caller
+ * rendering many entities (e.g. the whole process-catalog tree) can show
+ * per-entity attachment counts without one fetch per entity. Optional
+ * `entityIds` (comma-separated) narrows the result to those ids; entities
+ * with zero attachments are simply absent from the map.
+ *
+ * Declared before `/:id` so "counts" isn't captured as an id param.
+ */
+router.get('/counts', async (req: Request, res: Response) => {
+  const { entityType, entityIds, orgId } = req.query;
+  const all = await attachmentsRepo.list();
+  const idFilter = typeof entityIds === 'string' && entityIds.length > 0
+    ? new Set(entityIds.split(',').map((s) => s.trim()).filter(Boolean))
+    : null;
+  const counts: Record<string, number> = {};
+  for (const a of all) {
+    if (entityType && a.entityType !== entityType) continue;
+    if (orgId && a.orgId !== orgId) continue;
+    if (idFilter && !idFilter.has(a.entityId)) continue;
+    counts[a.entityId] = (counts[a.entityId] || 0) + 1;
+  }
+  res.json({ success: true, data: counts });
+});
+
 /** GET /api/v1/attachments/:id — get metadata */
 router.get('/:id', async (req: Request, res: Response) => {
   const a = await attachmentsRepo.get(req.params.id as string);
