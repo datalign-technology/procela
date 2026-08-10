@@ -140,9 +140,9 @@ function DependenciesPanel({ nodeId, valueStreamName, allActivities, disabled, g
 
   return (
     <div style={{ marginTop: grouped ? 0 : 'var(--space-section)', padding: '10px 12px', background: '#fafbfc', border: '1px solid var(--color-border)', borderRadius: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, marginBottom: 6 }}>
         <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Dependencies</span>
-        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>· what has to run before, and what this unblocks</span>
+        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>what has to run before, and what this unblocks</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {/* Predecessors */}
