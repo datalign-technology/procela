@@ -5,9 +5,6 @@ import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
 import AttachmentsPanel from '../../components/AttachmentsPanel';
 import CollapsibleSection from '../../components/CollapsibleSection';
-import AssetSuggestionsPanel from '../../components/AssetSuggestionsPanel';
-import SystemSuggestionsPanel from '../../components/SystemSuggestionsPanel';
-import PeopleSuggestionsPanel from '../../components/PeopleSuggestionsPanel';
 import {
   InlineEdit, DocField, DocDropdown, TierField, RtoField,
   ControlsPicker, DocPersonField, DocRoleField, DocMultiSelect,
@@ -826,58 +823,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               valueStreamName={valueStreamName || null}
               allActivities={activitiesFlat}
               disabled={isLocked}
-            />
-          )}
-          {/* Phase 3 Discover: suggest data assets that look like
-              candidates for this activity. Hidden when fully mapped
-              or no candidates score above the backend's default
-              threshold. Accept here hits the same mappings POST as
-              the picker in IOPanel above. */}
-          {isExpanded && node.level === 'ACTIVITY' && (
-            <AssetSuggestionsPanel
-              nodeId={node.id}
-              systemNames={systemsList.reduce<Record<string, string>>((acc, s) => {
-                acc[s.id] = s.name;
-                return acc;
-              }, {})}
-              disabled={isLocked}
-              refreshKey={(mappingsByStep[node.id] || []).length}
-              onAccept={async (assetId) => {
-                // Default linkType to 'consumes' (the step uses this
-                // data) — the most common case for a freshly-accepted
-                // suggestion. The user can promote to 'produces' /
-                // 'transforms' from the IOPanel after the row lands.
-                await onAddMapping(node.id, { kind: 'asset', id: assetId }, 'consumes');
-              }}
-            />
-          )}
-          {/* Phase 3 Discover: rank Systems the step looks like it
-              runs on. Accept appends the system id to node.systemIds;
-              the SystemPicker block above will reflect the change on
-              the next render. */}
-          {isExpanded && node.level === 'ACTIVITY' && (
-            <SystemSuggestionsPanel
-              nodeId={node.id}
-              disabled={isLocked}
-              refreshKey={(node.systemIds || []).length}
-              onAccept={async (systemId) => {
-                const next = Array.from(new Set([...(node.systemIds || []), systemId]));
-                onUpdate(node.id, { systemIds: next });
-              }}
-            />
-          )}
-          {/* Phase 3 Discover: rank People who look like good
-              candidates to involve. Accept assigns as Responsible
-              Person (the next-most-meaningful slot when an Owner is
-              already on the node). */}
-          {isExpanded && node.level === 'ACTIVITY' && (
-            <PeopleSuggestionsPanel
-              nodeId={node.id}
-              disabled={isLocked}
-              refreshKey={node.responsiblePersonId ? 1 : 0}
-              onAccept={async (personId) => {
-                onUpdate(node.id, { responsiblePersonId: personId });
-              }}
             />
           )}
           {/* Approved agent drafts that haven't yet been promoted to a
