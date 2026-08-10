@@ -4,6 +4,7 @@ import { Check, Loader, AlertTriangle, type LucideIcon } from 'lucide-react';
 import { apiClient } from '@/api/client';
 import { useOrgContext } from '@/stores/orgContext';
 import { useSetupStore } from '@/stores/setupStore';
+import { useToastStore } from '@/stores/toastStore';
 import ProgressRing from '@/components/ProgressRing';
 import Page from '@/components/Page';
 import PageHeader from '@/components/PageHeader';
@@ -85,7 +86,13 @@ const STATUS_META: Record<TaskStatus, { Icon: LucideIcon | null; color: string; 
 export default function SetupHubPage() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName, orgs, refreshKey } = useOrgContext();
-  const { setProgress, toggleAffirm, isAffirmed } = useSetupStore();
+  const { setProgress, toggleAffirm, isAffirmed, setVisibility } = useSetupStore();
+  const addToast = useToastStore((s) => s.addToast);
+  const hideGuide = () => {
+    if (!activeOrgId) return;
+    setVisibility(activeOrgId, 'hidden');
+    addToast('info', 'Get Started hidden from the sidebar. Turn it back on in Settings → Get Started guide.');
+  };
   // Subscribe to the active org's affirmation list so toggling "mark
   // complete" actually re-derives task status. isAffirmed is a stable
   // store-method reference, so depending on it alone never recomputes the
@@ -371,7 +378,19 @@ export default function SetupHubPage() {
         subtitle={overall === 100
           ? `${activeOrgName} is fully set up. Revisit any step below to keep it current.`
           : `Set up ${activeOrgName} in three phases — capture your business, assign ownership, then wrap governance around it.`}
-        actions={<ProgressRing percent={overall} size={56} stroke={6} showLabel />}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              onClick={hideGuide}
+              style={textBtnStyle}
+              title="Hide the Get Started guide from the sidebar. You can turn it back on any time in Settings."
+            >
+              Hide guide
+            </button>
+            <ProgressRing percent={overall} size={56} stroke={6} showLabel />
+          </div>
+        }
       />
 
 

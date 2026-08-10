@@ -16,7 +16,7 @@ import {
 } from './navConfig';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { useOrgContext } from '@/stores/orgContext';
-import { useSetupStore } from '@/stores/setupStore';
+import { useSetupStore, shouldShowGetStarted } from '@/stores/setupStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 
@@ -64,11 +64,14 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
   const { isAdmin } = usePermissions();
   const isMobile = useIsMobile();
 
-  // "Get Started" Setup Hub: shown until the active org is fully set up.
-  // Progress is computed by the Hub page and persisted in setupStore; an
-  // undefined value (never visited) keeps the entry visible as a nudge.
+  // "Get Started" Setup Hub visibility. Progress is computed by the Hub page
+  // and persisted in setupStore; an undefined value (never visited) keeps the
+  // entry visible as a nudge. The user's explicit choice (Hide button / the
+  // Settings control) overrides: 'hidden' removes it, 'shown' pins it, 'auto'
+  // (default) hides it once the org hits 100%.
   const setupProgress = useSetupStore((s) => (activeOrgId ? s.progressByOrg[activeOrgId] : undefined));
-  const showSetup = !!activeOrgId && (setupProgress === undefined || setupProgress < 100);
+  const setupVisibility = useSetupStore((s) => (activeOrgId ? (s.visibilityByOrg[activeOrgId] || 'auto') : 'auto'));
+  const showSetup = !!activeOrgId && shouldShowGetStarted(setupVisibility, setupProgress);
 
   const baseSections = showSetup
     ? [{ label: null, items: [GET_STARTED_ITEM] } as NavSection, ...navSections]
