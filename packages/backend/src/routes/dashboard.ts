@@ -143,20 +143,6 @@ router.get('/stats', async (req: Request, res: Response) => {
   );
   const orphanAssets = filteredAssets.filter((a) => !mappedAssetIdsAll.has(a.id)).length;
 
-  // Dismissed suggestions — Phase 3 learning loop. Lazy require to
-  // avoid touching the process-catalog module twice in the import
-  // graph; the store is registered at boot so it's always available
-  // by the time stats is hit.
-  let dismissedSuggestions = 0;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { suggestionDismissalsRepo } = require('./process-catalog');
-    const rows = await suggestionDismissalsRepo.list();
-    dismissedSuggestions = filterByOrgScope(
-      rows as Array<{ orgId: string }>, oid,
-    ).length;
-  } catch { /* store not loaded yet — leave at 0 */ }
-
   const filteredDomains = filterByOrgScope(dataDomains, oid);
   const ungovernedDomains = filteredDomains.filter((d) => !d.ownerId).length;
 
@@ -223,7 +209,6 @@ router.get('/stats', async (req: Request, res: Response) => {
         ownerlessItems,
         ungovernedDomains,
         orphanAssets,
-        dismissedSuggestions,
       },
     },
   });

@@ -10,9 +10,8 @@
 //     - includes the catalog tree, systems, assets, mappings and gaps
 //       sections when data is present
 //     - surfaces the Phase 3 signals (activity↔system declarations,
-//       orphan assets, dismissed-suggestion count) so the assistant
-//       can answer questions like "what data do we have that nobody
-//       uses?"
+//       orphan assets) so the assistant can answer questions like
+//       "what data do we have that nobody uses?"
 //
 //   POST /chat
 //     - 400 on missing / malformed messages array
@@ -35,7 +34,7 @@ const chatRouter = require('../routes/chat').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { buildOrgSnapshot, buildEntityIndex } = require('../routes/chat');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { processNodes, suggestionDismissals } = require('../routes/process-catalog');
+const { processNodes } = require('../routes/process-catalog');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataAssets } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -101,7 +100,6 @@ describe('chat routes + buildOrgSnapshot', () => {
   const procId = PREFIX + 'proc';
   const actId = PREFIX + 'act';
   const mapId = PREFIX + 'map';
-  const dismissalId = PREFIX + 'dismissal';
   const termId = PREFIX + 'term';
   const policyId = PREFIX + 'policy';
   const issueId = PREFIX + 'issue';
@@ -146,7 +144,7 @@ describe('chat routes + buildOrgSnapshot', () => {
         if (typeof id === 'string' && id.startsWith(PREFIX)) arr.splice(i, 1);
       }
     };
-    sweep(mappings); sweep(processNodes); sweep(dataAssets); sweep(systems); sweep(suggestionDismissals);
+    sweep(mappings); sweep(processNodes); sweep(dataAssets); sweep(systems);
     sweep(glossaryTerms); sweep(governancePolicies); sweep(governanceIssues); sweep(governanceTasks); sweep(dataQualityRules);
     sweep(connections); sweep(connectionSystemLinks);
     // Sweep both orgs so any stale rows from a previous run go away.
@@ -231,10 +229,6 @@ describe('chat routes + buildOrgSnapshot', () => {
       linkType: 'consumes', notes: '', aiSuggested: false, userOverridden: false,
       createdBy: 'test', createdAt: now, updatedAt: now,
     });
-    suggestionDismissals.push({
-      id: dismissalId, orgId, nodeId: actId, kind: 'asset', targetId: 'some-other-asset',
-      dismissedBy: null, dismissedAt: now,
-    });
   });
 
   after(async () => {
@@ -246,7 +240,7 @@ describe('chat routes + buildOrgSnapshot', () => {
         if (typeof id === 'string' && id.startsWith(PREFIX)) arr.splice(i, 1);
       }
     };
-    sweep(mappings); sweep(processNodes); sweep(dataAssets); sweep(systems); sweep(suggestionDismissals);
+    sweep(mappings); sweep(processNodes); sweep(dataAssets); sweep(systems);
     sweep(glossaryTerms); sweep(governancePolicies); sweep(governanceIssues); sweep(governanceTasks); sweep(dataQualityRules);
     for (const id of [orgId, parentOrgId]) {
       const i = organizations.findIndex((o: any) => o.id === id);
@@ -291,7 +285,7 @@ describe('chat routes + buildOrgSnapshot', () => {
       assert.ok(!/Unused billing ledger/.test(cov), 'orphan should not appear as a coverage edge');
     });
 
-    it('surfaces orphan assets and dismissal count in KNOWN GAPS', async () => {
+    it('surfaces orphan assets in KNOWN GAPS', async () => {
       const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## KNOWN GAPS/);
       // Two orphans in scope: the child's "Unused billing ledger"
@@ -301,7 +295,6 @@ describe('chat routes + buildOrgSnapshot', () => {
       assert.match(out!, /Orphan data assets.*\(2\)/);
       assert.match(out!, /Unused billing ledger/);
       assert.match(out!, /Corporate finance ledger/);
-      assert.match(out!, /Suggestions the user has dismissed.*: 1/);
     });
 
     // Regression guard for the scope bug: buildOrgSnapshot used to
