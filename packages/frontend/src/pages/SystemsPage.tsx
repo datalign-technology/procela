@@ -804,17 +804,6 @@ export default function SystemsPage() {
       <PageHeader
         title="Systems"
         subtitle="Applications and platforms where your organization's data lives."
-        meta={systems.length > 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{systems.length} systems</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{new Set(systems.map((s) => s.systemType).filter(Boolean)).size} types</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{systems.filter((s) => s.businessCriticality === 'HIGH').length} high criticality</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{connections.filter((c) => c.status === 'CONNECTED').length} connected</span>
-          </div>
-        ) : undefined}
         actions={
           <>
             <SavedViewsMenu
