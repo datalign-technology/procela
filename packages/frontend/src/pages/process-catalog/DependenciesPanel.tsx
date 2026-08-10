@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 import { useToastStore } from '../../stores/toastStore';
 
@@ -13,6 +14,7 @@ import { useToastStore } from '../../stores/toastStore';
 interface DependencyOtherEnd {
   id: string;
   name: string;
+  description: string;
   level: string;
   status: string;
   breadcrumb: string;
@@ -108,16 +110,22 @@ function DependenciesPanel({ nodeId, valueStreamName, allActivities, disabled }:
     const crossStream = !!(thisValueStream && otherStream && otherStream !== thisValueStream);
     return (
       <div key={flow.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 11 }}>
-        <span style={{ fontWeight: 500 }}>{flow.other.name}</span>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{flow.other.breadcrumb}</span>
+        <Link
+          to={`/processes?node=${flow.other.id}`}
+          title={`Open ${flow.other.name}`}
+          style={{ fontWeight: 500, color: 'var(--color-primary)', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+        >{flow.other.name}</Link>
+        {flow.other.description && (
+          <span title={flow.other.description} style={{ color: 'var(--color-text-muted)', fontSize: 10, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{flow.other.description}</span>
+        )}
         {crossStream && (
-          <span title="Different value stream from this activity" style={{ background: '#fef3c7', color: '#92400e', padding: '0 4px', borderRadius: 2, fontSize: 9, fontWeight: 600 }}>CROSS-STREAM</span>
+          <span title="Different value stream from this activity" style={{ background: '#fef3c7', color: '#92400e', padding: '0 4px', borderRadius: 2, fontSize: 9, fontWeight: 600, flexShrink: 0 }}>CROSS-STREAM</span>
         )}
         {flow.type !== 'SEQUENCE' && (
-          <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '0 4px', borderRadius: 2, fontSize: 9, fontWeight: 600 }}>{flow.type}</span>
+          <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '0 4px', borderRadius: 2, fontSize: 9, fontWeight: 600, flexShrink: 0 }}>{flow.type}</span>
         )}
         {!disabled && (
-          <button onClick={() => removeFlow(flow.id)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 11 }} title="Remove dependency">×</button>
+          <button onClick={() => removeFlow(flow.id)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 11, flexShrink: 0 }} title="Remove dependency">×</button>
         )}
       </div>
     );
