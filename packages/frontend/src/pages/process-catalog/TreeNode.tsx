@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, Paperclip } from 'lucide-react';
 import StatusBadge from '../../components/StatusBadge';
 import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
 import AttachmentsPanel from '../../components/AttachmentsPanel';
-import CollapsibleSection from '../../components/CollapsibleSection';
 import FieldStack from '../../components/FieldStack';
+import Modal from '../../components/Modal';
 import {
   InlineEdit, DocField, DocDropdown, TierField, RtoField,
   ControlsPicker, DocPersonField, DocRoleField, DocMultiSelect,
@@ -116,18 +116,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   const [tagDraft, setTagDraft] = useState('');
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [reviewCommentDraft, setReviewCommentDraft] = useState('');
-  // Collaboration panels (Attachments / Discussion / Activity) are collapsed
-  // by default to keep the tree compact; counts come from the panels via
-  // onCount so the header badge is accurate before the section is opened.
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
-  const [sectionCounts, setSectionCounts] = useState<{ attachments?: number; discussion?: number }>({});
-  const toggleSection = (key: string) => setOpenSections((prev) => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
-  const setSectionCount = (key: 'attachments' | 'discussion', n: number) =>
-    setSectionCounts((prev) => (prev[key] === n ? prev : { ...prev, [key]: n }));
+  // Attachments live behind the "Attach" button in the action row (the
+  // same affordance at every level). The panel opens in a modal; while the
+  // node is expanded a single hidden instance stays mounted so the button's
+  // count badge is accurate without opening the modal.
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [attachmentCount, setAttachmentCount] = useState<number | null>(null);
   // Which available agent to run on this activity, and whether the produced
   // draft is expanded for review.
   const [runAgentId, setRunAgentId] = useState('');
@@ -859,35 +853,40 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               </div>
             );
           })()}
-          {/* Collaboration panels — collapsed by default to keep the tree
-            *  compact. The panels stay mounted (hidden) so their header
-            *  counts populate without the user opening each one. */}
-          {isExpanded && (
-            <>
-              {/* Attachments — docs, diagrams, external links */}
-              <CollapsibleSection
-                title="Attachments"
-                count={sectionCounts.attachments}
-                open={openSections.has('attachments')}
-                onToggle={() => toggleSection('attachments')}
-              >
-                <AttachmentsPanel
-                  entityType="ProcessNode"
-                  entityId={node.id}
-                  orgId={node.orgIds?.[0]}
-                  disabled={isLocked}
-                  hideHeader
-                  onCount={(n) => setSectionCount('attachments', n)}
-                />
-              </CollapsibleSection>
-              {/* Discussion (per-node threaded comments) removed: low
-                *  real-world use — teams discuss in Slack/Teams, not per
-                *  node. The comments API remains for other entity types. */}
-              {/* Per-node history removed: it duplicated the Versions
-                *  button on this same row (version snapshots) and the
-                *  global Audit Log page. */}
-            </>
-          )}
+          {/* Attachments window — reachable from the "Attach" button in the
+              action row at every level. Single instance: shown in a modal
+              when open, otherwise (when the node is expanded) mounted hidden
+              purely to keep the button's count badge fresh. Toggling remounts
+              it, so the count re-syncs after uploads / deletes. */}
+          {showAttachments ? (
+            <Modal
+              open
+              onClose={() => setShowAttachments(false)}
+              size="md"
+              kicker="ATTACHMENTS"
+              title={node.name || 'Attachments'}
+              subtitle="Upload files or link documentation, diagrams, SOPs, and external references."
+            >
+              <AttachmentsPanel
+                entityType="ProcessNode"
+                entityId={node.id}
+                orgId={node.orgIds?.[0]}
+                disabled={isLocked}
+                hideHeader
+                onCount={setAttachmentCount}
+              />
+            </Modal>
+          ) : isExpanded ? (
+            <div style={{ display: 'none' }}>
+              <AttachmentsPanel
+                entityType="ProcessNode"
+                entityId={node.id}
+                orgId={node.orgIds?.[0]}
+                disabled={isLocked}
+                onCount={setAttachmentCount}
+              />
+            </div>
+          ) : null}
           {/* Guided prompt for missing required children */}
           {warning && (
             <div style={{ fontSize: 10, color: 'var(--color-warning)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, background: '#fef3c7', padding: '2px 8px', borderRadius: 4, width: 'fit-content' }}>
@@ -1003,6 +1002,18 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
             })}
           </select>
         )}
+
+        {/* Attachments — opens the upload / manage window. Rendered at
+            every level so the affordance is identical across the whole
+            hierarchy; the count badge shows once known. */}
+        <button
+          style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+          onClick={() => setShowAttachments(true)}
+          title="Attachments — upload & manage"
+        >
+          <Paperclip size={12} strokeWidth={2} />
+          Attach{attachmentCount ? ` (${attachmentCount})` : ''}
+        </button>
 
         {/* Actions — smart + button */}
         {/* Reorder buttons */}
