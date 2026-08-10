@@ -468,6 +468,9 @@ export default function ProcessCatalogPage() {
   // and the chip labels.
   const [controlsList, setControlsList] = useState<Array<{ id: string; code: string; name: string; policyId: string }>>([]);
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
+  // Per-node attachment counts, fetched in one bulk call so every node's
+  // "Attach (n)" badge is populated up front (no fetch-per-node).
+  const [attachmentCountByNode, setAttachmentCountByNode] = useState<Record<string, number>>({});
   // Skill-coverage map — keyed by nodeId. Populated for activity
   // nodes whose responsible person is missing one or more required
   // skills. Drives the warning chip rendered next to the Required
@@ -534,7 +537,7 @@ export default function ProcessCatalogPage() {
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes, coverageRes, controlsRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes, coverageRes, controlsRes, attachCountsRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
@@ -554,8 +557,12 @@ export default function ProcessCatalogPage() {
         // Catch so a controls-endpoint fault doesn't take down the whole
         // catalog — the picker just renders as empty.
         apiClient.get<{ success: boolean; data: Array<{ id: string; code: string; name: string; policyId: string }> }>(`/governance-controls${qp}`).catch(() => ({ data: [] })),
+        // Bulk per-node attachment counts (one round-trip for the whole
+        // tree). Catch so a counts fault just leaves badges blank.
+        apiClient.get<{ success: boolean; data: Record<string, number> }>(`/attachments/counts?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`).catch(() => ({ data: {} as Record<string, number> })),
       ]);
       setSkillCoverageByNode(coverageRes.data?.byNode || {});
+      setAttachmentCountByNode(attachCountsRes.data || {});
       const byStep: Record<string, MappingInfo[]> = {};
       for (const m of (mappingsRes.data || [])) {
         if (!byStep[m.processStepId]) byStep[m.processStepId] = [];
@@ -1591,6 +1598,7 @@ export default function ProcessCatalogPage() {
               policiesList={policiesList}
               systemsList={systemsList}
               mappingsByStep={mappingsByStep}
+              attachmentCountByNode={attachmentCountByNode}
               skillCoverageByNode={skillCoverageByNode}
               activePageOrgId={activeOrgId || ''}
               onAddMapping={addMapping}
