@@ -816,7 +816,13 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {isExpanded && node.level === 'ACTIVITY' && (
             <div style={{ marginTop: 'var(--space-section)' }}>
               <SectionLabel>Flow</SectionLabel>
-              <FieldStack gap="field">
+              {/* Two panels side by side to cut the section's height — I/O
+                  (data flow) on the left, Dependencies (sequence flow) on
+                  the right. auto-fit collapses them back to a single
+                  stacked column when the node is too narrow to hold both.
+                  alignItems:start lets each keep its natural height rather
+                  than stretching to the taller neighbour. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--space-field)', alignItems: 'start' }}>
                 <IOPanel
                   grouped
                   nodeId={node.id}
@@ -838,7 +844,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   allActivities={activitiesFlat}
                   disabled={isLocked}
                 />
-              </FieldStack>
+              </div>
             </div>
           )}
           {/* Approved agent drafts that haven't yet been promoted to a
