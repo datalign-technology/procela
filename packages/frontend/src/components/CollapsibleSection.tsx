@@ -21,7 +21,7 @@ interface CollapsibleSectionProps {
 // without the user having to open the section first.
 export default function CollapsibleSection({ title, count, open, onToggle, action, children }: CollapsibleSectionProps) {
   return (
-    <div style={{ marginTop: 12 }}>
+    <div style={{ marginTop: 'var(--space-section)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div
           role="button"

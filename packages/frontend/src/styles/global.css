@@ -136,6 +136,14 @@ ol {
   --radius-md: 6px;
   --radius-lg: 10px;
 
+  /* Vertical-rhythm scale (4px grid). Owned by the <FieldStack>
+     primitive so field and section spacing is uniform across pages
+     regardless of which fields render. Do not hand-roll gaps that
+     duplicate these — compose <FieldStack> instead. */
+  --space-tight: 4px;   /* dense chip rows / sub-notes under a field */
+  --space-field: 8px;   /* between individual fields in a form/detail stack */
+  --space-section: 16px; /* between logical sections / panels */
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
     0 2px 4px -2px rgba(0, 0, 0, 0.1);

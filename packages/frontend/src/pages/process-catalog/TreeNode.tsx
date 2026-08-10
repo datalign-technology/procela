@@ -5,6 +5,7 @@ import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
 import AttachmentsPanel from '../../components/AttachmentsPanel';
 import CollapsibleSection from '../../components/CollapsibleSection';
+import FieldStack from '../../components/FieldStack';
 import {
   InlineEdit, DocField, DocDropdown, TierField, RtoField,
   ControlsPicker, DocPersonField, DocRoleField, DocMultiSelect,
@@ -301,9 +302,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               )}
             </div>
           )}
-          {/* Documentation fields — visible when expanded */}
+          {/* Documentation fields — visible when expanded. FieldStack
+             owns the vertical rhythm (--space-field) so the gap between
+             rows is uniform no matter which fields render for this node
+             type / status; children must not add their own margins. */}
           {isExpanded && (
-            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: 2 }}>
+            <FieldStack style={{ marginTop: 'var(--space-section)', paddingLeft: 2 }}>
               {/* "Where it runs" connection summary — read-only one-liner
                  above the editable fields so the connection landscape
                  (owner · role · systems · data) is visible at a glance.
@@ -326,7 +330,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 return (
                   <div style={{
                     display: 'flex', alignItems: 'flex-start', gap: 6,
-                    fontSize: 11, marginBottom: 6,
+                    fontSize: 11,
                     padding: '6px 8px',
                     background: 'var(--color-bg)', border: '1px solid var(--color-border)',
                     borderRadius: 4,
@@ -783,7 +787,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   disabled={isLocked}
                 />
               )}
-            </div>
+            </FieldStack>
           )}
           {/* Free-text Inputs / Outputs note — sits directly above the
              structured IOPanel so the description and the attached
@@ -836,7 +840,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
             if (ex.reviewStatus !== 'APPROVED') return null;
             if (ex.promotedDocumentId) return null;
             return (
-              <div style={{ marginTop: 6, padding: '6px 10px', background: '#faf5ff', border: '1px dashed #d8b4fe', borderRadius: 4 }}>
+              <div style={{ marginTop: 'var(--space-section)', padding: '6px 10px', background: '#faf5ff', border: '1px dashed #d8b4fe', borderRadius: 4 }}>
                 <div style={{ fontSize: 10, fontWeight: 600, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
                   Approved draft pending promotion
                 </div>
