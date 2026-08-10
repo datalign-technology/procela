@@ -1416,10 +1416,12 @@ router.get('/flows/by-node/:nodeId', async (req: Request, res: Response) => {
 
 // Build a compact "other end" summary for a flow. Walk up the tree to
 // build the breadcrumb so the caller can render "Outage Management >
-// Response > Outage triage" without shipping the whole catalog. Null
-// when the referenced node is missing — the row still renders as
-// dangling so the user can delete it.
-function nodeSummary(id: string): { id: string; name: string; level: string; status: string; breadcrumb: string } | null {
+// Response > Outage triage" without shipping the whole catalog. Also
+// carry the node's own description so the Dependencies panel can show
+// identifier + description without a second lookup. Null when the
+// referenced node is missing — the row still renders as dangling so
+// the user can delete it.
+function nodeSummary(id: string): { id: string; name: string; description: string; level: string; status: string; breadcrumb: string } | null {
   const node = findNode(id);
   if (!node) return null;
   const crumbs: string[] = [];
@@ -1431,6 +1433,7 @@ function nodeSummary(id: string): { id: string; name: string; level: string; sta
   return {
     id: node.id,
     name: node.name,
+    description: node.description || '',
     level: node.level,
     status: node.status,
     breadcrumb: crumbs.join(' > '),

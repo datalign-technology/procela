@@ -4,8 +4,8 @@
 //   1. POST /flows rejects a cycle before it lands (unless the caller
 //      explicitly declared a LOOP).
 //   2. GET /flows/by-node/:id returns the "other end" enrichment
-//      (name, level, status, breadcrumb) — the DependenciesPanel
-//      relies on this to render without a second lookup.
+//      (name, description, level, status, breadcrumb) — the
+//      DependenciesPanel relies on this to render without a second lookup.
 //   3. DELETE /nodes/:id cascades flow rows involving the deleted
 //      node (already implemented; regression cover).
 
@@ -158,11 +158,12 @@ describe('flow-relationship dependencies', () => {
       assert.strictEqual(get.status, 200);
       assert.strictEqual(get.body.data.incoming.length, 2);
       assert.strictEqual(get.body.data.outgoing.length, 0);
-      // Enrichment: `other` carries name + breadcrumb.
+      // Enrichment: `other` carries name + description + breadcrumb.
       const other = get.body.data.incoming[0].other;
       assert.ok(other);
       assert.ok(['Activity A', 'Activity C'].includes(other.name));
       assert.strictEqual(other.level, 'ACTIVITY');
+      assert.strictEqual(typeof other.description, 'string');
       assert.match(other.breadcrumb, /VS Test > Proc Test > SP Test/);
       // Silence the deliberate typo call above so it's not flagged as unused.
       void res;
