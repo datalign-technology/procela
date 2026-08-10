@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import FieldStack from '../components/FieldStack';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 import Combobox from '../components/Combobox';
@@ -723,7 +724,7 @@ export default function OrganizationsPage() {
             {showOrgForm ? (
               <div style={{ padding: 16 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <FieldStack>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
                     <input autoFocus
@@ -764,7 +765,7 @@ export default function OrganizationsPage() {
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
                     <input style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
                   </div>
-                </div>
+                </FieldStack>
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
                   <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</button>
                   <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1, cursor: !orgForm.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
@@ -791,7 +792,7 @@ export default function OrganizationsPage() {
                 {detailOrg.description && (
                   <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: 12 }}>{detailOrg.description}</p>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <FieldStack>
                   {detailOrg.parentId && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                       <span style={{ color: 'var(--color-text-muted)' }}>Parent</span>
@@ -809,7 +810,7 @@ export default function OrganizationsPage() {
                     <span style={{ color: 'var(--color-text-muted)' }}>Children</span>
                     <span style={{ fontWeight: 500 }}>{flatOrgs.filter((o) => o.parentId === detailOrg.id).length}</span>
                   </div>
-                </div>
+                </FieldStack>
               </div>
             ) : (
               <div style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
