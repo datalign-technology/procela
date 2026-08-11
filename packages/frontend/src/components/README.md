@@ -236,8 +236,15 @@ caret column that toggles a full-width detail row beneath each row:
 DataTable computes the detail row's `colSpan` internally (retiring every
 hardcoded `colSpan={8}`). Lazy-fetch-on-expand, spinners, nested
 sub-tables, and quick-add controls all live inside `renderExpandedRow` —
-DataTable never fetches. Expansion is caret-triggered; whole-row-click
-triggering can be added when a page needs it.
+DataTable never fetches.
+
+`trigger` controls how a row expands. Default `'caret'`: only the leading
+caret button toggles. `'row-click'`: clicking anywhere on the row toggles,
+and the caret stays a keyboard-focusable affordance. In `'row-click'` mode
+DataTable `stopPropagation`s the cells it owns (caret + selection
+checkbox) — but any interactive control you put inside a `column.render`
+(action buttons, links) must `stopPropagation` itself so a click on it
+doesn't also toggle the row.
 
 Still out of scope (keep hand-rolled): quick-add rows pinned inside
 `<tbody>` and conditional columns (People).

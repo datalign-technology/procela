@@ -187,5 +187,54 @@ describe('DataTable', () => {
       // 'b' is in expandedIds but not expandable → no detail
       expect(screen.queryByTestId('detail-b')).toBeNull();
     });
+
+    it("trigger='row-click' toggles when the row body is clicked", () => {
+      const onToggleExpanded = vi.fn();
+      const { container } = render(
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(r) => r.id}
+          expansion={baseExpansion({ onToggleExpanded, trigger: 'row-click' })}
+        />,
+      );
+      // click a data cell in the first row
+      const firstRow = container.querySelector('tbody tr') as HTMLTableRowElement;
+      fireEvent.click(firstRow.querySelectorAll('td')[1]);
+      expect(onToggleExpanded).toHaveBeenCalledWith('a');
+    });
+
+    it("trigger='row-click' does not toggle when the selection checkbox is clicked", () => {
+      const onToggleExpanded = vi.fn();
+      const selection = mockSelection();
+      render(
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(r) => r.id}
+          selection={selection}
+          expansion={baseExpansion({ onToggleExpanded, trigger: 'row-click' })}
+        />,
+      );
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      fireEvent.click(checkboxes[1]); // first row's selection checkbox
+      expect(selection.toggle).toHaveBeenCalledWith('a');
+      expect(onToggleExpanded).not.toHaveBeenCalled(); // stopPropagation kept it from toggling
+    });
+
+    it("trigger='row-click' caret click toggles exactly once (no double-fire)", () => {
+      const onToggleExpanded = vi.fn();
+      render(
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(r) => r.id}
+          expansion={baseExpansion({ onToggleExpanded, trigger: 'row-click' })}
+        />,
+      );
+      fireEvent.click(screen.getAllByRole('button', { name: /expand row/i })[0]);
+      expect(onToggleExpanded).toHaveBeenCalledTimes(1);
+      expect(onToggleExpanded).toHaveBeenCalledWith('a');
+    });
   });
 });
