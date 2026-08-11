@@ -189,6 +189,46 @@ Never re-enable wrap on a list. If a cell has genuinely long
 content, use TruncatedText; if you want to show more, add a detail
 panel or an accordion.
 
+### `useRowSelection` + `<BulkActionBar>`
+
+Checkbox selection for list pages. Every list had hand-rolled the same
+`Set<string>` + select-all + "N selected" bar, and the copies drifted —
+several computed select-all against the *unfiltered* source list while
+the body rendered the *filtered* one, so "select all" ticked hidden rows
+and the header checkbox showed the wrong state. `useRowSelection` fixes
+that by construction: it is told the visible, selectable rows and derives
+`allSelected` / `someSelected` / `toggleAll` from that set. Selections
+that scroll out of view under a filter are preserved (bulk actions still
+run over the full `selectedIds`), but the header checkbox only governs
+the rows the user can see.
+
+```tsx
+import { useRowSelection } from '@/hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '@/components/BulkActionBar';
+
+// Pass ONLY the rows the user may tick (filter out inherited / read-only).
+const sel = useRowSelection(visibleRows, (r) => r.id);
+
+// Header cell:
+<input type="checkbox"
+  ref={(el) => { if (el) el.indeterminate = sel.someSelected; }}
+  checked={sel.allSelected} onChange={sel.toggleAll} />
+
+// Row cell:
+<input type="checkbox" checked={sel.isSelected(r.id)} onChange={() => sel.toggle(r.id)} />
+
+// The bar (renders nothing when count is 0, so mount it unconditionally):
+<BulkActionBar count={sel.count} onClear={sel.clear}>
+  <BulkActionButton onClick={bulkTag}>Set tier</BulkActionButton>
+  <BulkActionButton variant="danger" onClick={confirmDelete}>Delete selected</BulkActionButton>
+</BulkActionBar>
+```
+
+`<BulkActionButton>` variants are `primary` / `neutral` (default) /
+`danger` — semantic intent, not colour. The bar and buttons draw from
+`--color-*` tokens (the old hand-rolled bars were hardcoded blue while
+the brand primary is teal). Do NOT hand-roll a selection bar.
+
 ---
 
 ## Interactive
