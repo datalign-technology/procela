@@ -22,6 +22,8 @@ import OrgChipInput from '../components/OrgChipInput';
 import { OrgPickerModal } from '../components/OrgPicker';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 // Lazy: only renders when the user opens the connection picker.
 const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 
@@ -293,7 +295,6 @@ export default function PeoplePage() {
   const [previewPersonId, setPreviewPersonId] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<Person360Data | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
   const [deletePersonImpact, setDeletePersonImpact] = useState<{ ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number; activeAgents: number } | null>(null);
@@ -451,6 +452,9 @@ export default function PeoplePage() {
     'p_',
   );
 
+  // Row selection for bulk actions, over the currently filtered+sorted list.
+  const sel = useRowSelection(sortedPeople, (p) => p.id);
+
   const orgOptions = flattenTreeForSelect(tree);
   // Reserved for future visibility filtering
   void accessibleOrgs;
@@ -484,7 +488,7 @@ export default function PeoplePage() {
 
     if (!targetOrg) { clearParam(); return; }
 
-    if (selectedPersonIds.size > 0) {
+    if (sel.count > 0) {
       // Bulk-assign existing selection to that org instead of creating a new person.
       setBulkAssignOrgIds(new Set([targetOrg.id]));
       setBulkAssignOpen(true);
@@ -617,24 +621,10 @@ export default function PeoplePage() {
   };
 
   // ── Bulk select handlers ──
-  const togglePersonSelect = (id: string) => {
-    setSelectedPersonIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const togglePeopleSelectAll = () => {
-    if (selectedPersonIds.size === filteredPeople.length) {
-      setSelectedPersonIds(new Set());
-    } else {
-      setSelectedPersonIds(new Set(filteredPeople.map((p) => p.id)));
-    }
-  };
   const handleBulkDeletePeople = async () => {
-    if (selectedPersonIds.size === 0) return;
-    await Promise.all(Array.from(selectedPersonIds).map((id) => apiClient.delete(`/people/${id}`)));
-    setSelectedPersonIds(new Set());
+    if (sel.count === 0) return;
+    await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/people/${id}`)));
+    sel.clear();
     fetchData();
   };
 
@@ -653,8 +643,8 @@ export default function PeoplePage() {
     });
   };
   const handleBulkAssign = async () => {
-    if (selectedPersonIds.size === 0 || bulkAssignOrgIds.size === 0) return;
-    const targetIds = Array.from(selectedPersonIds);
+    if (sel.count === 0 || bulkAssignOrgIds.size === 0) return;
+    const targetIds = Array.from(sel.selectedIds);
     const newOrgIds = Array.from(bulkAssignOrgIds);
     try {
       await Promise.all(targetIds.map(async (pid) => {
@@ -669,21 +659,21 @@ export default function PeoplePage() {
       addToast('success', `${verb} ${targetIds.length} ${targetIds.length === 1 ? 'person' : 'people'} to ${newOrgIds.length} org${newOrgIds.length === 1 ? '' : 's'}`);
       setBulkAssignOpen(false);
       setBulkAssignOrgIds(new Set());
-      setSelectedPersonIds(new Set());
+      sel.clear();
       fetchData();
     } catch (err) {
       errorToast(err, 'Bulk assignment failed');
     }
   };
   const handleBulkRoleAssign = async () => {
-    if (selectedPersonIds.size === 0 || !bulkRoleValue) return;
-    const targetIds = Array.from(selectedPersonIds);
+    if (sel.count === 0 || !bulkRoleValue) return;
+    const targetIds = Array.from(sel.selectedIds);
     try {
       await Promise.all(targetIds.map((pid) => apiClient.put(`/people/${pid}`, { role: bulkRoleValue })));
       addToast('success', `Set ${targetIds.length} ${targetIds.length === 1 ? 'person' : 'people'} to ${ROLE_LABELS[bulkRoleValue] || bulkRoleValue}`);
       setBulkRoleOpen(false);
       setBulkRoleValue('');
-      setSelectedPersonIds(new Set());
+      sel.clear();
       fetchData();
     } catch (err) {
       errorToast(err, 'Bulk role assignment failed');
@@ -891,7 +881,7 @@ export default function PeoplePage() {
               <ConfirmDialog
                 open={confirmBulkDeletePeople}
                 title="Delete Selected People?"
-                message={`Delete ${selectedPersonIds.size} selected people? This cannot be undone.`}
+                message={`Delete ${sel.count} selected people? This cannot be undone.`}
                 confirmLabel="Delete Selected"
                 onConfirm={async () => {
                   setConfirmBulkDeletePeople(false);
@@ -918,50 +908,17 @@ export default function PeoplePage() {
                 onCancel={() => { setConfirmDeletePerson(null); setDeletePersonImpact(null); }}
               />
 
-              {/* Bulk Action Bar */}
-              {selectedPersonIds.size > 0 && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-                  background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-                }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedPersonIds.size} selected</span>
-                  <button
-                    onClick={() => { setBulkAssignMode('move'); openBulkAssign(); }}
-                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-                  >
-                    Move to org…
-                  </button>
-                  <button
-                    onClick={() => { setBulkAssignMode('add'); openBulkAssign(); }}
-                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-                  >
-                    Add to org…
-                  </button>
-                  <button
-                    onClick={() => setBulkRoleOpen(true)}
-                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-                  >
-                    Set app role…
-                  </button>
-                  <button
-                    onClick={() => setConfirmBulkDeletePeople(true)}
-                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-                  >
-                    Delete Selected
-                  </button>
-                  <button
-                    onClick={() => setSelectedPersonIds(new Set())}
-                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-                  >
-                    Clear Selection
-                  </button>
-                </div>
-              )}
+              <BulkActionBar count={sel.count} onClear={sel.clear}>
+                <BulkActionButton variant="primary" onClick={() => { setBulkAssignMode('move'); openBulkAssign(); }}>Move to org…</BulkActionButton>
+                <BulkActionButton onClick={() => { setBulkAssignMode('add'); openBulkAssign(); }}>Add to org…</BulkActionButton>
+                <BulkActionButton onClick={() => setBulkRoleOpen(true)}>Set app role…</BulkActionButton>
+                <BulkActionButton variant="danger" onClick={() => setConfirmBulkDeletePeople(true)}>Delete selected</BulkActionButton>
+              </BulkActionBar>
 
               {/* Bulk assign picker modal — shared OrgPicker in a dialog. */}
               <OrgPickerModal
                 open={bulkAssignOpen}
-                title={`${bulkAssignMode === 'move' ? 'Move' : 'Assign'} ${selectedPersonIds.size} ${selectedPersonIds.size === 1 ? 'person' : 'people'} to organizations`}
+                title={`${bulkAssignMode === 'move' ? 'Move' : 'Assign'} ${sel.count} ${sel.count === 1 ? 'person' : 'people'} to organizations`}
                 description={bulkAssignMode === 'move'
                   ? 'Selected people will be removed from their current org(s) and moved to the selected org(s).'
                   : 'Selected org(s) will be added. Existing assignments are preserved.'}
@@ -977,7 +934,7 @@ export default function PeoplePage() {
               {/* Bulk Role Assignment Dialog */}
               <ConfirmDialog
                 open={bulkRoleOpen}
-                title={`Set app role for ${selectedPersonIds.size} ${selectedPersonIds.size === 1 ? 'person' : 'people'}`}
+                title={`Set app role for ${sel.count} ${sel.count === 1 ? 'person' : 'people'}`}
                 message=""
                 confirmLabel={bulkRoleValue ? `Set to ${ROLE_LABELS[bulkRoleValue] || bulkRoleValue}` : 'Select a role'}
                 variant="primary"
@@ -1133,8 +1090,9 @@ export default function PeoplePage() {
                       <tr style={{ background: 'var(--color-bg)' }}>
                         <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                           <input type="checkbox"
-                            checked={filteredPeople.length > 0 && selectedPersonIds.size === filteredPeople.length}
-                            onChange={togglePeopleSelectAll} />
+                            ref={(el) => { if (el) el.indeterminate = sel.someSelected; }}
+                            checked={sel.allSelected}
+                            onChange={sel.toggleAll} />
                         </th>
                         <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                         <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
@@ -1191,13 +1149,13 @@ export default function PeoplePage() {
                         const govText = gs
                           ? [gs.groups > 0 && `${gs.groups} group${gs.groups > 1 ? 's' : ''}`, gs.roles > 0 && `${gs.roles} role${gs.roles > 1 ? 's' : ''}`, gs.domains > 0 && `${gs.domains} domain${gs.domains > 1 ? 's' : ''}`].filter(Boolean).join(', ')
                           : null;
-                        const isSelected = selectedPersonIds.has(person.id);
+                        const isSelected = sel.isSelected(person.id);
                         return (
-                        <tr key={person.id} id={`row-${person.id}`} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
+                        <tr key={person.id} id={`row-${person.id}`} style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '' }}
                           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
                           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
                           <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                            <input type="checkbox" checked={isSelected} onChange={() => togglePersonSelect(person.id)} />
+                            <input type="checkbox" checked={isSelected} onChange={() => sel.toggle(person.id)} />
                           </td>
                           <td style={{ ...tdStyle, fontWeight: 500 }}>
                             <span

@@ -30,6 +30,8 @@ import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
 import BulkSelectHint from '../components/BulkSelectHint';
 import { useSortedList } from '../hooks/useSortedList';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { useToastStore } from '../stores/toastStore';
 import { errorMessage, errorToast } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
@@ -154,17 +156,6 @@ const btnSecondary: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
   cursor: 'pointer',
-};
-
-const bulkBtnStyle: React.CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 11,
-  fontWeight: 500,
-  background: '#fff',
-  border: '1px solid #93c5fd',
-  borderRadius: 4,
-  cursor: 'pointer',
-  color: '#1e40af',
 };
 
 interface Asset360Data {
@@ -412,7 +403,6 @@ export default function DataAssetsPage() {
       ? 'Pick the table / file / asset to link to.'
       : null,
   });
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterCategory, setFilterCategory] = useState('');
   const [filterTier, setFilterTier] = useState('');
   const [filterSystemId, setFilterSystemId] = useState('');
@@ -622,6 +612,14 @@ export default function DataAssetsPage() {
     },
     'name',
   );
+
+  // Row selection for bulk actions. Only rows the user can actually tick are
+  // selectable — inherited (cross-org) rows have disabled checkboxes — so
+  // select-all governs exactly the visible, selectable set (this is what
+  // fixes the old bug where select-all compared against the full unfiltered
+  // `assets` list and ticked hidden rows).
+  const selectableAssets = sorted.filter((a) => !isInheritedAsset(a.orgId, activeOrgId));
+  const sel = useRowSelection(selectableAssets, (a) => a.id);
 
   // Column management
   const toggleExpandColumns = async (assetId: string) => {
@@ -921,29 +919,13 @@ export default function DataAssetsPage() {
     }
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === assets.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(assets.map((a) => a.id)));
-    }
-  };
-
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    const count = selectedIds.size;
+    if (sel.count === 0) return;
+    const count = sel.count;
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/data-assets/${id}`)));
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/data-assets/${id}`)));
       addToast('success', `Deleted ${count} asset${count === 1 ? '' : 's'}`);
-      setSelectedIds(new Set());
+      sel.clear();
       fetchData();
     } catch (err) {
       errorToast(err, 'Bulk delete failed');
@@ -952,12 +934,12 @@ export default function DataAssetsPage() {
   };
 
   const bulkSetTier = async (tier: string) => {
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(sel.selectedIds);
     if (ids.length === 0) return;
     try {
       await Promise.all(ids.map((id) => apiClient.put(`/data-assets/${id}`, { governanceTier: tier })));
       addToast('success', `Set ${ids.length} asset${ids.length === 1 ? '' : 's'} to ${tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase()}`);
-      setSelectedIds(new Set());
+      sel.clear();
       fetchData();
     } catch (err) {
       errorToast(err, 'Failed to update governance tier');
@@ -965,13 +947,13 @@ export default function DataAssetsPage() {
   };
 
   const bulkSetOwner = async (ownerId: string) => {
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(sel.selectedIds);
     if (ids.length === 0) return;
     try {
       await Promise.all(ids.map((id) => apiClient.put(`/data-assets/${id}`, { ownerPersonId: ownerId })));
       const ownerName = peopleList.find((p) => p.id === ownerId)?.name || 'selected owner';
       addToast('success', `Assigned ${ownerName} as owner to ${ids.length} asset${ids.length === 1 ? '' : 's'}`);
-      setSelectedIds(new Set());
+      sel.clear();
       fetchData();
     } catch (err) {
       errorToast(err, 'Failed to assign owner');
@@ -1630,46 +1612,27 @@ export default function DataAssetsPage() {
         </SectionCard>
       )}
 
-      <BulkSelectHint storageKey="data-assets" itemLabel="data assets" hasItems={assets.length > 0} hasSelection={selectedIds.size > 0} />
+      <BulkSelectHint storageKey="data-assets" itemLabel="data assets" hasItems={assets.length > 0} hasSelection={sel.count > 0} />
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 'var(--radius-md)',
-          fontSize: 12, flexWrap: 'wrap',
-        }}>
-          <span style={{ fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <span style={{ color: '#93c5fd' }}>|</span>
-          <button onClick={() => bulkSetTier('GOLD')} style={bulkBtnStyle}>Set {tierLabel('GOLD')}</button>
-          <button onClick={() => bulkSetTier('SILVER')} style={bulkBtnStyle}>Set {tierLabel('SILVER')}</button>
-          <button onClick={() => bulkSetTier('BRONZE')} style={bulkBtnStyle}>Set {tierLabel('BRONZE')}</button>
-          <span style={{ color: '#93c5fd' }}>|</span>
-          <select
-            onChange={(e) => { if (e.target.value) bulkSetOwner(e.target.value); e.target.value = ''; }}
-            style={bulkBtnStyle}
-          >
-            <option value="">Assign Owner...</option>
-            {peopleList.map((p) => (
-              <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
-            ))}
-          </select>
-          <span style={{ color: '#93c5fd' }}>|</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ ...bulkBtnStyle, background: '#fef2f2', borderColor: '#fca5a5', color: 'var(--color-error)' }}
-          >
-            Delete Selected
-          </button>
-          <span style={{ flex: 1 }} />
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ ...bulkBtnStyle, color: 'var(--color-text-muted)', borderColor: '#d1d5db' }}
-          >
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton onClick={() => bulkSetTier('GOLD')}>Set {tierLabel('GOLD')}</BulkActionButton>
+        <BulkActionButton onClick={() => bulkSetTier('SILVER')}>Set {tierLabel('SILVER')}</BulkActionButton>
+        <BulkActionButton onClick={() => bulkSetTier('BRONZE')}>Set {tierLabel('BRONZE')}</BulkActionButton>
+        <select
+          onChange={(e) => { if (e.target.value) bulkSetOwner(e.target.value); e.target.value = ''; }}
+          style={{
+            padding: '5px 12px', fontSize: 12, fontWeight: 500,
+            background: 'var(--color-surface)', color: 'var(--color-text)',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+          }}
+        >
+          <option value="">Assign owner…</option>
+          {peopleList.map((p) => (
+            <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
+          ))}
+        </select>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -1687,7 +1650,7 @@ export default function DataAssetsPage() {
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Data Assets?"
-        message={`Delete ${selectedIds.size} selected items? This cannot be undone.`}
+        message={`Delete ${sel.count} selected items? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => {
           setConfirmBulkDelete(false);
@@ -1728,7 +1691,7 @@ export default function DataAssetsPage() {
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
                 <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                  <input type="checkbox" checked={assets.length > 0 && selectedIds.size === assets.length} onChange={toggleSelectAll} aria-label="Select all assets" />
+                  <input type="checkbox" ref={(el) => { if (el) el.indeterminate = sel.someSelected; }} checked={sel.allSelected} onChange={sel.toggleAll} aria-label="Select all assets" />
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 {isVisible('system') && <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>}
@@ -1756,9 +1719,9 @@ export default function DataAssetsPage() {
                   : '';
                 return (
                   <React.Fragment key={asset.id}>
-                  <tr id={`row-${asset.id}`} style={{ transition: 'background 0.1s', background: selectedIds.has(asset.id) ? '#f0f9ff' : '' }} onMouseEnter={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = ''; }}>
+                  <tr id={`row-${asset.id}`} style={{ transition: 'background 0.1s', background: sel.isSelected(asset.id) ? 'var(--color-primary-light)' : '' }} onMouseEnter={(e) => { if (!sel.isSelected(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!sel.isSelected(asset.id)) e.currentTarget.style.background = ''; }}>
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} title={inherited ? inheritedHint : undefined}>
-                      <input type="checkbox" checked={selectedIds.has(asset.id)} disabled={inherited} onChange={() => toggleSelect(asset.id)} />
+                      <input type="checkbox" checked={sel.isSelected(asset.id)} disabled={inherited} onChange={() => sel.toggle(asset.id)} />
                     </td>
                     {/* maxWidth caps the Asset column so a long description
                       *  sub-label ellipsises within the cell instead of
