@@ -61,6 +61,13 @@ export interface DataTableExpansion<T> {
   /** Gate which rows can expand (rows returning false show no caret and
    *  never render a detail row). Default: every row is expandable. */
   getRowExpandable?: (row: T) => boolean;
+  /** How a row is expanded. `'caret'` (default): only the leading caret
+   *  button toggles. `'row-click'`: clicking anywhere on the row toggles,
+   *  and the caret becomes a keyboard-focusable affordance. DataTable
+   *  `stopPropagation`s the cells it owns (caret + selection checkbox); any
+   *  interactive control inside a `column.render` must `stopPropagation`
+   *  itself so a click on it doesn't also toggle the row. */
+  trigger?: 'caret' | 'row-click';
 }
 
 interface DataTableProps<T> {
@@ -151,11 +158,13 @@ export default function DataTable<T>({
             const isSelected = selection?.isSelected(id) ?? false;
             const canExpand = expansion ? (expansion.getRowExpandable?.(row) ?? true) : false;
             const isExpanded = canExpand && (expansion?.expandedIds.has(id) ?? false);
+            const rowClick = expansion?.trigger === 'row-click' && canExpand;
             return (
               <React.Fragment key={id}>
                 <tr
                   id={rowId?.(row)}
-                  style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '' }}
+                  onClick={rowClick ? () => expansion!.onToggleExpanded(id) : undefined}
+                  style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '', cursor: rowClick ? 'pointer' : undefined }}
                   onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
                   onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
                 >
@@ -166,7 +175,7 @@ export default function DataTable<T>({
                           type="button"
                           aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
                           aria-expanded={isExpanded}
-                          onClick={() => expansion.onToggleExpanded(id)}
+                          onClick={(e) => { if (rowClick) e.stopPropagation(); expansion.onToggleExpanded(id); }}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 10, lineHeight: 1, padding: 4 }}
                         >
                           {isExpanded ? '▼' : '▶'}
@@ -175,7 +184,10 @@ export default function DataTable<T>({
                     </td>
                   )}
                   {selection && (
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                    <td
+                      style={{ ...tdStyle, textAlign: 'center', width: 32 }}
+                      onClick={rowClick ? (e) => e.stopPropagation() : undefined}
+                    >
                       <input
                         type="checkbox"
                         checked={isSelected}
