@@ -431,6 +431,29 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   `table th, table td { white-space: nowrap; }` rule, this keeps
   every list uniform-height.
 
+**List primitives:**
+
+- `<DataTable>` — the shared list table. Every flat or expandable
+  entity-list page composes it instead of hand-rolling a `<table>`
+  shell: it owns the header, the leading checkbox column, per-row
+  hover + selected-row tint, the "no matches" row, and — via the
+  `expansion` prop — caret / row-click expandable detail rows with an
+  internally-computed colSpan. Pass a declarative `columns` array;
+  sorting (`useSortedList`), column visibility (`useColumnPicker`), and
+  the `renderExpandedRow` body (lazy fetch, nested sub-tables, forms,
+  quick-add) stay page-owned. Do NOT re-roll the table shell for a new
+  list. Exceptions that stay hand-rolled: **People** (pinned `<tbody>`
+  quick-add row + conditional column), and non-entity-list tables
+  (reports, the RACI matrix, the audit log, static reference tables,
+  nested detail sub-tables).
+- `useRowSelection` — the row-selection hook wired into `DataTable`'s
+  `selection` prop. Build it over the *filtered* rows so select-all
+  matches what's visible. Do NOT hand-roll a `selectedIds` Set +
+  `toggleSelectAll` (a recurring source of select-all/filter bugs).
+- `<BulkActionBar>` — the selected-rows action bar (`count` + `onClear`,
+  with `<BulkActionButton>` children). Do NOT hand-roll the off-brand
+  blue selected-count bar.
+
 **Interactive primitives:**
 
 - `<SecondaryButton>` — the neutral Cancel / Close affordance. Do NOT
