@@ -167,6 +167,58 @@ Props:
 
 ## Lists
 
+### `<DataTable>`
+
+The shared list table. ~18 pages hand-rolled the same `<table
+style={{width:'100%',borderCollapse:'collapse'}}>` shell — a header
+row on `--color-bg`, a leading checkbox column, per-row imperative
+hover + selected-row tint, and a colSpan "no matches" row.
+`DataTable` owns all of that behind a declarative column config.
+
+```tsx
+import DataTable, { type DataTableColumn } from '@/components/DataTable';
+
+const columns = ([
+  colPicker.isVisible('title') && {
+    key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
+    render: (r) => <span style={{ color: 'var(--color-primary)' }}>{r.title}</span>,
+  },
+  { key: 'actions', header: 'Actions', align: 'center', width: 100, render: (r) => <RowActions row={r} /> },
+].filter(Boolean) as DataTableColumn<Row>[]);
+
+<DataTable
+  rows={sorted}                 // already filtered + sorted by the page
+  columns={columns}
+  rowKey={(r) => r.id}
+  selection={sel}               // a useRowSelection result → adds the checkbox column
+  isRowDisabled={(r) => r.inherited}
+  sort={{ sortKey, sortDir, onSort: toggleSort }}
+  emptyMessage="No rows match the current filters."
+/>
+```
+
+Column config: `key` (also the sort key), `header`, `render?` (defaults
+to the row's value at `key`; accepts any `ReactNode` — badges, chips,
+inline-edit selects, icon clusters), `sortable?`, `width?`, `align?`,
+`cellStyle?`. Optional `rowId?(row)` sets a DOM `id` (e.g.
+`row-<id>` for scroll-to-highlight).
+
+What stays on the **page**, deliberately, so behaviour is identical
+and the surface stays small:
+
+- **Sorting** in `useSortedList` (URL-persisted). Pass the current
+  `sort` state in; mark columns `sortable`.
+- **Column visibility** in `useColumnPicker` with `<ColumnPicker>` in
+  the `PageHeader`. Pass the already-filtered `columns` list (filter
+  with `.filter(Boolean)` as above).
+- **Loading skeleton** and the **"no data at all" empty hero** in the
+  page's outer branch — they depend on page-specific state. `DataTable`
+  only renders the inline "no *matches*" row via `emptyMessage`.
+
+Out of scope for now (keep hand-rolled): expandable sub-rows, quick-add
+rows inside `<tbody>`, and conditional columns (Data Assets, SOPs,
+People). An `expandableRow` slot can be added later.
+
 ### `<TruncatedText>`
 
 Single-line ellipsis + hover tooltip for list-row cells. Combined

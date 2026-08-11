@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import { useSortedList } from '../hooks/useSortedList';
-import SortableTh from '../components/SortableTh';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -153,7 +154,6 @@ export default function GovernanceTasksPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Filters
@@ -208,6 +208,8 @@ export default function GovernanceTasksPage() {
     },
     'title',
   );
+
+  const sel = useRowSelection(sorted, (t) => t.id);
 
   // ── CRUD ──
 
@@ -290,23 +292,12 @@ export default function GovernanceTasksPage() {
   };
 
   // ── Bulk select ──
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const toggleSelectAll = () => {
-    if (selectedIds.size === sorted.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(sorted.map((t) => t.id)));
-  };
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
+    if (sel.count === 0) return;
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/governance-tasks/${id}`)));
-      addToast('success', `Deleted ${selectedIds.size} task${selectedIds.size === 1 ? '' : 's'}`);
-      setSelectedIds(new Set());
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/governance-tasks/${id}`)));
+      addToast('success', `Deleted ${sel.count} task${sel.count === 1 ? '' : 's'}`);
+      sel.clear();
       fetchData();
     } catch {
       addToast('error', 'Some tasks could not be deleted');
@@ -324,6 +315,68 @@ export default function GovernanceTasksPage() {
     if (!d) return '--';
     return new Date(d).toLocaleDateString();
   };
+
+  const taskColumns = ([
+    taskCols.isVisible('title') && {
+      key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
+      render: (t: GovernanceTask) => (
+        <>
+          <span style={{ color: 'var(--color-primary)' }}>{t.title}</span>
+          {isOverdue(t) && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-error)', fontWeight: 600 }}>OVERDUE</span>}
+        </>
+      ),
+    },
+    taskCols.isVisible('type') && {
+      key: 'type', header: 'Type', sortable: true,
+      render: (t: GovernanceTask) => <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{t.taskType.replace(/_/g, ' ')}</span>,
+    },
+    taskCols.isVisible('status') && {
+      key: 'status', header: 'Status', sortable: true,
+      render: (t: GovernanceTask) => <span style={badge(t.status, STATUS_COLORS[t.status] || { bg: '#f3f4f6', color: '#6b7280' })}>{t.status.replace(/_/g, ' ')}</span>,
+    },
+    taskCols.isVisible('priority') && {
+      key: 'priority', header: 'Priority', sortable: true,
+      render: (t: GovernanceTask) => <span style={badge(t.priority, PRIORITY_COLORS[t.priority] || { bg: '#f3f4f6', color: '#6b7280' })}>{t.priority}</span>,
+    },
+    taskCols.isVisible('assignee') && {
+      key: 'assignee', header: 'Assignee', sortable: true,
+      render: (t: GovernanceTask) => t.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>,
+    },
+    taskCols.isVisible('dueDate') && {
+      key: 'dueDate', header: 'Due Date', sortable: true,
+      render: (t: GovernanceTask) => (
+        <span style={{ color: isOverdue(t) ? 'var(--color-error)' : undefined, fontWeight: isOverdue(t) ? 600 : undefined }}>{formatDate(t.dueDate)}</span>
+      ),
+    },
+    taskCols.isVisible('mode') && {
+      key: 'mode', header: 'Mode',
+      render: (t: GovernanceTask) => <span style={badge(t.automationMode, MODE_COLORS[t.automationMode] || { bg: '#f3f4f6', color: '#6b7280' })}>{t.automationMode}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 140,
+      render: (t: GovernanceTask) => (
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {(STATUS_TRANSITIONS[t.status] || []).map((tr) => (
+            <button
+              key={tr.target}
+              onClick={() => handleStatusTransition(t.id, tr.target)}
+              title={`${tr.label} (${tr.target.replace(/_/g, ' ')})`}
+              style={{
+                padding: '2px 8px', fontSize: 10, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
+                border: 'none',
+                background: tr.style === 'primary' ? 'var(--color-primary)' : tr.style === 'danger' ? '#fee2e2' : 'var(--color-bg)',
+                color: tr.style === 'primary' ? '#fff' : tr.style === 'danger' ? '#991b1b' : 'var(--color-text)',
+              }}
+            >
+              {tr.label}
+            </button>
+          ))}
+          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
+          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
+        </div>
+      ),
+    },
+  ].filter(Boolean) as DataTableColumn<GovernanceTask>[]);
 
   return (
     <div>
@@ -383,27 +436,9 @@ export default function GovernanceTasksPage() {
         </div>
       )}
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -421,7 +456,7 @@ export default function GovernanceTasksPage() {
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Tasks?"
-        message={`Delete ${selectedIds.size} selected task${selectedIds.size === 1 ? '' : 's'}? This cannot be undone.`}
+        message={`Delete ${sel.count} selected task${sel.count === 1 ? '' : 's'}? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
@@ -518,110 +553,15 @@ export default function GovernanceTasksPage() {
             action={canWrite ? { label: '+ Add Task', onClick: openAdd } : undefined}
           />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                  <input type="checkbox"
-                    checked={sorted.length > 0 && selectedIds.size === sorted.length}
-                    onChange={toggleSelectAll} />
-                </th>
-                {taskCols.isVisible('title') && <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>}
-                {taskCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
-                {taskCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                {taskCols.isVisible('priority') && <SortableTh sortKey="priority" active={sortKey} dir={sortDir} onClick={toggleSort}>Priority</SortableTh>}
-                {taskCols.isVisible('assignee') && <SortableTh sortKey="assignee" active={sortKey} dir={sortDir} onClick={toggleSort}>Assignee</SortableTh>}
-                {taskCols.isVisible('dueDate') && <SortableTh sortKey="dueDate" active={sortKey} dir={sortDir} onClick={toggleSort}>Due Date</SortableTh>}
-                {taskCols.isVisible('mode') && <th scope="col" style={thStyle}>Mode</th>}
-                <th scope="col" style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: 'var(--color-text-muted)', padding: 24 }}>
-                    No tasks match the current filters.
-                  </td>
-                </tr>
-              ) : sorted.map((task) => {
-                const isSelected = selectedIds.has(task.id);
-                const overdue = isOverdue(task);
-                const transitions = STATUS_TRANSITIONS[task.status] || [];
-                return (
-                  <tr key={task.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
-                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(task.id)} />
-                    </td>
-                    {taskCols.isVisible('title') && (
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>
-                        <span style={{ color: 'var(--color-primary)' }}>{task.title}</span>
-                        {overdue && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-error)', fontWeight: 600 }}>OVERDUE</span>}
-                      </td>
-                    )}
-                    {taskCols.isVisible('type') && (
-                      <td style={tdStyle}>
-                        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{task.taskType.replace(/_/g, ' ')}</span>
-                      </td>
-                    )}
-                    {taskCols.isVisible('status') && (
-                      <td style={tdStyle}>
-                        <span style={badge(task.status.replace(/_/g, ' '), STATUS_COLORS[task.status] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                          {task.status.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                    )}
-                    {taskCols.isVisible('priority') && (
-                      <td style={tdStyle}>
-                        <span style={badge(task.priority, PRIORITY_COLORS[task.priority] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                          {task.priority}
-                        </span>
-                      </td>
-                    )}
-                    {taskCols.isVisible('assignee') && (
-                      <td style={tdStyle}>
-                        {task.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
-                      </td>
-                    )}
-                    {taskCols.isVisible('dueDate') && (
-                      <td style={{ ...tdStyle, color: overdue ? '#dc2626' : undefined, fontWeight: overdue ? 600 : undefined }}>
-                        {formatDate(task.dueDate)}
-                      </td>
-                    )}
-                    {taskCols.isVisible('mode') && (
-                      <td style={tdStyle}>
-                        <span style={badge(task.automationMode, MODE_COLORS[task.automationMode] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                          {task.automationMode}
-                        </span>
-                      </td>
-                    )}
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        {transitions.map((tr) => (
-                          <button
-                            key={tr.target}
-                            onClick={() => handleStatusTransition(task.id, tr.target)}
-                            title={`${tr.label} (${tr.target.replace(/_/g, ' ')})`}
-                            style={{
-                              padding: '2px 8px', fontSize: 10, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
-                              border: 'none',
-                              background: tr.style === 'primary' ? 'var(--color-primary)' : tr.style === 'danger' ? '#fee2e2' : 'var(--color-bg)',
-                              color: tr.style === 'primary' ? '#fff' : tr.style === 'danger' ? '#991b1b' : 'var(--color-text)',
-                            }}
-                          >
-                            {tr.label}
-                          </button>
-                        ))}
-                        {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(task)} />}
-                        {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(task.id)} />}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={sorted}
+            columns={taskColumns}
+            rowKey={(t) => t.id}
+            selection={sel}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all tasks"
+            emptyMessage="No tasks match the current filters."
+          />
         )}
       </div>
     </div>
