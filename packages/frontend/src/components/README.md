@@ -215,9 +215,32 @@ and the surface stays small:
   page's outer branch — they depend on page-specific state. `DataTable`
   only renders the inline "no *matches*" row via `emptyMessage`.
 
-Out of scope for now (keep hand-rolled): expandable sub-rows, quick-add
-rows inside `<tbody>`, and conditional columns (Data Assets, SOPs,
-People). An `expandableRow` slot can be added later.
+**Expandable detail rows** — pass the `expansion` prop to add a leading
+caret column that toggles a full-width detail row beneath each row:
+
+```tsx
+<DataTable
+  rows={filteredRows}
+  columns={columns}
+  rowKey={(r) => r.id}
+  selection={sel}
+  expansion={{
+    expandedIds,                         // Set<string>; single-open pages pass a 0/1-element Set
+    onToggleExpanded: toggleExpand,      // (id) => void
+    renderExpandedRow: (r) => <Detail row={r} />,
+    getRowExpandable: (r) => r.hasDetail, // optional; default all rows
+  }}
+/>
+```
+
+DataTable computes the detail row's `colSpan` internally (retiring every
+hardcoded `colSpan={8}`). Lazy-fetch-on-expand, spinners, nested
+sub-tables, and quick-add controls all live inside `renderExpandedRow` —
+DataTable never fetches. Expansion is caret-triggered; whole-row-click
+triggering can be added when a page needs it.
+
+Still out of scope (keep hand-rolled): quick-add rows pinned inside
+`<tbody>` and conditional columns (People).
 
 ### `<TruncatedText>`
 

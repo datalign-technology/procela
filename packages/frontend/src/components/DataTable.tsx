@@ -28,10 +28,11 @@ import type { SortDir } from '../hooks/useSortedList';
 //   - Loading skeletons and the "no data at all" empty hero stay in the
 //     page's outer branch (they depend on page-specific state).
 //
-// Rows with expandable sub-rows, quick-add rows inside the body, or
-// conditional columns (Data Assets, SOPs, People) are intentionally out of
-// scope for this version — keep those hand-rolled until an expandable-row
-// slot is added.
+// Expandable detail rows are supported via the `expansion` prop (caret
+// trigger): the page owns what the expanded region renders — including any
+// lazy fetch, nested sub-table, or quick-add controls — inside
+// `renderExpandedRow`. Quick-add rows pinned in the body and conditional
+// columns (People) remain out of scope.
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface DataTableColumn<T> {
@@ -45,6 +46,21 @@ export interface DataTableColumn<T> {
   align?: 'left' | 'center';
   /** Extra style merged into every `<td>` in this column (e.g. `fontWeight`). */
   cellStyle?: React.CSSProperties;
+}
+
+export interface DataTableExpansion<T> {
+  /** Ids of the currently-open rows. Pages that allow only one open at a
+   *  time pass a 0/1-element Set derived from their single `expandedId`. */
+  expandedIds: Set<string>;
+  /** Called from the caret button. The page decides single- vs multi-open. */
+  onToggleExpanded: (id: string) => void;
+  /** Body of the expanded region. DataTable wraps it in a full-width
+   *  `<tr><td colSpan=…>`. Lazy fetch / spinners / nested tables / quick-add
+   *  all live here — DataTable never fetches. */
+  renderExpandedRow: (row: T) => ReactNode;
+  /** Gate which rows can expand (rows returning false show no caret and
+   *  never render a detail row). Default: every row is expandable. */
+  getRowExpandable?: (row: T) => boolean;
 }
 
 interface DataTableProps<T> {
@@ -63,6 +79,8 @@ interface DataTableProps<T> {
   emptyMessage?: ReactNode;
   /** aria-label for the select-all checkbox. */
   selectAllLabel?: string;
+  /** Enable expandable detail rows with a leading caret column. */
+  expansion?: DataTableExpansion<T>;
 }
 
 export default function DataTable<T>({
@@ -75,13 +93,15 @@ export default function DataTable<T>({
   sort,
   emptyMessage,
   selectAllLabel = 'Select all rows',
+  expansion,
 }: DataTableProps<T>) {
-  const colCount = columns.length + (selection ? 1 : 0);
+  const colCount = columns.length + (selection ? 1 : 0) + (expansion ? 1 : 0);
 
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr style={{ background: 'var(--color-bg)' }}>
+          {expansion && <th scope="col" aria-hidden="true" style={{ ...thStyle, width: 32 }} />}
           {selection && (
             <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
               <input
@@ -129,33 +149,58 @@ export default function DataTable<T>({
           rows.map((row) => {
             const id = rowKey(row);
             const isSelected = selection?.isSelected(id) ?? false;
+            const canExpand = expansion ? (expansion.getRowExpandable?.(row) ?? true) : false;
+            const isExpanded = canExpand && (expansion?.expandedIds.has(id) ?? false);
             return (
-              <tr
-                key={id}
-                id={rowId?.(row)}
-                style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '' }}
-                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
-              >
-                {selection && (
-                  <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={isRowDisabled?.(row) ?? false}
-                      onChange={() => selection.toggle(id)}
-                    />
-                  </td>
+              <React.Fragment key={id}>
+                <tr
+                  id={rowId?.(row)}
+                  style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '' }}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
+                >
+                  {expansion && (
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                      {canExpand && (
+                        <button
+                          type="button"
+                          aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
+                          aria-expanded={isExpanded}
+                          onClick={() => expansion.onToggleExpanded(id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 10, lineHeight: 1, padding: 4 }}
+                        >
+                          {isExpanded ? '▼' : '▶'}
+                        </button>
+                      )}
+                    </td>
+                  )}
+                  {selection && (
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={isRowDisabled?.(row) ?? false}
+                        onChange={() => selection.toggle(id)}
+                      />
+                    </td>
+                  )}
+                  {columns.map((col) => (
+                    <td
+                      key={col.key}
+                      style={{ ...tdStyle, textAlign: col.align ?? 'left', width: col.width, ...col.cellStyle }}
+                    >
+                      {col.render ? col.render(row) : ((row as Record<string, ReactNode>)[col.key] ?? null)}
+                    </td>
+                  ))}
+                </tr>
+                {isExpanded && expansion && (
+                  <tr>
+                    <td colSpan={colCount} style={{ padding: 0, borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+                      {expansion.renderExpandedRow(row)}
+                    </td>
+                  </tr>
                 )}
-                {columns.map((col) => (
-                  <td
-                    key={col.key}
-                    style={{ ...tdStyle, textAlign: col.align ?? 'left', width: col.width, ...col.cellStyle }}
-                  >
-                    {col.render ? col.render(row) : ((row as Record<string, ReactNode>)[col.key] ?? null)}
-                  </td>
-                ))}
-              </tr>
+              </React.Fragment>
             );
           })
         )}

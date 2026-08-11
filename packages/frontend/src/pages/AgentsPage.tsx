@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Card from '../components/Card';
-import SecondaryButton from '../components/SecondaryButton';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -15,7 +16,6 @@ import IconButton from '../components/IconButton';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
-import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
@@ -145,7 +145,6 @@ export default function AgentsPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [confirmAutoPause, setConfirmAutoPause] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -331,24 +330,13 @@ export default function AgentsPage() {
   };
 
   // ── Bulk select handlers ──
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map((a) => a.id)));
-  };
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    const count = selectedIds.size;
+    if (sel.count === 0) return;
+    const count = sel.count;
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/agents/${id}`)));
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/agents/${id}`)));
       addToast('success', `Deleted ${count} agent${count === 1 ? '' : 's'}`);
-      setSelectedIds(new Set());
+      sel.clear();
       fetchData();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
@@ -384,6 +372,8 @@ export default function AgentsPage() {
     'name',
   );
 
+  const sel = useRowSelection(sorted, (a) => a.id);
+
   const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -404,6 +394,75 @@ export default function AgentsPage() {
       </Card>
     </div>
   );
+
+  const agentColumns = ([
+    agentCols.isVisible('name') && {
+      key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500 },
+      render: (a: Agent) => {
+        const roles = agentRoles.filter((r) => r.agentId === a.id);
+        const execs = agentExecutions.filter((e) => e.agentId === a.id);
+        return (
+          <>
+            <span onClick={() => setExpandedAgentId((prev) => prev === a.id ? null : a.id)} style={{ cursor: 'pointer' }}>
+              {a.name}
+            </span>
+            {a.description && (
+              <TruncatedText text={a.description} style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }} />
+            )}
+            {(roles.length > 0 || execs.length > 0) && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+                {roles.length > 0 && <StatusBadge variant="agent">{roles.length} role{roles.length !== 1 ? 's' : ''}</StatusBadge>}
+                {execs.length > 0 && <StatusBadge variant="success">{execs.length} execution{execs.length !== 1 ? 's' : ''}</StatusBadge>}
+              </div>
+            )}
+          </>
+        );
+      },
+    },
+    agentCols.isVisible('type') && {
+      key: 'type', header: 'Type', sortable: true,
+      render: (a: Agent) => {
+        const tb = badgeColor('agentType', a.agentType);
+        return (
+          <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: tb.bg, color: tb.color }}>
+            {a.agentType.replace('_', ' ')}
+          </span>
+        );
+      },
+    },
+    agentCols.isVisible('provider') && {
+      key: 'provider', header: 'Provider', sortable: true,
+      render: (a: Agent) => a.provider || <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>,
+    },
+    agentCols.isVisible('status') && {
+      key: 'status', header: 'Status', sortable: true,
+      render: (a: Agent) => {
+        const sb = STATUS_BADGES[a.status] || STATUS_BADGES.ACTIVE;
+        return (
+          <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: sb.bg, color: sb.color }}>
+            {a.status}
+          </span>
+        );
+      },
+    },
+    agentCols.isVisible('orgs') && {
+      key: 'orgs', header: 'Organizations',
+      render: (a: Agent) => a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>,
+    },
+    agentCols.isVisible('responsible') && {
+      key: 'responsible', header: 'Responsible',
+      render: (a: Agent) => a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 120,
+      render: (a: Agent) => (
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(a)} />
+          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(a.id)} />
+        </div>
+      ),
+    },
+  ].filter(Boolean) as DataTableColumn<Agent>[]);
 
   return (
     <div>
@@ -630,29 +689,14 @@ export default function AgentsPage() {
         </Card>
       )}
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <SecondaryButton onClick={() => setSelectedIds(new Set())}>
-            Clear Selection
-          </SecondaryButton>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Agents?"
-        message={`Delete ${selectedIds.size} selected agents? This cannot be undone.`}
+        message={`Delete ${sel.count} selected agents? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => {
           setConfirmBulkDelete(false);
@@ -684,158 +728,69 @@ export default function AgentsPage() {
             secondaryAction={{ label: 'Import from CSV', onClick: () => { setImportOrgId(selectedOrgId); setShowImport(true); } }}
           />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                  <input type="checkbox"
-                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                    onChange={toggleSelectAll} aria-label="Select all agents" />
-                </th>
-                {agentCols.isVisible('name') && <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>}
-                {agentCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
-                {agentCols.isVisible('provider') && <SortableTh sortKey="provider" active={sortKey} dir={sortDir} onClick={toggleSort}>Provider</SortableTh>}
-                {agentCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                {agentCols.isVisible('orgs') && <th scope="col" style={thStyle}>Organizations</th>}
-                {agentCols.isVisible('responsible') && <th scope="col" style={thStyle}>Responsible</th>}
-                <th scope="col" style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((a) => {
-                const tb = badgeColor('agentType', a.agentType);
-                const sb = STATUS_BADGES[a.status] || STATUS_BADGES.ACTIVE;
-                const isSelected = selectedIds.has(a.id);
+          <DataTable
+            rows={sorted}
+            columns={agentColumns}
+            rowKey={(a) => a.id}
+            selection={sel}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all agents"
+            emptyMessage="No agents match the current filters."
+            expansion={{
+              expandedIds: expandedAgentId ? new Set([expandedAgentId]) : new Set(),
+              onToggleExpanded: (id) => setExpandedAgentId((prev) => prev === id ? null : id),
+              renderExpandedRow: (a) => {
                 const roles = agentRoles.filter((r) => r.agentId === a.id);
                 const execs = agentExecutions.filter((e) => e.agentId === a.id);
-                const isExpanded = expandedAgentId === a.id;
                 return (
-                  <React.Fragment key={a.id}>
-                    <tr style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
-                      onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                      onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                      <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(a.id)} />
-                      </td>
-                      {agentCols.isVisible('name') && (
-                        <td style={{ ...tdStyle, fontWeight: 500 }}>
-                          <span
-                            onClick={() => setExpandedAgentId(isExpanded ? null : a.id)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {a.name}
-                          </span>
-                          {a.description && (
-                            <TruncatedText
-                              text={a.description}
-                              style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }}
-                            />
-                          )}
-                          {(roles.length > 0 || execs.length > 0) && (
-                            <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
-                              {roles.length > 0 && (
-                                <StatusBadge variant="agent">
-                                  {roles.length} role{roles.length !== 1 ? 's' : ''}
-                                </StatusBadge>
-                              )}
-                              {execs.length > 0 && (
-                                <StatusBadge variant="success">
-                                  {execs.length} execution{execs.length !== 1 ? 's' : ''}
-                                </StatusBadge>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      )}
-                      {agentCols.isVisible('type') && (
-                        <td style={tdStyle}>
-                          <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: tb.bg, color: tb.color }}>
-                            {a.agentType.replace('_', ' ')}
-                          </span>
-                        </td>
-                      )}
-                      {agentCols.isVisible('provider') && (
-                        <td style={tdStyle}>{a.provider || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}</td>
-                      )}
-                      {agentCols.isVisible('status') && (
-                        <td style={tdStyle}>
-                          <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: sb.bg, color: sb.color }}>
-                            {a.status}
-                          </span>
-                        </td>
-                      )}
-                      {agentCols.isVisible('orgs') && (
-                        <td style={tdStyle}>
-                          {a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
-                        </td>
-                      )}
-                      {agentCols.isVisible('responsible') && (
-                        <td style={tdStyle}>
-                          {a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
-                        </td>
-                      )}
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(a)} />
-                          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(a.id)} />
+                  <div style={{ padding: '12px 16px 12px 48px', background: '#fafbfc' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      {/* DAMA Roles */}
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                          Assigned DAMA Roles
                         </div>
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={8} style={{ padding: 0, borderTop: 'none' }}>
-                          <div style={{ padding: '12px 16px 12px 48px', background: '#fafbfc', borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                              {/* DAMA Roles */}
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-                                  Assigned DAMA Roles
-                                </div>
-                                {roles.length === 0 ? (
-                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No roles assigned</div>
-                                ) : (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                    {roles.map((r) => (
-                                      <StatusBadge key={r.id} variant="agent" size="md">
-                                        {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
-                                      </StatusBadge>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                              {/* Execution History */}
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-                                  Execution History ({execs.length})
-                                </div>
-                                {execs.length === 0 ? (
-                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No executions yet</div>
-                                ) : (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                    {execs.slice(0, 5).map((ex) => (
-                                      <div key={ex.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11 }}>
-                                        <StatusBadge variant={ex.status === 'SUCCESS' ? 'success' : ex.status === 'FAILED' ? 'danger' : 'warning'}>
-                                          {ex.status}
-                                        </StatusBadge>
-                                        <span style={{ color: 'var(--color-text-muted)' }}>
-                                          {ex.completedAt ? new Date(ex.completedAt).toLocaleString() : 'Pending'}
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {execs.length > 5 && <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>...and {execs.length - 5} more</div>}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+                        {roles.length === 0 ? (
+                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No roles assigned</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {roles.map((r) => (
+                              <StatusBadge key={r.id} variant="agent" size="md">
+                                {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
+                              </StatusBadge>
+                            ))}
                           </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                        )}
+                      </div>
+                      {/* Execution History */}
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                          Execution History ({execs.length})
+                        </div>
+                        {execs.length === 0 ? (
+                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No executions yet</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {execs.slice(0, 5).map((ex) => (
+                              <div key={ex.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11 }}>
+                                <StatusBadge variant={ex.status === 'SUCCESS' ? 'success' : ex.status === 'FAILED' ? 'danger' : 'warning'}>
+                                  {ex.status}
+                                </StatusBadge>
+                                <span style={{ color: 'var(--color-text-muted)' }}>
+                                  {ex.completedAt ? new Date(ex.completedAt).toLocaleString() : 'Pending'}
+                                </span>
+                              </div>
+                            ))}
+                            {execs.length > 5 && <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>...and {execs.length - 5} more</div>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 );
-              })}
-            </tbody>
-          </table>
+              },
+            }}
+          />
         )}
       </Card>
 
