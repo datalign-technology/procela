@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } fro
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
@@ -13,9 +12,11 @@ import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
-import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 // Lazy: only renders when the user opens the connection picker.
 const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 import { formatPersonLabel } from '../lib/personLabel';
@@ -205,21 +206,9 @@ export default function BusinessGlossaryPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   // Bulk selection
-  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
   const [bulkUpdates, setBulkUpdates] = useState<{ status: string; category: string; ownerPersonId: string; domainId: string }>({ status: '', category: '', ownerPersonId: '', domainId: '' });
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [applyingBulk, setApplyingBulk] = useState(false);
-  const toggleBulkSelect = (id: string) => {
-    setBulkSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const clearBulkSelection = () => {
-    setBulkSelectedIds(new Set());
-    setBulkUpdates({ status: '', category: '', ownerPersonId: '', domainId: '' });
-  };
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -317,6 +306,12 @@ export default function BusinessGlossaryPage() {
     'term',
   );
 
+  const sel = useRowSelection(sorted, (t) => t.id);
+  const clearBulkSelection = () => {
+    sel.clear();
+    setBulkUpdates({ status: '', category: '', ownerPersonId: '', domainId: '' });
+  };
+
   // ── CRUD ──
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
@@ -374,7 +369,7 @@ export default function BusinessGlossaryPage() {
   };
 
   const handleBulkApply = async () => {
-    const ids = Array.from(bulkSelectedIds);
+    const ids = Array.from(sel.selectedIds);
     if (ids.length === 0) return;
     const updates: Record<string, string | null> = {};
     if (bulkUpdates.status) updates.status = bulkUpdates.status;
@@ -400,7 +395,7 @@ export default function BusinessGlossaryPage() {
   };
 
   const handleBulkDelete = async () => {
-    const ids = Array.from(bulkSelectedIds);
+    const ids = Array.from(sel.selectedIds);
     if (ids.length === 0) return;
     setApplyingBulk(true);
     try {
@@ -473,16 +468,107 @@ export default function BusinessGlossaryPage() {
     addToast('success', 'Glossary exported as HTML');
   };
 
-  const allVisibleSelected = sorted.length > 0 && sorted.every((t) => bulkSelectedIds.has(t.id));
-  const someVisibleSelected = !allVisibleSelected && sorted.some((t) => bulkSelectedIds.has(t.id));
-  const toggleSelectAllVisible = () => {
-    setBulkSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) sorted.forEach((t) => next.delete(t.id));
-      else sorted.forEach((t) => next.add(t.id));
-      return next;
-    });
-  };
+  // ── Columns ──
+  const glossaryColumns = ([
+    glossaryCols.isVisible('term') && {
+      key: 'term', header: 'Term', sortable: true, cellStyle: { fontWeight: 500 },
+      render: (t: GlossaryTerm) => (
+        <div style={{ minWidth: 0 }}>
+          {/* Click opens the edit form so the term gets a
+           *  proper modal with definition / classification /
+           *  related-terms - the inline editor only let users
+           *  change the headword, missing the rest. Viewers
+           *  get a plain label since they can't edit. */}
+          {canWrite ? (
+            <button
+              type="button"
+              onClick={() => openEdit(t)}
+              title="Click to edit term"
+              style={{
+                background: 'none', border: 'none', padding: 0,
+                color: 'var(--color-primary)', cursor: 'pointer',
+                font: 'inherit', fontWeight: 500, textAlign: 'left',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+            >
+              {t.term}
+            </button>
+          ) : (
+            t.term
+          )}
+          {/* Definition renders as a single-line, ellipsised
+           *  sub-label under the term (directory-entry style,
+           *  matching Data Assets). It stays searchable and
+           *  fully editable via the row's Edit form. */}
+          <TruncatedText
+            text={t.definition}
+            style={{
+              fontSize: 12, fontWeight: 400, marginTop: 2, maxWidth: 460,
+              ...(t.definition?.trim() ? { color: 'var(--color-text-secondary)' } : null),
+            }}
+          />
+        </div>
+      ),
+    },
+    glossaryCols.isVisible('category') && {
+      key: 'category', header: 'Category', sortable: true,
+      render: (t: GlossaryTerm) => (
+        canWrite ? (
+          <InlineCellEdit
+            value={t.category}
+            display={<span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>}
+            type="select"
+            options={CATEGORIES}
+            onSave={(v) => inlineSaveField(t.id, 'category', v)}
+          />
+        ) : (
+          <span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
+        )
+      ),
+    },
+    glossaryCols.isVisible('status') && {
+      key: 'status', header: 'Status', sortable: true,
+      render: (t: GlossaryTerm) => (
+        canWrite ? (
+          <InlineCellEdit
+            value={t.status}
+            display={<span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>}
+            type="select"
+            options={STATUSES}
+            onSave={(v) => inlineSaveField(t.id, 'status', v)}
+          />
+        ) : (
+          <span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
+        )
+      ),
+    },
+    glossaryCols.isVisible('domain') && {
+      key: 'domain', header: 'Primary Domain', sortable: true,
+      render: (t: GlossaryTerm) => (
+        <span style={{ color: t.domainName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+          {t.domainName || '—'}
+        </span>
+      ),
+    },
+    glossaryCols.isVisible('owner') && {
+      key: 'owner', header: 'Owner', sortable: true,
+      render: (t: GlossaryTerm) => (
+        <span style={{ color: t.ownerName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+          {t.ownerName || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 80,
+      render: (t: GlossaryTerm) => (
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
+          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
+        </div>
+      ),
+    },
+  ].filter(Boolean) as DataTableColumn<GlossaryTerm>[]);
 
   // ── Render ──
 
@@ -521,8 +607,8 @@ export default function BusinessGlossaryPage() {
         onCancel={() => setConfirmDelete(null)} />
 
       <ConfirmDialog open={confirmBulkDelete}
-        title={`Delete ${bulkSelectedIds.size} term${bulkSelectedIds.size !== 1 ? 's' : ''}?`}
-        message={`This will permanently delete the ${bulkSelectedIds.size} selected glossary term${bulkSelectedIds.size !== 1 ? 's' : ''}. This cannot be undone.`}
+        title={`Delete ${sel.count} term${sel.count !== 1 ? 's' : ''}?`}
+        message={`This will permanently delete the ${sel.count} selected glossary term${sel.count !== 1 ? 's' : ''}. This cannot be undone.`}
         confirmLabel="Delete"
         onConfirm={handleBulkDelete}
         onCancel={() => setConfirmBulkDelete(false)} />
@@ -809,55 +895,32 @@ export default function BusinessGlossaryPage() {
           )}
 
           {/* Bulk Action Bar */}
-          {bulkSelectedIds.size > 0 && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 12,
-              background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-              flexWrap: 'wrap',
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{bulkSelectedIds.size} selected</span>
-              <span style={{ color: '#93c5fd' }}>|</span>
-              <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.status} onChange={(e) => setBulkUpdates({ ...bulkUpdates, status: e.target.value })}>
-                <option value="">Status…</option>
-                {STATUSES.map((s) => <option key={s} value={s}>Set {s}</option>)}
-              </select>
-              <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.category} onChange={(e) => setBulkUpdates({ ...bulkUpdates, category: e.target.value })}>
-                <option value="">Category…</option>
-                {CATEGORIES.map((c) => <option key={c} value={c}>Set {c}</option>)}
-              </select>
-              <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.ownerPersonId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerPersonId: e.target.value })}>
-                <option value="">Owner…</option>
-                <option value="__unassign__">Clear owner</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
-              <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.domainId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, domainId: e.target.value })}>
-                <option value="">Primary Domain…</option>
-                <option value="__unassign__">Clear domain</option>
-                {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-              <button
-                onClick={handleBulkApply}
-                disabled={applyingBulk}
-                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: applyingBulk ? 'not-allowed' : 'pointer', opacity: applyingBulk ? 0.6 : 1 }}
-              >
-                {applyingBulk ? 'Applying…' : 'Apply'}
-              </button>
-              <span style={{ color: '#93c5fd' }}>|</span>
-              <button
-                onClick={() => setConfirmBulkDelete(true)}
-                disabled={applyingBulk}
-                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-              >
-                Delete Selected
-              </button>
-              <button
-                onClick={clearBulkSelection}
-                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-              >
-                Clear Selection
-              </button>
-            </div>
-          )}
+          <BulkActionBar count={sel.count} onClear={clearBulkSelection} clearLabel="Clear Selection">
+            <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.status} onChange={(e) => setBulkUpdates({ ...bulkUpdates, status: e.target.value })}>
+              <option value="">Status…</option>
+              {STATUSES.map((s) => <option key={s} value={s}>Set {s}</option>)}
+            </select>
+            <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.category} onChange={(e) => setBulkUpdates({ ...bulkUpdates, category: e.target.value })}>
+              <option value="">Category…</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>Set {c}</option>)}
+            </select>
+            <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.ownerPersonId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerPersonId: e.target.value })}>
+              <option value="">Owner…</option>
+              <option value="__unassign__">Clear owner</option>
+              {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+            </select>
+            <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.domainId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, domainId: e.target.value })}>
+              <option value="">Primary Domain…</option>
+              <option value="__unassign__">Clear domain</option>
+              {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <BulkActionButton variant="primary" onClick={handleBulkApply} disabled={applyingBulk} style={{ opacity: applyingBulk ? 0.6 : 1 }}>
+              {applyingBulk ? 'Applying…' : 'Apply'}
+            </BulkActionButton>
+            <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)} disabled={applyingBulk}>
+              Delete Selected
+            </BulkActionButton>
+          </BulkActionBar>
 
           {/* Table */}
           <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
@@ -877,136 +940,15 @@ export default function BusinessGlossaryPage() {
                 No terms match your filters.
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg)' }}>
-                    <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                      {canWrite && (
-                        <input
-                          type="checkbox"
-                          aria-label="Select all visible terms"
-                          checked={allVisibleSelected}
-                          ref={(el) => { if (el) el.indeterminate = someVisibleSelected; }}
-                          onChange={toggleSelectAllVisible}
-                        />
-                      )}
-                    </th>
-                    {glossaryCols.isVisible('term') && <SortableTh sortKey="term" active={sortKey} dir={sortDir} onClick={toggleSort}>Term</SortableTh>}
-                    {glossaryCols.isVisible('category') && <SortableTh sortKey="category" active={sortKey} dir={sortDir} onClick={toggleSort}>Category</SortableTh>}
-                    {glossaryCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                    {glossaryCols.isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Primary Domain</SortableTh>}
-                    {glossaryCols.isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
-                    <th scope="col" style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.map((t) => {
-                    const isSelected = bulkSelectedIds.has(t.id);
-                    return (
-                      <tr key={t.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
-                        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                        <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
-                          {canWrite && (
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleBulkSelect(t.id)}
-                              aria-label={`Select ${t.term}`}
-                            />
-                          )}
-                        </td>
-                        {glossaryCols.isVisible('term') && (
-                          <td style={{ ...tdStyle, fontWeight: 500 }}>
-                            <div style={{ minWidth: 0 }}>
-                              {/* Click opens the edit form so the term gets a
-                               *  proper modal with definition / classification /
-                               *  related-terms - the inline editor only let users
-                               *  change the headword, missing the rest. Viewers
-                               *  get a plain label since they can't edit. */}
-                              {canWrite ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openEdit(t)}
-                                  title="Click to edit term"
-                                  style={{
-                                    background: 'none', border: 'none', padding: 0,
-                                    color: 'var(--color-primary)', cursor: 'pointer',
-                                    font: 'inherit', fontWeight: 500, textAlign: 'left',
-                                  }}
-                                  onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-                                  onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-                                >
-                                  {t.term}
-                                </button>
-                              ) : (
-                                t.term
-                              )}
-                              {/* Definition renders as a single-line, ellipsised
-                               *  sub-label under the term (directory-entry style,
-                               *  matching Data Assets). It stays searchable and
-                               *  fully editable via the row's Edit form. */}
-                              <TruncatedText
-                                text={t.definition}
-                                style={{
-                                  fontSize: 12, fontWeight: 400, marginTop: 2, maxWidth: 460,
-                                  ...(t.definition?.trim() ? { color: 'var(--color-text-secondary)' } : null),
-                                }}
-                              />
-                            </div>
-                          </td>
-                        )}
-                        {glossaryCols.isVisible('category') && (
-                          <td style={tdStyle}>
-                            {canWrite ? (
-                              <InlineCellEdit
-                                value={t.category}
-                                display={<span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>}
-                                type="select"
-                                options={CATEGORIES}
-                                onSave={(v) => inlineSaveField(t.id, 'category', v)}
-                              />
-                            ) : (
-                              <span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
-                            )}
-                          </td>
-                        )}
-                        {glossaryCols.isVisible('status') && (
-                          <td style={tdStyle}>
-                            {canWrite ? (
-                              <InlineCellEdit
-                                value={t.status}
-                                display={<span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>}
-                                type="select"
-                                options={STATUSES}
-                                onSave={(v) => inlineSaveField(t.id, 'status', v)}
-                              />
-                            ) : (
-                              <span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
-                            )}
-                          </td>
-                        )}
-                        {glossaryCols.isVisible('domain') && (
-                          <td style={{ ...tdStyle, color: t.domainName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                            {t.domainName || '—'}
-                          </td>
-                        )}
-                        {glossaryCols.isVisible('owner') && (
-                          <td style={{ ...tdStyle, color: t.ownerName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                            {t.ownerName || '—'}
-                          </td>
-                        )}
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>
-                          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                            {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
-                            {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <DataTable
+                rows={sorted}
+                columns={glossaryColumns}
+                rowKey={(t) => t.id}
+                selection={canWrite ? sel : undefined}
+                sort={{ sortKey, sortDir, onSort: toggleSort }}
+                selectAllLabel="Select all terms"
+                emptyMessage="No terms match the current filters."
+              />
             )}
           </Card>
         </div>

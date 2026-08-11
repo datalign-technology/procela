@@ -4,11 +4,12 @@ import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
-import SecondaryButton from '../components/SecondaryButton';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import { usePolling } from '../hooks/usePolling';
@@ -252,7 +253,6 @@ export default function DataLineagePage() {
   const [confirmDeleteDbtConn, setConfirmDeleteDbtConn] = useState<DbtCloudConnectionRow | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'visualization'>('table');
   const [vizMode, setVizMode] = useState<'systems' | 'assets' | 'both'>('systems');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Visualization data
@@ -366,6 +366,8 @@ export default function DataLineagePage() {
   useEffect(() => { if (viewMode === 'visualization') fetchVisualization(); }, [viewMode, fetchVisualization]);
   usePolling(fetchData, 30000);
 
+  const sel = useRowSelection(links, (l) => l.id);
+
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
@@ -426,23 +428,12 @@ export default function DataLineagePage() {
   };
 
   // ── Bulk select handlers ──
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const toggleSelectAll = () => {
-    if (selectedIds.size === links.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(links.map((l) => l.id)));
-  };
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
+    if (sel.count === 0) return;
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/data-lineage/${id}`)));
-      addToast('success', `Deleted ${selectedIds.size} lineage flows`);
-      setSelectedIds(new Set());
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/data-lineage/${id}`)));
+      addToast('success', `Deleted ${sel.count} lineage flows`);
+      sel.clear();
       fetchData();
       if (viewMode === 'visualization') fetchVisualization();
     } catch {
@@ -459,6 +450,60 @@ export default function DataLineagePage() {
   const updateField = (field: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  const lineageColumns = ([
+    lineageCols.isVisible('source') && {
+      key: 'source', header: 'Source System',
+      render: (link: LineageLink) => link.sourceSystemName || link.sourceSystemId,
+    },
+    lineageCols.isVisible('target') && {
+      key: 'target', header: 'Target System',
+      render: (link: LineageLink) => link.targetSystemName || link.targetSystemId,
+    },
+    lineageCols.isVisible('asset') && {
+      key: 'asset', header: 'Data Asset',
+      render: (link: LineageLink) => (
+        link.dataAssetName ? (
+          <span style={{ color: 'var(--color-text-secondary)' }}>{link.dataAssetName}</span>
+        ) : (
+          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>
+        )
+      ),
+    },
+    lineageCols.isVisible('flowType') && {
+      key: 'flowType', header: 'Flow Type',
+      render: (link: LineageLink) => (
+        <Badge label={link.flowType} colors={FLOW_TYPE_BADGES[link.flowType] || FLOW_TYPE_BADGES.MANUAL} />
+      ),
+    },
+    lineageCols.isVisible('frequency') && {
+      key: 'frequency', header: 'Frequency',
+      render: (link: LineageLink) => (
+        <Badge label={link.frequency} colors={FREQUENCY_BADGES[link.frequency] || FREQUENCY_BADGES.ON_DEMAND} />
+      ),
+    },
+    lineageCols.isVisible('status') && {
+      key: 'status', header: 'Status',
+      render: (link: LineageLink) => (
+        <Badge label={link.status} colors={STATUS_BADGES[link.status] || STATUS_BADGES.ACTIVE} />
+      ),
+    },
+    lineageCols.isVisible('description') && {
+      key: 'description', header: 'Description', cellStyle: { maxWidth: 200 },
+      render: (link: LineageLink) => (
+        <TruncatedText text={link.description} emptyPlaceholder="--" />
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const,
+      render: (link: LineageLink) => (
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(link)} />
+          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(link.id)} />
+        </div>
+      ),
+    },
+  ].filter(Boolean) as DataTableColumn<LineageLink>[]);
 
   if (loading) {
     return (
@@ -608,7 +653,7 @@ export default function DataLineagePage() {
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Lineage Flows?"
-        message={`Delete ${selectedIds.size} selected flows? This cannot be undone.`}
+        message={`Delete ${sel.count} selected flows? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
@@ -623,22 +668,10 @@ export default function DataLineagePage() {
       />
 
       {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && viewMode === 'table' && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <SecondaryButton onClick={() => setSelectedIds(new Set())}>
-            Clear Selection
-          </SecondaryButton>
-        </div>
+      {viewMode === 'table' && (
+        <BulkActionBar count={sel.count} onClear={sel.clear}>
+          <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
+        </BulkActionBar>
       )}
 
       {viewMode === 'table' ? (
@@ -653,74 +686,14 @@ export default function DataLineagePage() {
             />
           ) : (
             <Card padding={0} style={{ overflow: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg)' }}>
-                    <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                      <input type="checkbox"
-                        checked={links.length > 0 && selectedIds.size === links.length}
-                        onChange={toggleSelectAll} />
-                    </th>
-                    {lineageCols.isVisible('source') && <th scope="col" style={thStyle}>Source System</th>}
-                    {lineageCols.isVisible('target') && <th scope="col" style={thStyle}>Target System</th>}
-                    {lineageCols.isVisible('asset') && <th scope="col" style={thStyle}>Data Asset</th>}
-                    {lineageCols.isVisible('flowType') && <th scope="col" style={thStyle}>Flow Type</th>}
-                    {lineageCols.isVisible('frequency') && <th scope="col" style={thStyle}>Frequency</th>}
-                    {lineageCols.isVisible('status') && <th scope="col" style={thStyle}>Status</th>}
-                    {lineageCols.isVisible('description') && <th scope="col" style={thStyle}>Description</th>}
-                    <th scope="col" style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {links.map((link) => {
-                    const isSelected = selectedIds.has(link.id);
-                    return (
-                    <tr key={link.id} style={{ background: isSelected ? '#f0f9ff' : '' }}>
-                      <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(link.id)} />
-                      </td>
-                      {lineageCols.isVisible('source') && <td style={tdStyle}>{link.sourceSystemName || link.sourceSystemId}</td>}
-                      {lineageCols.isVisible('target') && <td style={tdStyle}>{link.targetSystemName || link.targetSystemId}</td>}
-                      {lineageCols.isVisible('asset') && (
-                        <td style={tdStyle}>
-                          {link.dataAssetName ? (
-                            <span style={{ color: 'var(--color-text-secondary)' }}>{link.dataAssetName}</span>
-                          ) : (
-                            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>
-                          )}
-                        </td>
-                      )}
-                      {lineageCols.isVisible('flowType') && (
-                        <td style={tdStyle}>
-                          <Badge label={link.flowType} colors={FLOW_TYPE_BADGES[link.flowType] || FLOW_TYPE_BADGES.MANUAL} />
-                        </td>
-                      )}
-                      {lineageCols.isVisible('frequency') && (
-                        <td style={tdStyle}>
-                          <Badge label={link.frequency} colors={FREQUENCY_BADGES[link.frequency] || FREQUENCY_BADGES.ON_DEMAND} />
-                        </td>
-                      )}
-                      {lineageCols.isVisible('status') && (
-                        <td style={tdStyle}>
-                          <Badge label={link.status} colors={STATUS_BADGES[link.status] || STATUS_BADGES.ACTIVE} />
-                        </td>
-                      )}
-                      {lineageCols.isVisible('description') && (
-                        <td style={{ ...tdStyle, maxWidth: 200 }}>
-                          <TruncatedText text={link.description} emptyPlaceholder="--" />
-                        </td>
-                      )}
-                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(link)} />
-                          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(link.id)} />
-                        </div>
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <DataTable
+                rows={links}
+                columns={lineageColumns}
+                rowKey={(l) => l.id}
+                selection={sel}
+                selectAllLabel="Select all flows"
+                emptyMessage="No flows match the current filters."
+              />
             </Card>
           )}
 

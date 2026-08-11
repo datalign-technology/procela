@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import { thStyle, tdStyle } from '../lib/tableStyles';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -180,7 +182,6 @@ export default function GovernanceCalendarPage() {
     name: (v: any) => !v?.trim() ? 'Event name is required.' : null,
   });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterType, setFilterType] = useState('');
   const [filterCadence, setFilterCadence] = useState('');
@@ -341,21 +342,11 @@ export default function GovernanceCalendarPage() {
     }
   };
 
-  const toggleSelect = (id: string) => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredEvents.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filteredEvents.map((i) => i.id)));
-  };
-
   const handleBulkDelete = async () => {
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(sel.selectedIds);
     await Promise.all(ids.map((id) => apiClient.delete(`/governance-calendar/${id}`)));
     addToast('success', `Deleted ${ids.length} event${ids.length === 1 ? '' : 's'}`);
-    setSelectedIds(new Set());
+    sel.clear();
     fetchData();
   };
 
@@ -379,6 +370,8 @@ export default function GovernanceCalendarPage() {
   }, [events, filterType, filterCadence, filterStatus]);
 
   const hasActiveFilters = !!(filterType || filterCadence || filterStatus);
+
+  const sel = useRowSelection(filteredEvents, (e) => e.id);
 
   // Calendar grid: compute which events fall on which days of the displayed month
   const calendarDays = useMemo(() => {
@@ -427,6 +420,52 @@ export default function GovernanceCalendarPage() {
   const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); } else setCalMonth(calMonth - 1); };
   const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else setCalMonth(calMonth + 1); };
   const goToday = () => { const now = new Date(); setCalYear(now.getFullYear()); setCalMonth(now.getMonth()); };
+
+  const calendarColumns: DataTableColumn<CalendarEvent>[] = [
+    {
+      key: 'name', header: 'Name', cellStyle: { fontWeight: 500, color: 'var(--color-primary)' },
+      render: (ev) => (
+        <>
+          {ev.name}
+          {ev.attendeeNames.length > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2 }}>
+              {ev.attendeeNames.slice(0, 3).join(', ')}
+              {ev.attendeeNames.length > 3 && ` +${ev.attendeeNames.length - 3}`}
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'type', header: 'Type',
+      render: (ev) => (
+        <span style={badgeStyle(EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM)}>
+          {formatTypeLabel(ev.eventType)}
+        </span>
+      ),
+    },
+    { key: 'cadence', header: 'Cadence', render: (ev) => formatTypeLabel(ev.cadence) },
+    { key: 'next', header: 'Next', render: (ev) => formatOccurrence(ev.nextOccurrence) },
+    {
+      key: 'status', header: 'Status',
+      render: (ev) => (
+        <span style={badgeStyle(STATUS_COLORS[ev.status] || STATUS_COLORS.ACTIVE)}>
+          {ev.status}
+        </span>
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 140,
+      render: (ev) => (
+        <div style={{ display: 'inline-flex', gap: 4 }}>
+          {canWrite && <IconButton size="sm" icon="check" label="Mark occurrence done" onClick={() => handleRun(ev.id)} />}
+          <IconButton size="sm" icon="download" label="Add to calendar (.ics)" onClick={() => downloadIcs(ev)} />
+          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(ev)} />}
+          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(ev.id)} />}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -630,30 +669,16 @@ export default function GovernanceCalendarPage() {
 
       <ConfirmDialog
         open={confirmBulkDelete}
-        title={`Delete ${selectedIds.size} event${selectedIds.size === 1 ? '' : 's'}?`}
+        title={`Delete ${sel.count} event${sel.count === 1 ? '' : 's'}?`}
         message="This cannot be undone."
-        confirmLabel={`Delete ${selectedIds.size}`}
+        confirmLabel={`Delete ${sel.count}`}
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
-      {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Delete Selected
-          </button>
-          <button onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       {/* Filters */}
       {events.length > 0 && (
@@ -828,88 +853,14 @@ export default function GovernanceCalendarPage() {
                 No events match the current filters.
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg)' }}>
-                    <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                      <input type="checkbox" checked={filteredEvents.length > 0 && selectedIds.size === filteredEvents.length} onChange={toggleSelectAll} />
-                    </th>
-                    <th scope="col" style={thStyle}>Name</th>
-                    <th scope="col" style={thStyle}>Type</th>
-                    <th scope="col" style={thStyle}>Cadence</th>
-                    <th scope="col" style={thStyle}>Next</th>
-                    <th scope="col" style={thStyle}>Status</th>
-                    <th scope="col" style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredEvents.map((ev) => (
-                    <tr key={ev.id} style={{ transition: 'background 0.1s' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
-                      <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
-                        <input type="checkbox" checked={selectedIds.has(ev.id)} onChange={() => toggleSelect(ev.id)} />
-                      </td>
-                      <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>
-                        {ev.name}
-                        {ev.attendeeNames.length > 0 && (
-                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2 }}>
-                            {ev.attendeeNames.slice(0, 3).join(', ')}
-                            {ev.attendeeNames.length > 3 && ` +${ev.attendeeNames.length - 3}`}
-                          </div>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={badgeStyle(EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM)}>
-                          {formatTypeLabel(ev.eventType)}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>{formatTypeLabel(ev.cadence)}</td>
-                      <td style={tdStyle}>{formatOccurrence(ev.nextOccurrence)}</td>
-                      <td style={tdStyle}>
-                        <span style={badgeStyle(STATUS_COLORS[ev.status] || STATUS_COLORS.ACTIVE)}>
-                          {ev.status}
-                        </span>
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', gap: 4 }}>
-                          {canWrite && (
-                            <IconButton
-                              size="sm"
-                              icon="check"
-                              label="Mark occurrence done"
-                              onClick={() => handleRun(ev.id)}
-                            />
-                          )}
-                          <IconButton
-                            size="sm"
-                            icon="download"
-                            label="Add to calendar (.ics)"
-                            onClick={() => downloadIcs(ev)}
-                          />
-                          {canWrite && (
-                            <IconButton
-                              size="sm"
-                              icon="edit"
-                              label="Edit"
-                              onClick={() => openEdit(ev)}
-                            />
-                          )}
-                          {canWrite && (
-                            <IconButton
-                              size="sm"
-                              icon="trash"
-                              label="Delete"
-                              variant="danger"
-                              onClick={() => setConfirmDelete(ev.id)}
-                            />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable
+                rows={filteredEvents}
+                columns={calendarColumns}
+                rowKey={(e) => e.id}
+                selection={sel}
+                selectAllLabel="Select all events"
+                emptyMessage="No events match the current filters."
+              />
             )}
           </Card>
         </div>
