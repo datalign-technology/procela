@@ -876,9 +876,6 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     return true;
   });
 
-  const tdLocal: React.CSSProperties = {
-    padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
-  };
   const thLocal: React.CSSProperties = {
     textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
     color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -956,6 +953,162 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     );
   }
 
+  // Per-asset derived stats shared by the Health / Rules / Actions columns.
+  const assetStats = (a: DataAssetFull) => {
+    const rs = rulesByAsset.get(a.id) || [];
+    const measured = rs.filter((r) => r.currentScore > 0);
+    const passing = rs.filter((r) => r.status === 'PASSING').length;
+    const failing = rs.filter((r) => r.status === 'FAILING').length;
+    const warn = rs.filter((r) => r.status === 'WARNING').length;
+    const score = a.healthScore ?? 0;
+    const healthColor = rs.length === 0 ? 'var(--color-text-muted)' : score >= 80 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
+    const totalWeight = rs.reduce((s, r) => s + r.weight, 0);
+    const healthTooltip = rs.length === 0
+      ? 'No rules defined. Add rules to calculate health.'
+      : `Health: ${score}%\nWeighted average of ${rs.length} rule${rs.length > 1 ? 's' : ''} (${measured.length} measured)\nFormula: Σ(score × weight) / Σ(weight)\nTotal weight: ${totalWeight}\nPassing: ${passing} | Warning: ${warn} | Failing: ${failing}`;
+    return { rs, measured, passing, failing, warn, score, healthColor, totalWeight, healthTooltip };
+  };
+
+  const assetColumns: DataTableColumn<DataAssetFull>[] = [
+    {
+      key: 'asset', header: 'Asset', cellStyle: { fontWeight: 500 },
+      render: (a) => (
+        <>
+          {a.name}
+          {a.description && (
+            <TruncatedText
+              text={a.description}
+              style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 1 }}
+            />
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'system', header: 'System',
+      render: (a) => systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>,
+    },
+    {
+      key: 'owner', header: 'Owner',
+      render: (a) => a.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>,
+    },
+    {
+      key: 'health', header: 'Health',
+      render: (a) => {
+        const { score, healthColor, healthTooltip } = assetStats(a);
+        return (
+          <div title={healthTooltip} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'help' }}>
+            <div style={{ flex: 1, maxWidth: 80, height: 6, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
+              <div style={{ width: `${score}%`, height: '100%', borderRadius: 3, background: healthColor }} />
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 500, color: healthColor }}>{score}%</span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'rules', header: 'Rules', cellStyle: { fontSize: 12 },
+      render: (a) => {
+        const { rs, passing, warn, failing } = assetStats(a);
+        return rs.length === 0 ? (
+          <span style={{ color: 'var(--color-text-muted)' }}>No rules</span>
+        ) : (
+          <span>
+            {rs.length} total
+            {passing > 0 && <span style={{ color: 'var(--color-success)', marginLeft: 6 }}>{'✔'} {passing}</span>}
+            {warn > 0 && <span style={{ color: '#ca8a04', marginLeft: 6 }}>{'⚠'} {warn}</span>}
+            {failing > 0 && <span style={{ color: 'var(--color-error)', marginLeft: 6 }}>{'✖'} {failing}</span>}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center',
+      render: (a) => {
+        const { rs } = assetStats(a);
+        // runAllRules calls e.stopPropagation() itself, so clicking Run all
+        // does not also toggle the row in trigger:'row-click' mode.
+        return rs.length > 0 ? (
+          <IconButton
+            size="sm"
+            icon="play"
+            label={runningAll === a.id ? 'Running…' : 'Run all rules'}
+            onClick={(e) => runAllRules(e, a.id, a.name)}
+            disabled={runningAll !== null}
+          />
+        ) : null;
+      },
+    },
+  ];
+
+  // Expanded region is page-owned: DataTable never fetches. Columns are
+  // lazy-loaded into columnsMap by toggleExpand.
+  const renderExpandedRow = (a: DataAssetFull) => {
+    const cols = columnsMap[a.id] || [];
+    return (
+      <div style={{ padding: '12px 20px 12px 50px' }}>
+        {loadingCols === a.id ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading columns…'}</div>
+        ) : cols.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
+            No columns defined. Auto-discover them from the Data Assets page.
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: 'var(--color-bg)' }}>
+                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Column</th>
+                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Type</th>
+                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Health</th>
+                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Rules</th>
+                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cols.map((col) => {
+                const h = col.healthScore;
+                const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
+                return (
+                  <tr key={col.id}>
+                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
+                      {col.columnName}
+                    </td>
+                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>{col.dataType || '—'}</td>
+                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)' }}>
+                      {h != null ? (
+                        <span style={{ fontWeight: 600, fontSize: 12, color: hc }}>{h}%</span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{(col.rulesCount || 0) > 0 ? 'Not run' : '—'}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontSize: 11 }}>
+                      {(col.rulesCount || 0) > 0 ? (
+                        <span>
+                          {col.rulesCount}
+                          {(col.rulesPassing || 0) > 0 && <span style={{ color: 'var(--color-success)', marginLeft: 4 }}>{'✔'}{col.rulesPassing}</span>}
+                          {(col.rulesFailing || 0) > 0 && <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>{'✖'}{col.rulesFailing}</span>}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)' }}>None</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
+                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddRule(a.id, col, 'NOT_NULL')} />
+                        <IconButton size="sm" icon="check" label="Add UNIQUE rule" onClick={() => quickAddRule(a.id, col, 'UNIQUE')} />
+                        <IconButton size="sm" icon="settings" label="Manage rules for this column" onClick={() => onManageRules(a, col.columnName)} />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       {/* Filters */}
@@ -986,160 +1139,18 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
         )}
       </div>
       <Card padding={0} shadow="none">
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: 'var(--color-bg)' }}>
-              <th scope="col" style={{ ...thLocal, width: 32 }}></th>
-              <th scope="col" style={thLocal}>Asset</th>
-              <th scope="col" style={thLocal}>System</th>
-              <th scope="col" style={thLocal}>Owner</th>
-              <th scope="col" style={thLocal}>Health</th>
-              <th scope="col" style={thLocal}>Rules</th>
-              <th scope="col" style={{ ...thLocal, textAlign: 'center' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAssets.map((a) => {
-              const rs = rulesByAsset.get(a.id) || [];
-              const measured = rs.filter((r) => r.currentScore > 0);
-              const passing = rs.filter((r) => r.status === 'PASSING').length;
-              const failing = rs.filter((r) => r.status === 'FAILING').length;
-              const warn = rs.filter((r) => r.status === 'WARNING').length;
-              const score = a.healthScore ?? 0;
-              const healthColor = rs.length === 0 ? 'var(--color-text-muted)' : score >= 80 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
-              const isExpanded = expandedId === a.id;
-              const cols = columnsMap[a.id] || [];
-              const totalWeight = rs.reduce((s, r) => s + r.weight, 0);
-              const healthTooltip = rs.length === 0
-                ? 'No rules defined. Add rules to calculate health.'
-                : `Health: ${score}%\nWeighted average of ${rs.length} rule${rs.length > 1 ? 's' : ''} (${measured.length} measured)\nFormula: \u03A3(score \u00D7 weight) / \u03A3(weight)\nTotal weight: ${totalWeight}\nPassing: ${passing} | Warning: ${warn} | Failing: ${failing}`;
-              return (
-                <React.Fragment key={a.id}>
-                <tr style={{ cursor: 'pointer' }}
-                  onClick={() => toggleExpand(a.id)}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
-                >
-                  <td style={{ ...tdLocal, textAlign: 'center', width: 32, fontSize: 10, color: 'var(--color-text-muted)' }}>
-                    {isExpanded ? '\u25BC' : '\u25B6'}
-                  </td>
-                  <td style={{ ...tdLocal, fontWeight: 500 }}>
-                    {a.name}
-                    {a.description && (
-                      <TruncatedText
-                        text={a.description}
-                        style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 1 }}
-                      />
-                    )}
-                  </td>
-                  <td style={tdLocal}>
-                    {systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
-                  </td>
-                  <td style={tdLocal}>{a.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
-                  <td style={tdLocal} title={healthTooltip}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'help' }}>
-                      <div style={{ flex: 1, maxWidth: 80, height: 6, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
-                        <div style={{ width: `${score}%`, height: '100%', borderRadius: 3, background: healthColor }} />
-                      </div>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: healthColor }}>{score}%</span>
-                    </div>
-                  </td>
-                  <td style={{ ...tdLocal, fontSize: 12 }}>
-                    {rs.length === 0 ? (
-                      <span style={{ color: 'var(--color-text-muted)' }}>No rules</span>
-                    ) : (
-                      <span>
-                        {rs.length} total
-                        {passing > 0 && <span style={{ color: 'var(--color-success)', marginLeft: 6 }}>{'\u2714'} {passing}</span>}
-                        {warn > 0 && <span style={{ color: '#ca8a04', marginLeft: 6 }}>{'\u26A0'} {warn}</span>}
-                        {failing > 0 && <span style={{ color: 'var(--color-error)', marginLeft: 6 }}>{'\u2716'} {failing}</span>}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ ...tdLocal, textAlign: 'center' }}>
-                    {rs.length > 0 && (
-                      <IconButton
-                        size="sm"
-                        icon="play"
-                        label={runningAll === a.id ? 'Running\u2026' : 'Run all rules'}
-                        onClick={(e) => runAllRules(e, a.id, a.name)}
-                        disabled={runningAll !== null}
-                      />
-                    )}
-                  </td>
-                </tr>
-                {/* Expanded columns */}
-                {isExpanded && (
-                  <tr>
-                    <td colSpan={7} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
-                      <div style={{ padding: '12px 20px 12px 50px' }}>
-                        {loadingCols === a.id ? (
-                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading columns\u2026'}</div>
-                        ) : cols.length === 0 ? (
-                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
-                            No columns defined. Auto-discover them from the Data Assets page.
-                          </div>
-                        ) : (
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                            <thead>
-                              <tr style={{ background: 'var(--color-bg)' }}>
-                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Column</th>
-                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Type</th>
-                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Health</th>
-                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Rules</th>
-                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {cols.map((col) => {
-                                const h = col.healthScore;
-                                const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
-                                return (
-                                  <tr key={col.id}>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
-                                      {col.columnName}
-                                    </td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>{col.dataType || '\u2014'}</td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)' }}>
-                                      {h != null ? (
-                                        <span style={{ fontWeight: 600, fontSize: 12, color: hc }}>{h}%</span>
-                                      ) : (
-                                        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{(col.rulesCount || 0) > 0 ? 'Not run' : '\u2014'}</span>
-                                      )}
-                                    </td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontSize: 11 }}>
-                                      {(col.rulesCount || 0) > 0 ? (
-                                        <span>
-                                          {col.rulesCount}
-                                          {(col.rulesPassing || 0) > 0 && <span style={{ color: 'var(--color-success)', marginLeft: 4 }}>{'\u2714'}{col.rulesPassing}</span>}
-                                          {(col.rulesFailing || 0) > 0 && <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>{'\u2716'}{col.rulesFailing}</span>}
-                                        </span>
-                                      ) : (
-                                        <span style={{ color: 'var(--color-text-muted)' }}>None</span>
-                                      )}
-                                    </td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
-                                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                                        <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddRule(a.id, col, 'NOT_NULL')} />
-                                        <IconButton size="sm" icon="check" label="Add UNIQUE rule" onClick={() => quickAddRule(a.id, col, 'UNIQUE')} />
-                                        <IconButton size="sm" icon="settings" label="Manage rules for this column" onClick={() => onManageRules(a, col.columnName)} />
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+        <DataTable
+          rows={filteredAssets}
+          columns={assetColumns}
+          rowKey={(a) => a.id}
+          expansion={{
+            expandedIds: expandedId ? new Set([expandedId]) : new Set<string>(),
+            onToggleExpanded: toggleExpand,
+            renderExpandedRow,
+            trigger: 'row-click',
+          }}
+          emptyMessage="No assets match the current filters."
+        />
       </Card>
     </div>
   );

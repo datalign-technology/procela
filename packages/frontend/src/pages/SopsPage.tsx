@@ -2,8 +2,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -142,7 +144,6 @@ export default function SopsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -261,21 +262,11 @@ export default function SopsPage() {
     });
   };
 
-  const toggleSelect = (id: string) => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
-  const toggleSelectAll = () => {
-    if (selectedIds.size === sops.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(sops.map((i) => i.id)));
-  };
-
   const handleBulkDelete = async () => {
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(sel.selectedIds);
     await Promise.all(ids.map((id) => apiClient.delete(`/sops/${id}`)));
     addToast('success', `Deleted ${ids.length} SOP${ids.length === 1 ? '' : 's'}`);
-    setSelectedIds(new Set());
+    sel.clear();
     fetchData();
   };
 
@@ -294,6 +285,133 @@ export default function SopsPage() {
     return true;
   });
 
+  const sel = useRowSelection(filtered, (s) => s.id);
+
+  const sopColumns = ([
+    sopCols.isVisible('code') && {
+      key: 'code', header: 'Code', width: 80, cellStyle: { fontFamily: 'var(--font-mono)', fontSize: 12 },
+      render: (sop: Sop) => sop.code,
+    },
+    sopCols.isVisible('title') && {
+      key: 'title', header: 'Title', cellStyle: { fontWeight: 500 },
+      render: (sop: Sop) => sop.title,
+    },
+    sopCols.isVisible('category') && {
+      key: 'category', header: 'Category',
+      render: (sop: Sop) => (
+        <span style={badge(CATEGORY_COLORS[sop.category] || CATEGORY_COLORS.OTHER)}>{CATEGORY_LABELS[sop.category] || sop.category}</span>
+      ),
+    },
+    sopCols.isVisible('roles') && {
+      key: 'roles', header: 'Roles', cellStyle: { fontSize: 11, color: 'var(--color-text-muted)' },
+      render: (sop: Sop) => (
+        <>
+          {(sop.applicableRoles || []).slice(0, 3).map((r) => ROLE_LABELS[r] || r).join(', ')}
+          {sop.applicableRoles && sop.applicableRoles.length > 3 && ` +${sop.applicableRoles.length - 3}`}
+        </>
+      ),
+    },
+    sopCols.isVisible('steps') && {
+      key: 'steps', header: 'Steps', align: 'center' as const,
+      render: (sop: Sop) => sop.steps?.length || 0,
+    },
+    sopCols.isVisible('status') && {
+      key: 'status', header: 'Status',
+      render: (sop: Sop) => (
+        <span style={badge(STATUS_COLORS[sop.status] || STATUS_COLORS.DRAFT)}>{sop.status}</span>
+      ),
+    },
+    sopCols.isVisible('owner') && {
+      key: 'owner', header: 'Owner', cellStyle: { fontSize: 12 },
+      render: (sop: Sop) => sop.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
+      render: (sop: Sop) => (
+        <div style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sop)} />}
+          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(sop.id)} />}
+        </div>
+      ),
+    },
+  ].filter(Boolean) as DataTableColumn<Sop>[]);
+
+  const renderExpandedRow = (sop: Sop) => (
+    <div style={{ maxWidth: 800, padding: 16 }}>
+      {sop.purpose && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Purpose</div>
+          <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>{sop.purpose}</div>
+        </div>
+      )}
+      {sop.triggerEvent && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Trigger</div>
+          <div style={{ fontSize: 13 }}>{sop.triggerEvent}</div>
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Steps</div>
+        {canWrite && (
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              const newStep = { order: (sop.steps?.length || 0) + 1, title: 'New step', description: '', estimatedMinutes: 0 };
+              const updatedSteps = [...(sop.steps || []), newStep];
+              await apiClient.put(`/sops/${sop.id}`, { steps: updatedSteps });
+              addToast('success', 'Step added');
+              fetchData();
+            }}
+            style={{ ...btnSecondary, fontSize: 11, padding: '3px 10px' }}
+          >+ Add Step</button>
+        )}
+      </div>
+      <ol style={{ paddingLeft: 0, listStyle: 'none', margin: 0 }}>
+        {(sop.steps || []).map((step, stepIdx) => (
+          <li key={step.order} style={{ display: 'flex', gap: 12, padding: '10px 12px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{step.order}</div>
+              {canWrite && (
+                <>
+                  <button disabled={stepIdx === 0} onClick={async (e) => {
+                    e.stopPropagation();
+                    const steps = [...sop.steps];
+                    [steps[stepIdx - 1], steps[stepIdx]] = [steps[stepIdx], steps[stepIdx - 1]];
+                    await apiClient.put(`/sops/${sop.id}`, { steps: steps.map((s, i) => ({ ...s, order: i + 1 })) });
+                    fetchData();
+                  }} style={{ background: 'none', border: 'none', cursor: stepIdx === 0 ? 'default' : 'pointer', fontSize: 9, color: stepIdx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0 }}>&#9650;</button>
+                  <button disabled={stepIdx === sop.steps.length - 1} onClick={async (e) => {
+                    e.stopPropagation();
+                    const steps = [...sop.steps];
+                    [steps[stepIdx], steps[stepIdx + 1]] = [steps[stepIdx + 1], steps[stepIdx]];
+                    await apiClient.put(`/sops/${sop.id}`, { steps: steps.map((s, i) => ({ ...s, order: i + 1 })) });
+                    fetchData();
+                  }} style={{ background: 'none', border: 'none', cursor: stepIdx === sop.steps.length - 1 ? 'default' : 'pointer', fontSize: 9, color: stepIdx === sop.steps.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0 }}>&#9660;</button>
+                </>
+              )}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{step.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{step.description}</div>
+            </div>
+            {canWrite && (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const updatedSteps = sop.steps.filter((_, i) => i !== stepIdx).map((s, i) => ({ ...s, order: i + 1 }));
+                  await apiClient.put(`/sops/${sop.id}`, { steps: updatedSteps });
+                  addToast('success', 'Step removed');
+                  fetchData();
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error, #dc2626)', fontSize: 14, padding: 4, flexShrink: 0, alignSelf: 'flex-start' }}
+                title="Remove step"
+              >&times;</button>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 
   return (
     <div>
@@ -430,30 +548,16 @@ export default function SopsPage() {
 
       <ConfirmDialog
         open={confirmBulkDelete}
-        title={`Delete ${selectedIds.size} SOP${selectedIds.size === 1 ? '' : 's'}?`}
+        title={`Delete ${sel.count} SOP${sel.count === 1 ? '' : 's'}?`}
         message="This cannot be undone."
-        confirmLabel={`Delete ${selectedIds.size}`}
+        confirmLabel={`Delete ${sel.count}`}
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
-      {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Delete Selected
-          </button>
-          <button onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       {/* Table */}
       {loading ? (
@@ -470,148 +574,20 @@ export default function SopsPage() {
         />
       ) : (
         <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                  <input type="checkbox" checked={sops.length > 0 && selectedIds.size === sops.length} onChange={toggleSelectAll} />
-                </th>
-                {sopCols.isVisible('code') && <th scope="col" style={{ ...thStyle, width: 80 }}>Code</th>}
-                {sopCols.isVisible('title') && <th scope="col" style={thStyle}>Title</th>}
-                {sopCols.isVisible('category') && <th scope="col" style={thStyle}>Category</th>}
-                {sopCols.isVisible('roles') && <th scope="col" style={thStyle}>Roles</th>}
-                {sopCols.isVisible('steps') && <th scope="col" style={{ ...thStyle, textAlign: 'center' }}>Steps</th>}
-                {sopCols.isVisible('status') && <th scope="col" style={thStyle}>Status</th>}
-                {sopCols.isVisible('owner') && <th scope="col" style={thStyle}>Owner</th>}
-                <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((sop) => {
-                const isExpanded = expandedId === sop.id;
-                return (
-                  <>
-                    <tr key={sop.id} onClick={() => setExpandedId(isExpanded ? null : sop.id)} style={{ cursor: 'pointer' }}>
-                      <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" checked={selectedIds.has(sop.id)} onChange={() => toggleSelect(sop.id)} />
-                      </td>
-                      {sopCols.isVisible('code') && <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{sop.code}</td>}
-                      {sopCols.isVisible('title') && (
-                        <td style={{ ...tdStyle, fontWeight: 500 }}>
-                          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginRight: 6 }}>{isExpanded ? '▼' : '▶'}</span>
-                          {sop.title}
-                        </td>
-                      )}
-                      {sopCols.isVisible('category') && (
-                        <td style={tdStyle}>
-                          <span style={badge(CATEGORY_COLORS[sop.category] || CATEGORY_COLORS.OTHER)}>{CATEGORY_LABELS[sop.category] || sop.category}</span>
-                        </td>
-                      )}
-                      {sopCols.isVisible('roles') && (
-                        <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-muted)' }}>
-                          {(sop.applicableRoles || []).slice(0, 3).map((r) => ROLE_LABELS[r] || r).join(', ')}
-                          {sop.applicableRoles && sop.applicableRoles.length > 3 && ` +${sop.applicableRoles.length - 3}`}
-                        </td>
-                      )}
-                      {sopCols.isVisible('steps') && <td style={{ ...tdStyle, textAlign: 'center' }}>{sop.steps?.length || 0}</td>}
-                      {sopCols.isVisible('status') && (
-                        <td style={tdStyle}>
-                          <span style={badge(STATUS_COLORS[sop.status] || STATUS_COLORS.DRAFT)}>{sop.status}</span>
-                        </td>
-                      )}
-                      {sopCols.isVisible('owner') && <td style={{ ...tdStyle, fontSize: 12 }}>{sop.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}</td>}
-                      <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'inline-flex', gap: 4 }}>
-                          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sop)} />}
-                          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(sop.id)} />}
-                        </div>
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={9} style={{ background: 'var(--color-bg)', padding: 16, borderTop: '1px solid var(--color-border)' }}>
-                          <div style={{ maxWidth: 800 }}>
-                            {sop.purpose && (
-                              <div style={{ marginBottom: 12 }}>
-                                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Purpose</div>
-                                <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>{sop.purpose}</div>
-                              </div>
-                            )}
-                            {sop.triggerEvent && (
-                              <div style={{ marginBottom: 12 }}>
-                                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Trigger</div>
-                                <div style={{ fontSize: 13 }}>{sop.triggerEvent}</div>
-                              </div>
-                            )}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Steps</div>
-                              {canWrite && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    const newStep = { order: (sop.steps?.length || 0) + 1, title: 'New step', description: '', estimatedMinutes: 0 };
-                                    const updatedSteps = [...(sop.steps || []), newStep];
-                                    await apiClient.put(`/sops/${sop.id}`, { steps: updatedSteps });
-                                    addToast('success', 'Step added');
-                                    fetchData();
-                                  }}
-                                  style={{ ...btnSecondary, fontSize: 11, padding: '3px 10px' }}
-                                >+ Add Step</button>
-                              )}
-                            </div>
-                            <ol style={{ paddingLeft: 0, listStyle: 'none', margin: 0 }}>
-                              {(sop.steps || []).map((step, stepIdx) => (
-                                <li key={step.order} style={{ display: 'flex', gap: 12, padding: '10px 12px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: 6 }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{step.order}</div>
-                                    {canWrite && (
-                                      <>
-                                        <button disabled={stepIdx === 0} onClick={async (e) => {
-                                          e.stopPropagation();
-                                          const steps = [...sop.steps];
-                                          [steps[stepIdx - 1], steps[stepIdx]] = [steps[stepIdx], steps[stepIdx - 1]];
-                                          await apiClient.put(`/sops/${sop.id}`, { steps: steps.map((s, i) => ({ ...s, order: i + 1 })) });
-                                          fetchData();
-                                        }} style={{ background: 'none', border: 'none', cursor: stepIdx === 0 ? 'default' : 'pointer', fontSize: 9, color: stepIdx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0 }}>&#9650;</button>
-                                        <button disabled={stepIdx === sop.steps.length - 1} onClick={async (e) => {
-                                          e.stopPropagation();
-                                          const steps = [...sop.steps];
-                                          [steps[stepIdx], steps[stepIdx + 1]] = [steps[stepIdx + 1], steps[stepIdx]];
-                                          await apiClient.put(`/sops/${sop.id}`, { steps: steps.map((s, i) => ({ ...s, order: i + 1 })) });
-                                          fetchData();
-                                        }} style={{ background: 'none', border: 'none', cursor: stepIdx === sop.steps.length - 1 ? 'default' : 'pointer', fontSize: 9, color: stepIdx === sop.steps.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0 }}>&#9660;</button>
-                                      </>
-                                    )}
-                                  </div>
-                                  <div style={{ flex: 1 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{step.title}</div>
-                                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{step.description}</div>
-                                  </div>
-                                  {canWrite && (
-                                    <button
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        const updatedSteps = sop.steps.filter((_, i) => i !== stepIdx).map((s, i) => ({ ...s, order: i + 1 }));
-                                        await apiClient.put(`/sops/${sop.id}`, { steps: updatedSteps });
-                                        addToast('success', 'Step removed');
-                                        fetchData();
-                                      }}
-                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error, #dc2626)', fontSize: 14, padding: 4, flexShrink: 0, alignSelf: 'flex-start' }}
-                                      title="Remove step"
-                                    >&times;</button>
-                                  )}
-                                </li>
-                              ))}
-                            </ol>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={filtered}
+            columns={sopColumns}
+            rowKey={(s) => s.id}
+            selection={sel}
+            expansion={{
+              expandedIds: expandedId ? new Set([expandedId]) : new Set(),
+              onToggleExpanded: (id) => setExpandedId((prev) => prev === id ? null : id),
+              renderExpandedRow,
+              trigger: 'row-click',
+            }}
+            selectAllLabel="Select all SOPs"
+            emptyMessage="No SOPs match the current filters."
+          />
         </Card>
       )}
 
