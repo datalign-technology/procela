@@ -134,4 +134,58 @@ describe('DataTable', () => {
     expect(container.querySelector('#row-a')).not.toBeNull();
     expect(container.querySelector('#row-b')).not.toBeNull();
   });
+
+  describe('expansion', () => {
+    const baseExpansion = (over = {}) => ({
+      expandedIds: new Set<string>(),
+      onToggleExpanded: vi.fn(),
+      renderExpandedRow: (r: Row) => <div data-testid={`detail-${r.id}`}>detail of {r.name}</div>,
+      ...over,
+    });
+
+    it('renders a caret per expandable row and toggles on click', () => {
+      const onToggleExpanded = vi.fn();
+      render(
+        <DataTable rows={rows} columns={columns} rowKey={(r) => r.id} expansion={baseExpansion({ onToggleExpanded })} />,
+      );
+      const carets = screen.getAllByRole('button', { name: /expand row/i });
+      expect(carets).toHaveLength(2);
+      fireEvent.click(carets[0]);
+      expect(onToggleExpanded).toHaveBeenCalledWith('a');
+    });
+
+    it('renders the detail row only for expanded ids, spanning all columns', () => {
+      render(
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(r) => r.id}
+          selection={mockSelection()}
+          expansion={baseExpansion({ expandedIds: new Set(['b']) })}
+        />,
+      );
+      expect(screen.queryByTestId('detail-a')).toBeNull();
+      const detail = screen.getByTestId('detail-b');
+      expect(detail).toBeInTheDocument();
+      // caret(1) + selection(1) + 2 data columns = colSpan 4
+      expect(detail.closest('td')).toHaveAttribute('colspan', '4');
+      // expanded row shows a collapse control
+      expect(screen.getByRole('button', { name: /collapse row/i })).toBeInTheDocument();
+    });
+
+    it('getRowExpandable=false hides the caret and never renders a detail row', () => {
+      render(
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(r) => r.id}
+          expansion={baseExpansion({ expandedIds: new Set(['b']), getRowExpandable: (r: Row) => r.id !== 'b' })}
+        />,
+      );
+      // only row 'a' gets a caret
+      expect(screen.getAllByRole('button', { name: /expand row/i })).toHaveLength(1);
+      // 'b' is in expandedIds but not expandable → no detail
+      expect(screen.queryByTestId('detail-b')).toBeNull();
+    });
+  });
 });
