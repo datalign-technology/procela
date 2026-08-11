@@ -18,6 +18,9 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 // ── Types ──
@@ -177,7 +180,6 @@ export default function GovernancePoliciesPage() {
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [expandedPolicyId, setExpandedPolicyId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Control form state
@@ -309,25 +311,209 @@ export default function GovernancePoliciesPage() {
       addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to delete control')); }
   };
 
-  const toggleSelect = (id: string) => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
-  const toggleSelectAll = () => {
-    if (selectedIds.size === policies.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(policies.map((i) => i.id)));
-  };
-
   const handleBulkDelete = async () => {
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(sel.selectedIds);
     await Promise.all(ids.map((id) => apiClient.delete(`/governance-policies/${id}`)));
     addToast('success', `Deleted ${ids.length} polic${ids.length === 1 ? 'y' : 'ies'}`);
-    setSelectedIds(new Set());
+    sel.clear();
     fetchData();
   };
 
   const controlsForPolicy = (policyId: string) => controls.filter((c) => c.policyId === policyId);
+
+  // The rows the table actually renders (type filter + agent-promoted
+  // filter). Selection is built over THIS list so select-all matches the
+  // visible rows, not the unfiltered catalog.
+  const filteredPolicies = policies
+    .filter((p) => typeFilter === 'ALL' || p.documentType === typeFilter)
+    .filter((p) => !showAgentPromotedOnly || !!promotionsByPolicy[p.id]);
+  const sel = useRowSelection(filteredPolicies, (p) => p.id);
+
+  const policyColumns = ([
+    policyCols.isVisible('code') && {
+      key: 'code', header: 'Code', cellStyle: { fontWeight: 500, fontFamily: 'monospace', fontSize: 12 },
+      render: (pol: Policy) => pol.code,
+    },
+    policyCols.isVisible('name') && {
+      key: 'name', header: 'Name', cellStyle: { fontWeight: 500, color: 'var(--color-primary)' },
+      render: (pol: Policy) => {
+        const docType = pol.documentType || 'POLICY';
+        const promo = promotionsByPolicy[pol.id];
+        return (
+          <>
+            <span>{pol.name}</span>
+            <span style={{ ...badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY), marginLeft: 8 }}>{DOCUMENT_TYPE_LABEL[docType]}</span>
+            {promo && (
+              <StatusBadge
+                variant="agent"
+                size="md"
+                outlined
+                icon={<Bot size={11} strokeWidth={2.4} />}
+                title={`Promoted from agent draft "${promo.activityName}" by ${promo.agentName}${promo.reviewedBy ? `, approved by ${promo.reviewedBy}` : ''}`}
+                style={{ marginLeft: 8 }}
+              >
+                from agent draft
+              </StatusBadge>
+            )}
+          </>
+        );
+      },
+    },
+    policyCols.isVisible('category') && {
+      key: 'category', header: 'Category',
+      render: (pol: Policy) => <span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span>,
+    },
+    policyCols.isVisible('status') && {
+      key: 'status', header: 'Status',
+      render: (pol: Policy) => <span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span>,
+    },
+    policyCols.isVisible('owner') && {
+      key: 'owner', header: 'Owner',
+      render: (pol: Policy) => pol.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>,
+    },
+    policyCols.isVisible('controls') && {
+      key: 'controls', header: 'Controls',
+      render: (pol: Policy) => <span style={{ fontSize: 12, fontWeight: 600 }}>{controlsForPolicy(pol.id).length}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
+      render: (pol: Policy) => (
+        <div style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(pol)} />}
+          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(pol.id)} />}
+        </div>
+      ),
+    },
+  ].filter(Boolean) as DataTableColumn<Policy>[]);
+
+  // A document is expandable only if it has something to show below the row:
+  // a Controls panel (POLICY docType) or a Source panel (promoted from an
+  // agent draft). Otherwise it shows no caret and never opens an empty row.
+  const isPolicyExpandable = (p: Policy) =>
+    (p.documentType || 'POLICY') === 'POLICY' || !!promotionsByPolicy[p.id];
+
+  const renderPolicyExpansion = (pol: Policy) => {
+    const promo = promotionsByPolicy[pol.id];
+    const docType = pol.documentType || 'POLICY';
+    return (
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Source / provenance — shown for ANY documentType promoted from an
+            agent draft, so the round-trip to the source activity is reachable. */}
+        {promo && (
+          <div style={{ background: '#faf5ff', border: '1px solid #d8b4fe', borderRadius: 'var(--radius-md)', padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <StatusBadge variant="agent" icon={<Bot size={12} strokeWidth={2.4} />}>Source</StatusBadge>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: '#5b21b6' }}>Promoted from agent draft</h3>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 6, fontSize: 13 }}>
+              <span style={{ color: 'var(--color-text-muted)' }}>Source activity</span>
+              <a href={`/processes?node=${encodeURIComponent(promo.activityId)}`} title="Open the activity in the Process Catalog" style={{ color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'none' }}>{promo.activityName}</a>
+
+              <span style={{ color: 'var(--color-text-muted)' }}>Agent</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} style={{ color: '#5b21b6' }} /> {promo.agentName}</span>
+
+              <span style={{ color: 'var(--color-text-muted)' }}>Approved by</span>
+              <span>{promo.reviewedBy || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
+
+              <span style={{ color: 'var(--color-text-muted)' }}>Approved at</span>
+              <span>{promo.reviewedAt ? new Date(promo.reviewedAt).toLocaleString() : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
+            </div>
+            <p style={{ marginTop: 10, fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+              <strong>{pol.name}</strong> was created by promoting an approved AI-generated draft from the activity above. The draft's source-status note is preserved in the document's <em>Description</em>.
+            </p>
+          </div>
+        )}
+
+        {/* Controls — only for documentType POLICY. Charters, frameworks and
+            standards don't have rule-shaped controls hanging off them. */}
+        {docType === 'POLICY' && (
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Controls for {pol.name}</h3>
+              {canWrite && <button style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12 }} onClick={openAddControl}>+ Add Control</button>}
+            </div>
+
+            {/* Control Add/Edit Form */}
+            {showControlForm && (
+              <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{editingControlId ? 'Edit Control' : 'Add Control'}</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={labelStyle}>Name *</label>
+                    <input autoFocus style={inputStyle} value={controlForm.name} onChange={(e) => setControlForm({ ...controlForm, name: e.target.value })} />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={labelStyle}>Description</label>
+                    <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={controlForm.description} onChange={(e) => setControlForm({ ...controlForm, description: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Control Type</label>
+                    <select style={selectStyle} value={controlForm.controlType} onChange={(e) => setControlForm({ ...controlForm, controlType: e.target.value })}>
+                      {CONTROL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Automation Mode</label>
+                    <select style={selectStyle} value={controlForm.automationMode} onChange={(e) => setControlForm({ ...controlForm, automationMode: e.target.value })}>
+                      {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
+                    <input type="checkbox" checked={controlForm.evidenceRequired} onChange={(e) => setControlForm({ ...controlForm, evidenceRequired: e.target.checked })} />
+                    <label style={{ fontSize: 12, fontWeight: 500 }}>Evidence Required</label>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+                  <button style={{ ...btnSecondary, padding: '6px 12px', fontSize: 12 }} onClick={closeControlForm}>Cancel</button>
+                  <button style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12, opacity: !controlForm.name.trim() ? 0.6 : 1, cursor: !controlForm.name.trim() ? 'not-allowed' : 'pointer' }}
+                    disabled={!controlForm.name.trim()} onClick={handleSaveControl}>
+                    {editingControlId ? 'Save' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Controls Table */}
+            {controlsForPolicy(pol.id).length === 0 && !showControlForm ? (
+              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center', padding: 20 }}>No controls defined for this policy.</p>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)' }}>
+                    <th scope="col" style={thStyle}>Code</th>
+                    <th scope="col" style={thStyle}>Name</th>
+                    <th scope="col" style={thStyle}>Type</th>
+                    <th scope="col" style={thStyle}>Mode</th>
+                    <th scope="col" style={thStyle}>Evidence</th>
+                    <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {controlsForPolicy(pol.id).map((ctl) => (
+                    <tr key={ctl.id} style={{ transition: 'background 0.1s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
+                      <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{ctl.code}</td>
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>{ctl.name}</td>
+                      <td style={tdStyle}><span style={badgeStyle({ bg: '#e0e7ff', color: '#3730a3' })}>{ctl.controlType}</span></td>
+                      <td style={tdStyle}><span style={badgeStyle({ bg: '#ccfbf1', color: '#115e59' })}>{ctl.automationMode}</span></td>
+                      <td style={tdStyle}>{ctl.evidenceRequired ? 'Yes' : 'No'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', gap: 4 }}>
+                          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditControl(ctl)} />}
+                          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeleteControl(ctl.id)} />}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -460,30 +646,16 @@ export default function GovernancePoliciesPage() {
 
       <ConfirmDialog
         open={confirmBulkDelete}
-        title={`Delete ${selectedIds.size} polic${selectedIds.size === 1 ? 'y' : 'ies'}?`}
+        title={`Delete ${sel.count} polic${sel.count === 1 ? 'y' : 'ies'}?`}
         message="This cannot be undone."
-        confirmLabel={`Delete ${selectedIds.size}`}
+        confirmLabel={`Delete ${sel.count}`}
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
-      {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Delete Selected
-          </button>
-          <button onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       {/* Policies Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
@@ -494,198 +666,26 @@ export default function GovernancePoliciesPage() {
             description="Charters set the program's scope, policies set the rules, standards set the conventions, and frameworks set the structure. Create your first document to get started."
             action={canWrite ? { label: '+ Add Document', onClick: openAdd } : undefined} />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                  <input type="checkbox" checked={policies.length > 0 && selectedIds.size === policies.length} onChange={toggleSelectAll} />
-                </th>
-                {policyCols.isVisible('code') && <th scope="col" style={thStyle}>Code</th>}
-                {policyCols.isVisible('name') && <th scope="col" style={thStyle}>Name</th>}
-                {policyCols.isVisible('category') && <th scope="col" style={thStyle}>Category</th>}
-                {policyCols.isVisible('status') && <th scope="col" style={thStyle}>Status</th>}
-                {policyCols.isVisible('owner') && <th scope="col" style={thStyle}>Owner</th>}
-                {policyCols.isVisible('controls') && <th scope="col" style={thStyle}>Controls</th>}
-                <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {policies
-                .filter((p) => typeFilter === 'ALL' || p.documentType === typeFilter)
-                .filter((p) => !showAgentPromotedOnly || !!promotionsByPolicy[p.id])
-                .map((pol) => {
-                const policyControls = controlsForPolicy(pol.id);
-                const isExpanded = expandedPolicyId === pol.id;
-                const docType = pol.documentType || 'POLICY';
-                const promo = promotionsByPolicy[pol.id];
-                return (
-                  <tr key={pol.id} style={{ cursor: 'pointer', transition: 'background 0.1s' }}
-                    onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.background = ''; }}
-                    onClick={() => { setExpandedPolicyId(isExpanded ? null : pol.id); closeControlForm(); }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={selectedIds.has(pol.id)} onChange={() => toggleSelect(pol.id)} />
-                    </td>
-                    {policyCols.isVisible('code') && <td style={{ ...tdStyle, fontWeight: 500, fontFamily: 'monospace', fontSize: 12 }}>{pol.code}</td>}
-                    {policyCols.isVisible('name') && <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>
-                      <span>{pol.name}</span>
-                      <span style={{ ...badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY), marginLeft: 8 }}>{DOCUMENT_TYPE_LABEL[docType]}</span>
-                      {promo && (
-                        <StatusBadge
-                          variant="agent"
-                          size="md"
-                          outlined
-                          icon={<Bot size={11} strokeWidth={2.4} />}
-                          title={`Promoted from agent draft "${promo.activityName}" by ${promo.agentName}${promo.reviewedBy ? `, approved by ${promo.reviewedBy}` : ''}`}
-                          style={{ marginLeft: 8 }}
-                        >
-                          from agent draft
-                        </StatusBadge>
-                      )}
-                    </td>}
-                    {policyCols.isVisible('category') && <td style={tdStyle}><span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span></td>}
-                    {policyCols.isVisible('status') && <td style={tdStyle}><span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span></td>}
-                    {policyCols.isVisible('owner') && <td style={tdStyle}>{pol.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}</td>}
-                    {policyCols.isVisible('controls') && <td style={tdStyle}><span style={{ fontSize: 12, fontWeight: 600 }}>{policyControls.length}</span></td>}
-                    <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: 'inline-flex', gap: 4 }}>
-                        {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(pol)} />}
-                        {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(pol.id)} />}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={filteredPolicies}
+            columns={policyColumns}
+            rowKey={(p) => p.id}
+            selection={sel}
+            selectAllLabel="Select all documents"
+            emptyMessage="No documents match the current filters."
+            expansion={{
+              expandedIds: expandedPolicyId ? new Set([expandedPolicyId]) : new Set(),
+              onToggleExpanded: (id) => {
+                setExpandedPolicyId((prev) => (prev === id ? null : id));
+                closeControlForm();
+              },
+              getRowExpandable: isPolicyExpandable,
+              renderExpandedRow: renderPolicyExpansion,
+              trigger: 'row-click',
+            }}
+          />
         )}
       </div>
-
-      {/* Expanded Source Section — provenance for documents promoted from
-          an agent draft. Shown for ANY documentType (not just POLICY) so
-          the round-trip back to the source activity is always reachable.
-          Renders only when the expanded row has a matching agent
-          execution via promotedDocumentId. */}
-      {expandedPolicyId && promotionsByPolicy[expandedPolicyId] && (() => {
-        const promo = promotionsByPolicy[expandedPolicyId];
-        const polName = policies.find((p) => p.id === expandedPolicyId)?.name || 'Document';
-        return (
-          <div style={{ marginTop: 16, background: '#faf5ff', border: '1px solid #d8b4fe', borderRadius: 'var(--radius-md)', padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <StatusBadge variant="agent" icon={<Bot size={12} strokeWidth={2.4} />}>Source</StatusBadge>
-              <h3 style={{ fontSize: 14, fontWeight: 600, color: '#5b21b6' }}>Promoted from agent draft</h3>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 6, fontSize: 13 }}>
-              <span style={{ color: 'var(--color-text-muted)' }}>Source activity</span>
-              <a href={`/processes?node=${encodeURIComponent(promo.activityId)}`} title="Open the activity in the Process Catalog" style={{ color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'none' }}>{promo.activityName}</a>
-
-              <span style={{ color: 'var(--color-text-muted)' }}>Agent</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} style={{ color: '#5b21b6' }} /> {promo.agentName}</span>
-
-              <span style={{ color: 'var(--color-text-muted)' }}>Approved by</span>
-              <span>{promo.reviewedBy || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
-
-              <span style={{ color: 'var(--color-text-muted)' }}>Approved at</span>
-              <span>{promo.reviewedAt ? new Date(promo.reviewedAt).toLocaleString() : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
-            </div>
-            <p style={{ marginTop: 10, fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-              <strong>{polName}</strong> was created by promoting an approved AI-generated draft from the activity above. The draft's source-status note is preserved in the document's <em>Description</em>.
-            </p>
-          </div>
-        );
-      })()}
-
-      {/* Expanded Controls Section — only shown for documentType
-          POLICY. Charters, frameworks and standards don't have
-          rule-shaped controls hanging off them, so the panel
-          would be empty + misleading. */}
-      {expandedPolicyId && (policies.find((p) => p.id === expandedPolicyId)?.documentType ?? 'POLICY') === 'POLICY' && (
-        <div style={{ marginTop: 16, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>
-              Controls for {policies.find((p) => p.id === expandedPolicyId)?.name || 'Policy'}
-            </h3>
-            {canWrite && <button style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12 }} onClick={openAddControl}>+ Add Control</button>}
-          </div>
-
-          {/* Control Add/Edit Form */}
-          {showControlForm && (
-            <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12 }}>
-              <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{editingControlId ? 'Edit Control' : 'Add Control'}</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={labelStyle}>Name *</label>
-                  <input autoFocus style={inputStyle} value={controlForm.name} onChange={(e) => setControlForm({ ...controlForm, name: e.target.value })} />
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={labelStyle}>Description</label>
-                  <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={controlForm.description} onChange={(e) => setControlForm({ ...controlForm, description: e.target.value })} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Control Type</label>
-                  <select style={selectStyle} value={controlForm.controlType} onChange={(e) => setControlForm({ ...controlForm, controlType: e.target.value })}>
-                    {CONTROL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>Automation Mode</label>
-                  <select style={selectStyle} value={controlForm.automationMode} onChange={(e) => setControlForm({ ...controlForm, automationMode: e.target.value })}>
-                    {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
-                  <input type="checkbox" checked={controlForm.evidenceRequired} onChange={(e) => setControlForm({ ...controlForm, evidenceRequired: e.target.checked })} />
-                  <label style={{ fontSize: 12, fontWeight: 500 }}>Evidence Required</label>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-                <button style={{ ...btnSecondary, padding: '6px 12px', fontSize: 12 }} onClick={closeControlForm}>Cancel</button>
-                <button style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12, opacity: !controlForm.name.trim() ? 0.6 : 1, cursor: !controlForm.name.trim() ? 'not-allowed' : 'pointer' }}
-                  disabled={!controlForm.name.trim()} onClick={handleSaveControl}>
-                  {editingControlId ? 'Save' : 'Add'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Controls Table */}
-          {controlsForPolicy(expandedPolicyId).length === 0 && !showControlForm ? (
-            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center', padding: 20 }}>No controls defined for this policy.</p>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: 'var(--color-bg)' }}>
-                  <th scope="col" style={thStyle}>Code</th>
-                  <th scope="col" style={thStyle}>Name</th>
-                  <th scope="col" style={thStyle}>Type</th>
-                  <th scope="col" style={thStyle}>Mode</th>
-                  <th scope="col" style={thStyle}>Evidence</th>
-                  <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {controlsForPolicy(expandedPolicyId).map((ctl) => (
-                  <tr key={ctl.id} style={{ transition: 'background 0.1s' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{ctl.code}</td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>{ctl.name}</td>
-                    <td style={tdStyle}><span style={badgeStyle({ bg: '#e0e7ff', color: '#3730a3' })}>{ctl.controlType}</span></td>
-                    <td style={tdStyle}><span style={badgeStyle({ bg: '#ccfbf1', color: '#115e59' })}>{ctl.automationMode}</span></td>
-                    <td style={tdStyle}>{ctl.evidenceRequired ? 'Yes' : 'No'}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4 }}>
-                        {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditControl(ctl)} />}
-                        {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeleteControl(ctl.id)} />}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
     </div>
   );
 }
