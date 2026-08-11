@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
@@ -21,7 +20,9 @@ import PersonPicker from '../components/PersonPicker';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
-import SortableTh from '../components/SortableTh';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
@@ -487,7 +488,6 @@ export default function SystemsPage() {
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; connections: number; mappings: number } | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -717,26 +717,10 @@ export default function SystemsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === systems.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(systems.map((s) => s.id)));
-    }
-  };
-
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
+    if (sel.count === 0) return;
     // Snapshot the systems we're about to delete so we can offer Undo.
-    const toDelete = systems.filter((s) => selectedIds.has(s.id));
+    const toDelete = systems.filter((s) => sel.isSelected(s.id));
     const count = toDelete.length;
     try {
       await Promise.all(toDelete.map((s) => apiClient.delete(`/systems/${s.id}`)));
@@ -745,7 +729,7 @@ export default function SystemsPage() {
       fetchData();
       return;
     }
-    setSelectedIds(new Set());
+    sel.clear();
     fetchData();
     addToast('success', `Deleted ${count} system${count === 1 ? '' : 's'}`, {
       action: {
@@ -796,6 +780,118 @@ export default function SystemsPage() {
     },
     'name',
   );
+
+  // Only rows the user can actually tick are selectable — inherited
+  // (cross-org) rows have disabled checkboxes — so select-all governs the
+  // visible, selectable set (fixes select-all comparing against the full
+  // unfiltered `systems` list).
+  const selectableSystems = sorted.filter((s) => !isInheritedAsset(s.orgId, activeOrgId));
+  const sel = useRowSelection(selectableSystems, (s) => s.id);
+
+  const inheritedHintFor = (sys: SystemEntity) =>
+    isInheritedAsset(sys.orgId, activeOrgId)
+      ? `Owned at ${getOrgName(sys.orgId)}. Switch the "Working in..." scope to ${getOrgName(sys.orgId)} to edit.`
+      : '';
+
+  const systemColumns = ([
+    {
+      key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 340 },
+      render: (sys: SystemEntity) => (
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => setViewingSystemId(sys.id)}
+              title={sys.name}
+              style={{
+                background: 'none', border: 'none', padding: 0,
+                color: 'var(--color-primary)', cursor: 'pointer',
+                font: 'inherit', fontWeight: 500, textAlign: 'left',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                minWidth: 0, flexShrink: 1,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+            >
+              {sys.name}
+            </button>
+            <OwnerBadge assetOrgId={sys.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+          </div>
+          <TruncatedText
+            text={sys.description}
+            emptyPlaceholder="--"
+            style={{
+              fontSize: 12, fontWeight: 400, marginTop: 2,
+              ...(sys.description?.trim() ? { color: 'var(--color-text-secondary)' } : null),
+            }}
+          />
+        </div>
+      ),
+    },
+    systemCols.isVisible('type') && {
+      key: 'type', header: 'Type', sortable: true,
+      render: (sys: SystemEntity) => {
+        const inherited = isInheritedAsset(sys.orgId, activeOrgId);
+        return systemTypes.length > 0 && !inherited ? (
+          <InlineCellEdit
+            value={sys.systemType || ''}
+            onSave={(v) => inlineSaveField(sys.id, 'systemType', v)}
+            type="select"
+            options={systemTypes}
+          />
+        ) : (
+          sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>
+        );
+      },
+    },
+    systemCols.isVisible('owner') && {
+      key: 'owner', header: 'Owner', sortable: true,
+      render: (sys: SystemEntity) => sys.ownerName ? (
+        <div>
+          <div>{sys.ownerName}</div>
+          {sys.deputyOwnerName && (
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }} title="Deputy owner — backup when the primary is unavailable">
+              Deputy: {sys.deputyOwnerName}
+            </div>
+          )}
+        </div>
+      ) : (sys.connectivity || 'INTEGRATED') === 'INTEGRATED' ? (
+        <span style={{ color: '#b45309', fontStyle: 'italic' }} title="No business owner assigned — surfaces in gap detection">
+          Unassigned
+        </span>
+      ) : (
+        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+      ),
+    },
+    systemCols.isVisible('connections') && {
+      key: 'connections', header: 'Connections', width: 140,
+      render: (sys: SystemEntity) => {
+        const sysConnections = connections.filter((c) => connSystemIds(c).includes(sys.id));
+        const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
+        return renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate, setConnectingSystem);
+      },
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 80,
+      render: (sys: SystemEntity) => {
+        const inherited = isInheritedAsset(sys.orgId, activeOrgId);
+        const hint = inheritedHintFor(sys);
+        return (
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            <IconButton size="sm" icon="eye" label="View details" onClick={() => setViewingSystemId(sys.id)} />
+            <IconButton size="sm" icon="edit" label={hint || 'Edit'} disabled={inherited} onClick={() => openEdit(sys)} />
+            <IconButton size="sm" icon="trash" label={hint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
+              try {
+                const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
+                setDeleteImpact(res.data || null);
+              } catch { setDeleteImpact(null); }
+              setConfirmDelete(sys.id);
+            }} />
+          </div>
+        );
+      },
+    },
+  ].filter(Boolean) as DataTableColumn<SystemEntity>[]);
 
   return (
     <div>
@@ -1347,27 +1443,9 @@ export default function SystemsPage() {
         </div>
       )}
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -1390,7 +1468,7 @@ export default function SystemsPage() {
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Systems?"
-        message={`Delete ${selectedIds.size} selected items? This cannot be undone.`}
+        message={`Delete ${sel.count} selected items? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => {
           setConfirmBulkDelete(false);
@@ -1412,136 +1490,17 @@ export default function SystemsPage() {
             secondaryAction={{ label: 'Import from CSV', onClick: () => setShowImport(true) }}
           />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                  <input type="checkbox" checked={systems.length > 0 && selectedIds.size === systems.length} onChange={toggleSelectAll} aria-label="Select all systems" />
-                </th>
-                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                {systemCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
-                {systemCols.isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
-                {systemCols.isVisible('connections') && <th scope="col" style={{ ...thStyle, width: 140 }}>Connections</th>}
-                <th scope="col" style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((sys) => {
-                const sysConnections = connections.filter((c) => connSystemIds(c).includes(sys.id));
-                const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
-                // Rows whose orgId differs from the active scope are
-                // inherited from above (or rolled up from below) — every
-                // edit surface in the row is gated by this flag.
-                const inherited = isInheritedAsset(sys.orgId, activeOrgId);
-                const inheritedHint = inherited
-                  ? `Owned at ${getOrgName(sys.orgId)}. Switch the "Working in..." scope to ${getOrgName(sys.orgId)} to edit.`
-                  : '';
-                return (
-                  <tr key={sys.id} id={`row-${sys.id}`} style={{ transition: 'background 0.1s', background: selectedIds.has(sys.id) ? '#f0f9ff' : '' }}
-                    onMouseEnter={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} title={inherited ? inheritedHint : undefined}>
-                      <input type="checkbox" checked={selectedIds.has(sys.id)} disabled={inherited} onChange={() => toggleSelect(sys.id)} />
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 340 }}>
-                      {/* Clicking the name opens the detail modal, matching
-                       *  Data Assets / People / DAMA Roles. Editing the name
-                       *  is still possible via the row's Edit pencil button -
-                       *  but it's no longer a tap-target hazard on a column
-                       *  users naturally want to click. flex-nowrap so the
-                       *  OwnerBadge lock never falls to a second line — the
-                       *  name clips instead, tooltip carries the full text. */}
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                          <button
-                            type="button"
-                            onClick={() => setViewingSystemId(sys.id)}
-                            title={sys.name}
-                            style={{
-                              background: 'none', border: 'none', padding: 0,
-                              color: 'var(--color-primary)', cursor: 'pointer',
-                              font: 'inherit', fontWeight: 500, textAlign: 'left',
-                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                              minWidth: 0, flexShrink: 1,
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-                          >
-                            {sys.name}
-                          </button>
-                          <OwnerBadge assetOrgId={sys.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
-                        </div>
-                        {/* Description renders as a single-line, ellipsised
-                         *  sub-label under the name (directory-entry style,
-                         *  matching Data Assets). Still searchable and fully
-                         *  editable via the row's Edit form / detail modal. */}
-                        <TruncatedText
-                          text={sys.description}
-                          emptyPlaceholder="--"
-                          style={{
-                            fontSize: 12, fontWeight: 400, marginTop: 2,
-                            ...(sys.description?.trim() ? { color: 'var(--color-text-secondary)' } : null),
-                          }}
-                        />
-                      </div>
-                    </td>
-                    {systemCols.isVisible('type') && (
-                      <td style={tdStyle} title={inherited ? inheritedHint : undefined}>
-                        {systemTypes.length > 0 && !inherited ? (
-                          <InlineCellEdit
-                            value={sys.systemType || ''}
-                            onSave={(v) => inlineSaveField(sys.id, 'systemType', v)}
-                            type="select"
-                            options={systemTypes}
-                          />
-                        ) : (
-                          sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>
-                        )}
-                      </td>
-                    )}
-                    {systemCols.isVisible('owner') && (
-                      <td style={tdStyle}>
-                        {sys.ownerName ? (
-                          <div>
-                            <div>{sys.ownerName}</div>
-                            {sys.deputyOwnerName && (
-                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }} title="Deputy owner — backup when the primary is unavailable">
-                                Deputy: {sys.deputyOwnerName}
-                              </div>
-                            )}
-                          </div>
-                        ) : (sys.connectivity || 'INTEGRATED') === 'INTEGRATED' ? (
-                          <span style={{ color: '#b45309', fontStyle: 'italic' }} title="No business owner assigned — surfaces in gap detection">
-                            Unassigned
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--color-text-muted)' }}>—</span>
-                        )}
-                      </td>
-                    )}
-                    {systemCols.isVisible('connections') && (
-                      <td style={tdStyle}>
-                        {renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate, setConnectingSystem)}
-                      </td>
-                    )}
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <IconButton size="sm" icon="eye" label="View details" onClick={() => setViewingSystemId(sys.id)} />
-                        <IconButton size="sm" icon="edit" label={inheritedHint || 'Edit'} disabled={inherited} onClick={() => openEdit(sys)} />
-                        <IconButton size="sm" icon="trash" label={inheritedHint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
-                          try {
-                            const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
-                            setDeleteImpact(res.data || null);
-                          } catch { setDeleteImpact(null); }
-                          setConfirmDelete(sys.id);
-                        }} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={sorted}
+            columns={systemColumns}
+            rowKey={(s) => s.id}
+            rowId={(s) => `row-${s.id}`}
+            selection={sel}
+            isRowDisabled={(s) => isInheritedAsset(s.orgId, activeOrgId)}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all systems"
+            emptyMessage="No systems match the current filters."
+          />
         )}
       </div>
         </div>

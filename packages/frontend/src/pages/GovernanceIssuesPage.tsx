@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import { useSortedList } from '../hooks/useSortedList';
-import SortableTh from '../components/SortableTh';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -157,7 +158,6 @@ export default function GovernanceIssuesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Filters
@@ -213,6 +213,8 @@ export default function GovernanceIssuesPage() {
     },
     'title',
   );
+
+  const sel = useRowSelection(sorted, (i) => i.id);
 
   // ── CRUD ──
 
@@ -280,23 +282,12 @@ export default function GovernanceIssuesPage() {
   };
 
   // ── Bulk select ──
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const toggleSelectAll = () => {
-    if (selectedIds.size === sorted.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(sorted.map((i) => i.id)));
-  };
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
+    if (sel.count === 0) return;
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/governance-issues/${id}`)));
-      addToast('success', `Deleted ${selectedIds.size} issue${selectedIds.size === 1 ? '' : 's'}`);
-      setSelectedIds(new Set());
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/governance-issues/${id}`)));
+      addToast('success', `Deleted ${sel.count} issue${sel.count === 1 ? '' : 's'}`);
+      sel.clear();
       fetchData();
     } catch {
       addToast('error', 'Some issues could not be deleted');
@@ -310,6 +301,46 @@ export default function GovernanceIssuesPage() {
     return new Date(d).toLocaleDateString();
   };
 
+  const mutedDash = <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>;
+  const issueColumns = ([
+    issueCols.isVisible('title') && {
+      key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
+      render: (i: GovernanceIssue) => <span style={{ color: 'var(--color-primary)' }}>{i.title}</span>,
+    },
+    issueCols.isVisible('type') && {
+      key: 'type', header: 'Type', sortable: true,
+      render: (i: GovernanceIssue) => <span style={badge(i.issueType, ISSUE_TYPE_COLORS[i.issueType] || { bg: '#f3f4f6', color: '#6b7280' })}>{i.issueType.replace(/_/g, ' ')}</span>,
+    },
+    issueCols.isVisible('severity') && {
+      key: 'severity', header: 'Severity', sortable: true,
+      render: (i: GovernanceIssue) => <span style={badge(i.severity, SEVERITY_COLORS[i.severity] || { bg: '#f3f4f6', color: '#6b7280' })}>{i.severity}</span>,
+    },
+    issueCols.isVisible('status') && {
+      key: 'status', header: 'Status', sortable: true,
+      render: (i: GovernanceIssue) => <span style={badge(i.status, STATUS_COLORS[i.status] || { bg: '#f3f4f6', color: '#6b7280' })}>{i.status.replace(/_/g, ' ')}</span>,
+    },
+    issueCols.isVisible('domain') && {
+      key: 'domain', header: 'Domain', sortable: true,
+      render: (i: GovernanceIssue) => i.domainName || mutedDash,
+    },
+    issueCols.isVisible('assignee') && {
+      key: 'assignee', header: 'Assigned To', sortable: true,
+      render: (i: GovernanceIssue) => i.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>,
+    },
+    issueCols.isVisible('created') && {
+      key: 'created', header: 'Created', sortable: true,
+      render: (i: GovernanceIssue) => formatDate(i.createdAt),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
+      render: (i: GovernanceIssue) => (
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(i)} />}
+          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(i.id)} />}
+        </div>
+      ),
+    },
+  ].filter(Boolean) as DataTableColumn<GovernanceIssue>[]);
 
   return (
     <div>
@@ -348,27 +379,9 @@ export default function GovernanceIssuesPage() {
         />
       )}
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -386,7 +399,7 @@ export default function GovernanceIssuesPage() {
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Issues?"
-        message={`Delete ${selectedIds.size} selected issue${selectedIds.size === 1 ? '' : 's'}? This cannot be undone.`}
+        message={`Delete ${sel.count} selected issue${sel.count === 1 ? '' : 's'}? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
@@ -478,92 +491,15 @@ export default function GovernanceIssuesPage() {
             action={canWrite ? { label: '+ Add Issue', onClick: openAdd } : undefined}
           />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                  <input type="checkbox"
-                    checked={sorted.length > 0 && selectedIds.size === sorted.length}
-                    onChange={toggleSelectAll} />
-                </th>
-                {issueCols.isVisible('title') && <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>}
-                {issueCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
-                {issueCols.isVisible('severity') && <SortableTh sortKey="severity" active={sortKey} dir={sortDir} onClick={toggleSort}>Severity</SortableTh>}
-                {issueCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                {issueCols.isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>}
-                {issueCols.isVisible('assignee') && <SortableTh sortKey="assignee" active={sortKey} dir={sortDir} onClick={toggleSort}>Assigned To</SortableTh>}
-                {issueCols.isVisible('created') && <SortableTh sortKey="created" active={sortKey} dir={sortDir} onClick={toggleSort}>Created</SortableTh>}
-                <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: 'var(--color-text-muted)', padding: 24 }}>
-                    No issues match the current filters.
-                  </td>
-                </tr>
-              ) : sorted.map((issue) => {
-                const isSelected = selectedIds.has(issue.id);
-                return (
-                  <tr key={issue.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
-                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(issue.id)} />
-                    </td>
-                    {issueCols.isVisible('title') && (
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>
-                        <span style={{ color: 'var(--color-primary)' }}>{issue.title}</span>
-                      </td>
-                    )}
-                    {issueCols.isVisible('type') && (
-                      <td style={tdStyle}>
-                        <span style={badge(issue.issueType.replace(/_/g, ' '), ISSUE_TYPE_COLORS[issue.issueType] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                          {issue.issueType.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                    )}
-                    {issueCols.isVisible('severity') && (
-                      <td style={tdStyle}>
-                        <span style={badge(issue.severity, SEVERITY_COLORS[issue.severity] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                          {issue.severity}
-                        </span>
-                      </td>
-                    )}
-                    {issueCols.isVisible('status') && (
-                      <td style={tdStyle}>
-                        <span style={badge(issue.status.replace(/_/g, ' '), STATUS_COLORS[issue.status] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                          {issue.status.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                    )}
-                    {issueCols.isVisible('domain') && (
-                      <td style={tdStyle}>
-                        {issue.domainName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
-                      </td>
-                    )}
-                    {issueCols.isVisible('assignee') && (
-                      <td style={tdStyle}>
-                        {issue.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
-                      </td>
-                    )}
-                    {issueCols.isVisible('created') && (
-                      <td style={tdStyle}>
-                        {formatDate(issue.createdAt)}
-                      </td>
-                    )}
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                        {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(issue)} />}
-                        {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(issue.id)} />}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={sorted}
+            columns={issueColumns}
+            rowKey={(i) => i.id}
+            selection={sel}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all issues"
+            emptyMessage="No issues match the current filters."
+          />
         )}
       </div>
     </div>
