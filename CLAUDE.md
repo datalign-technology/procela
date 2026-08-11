@@ -442,8 +442,10 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   sorting (`useSortedList`), column visibility (`useColumnPicker`), and
   the `renderExpandedRow` body (lazy fetch, nested sub-tables, forms,
   quick-add) stay page-owned. Do NOT re-roll the table shell for a new
-  list. Exceptions that stay hand-rolled: **People** (pinned `<tbody>`
-  quick-add row + conditional column), and non-entity-list tables
+  list. Exceptions that stay hand-rolled: **People** (its pinned
+  `<tbody>` quick-add input row has no DataTable slot; its conditional
+  column is *not* a blocker — that's just a `.filter(Boolean)` column
+  entry), and non-entity-list tables
   (reports, the RACI matrix, the audit log, static reference tables,
   nested detail sub-tables).
 - `useRowSelection` — the row-selection hook wired into `DataTable`'s

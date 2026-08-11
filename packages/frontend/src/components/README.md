@@ -275,15 +275,20 @@ checkbox) — but any interactive control you put inside a `column.render`
 (action buttons, links) must `stopPropagation` itself so a click on it
 doesn't also toggle the row.
 
-**People is the one *entity* list deliberately left hand-rolled.** Its
-pinned quick-add row inside `<tbody>` (a persistent input row, not an
-expandable detail row) and its conditional column aren't shapes
-`DataTable` models, and forcing them through it would cost more than it
-saves. It's called out here — as opposed to the specialized non-list
-tables above — because it *is* a flat entity list and so is the page a
-reader would expect to find on `DataTable`. If a new page seems to need
-a `<tbody>`-pinned input row or a per-row conditional column, reach for
-the same judgement rather than assuming `DataTable` must grow to fit it.
+**People is the one *entity* list deliberately left hand-rolled.** The
+reason is one specific shape: a **pinned quick-add row** — a persistent
+`<tr>` of inputs at the top of `<tbody>` for adding a person inline
+(type in the column, press Enter). `DataTable` renders exactly one `<tr>`
+per row (plus optional detail rows) and has no slot for a non-data row in
+the body; adding a `pinnedRow` prop for a single consumer would bloat a
+deliberately minimal component, and moving the quick-add out of the grid
+(the only alternative) is a real UX regression on a useful affordance. So
+People stays hand-rolled. Note this is the *only* blocker: People's
+conditional "Skill gaps" column is **not** a reason — a boolean-gated
+column is just a `.filter(Boolean)` entry in the `columns` array, which
+`DataTable` already supports. It's called out here — as opposed to the
+specialized non-list tables above — because it *is* a flat entity list,
+the kind of page a reader would expect to find on `DataTable`.
 
 ### `<TruncatedText>`
 
