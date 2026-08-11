@@ -175,6 +175,22 @@ row on `--color-bg`, a leading checkbox column, per-row imperative
 hover + selected-row tint, and a colSpan "no matches" row.
 `DataTable` owns all of that behind a declarative column config.
 
+The list-consistency series migrated the app's entity-list pages onto
+it — **15 pages** spanning flat and expandable lists (Systems, Skills,
+Mappings, Business Glossary, Governance Issues/Tasks/Calendar, Data
+Lineage, Connections, Data Quality, Decision Rights, Agents, SOPs, Data
+Assets, Governance Policies). New list pages MUST compose `DataTable`
+rather than re-roll the shell.
+
+This does **not** mean every `<table>` in the app is a `DataTable`.
+Some hand-rolled tables aren't flat entity lists at all and shouldn't be
+forced through it — reports (Executive Report, Report Builder), the RACI
+matrix, the audit log, static reference tables (Help, DAMA Roles), and
+nested detail sub-tables (Governance Group detail). Before adding a new
+list, ask whether it's a flat entity list (→ `DataTable`) or one of
+these other shapes (→ hand-roll). See also the note at the end of this
+section for the one *entity* list deliberately kept hand-rolled.
+
 ```tsx
 import DataTable, { type DataTableColumn } from '@/components/DataTable';
 
@@ -234,9 +250,22 @@ caret column that toggles a full-width detail row beneath each row:
 ```
 
 DataTable computes the detail row's `colSpan` internally (retiring every
-hardcoded `colSpan={8}`). Lazy-fetch-on-expand, spinners, nested
-sub-tables, and quick-add controls all live inside `renderExpandedRow` —
-DataTable never fetches.
+hardcoded `colSpan={8}`). Everything *inside* the expanded region is
+page-owned — DataTable owns only the caret column and the detail row's
+`colSpan`, and never fetches. `renderExpandedRow` holds arbitrarily
+complex content; the migrated pages exercise the full range:
+
+- **Lazy-fetch-on-expand** with a spinner — Data Quality assets tab, Data
+  Assets (fetch in `onToggleExpanded`, render `loading ? spinner : …`).
+- **Nested sub-tables** — the per-policy Controls table (Governance
+  Policies), the per-asset columns table (Data Assets).
+- **An add/edit form + nested CRUD** — the control form + Controls sub-table
+  (Governance Policies), kept page-owned; single-open pages can share one
+  form-state set because only one detail row exists at a time.
+- **Two-level expansion** — Data Assets nests a per-column rules expansion
+  (its own `Set` + toggle) *inside* the per-asset `renderExpandedRow`; the
+  inner level is plain markup, not a second `DataTable`.
+- **Quick-add rows** — the "+ Add Step" / reorder controls (SOPs).
 
 `trigger` controls how a row expands. Default `'caret'`: only the leading
 caret button toggles. `'row-click'`: clicking anywhere on the row toggles,
@@ -246,8 +275,15 @@ checkbox) — but any interactive control you put inside a `column.render`
 (action buttons, links) must `stopPropagation` itself so a click on it
 doesn't also toggle the row.
 
-Still out of scope (keep hand-rolled): quick-add rows pinned inside
-`<tbody>` and conditional columns (People).
+**People is the one *entity* list deliberately left hand-rolled.** Its
+pinned quick-add row inside `<tbody>` (a persistent input row, not an
+expandable detail row) and its conditional column aren't shapes
+`DataTable` models, and forcing them through it would cost more than it
+saves. It's called out here — as opposed to the specialized non-list
+tables above — because it *is* a flat entity list and so is the page a
+reader would expect to find on `DataTable`. If a new page seems to need
+a `<tbody>`-pinned input row or a per-row conditional column, reach for
+the same judgement rather than assuming `DataTable` must grow to fit it.
 
 ### `<TruncatedText>`
 
