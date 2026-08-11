@@ -1,10 +1,8 @@
 import { SkeletonRows } from '../components/Skeleton';
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
-import SecondaryButton from '../components/SecondaryButton';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -22,8 +20,10 @@ import ActiveFiltersBar from '../components/ActiveFiltersBar';
 import type { RulesModalAsset } from '../components/DataQualityRulesModal';
 // Lazy: only renders when the user clicks the rules icon on a row.
 const DataQualityRulesModal = lazy(() => import('../components/DataQualityRulesModal'));
-import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 
 // Assets tab: we need more than just {id,name} to display source provenance
 // and per-asset stewardship / health — the backend already returns these on
@@ -219,7 +219,6 @@ export default function DataQualityPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterAssetId, setFilterAssetId] = useState('');
   const [filterDimension, setFilterDimension] = useState('');
@@ -266,6 +265,8 @@ export default function DataQualityPage() {
     },
     'dataAssetName',
   );
+
+  const sel = useRowSelection(sortedRules, (r) => r.id);
 
   // Stats
   const totalRules = rules.length;
@@ -369,19 +370,12 @@ export default function DataQualityPage() {
   };
 
   // ── Bulk select handlers ──
-  const toggleRuleSelect = (id: string) => {
-    setSelectedRuleIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
   const handleBulkDeleteRules = async () => {
-    if (selectedRuleIds.size === 0) return;
+    if (sel.count === 0) return;
     try {
-      await Promise.all(Array.from(selectedRuleIds).map((id) => apiClient.delete(`/data-quality/${id}`)));
-      addToast('success', `Deleted ${selectedRuleIds.size} quality rules`);
-      setSelectedRuleIds(new Set());
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/data-quality/${id}`)));
+      addToast('success', `Deleted ${sel.count} quality rules`);
+      sel.clear();
       fetchData();
     } catch {
       addToast('error', 'Bulk delete failed');
@@ -438,6 +432,109 @@ export default function DataQualityPage() {
     color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
     borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
   });
+
+  const ruleColumns = ([
+    dqCols.isVisible('asset') && {
+      key: 'dataAssetName', header: 'Data Asset', sortable: true,
+      render: (rule: QualityRule) => rule.dataAssetName || rule.dataAssetId,
+    },
+    dqCols.isVisible('column') && {
+      key: 'column', header: 'Column',
+      cellStyle: { fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' },
+      render: (rule: QualityRule) => (rule as any).columnName || <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>,
+    },
+    dqCols.isVisible('name') && {
+      key: 'name', header: 'Rule Name', sortable: true,
+      render: (rule: QualityRule) => rule.name,
+    },
+    dqCols.isVisible('dimension') && {
+      key: 'dimension', header: 'Dimension', sortable: true,
+      render: (rule: QualityRule) => <Badge label={rule.dimension} colors={DIMENSION_BADGES[rule.dimension] || DIMENSION_BADGES.VALIDITY} />,
+    },
+    dqCols.isVisible('threshold') && {
+      key: 'threshold', header: 'Threshold',
+      render: (rule: QualityRule) => `${rule.threshold}%`,
+    },
+    dqCols.isVisible('currentScore') && {
+      key: 'currentScore', header: 'Current Score', sortable: true,
+      render: (rule: QualityRule) => <ScoreBar score={rule.currentScore} threshold={rule.threshold} />,
+    },
+    dqCols.isVisible('weight') && {
+      key: 'weight', header: 'Weight',
+      render: (rule: QualityRule) => rule.weight,
+    },
+    dqCols.isVisible('status') && {
+      key: 'status', header: 'Status', sortable: true,
+      render: (rule: QualityRule) => <Badge label={rule.status} colors={STATUS_BADGES[rule.status] || STATUS_BADGES.NOT_MEASURED} />,
+    },
+    dqCols.isVisible('schedule') && {
+      key: 'schedule',
+      header: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Schedule <HelpPopover id="dq-schedule" title="Rule Scheduling">Click the clock icon to set how often a rule runs automatically: Hourly, Daily, or Weekly. Manual-only rules must be run with the play button.</HelpPopover></span>,
+      cellStyle: { fontSize: 12, position: 'relative' as const },
+      render: (rule: QualityRule) => (
+        <>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <IconButton
+              size="sm"
+              icon="clock"
+              label={scheduleLabel(rule)}
+              onClick={() => setScheduleOpen(scheduleOpen === rule.id ? null : rule.id)}
+            />
+            <span style={{ color: rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER' ? 'var(--color-text)' : 'var(--color-text-muted)', fontSize: 11 }}>
+              {rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER' ? rule.scheduleFrequency.charAt(0) + rule.scheduleFrequency.slice(1).toLowerCase() : 'Manual'}
+            </span>
+          </div>
+          {scheduleOpen === rule.id && (
+            <Card padding={8} shadow="md" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, minWidth: 150, fontSize: 12 }}>
+              {(['NEVER', 'HOURLY', 'DAILY', 'WEEKLY'] as ScheduleFrequency[]).map((f) => (
+                <div
+                  key={f}
+                  onClick={() => handleScheduleChange(rule.id, f)}
+                  style={{
+                    padding: '6px 10px', cursor: 'pointer', borderRadius: 4,
+                    fontWeight: rule.scheduleFrequency === f ? 600 : 400,
+                    background: rule.scheduleFrequency === f ? 'var(--color-bg)' : 'transparent',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = rule.scheduleFrequency === f ? 'var(--color-bg)' : 'transparent'; }}
+                >
+                  {f === 'NEVER' ? 'Manual only' : f.charAt(0) + f.slice(1).toLowerCase()}
+                </div>
+              ))}
+              {rule.nextRunAt && (
+                <div style={{ padding: '6px 10px', fontSize: 10, color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)', marginTop: 4 }}>
+                  Next run: {new Date(rule.nextRunAt).toLocaleString()}
+                </div>
+              )}
+            </Card>
+          )}
+        </>
+      ),
+    },
+    dqCols.isVisible('lastMeasured') && {
+      key: 'lastMeasured', header: 'Last Measured',
+      cellStyle: { fontSize: 12, color: 'var(--color-text-muted)' },
+      render: (rule: QualityRule) => rule.lastMeasured ? new Date(rule.lastMeasured).toLocaleDateString() : '--',
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const,
+      render: (rule: QualityRule) => (
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          {rule.ruleType && (
+            <IconButton
+              size="sm"
+              icon="play"
+              label={runningRuleId === rule.id ? 'Running…' : 'Run now'}
+              onClick={() => handleRunRule(rule)}
+              disabled={runningRuleId !== null}
+            />
+          )}
+          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(rule)} />}
+          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(rule.id)} />}
+        </div>
+      ),
+    },
+  ].filter(Boolean) as DataTableColumn<QualityRule>[]);
 
   return (
     <div>
@@ -688,30 +785,16 @@ export default function DataQualityPage() {
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Quality Rules?"
-        message={`Delete ${selectedRuleIds.size} selected rules? This cannot be undone.`}
+        message={`Delete ${sel.count} selected rules? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDeleteRules(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
       {/* Bulk Action Bar */}
-      {selectedRuleIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedRuleIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <SecondaryButton onClick={() => setSelectedRuleIds(new Set())}>
-            Clear Selection
-          </SecondaryButton>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
+      </BulkActionBar>
 
       {/* Table */}
       {filteredRules.length === 0 ? (
@@ -729,126 +812,15 @@ export default function DataQualityPage() {
         )
       ) : (
         <Card padding={0} style={{ overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                  <input type="checkbox"
-                    checked={filteredRules.length > 0 && selectedRuleIds.size === filteredRules.length}
-                    onChange={() => {
-                      if (selectedRuleIds.size === filteredRules.length) setSelectedRuleIds(new Set());
-                      else setSelectedRuleIds(new Set(filteredRules.map((r) => r.id)));
-                    }} />
-                </th>
-                {dqCols.isVisible('asset') && <SortableTh sortKey="dataAssetName" active={sortKey} dir={sortDir} onClick={toggleSort}>Data Asset</SortableTh>}
-                {dqCols.isVisible('column') && <th scope="col" style={thStyle}>Column</th>}
-                {dqCols.isVisible('name') && <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Rule Name</SortableTh>}
-                {dqCols.isVisible('dimension') && <SortableTh sortKey="dimension" active={sortKey} dir={sortDir} onClick={toggleSort}>Dimension</SortableTh>}
-                {dqCols.isVisible('threshold') && <th scope="col" style={thStyle}>Threshold</th>}
-                {dqCols.isVisible('currentScore') && <SortableTh sortKey="currentScore" active={sortKey} dir={sortDir} onClick={toggleSort}>Current Score</SortableTh>}
-                {dqCols.isVisible('weight') && <th scope="col" style={thStyle}>Weight</th>}
-                {dqCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                {dqCols.isVisible('schedule') && <th scope="col" style={thStyle}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Schedule <HelpPopover id="dq-schedule" title="Rule Scheduling">Click the clock icon to set how often a rule runs automatically: Hourly, Daily, or Weekly. Manual-only rules must be run with the play button.</HelpPopover></span></th>}
-                {dqCols.isVisible('lastMeasured') && <th scope="col" style={thStyle}>Last Measured</th>}
-                <th scope="col" style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRules.map((rule) => {
-                const isSelected = selectedRuleIds.has(rule.id);
-                return (
-                <tr key={rule.id} style={{ background: isSelected ? '#f0f9ff' : '' }}>
-                  <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                    <input type="checkbox" checked={isSelected} onChange={() => toggleRuleSelect(rule.id)} />
-                  </td>
-                  {dqCols.isVisible('asset') && <td style={tdStyle}>{rule.dataAssetName || rule.dataAssetId}</td>}
-                  {dqCols.isVisible('column') && (
-                    <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                      {(rule as any).columnName || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
-                    </td>
-                  )}
-                  {dqCols.isVisible('name') && <td style={tdStyle}>{rule.name}</td>}
-                  {dqCols.isVisible('dimension') && (
-                    <td style={tdStyle}>
-                      <Badge label={rule.dimension} colors={DIMENSION_BADGES[rule.dimension] || DIMENSION_BADGES.VALIDITY} />
-                    </td>
-                  )}
-                  {dqCols.isVisible('threshold') && <td style={tdStyle}>{rule.threshold}%</td>}
-                  {dqCols.isVisible('currentScore') && (
-                    <td style={tdStyle}>
-                      <ScoreBar score={rule.currentScore} threshold={rule.threshold} />
-                    </td>
-                  )}
-                  {dqCols.isVisible('weight') && <td style={tdStyle}>{rule.weight}</td>}
-                  {dqCols.isVisible('status') && (
-                    <td style={tdStyle}>
-                      <Badge label={rule.status} colors={STATUS_BADGES[rule.status] || STATUS_BADGES.NOT_MEASURED} />
-                    </td>
-                  )}
-                  {dqCols.isVisible('schedule') && (
-                  <td style={{ ...tdStyle, fontSize: 12, position: 'relative' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <IconButton
-                        size="sm"
-                        icon="clock"
-                        label={scheduleLabel(rule)}
-                        onClick={() => setScheduleOpen(scheduleOpen === rule.id ? null : rule.id)}
-                      />
-                      <span style={{ color: rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER' ? 'var(--color-text)' : 'var(--color-text-muted)', fontSize: 11 }}>
-                        {rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER' ? rule.scheduleFrequency.charAt(0) + rule.scheduleFrequency.slice(1).toLowerCase() : 'Manual'}
-                      </span>
-                    </div>
-                    {scheduleOpen === rule.id && (
-                      <Card padding={8} shadow="md" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, minWidth: 150, fontSize: 12 }}>
-                        {(['NEVER', 'HOURLY', 'DAILY', 'WEEKLY'] as ScheduleFrequency[]).map((f) => (
-                          <div
-                            key={f}
-                            onClick={() => handleScheduleChange(rule.id, f)}
-                            style={{
-                              padding: '6px 10px', cursor: 'pointer', borderRadius: 4,
-                              fontWeight: rule.scheduleFrequency === f ? 600 : 400,
-                              background: rule.scheduleFrequency === f ? 'var(--color-bg)' : 'transparent',
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = rule.scheduleFrequency === f ? 'var(--color-bg)' : 'transparent'; }}
-                          >
-                            {f === 'NEVER' ? 'Manual only' : f.charAt(0) + f.slice(1).toLowerCase()}
-                          </div>
-                        ))}
-                        {rule.nextRunAt && (
-                          <div style={{ padding: '6px 10px', fontSize: 10, color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)', marginTop: 4 }}>
-                            Next run: {new Date(rule.nextRunAt).toLocaleString()}
-                          </div>
-                        )}
-                      </Card>
-                    )}
-                  </td>
-                  )}
-                  {dqCols.isVisible('lastMeasured') && (
-                    <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                      {rule.lastMeasured ? new Date(rule.lastMeasured).toLocaleDateString() : '--'}
-                    </td>
-                  )}
-                  <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                      {rule.ruleType && (
-                        <IconButton
-                          size="sm"
-                          icon="play"
-                          label={runningRuleId === rule.id ? 'Running\u2026' : 'Run now'}
-                          onClick={() => handleRunRule(rule)}
-                          disabled={runningRuleId !== null}
-                        />
-                      )}
-                      {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(rule)} />}
-                      {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(rule.id)} />}
-                    </div>
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={sortedRules}
+            columns={ruleColumns}
+            rowKey={(r) => r.id}
+            selection={sel}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all rules"
+            emptyMessage="No rules match the current filters."
+          />
         </Card>
       )}
       </>)}

@@ -4,7 +4,6 @@ import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
-import SecondaryButton from '../components/SecondaryButton';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { usePolling } from '../hooks/usePolling';
@@ -15,8 +14,10 @@ import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from './../components/EmptyState';
 import { renderNavIcon } from './../components/navIcons';
 import StatusBadge from '../components/StatusBadge';
-import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
@@ -228,7 +229,6 @@ export default function ConnectionsPage() {
   const [formTestResult, setFormTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [formTesting, setFormTesting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterConnType, setFilterConnType] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -442,19 +442,12 @@ export default function ConnectionsPage() {
   };
 
   // ── Bulk select handlers ──
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
+    if (sel.count === 0) return;
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/connections/${id}`)));
-      addToast('success', `Deleted ${selectedIds.size} connections`);
-      setSelectedIds(new Set());
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/connections/${id}`)));
+      addToast('success', `Deleted ${sel.count} connections`);
+      sel.clear();
       fetchData();
     } catch { addToast('error', 'Bulk delete failed'); }
   };
@@ -561,6 +554,8 @@ export default function ConnectionsPage() {
     'asc',
     'c_',
   );
+
+  const sel = useRowSelection(sorted, (c) => c.id);
 
   // -----------------------------------------------------------------------
   // Form fields by connection type
@@ -726,6 +721,105 @@ export default function ConnectionsPage() {
 
   const systemNameMap: Record<string, string> = {};
   systems.forEach((s) => { systemNameMap[s.id] = s.name; });
+
+  const connectionColumns = ([
+    connCols.isVisible('system') && {
+      key: 'system', header: 'System', cellStyle: { fontWeight: 500, maxWidth: 240 },
+      render: (conn: ConnectionProfile) => {
+        const ids = conn.systemIds ?? [];
+        if (ids.length === 0) {
+          return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>;
+        }
+        const names = ids.map((id) => systemNameMap[id]).filter(Boolean);
+        if (names.length === 0) return <span style={{ color: 'var(--color-text-muted)' }}>--</span>;
+        // Clip long system names to one line. The name
+        // element takes the clipped space; the "+N"
+        // affordance stays visible on the right and
+        // hover surfaces the full list. Wrapping was
+        // shoving `+1` onto a second row on long
+        // names like "ArcGIS Utility Network Electric".
+        return (
+          <div
+            title={names.join(', ')}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}
+          >
+            <span
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+                flexShrink: 1,
+              }}
+            >
+              {names[0]}
+            </span>
+            {names.length > 1 && (
+              <span style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>
+                +{names.length - 1}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    connCols.isVisible('name') && {
+      key: 'name', header: 'Connection Name', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 260 },
+      render: (conn: ConnectionProfile) => <TruncatedText text={conn.name} />,
+    },
+    connCols.isVisible('type') && {
+      key: 'connectionType', header: 'Type', sortable: true,
+      render: (conn: ConnectionProfile) => {
+        const typeBadge = TYPE_BADGES[conn.connectionType] || TYPE_BADGES.DATABASE;
+        return (
+          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: typeBadge.bg, color: typeBadge.color }}>
+            {TYPE_LABELS[conn.connectionType] || conn.connectionType}
+          </span>
+        );
+      },
+    },
+    connCols.isVisible('config') && {
+      key: 'config', header: 'Config',
+      cellStyle: { color: 'var(--color-text-secondary)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontFamily: 'var(--font-mono)' },
+      render: (conn: ConnectionProfile) => configSummary(conn),
+    },
+    connCols.isVisible('status') && {
+      key: 'status', header: 'Status', sortable: true,
+      render: (conn: ConnectionProfile) => {
+        const statusBadge = STATUS_BADGES[conn.status] || STATUS_BADGES.UNTESTED;
+        return (
+          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: statusBadge.bg, color: statusBadge.color }}>
+            {conn.status}
+          </span>
+        );
+      },
+    },
+    connCols.isVisible('lastTested') && {
+      key: 'lastTested', header: 'Last Tested',
+      cellStyle: { color: 'var(--color-text-muted)', fontSize: 12 },
+      render: (conn: ConnectionProfile) => timeAgo(conn.lastTestedAt),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, cellStyle: { whiteSpace: 'nowrap' },
+      render: (conn: ConnectionProfile) => {
+        const isTesting = testingIds.has(conn.id);
+        return (
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            <IconButton size="sm" icon={isTesting ? 'refresh' : 'play'}
+              label={isTesting ? 'Testing...' : 'Test connection'}
+              disabled={isTesting}
+              onClick={() => !isTesting && handleRowTest(conn.id)} />
+            {conn.status === 'CONNECTED' && (
+              <IconButton size="sm" icon="search" label="Discover assets" onClick={() => handleDiscover(conn)} />
+            )}
+            <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(conn)} />
+            <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(conn)} />
+            <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(conn.id)} />
+          </div>
+        );
+      },
+    },
+  ].filter(Boolean) as DataTableColumn<ConnectionProfile>[]);
 
   return (
     <div>
@@ -1014,30 +1108,16 @@ export default function ConnectionsPage() {
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Connections?"
-        message={`Delete ${selectedIds.size} selected connections? This cannot be undone.`}
+        message={`Delete ${sel.count} selected connections? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
       {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <SecondaryButton onClick={() => setSelectedIds(new Set())}>
-            Clear Selection
-          </SecondaryButton>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear} clearLabel="Clear Selection">
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
+      </BulkActionBar>
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
@@ -1051,132 +1131,15 @@ export default function ConnectionsPage() {
             action={{ label: '+ Add Connection', onClick: openAdd }}
           />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                  <input type="checkbox"
-                    checked={visibleConnections.length > 0 && selectedIds.size === visibleConnections.length}
-                    onChange={() => {
-                      if (selectedIds.size === visibleConnections.length) setSelectedIds(new Set());
-                      else setSelectedIds(new Set(visibleConnections.map((c) => c.id)));
-                    }} />
-                </th>
-                {connCols.isVisible('system') && <th scope="col" style={thStyle}>System</th>}
-                {connCols.isVisible('name') && <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Connection Name</SortableTh>}
-                {connCols.isVisible('type') && <SortableTh sortKey="connectionType" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
-                {connCols.isVisible('config') && <th scope="col" style={thStyle}>Config</th>}
-                {connCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                {connCols.isVisible('lastTested') && <th scope="col" style={thStyle}>Last Tested</th>}
-                <th scope="col" style={{ ...thStyle, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((conn) => {
-                const statusBadge = STATUS_BADGES[conn.status] || STATUS_BADGES.UNTESTED;
-                const typeBadge = TYPE_BADGES[conn.connectionType] || TYPE_BADGES.DATABASE;
-                const isTesting = testingIds.has(conn.id);
-                const isSelected = selectedIds.has(conn.id);
-
-                return (
-                  <tr
-                    key={conn.id}
-                    style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
-                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
-                  >
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(conn.id)} />
-                    </td>
-                    {connCols.isVisible('system') && (
-                      <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 240 }}>
-                        {(() => {
-                          const ids = conn.systemIds ?? [];
-                          if (ids.length === 0) {
-                            return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>;
-                          }
-                          const names = ids.map((id) => systemNameMap[id]).filter(Boolean);
-                          if (names.length === 0) return <span style={{ color: 'var(--color-text-muted)' }}>--</span>;
-                          // Clip long system names to one line. The name
-                          // element takes the clipped space; the "+N"
-                          // affordance stays visible on the right and
-                          // hover surfaces the full list. Wrapping was
-                          // shoving `+1` onto a second row on long
-                          // names like "ArcGIS Utility Network Electric".
-                          return (
-                            <div
-                              title={names.join(', ')}
-                              style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}
-                            >
-                              <span
-                                style={{
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: 0,
-                                  flexShrink: 1,
-                                }}
-                              >
-                                {names[0]}
-                              </span>
-                              {names.length > 1 && (
-                                <span style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>
-                                  +{names.length - 1}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                    )}
-                    {connCols.isVisible('name') && (
-                      <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 260 }}>
-                        <TruncatedText text={conn.name} />
-                      </td>
-                    )}
-                    {connCols.isVisible('type') && (
-                      <td style={tdStyle}>
-                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: typeBadge.bg, color: typeBadge.color }}>
-                          {TYPE_LABELS[conn.connectionType] || conn.connectionType}
-                        </span>
-                      </td>
-                    )}
-                    {connCols.isVisible('config') && (
-                      <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-                        {configSummary(conn)}
-                      </td>
-                    )}
-                    {connCols.isVisible('status') && (
-                      <td style={tdStyle}>
-                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: statusBadge.bg, color: statusBadge.color }}>
-                          {conn.status}
-                        </span>
-                      </td>
-                    )}
-                    {connCols.isVisible('lastTested') && (
-                      <td style={{ ...tdStyle, color: 'var(--color-text-muted)', fontSize: 12 }}>
-                        {timeAgo(conn.lastTestedAt)}
-                      </td>
-                    )}
-                    <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <IconButton size="sm" icon={isTesting ? 'refresh' : 'play'}
-                          label={isTesting ? 'Testing...' : 'Test connection'}
-                          disabled={isTesting}
-                          onClick={() => !isTesting && handleRowTest(conn.id)} />
-                        {conn.status === 'CONNECTED' && (
-                          <IconButton size="sm" icon="search" label="Discover assets" onClick={() => handleDiscover(conn)} />
-                        )}
-                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(conn)} />
-                        <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(conn)} />
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(conn.id)} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={sorted}
+            columns={connectionColumns}
+            rowKey={(c) => c.id}
+            selection={sel}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all connections"
+            emptyMessage="No connections match the current filters."
+          />
         )}
       </div>
 

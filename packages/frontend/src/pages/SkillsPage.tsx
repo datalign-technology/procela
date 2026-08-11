@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
-import { thStyle, tdStyle } from '../lib/tableStyles';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
@@ -11,7 +13,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
-import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
@@ -97,7 +98,6 @@ export default function SkillsPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterCategory, setFilterCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,6 +136,13 @@ export default function SkillsPage() {
     },
     'name',
   );
+
+  // A row is inherited (not editable here) when owned by an org OTHER than
+  // the active one. Only selectable rows feed select-all.
+  const isInherited = (s: Skill) => !!s.orgId && !!activeOrgId && s.orgId !== activeOrgId;
+  const ownerNameFor = (s: Skill) => orgNameById.get(s.orgId) || 'another org';
+  const selectableSkills = sorted.filter((s) => !isInherited(s));
+  const sel = useRowSelection(selectableSkills, (s) => s.id);
 
   // ── CRUD ──
 
@@ -198,27 +205,13 @@ export default function SkillsPage() {
   };
 
   // ── Bulk select ──
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === sorted.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(sorted.map((s) => s.id)));
-  };
-
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    const count = selectedIds.size;
+    if (sel.count === 0) return;
+    const count = sel.count;
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/skills/${id}`)));
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/skills/${id}`)));
       addToast('success', `Deleted ${count} skill${count === 1 ? '' : 's'}`);
-      setSelectedIds(new Set());
+      sel.clear();
       fetchData();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
@@ -242,6 +235,58 @@ export default function SkillsPage() {
       </div>
     </div>
   );
+
+  const skillColumns: DataTableColumn<Skill>[] = [
+    {
+      key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500 },
+      render: (s) => (
+        <>
+          {s.name}
+          {isInherited(s) && (
+            <span
+              title={`Switch the Working in… scope to ${ownerNameFor(s)} to edit`}
+              style={{
+                display: 'inline-block', marginLeft: 8, padding: '1px 6px',
+                borderRadius: 3, fontSize: 10, fontWeight: 600,
+                background: 'var(--color-bg)', color: 'var(--color-text-muted)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              Owned by {ownerNameFor(s)}
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'category', header: 'Category', sortable: true,
+      render: (s) => {
+        const cb = CATEGORY_BADGES[s.category] || CATEGORY_BADGES.GOVERNANCE;
+        return (
+          <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: cb.bg, color: cb.color }}>
+            {formatCategory(s.category)}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'description', header: 'Description', sortable: true, cellStyle: { maxWidth: 400 },
+      render: (s) => <TruncatedText text={s.description} />,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 120,
+      render: (s) => {
+        const inherited = isInherited(s);
+        const ownerName = ownerNameFor(s);
+        return (
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            <IconButton size="sm" icon="edit" label={inherited ? `Switch scope to ${ownerName} to edit` : 'Edit'} onClick={() => openEdit(s)} disabled={inherited} />
+            <IconButton size="sm" icon="trash" label={inherited ? `Switch scope to ${ownerName} to delete` : 'Delete'} variant="danger" onClick={() => setConfirmDelete(s.id)} disabled={inherited} />
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <div>
@@ -353,32 +398,14 @@ export default function SkillsPage() {
         </div>
       )}
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Skills?"
-        message={`Delete ${selectedIds.size} selected skills? This cannot be undone.`}
+        message={`Delete ${sel.count} selected skills? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => {
           setConfirmBulkDelete(false);
@@ -398,74 +425,16 @@ export default function SkillsPage() {
             secondaryAction={skills.length === 0 ? { label: 'Seed Standard Skills', onClick: handleSeed } : undefined}
           />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                  <input type="checkbox"
-                    checked={sorted.length > 0 && selectedIds.size === sorted.length}
-                    onChange={toggleSelectAll} aria-label="Select all skills" />
-                </th>
-                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                <SortableTh sortKey="category" active={sortKey} dir={sortDir} onClick={toggleSort}>Category</SortableTh>
-                <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>
-                <th scope="col" style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((s) => {
-                const cb = CATEGORY_BADGES[s.category] || CATEGORY_BADGES.GOVERNANCE;
-                const isSelected = selectedIds.has(s.id);
-                // A row is inherited (not editable here) when it's
-                // owned by an org OTHER than the active one. The
-                // filterByOrgScope backend endpoint rolls ancestor
-                // and descendant skills into the visible list; we
-                // badge them so a user can tell "why is this in my
-                // catalog?" and switch scope to edit.
-                const isInherited = !!s.orgId && !!activeOrgId && s.orgId !== activeOrgId;
-                const ownerName = isInherited ? (orgNameById.get(s.orgId) || 'another org') : null;
-                return (
-                  <tr key={s.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
-                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(s.id)} disabled={isInherited} />
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>
-                      {s.name}
-                      {isInherited && (
-                        <span
-                          title={`Switch the Working in… scope to ${ownerName} to edit`}
-                          style={{
-                            display: 'inline-block', marginLeft: 8, padding: '1px 6px',
-                            borderRadius: 3, fontSize: 10, fontWeight: 600,
-                            background: 'var(--color-bg)', color: 'var(--color-text-muted)',
-                            border: '1px solid var(--color-border)',
-                          }}
-                        >
-                          Owned by {ownerName}
-                        </span>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: cb.bg, color: cb.color }}>
-                        {formatCategory(s.category)}
-                      </span>
-                    </td>
-                    <td style={{ ...tdStyle, maxWidth: 400 }}>
-                      <TruncatedText text={s.description} />
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <IconButton size="sm" icon="edit" label={isInherited ? `Switch scope to ${ownerName} to edit` : 'Edit'} onClick={() => openEdit(s)} disabled={isInherited} />
-                        <IconButton size="sm" icon="trash" label={isInherited ? `Switch scope to ${ownerName} to delete` : 'Delete'} variant="danger" onClick={() => setConfirmDelete(s.id)} disabled={isInherited} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={sorted}
+            columns={skillColumns}
+            rowKey={(s) => s.id}
+            selection={sel}
+            isRowDisabled={(s) => isInherited(s)}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all skills"
+            emptyMessage="No skills match the current filters."
+          />
         )}
       </div>
 

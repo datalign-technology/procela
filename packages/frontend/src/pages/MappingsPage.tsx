@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -10,9 +9,11 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import { useToastStore } from '../stores/toastStore';
-import SortableTh from '../components/SortableTh';
 import TruncatedText from '../components/TruncatedText';
 import { useSortedList } from '../hooks/useSortedList';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
 import BatchMappingWizard from '../components/BatchMappingWizard';
@@ -188,7 +189,6 @@ export default function MappingsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [showBatchWizard, setShowBatchWizard] = useState(false);
@@ -302,29 +302,13 @@ export default function MappingsPage() {
     }
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === mappings.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(mappings.map((m) => m.id)));
-    }
-  };
-
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-    const count = selectedIds.size;
+    if (sel.count === 0) return;
+    const count = sel.count;
     try {
-      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/mappings/${id}`)));
+      await Promise.all(Array.from(sel.selectedIds).map((id) => apiClient.delete(`/mappings/${id}`)));
       addToast('success', `Deleted ${count} mapping${count === 1 ? '' : 's'}`);
-      setSelectedIds(new Set());
+      sel.clear();
       fetchData();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
@@ -385,7 +369,126 @@ export default function MappingsPage() {
     'stepPath',
   );
 
+  const sel = useRowSelection(sorted, (m) => m.id);
+
   const canSave = selectedStepId && selectedAssetId;
+
+  const mappingColumns: DataTableColumn<Mapping>[] = [
+    {
+      key: 'stepPath', header: 'Process Activity', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 300 },
+      render: (m) => m.stepInfo ? (
+        <TruncatedText text={formatStepPath(m.stepInfo)} />
+      ) : (
+        <span
+          title={`Original processStepId: ${m.processStepId}\nThe activity this mapping pointed at no longer exists — likely deleted or regenerated. Delete the row to clean it up.`}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '2px 8px', borderRadius: 4,
+            fontSize: 12, fontWeight: 600,
+            background: '#fee2e2', color: '#991b1b',
+            border: '1px solid #fca5a5',
+          }}
+        >
+          <span aria-hidden="true">⚠</span>
+          Activity deleted ({shortId(m.processStepId)})
+        </span>
+      ),
+    },
+    {
+      key: 'target', header: 'Target', sortable: true,
+      render: (m) => {
+        const t = resolveTarget(m);
+        if (t.kind === 'orphan' || t.kind === 'unknown') {
+          return (
+            <span
+              title={t.sub ? `Original id: ${t.sub}` : 'No target linked.'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '2px 8px', borderRadius: 4,
+                fontSize: 12, fontWeight: 600,
+                background: t.kind === 'orphan' ? '#fee2e2' : 'var(--color-bg)',
+                color: t.kind === 'orphan' ? '#991b1b' : 'var(--color-text-muted)',
+                border: t.kind === 'orphan' ? '1px solid #fca5a5' : '1px solid var(--color-border)',
+              }}
+            >
+              {t.kind === 'orphan' && <span aria-hidden="true">⚠</span>}
+              {t.label}
+            </span>
+          );
+        }
+        const kindLabel =
+          t.kind === 'asset' ? 'Asset' :
+          t.kind === 'policy' ? 'Document' :
+          'Attachment';
+        const kindColor =
+          t.kind === 'asset' ? { bg: '#dbeafe', fg: '#1e40af' } :
+          t.kind === 'policy' ? { bg: '#ede9fe', fg: '#5b21b6' } :
+          { bg: '#fef3c7', fg: '#92400e' };
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              style={{
+                display: 'inline-block', padding: '1px 6px', borderRadius: 3,
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                background: kindColor.bg, color: kindColor.fg,
+                textTransform: 'uppercase',
+              }}
+            >
+              {kindLabel}
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 500 }}>{t.label}</div>
+              {t.sub && (
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.sub}</div>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'linkType', header: 'Link Type', sortable: true,
+      render: (m) => (
+        <span
+          style={{
+            display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+            fontSize: 11, fontWeight: 500,
+            background: 'var(--color-primary-light)', color: 'var(--color-primary)',
+          }}
+        >
+          {m.linkType}
+        </span>
+      ),
+    },
+    {
+      key: 'ai', header: 'AI Suggested',
+      render: (m) => m.aiSuggested ? (
+        <span
+          style={{
+            display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+            fontSize: 11, fontWeight: 500,
+            background: '#dbeafe', color: '#1d4ed8',
+          }}
+        >
+          AI Suggested
+        </span>
+      ) : (
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Manual</span>
+      ),
+    },
+    {
+      key: 'notes', header: 'Notes', cellStyle: { maxWidth: 200 },
+      render: (m) => (
+        <span style={{ color: m.notes ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>
+          {m.notes || '--'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 60,
+      render: (m) => canWrite ? <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(m.id)} /> : null,
+    },
+  ];
 
   return (
     <div>
@@ -625,27 +728,9 @@ export default function MappingsPage() {
       )}
 
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
+      </BulkActionBar>
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -663,7 +748,7 @@ export default function MappingsPage() {
       <ConfirmDialog
         open={confirmBulkDelete}
         title="Delete Selected Mappings?"
-        message={`Delete ${selectedIds.size} selected items? This cannot be undone.`}
+        message={`Delete ${sel.count} selected items? This cannot be undone.`}
         confirmLabel="Delete Selected"
         onConfirm={async () => {
           setConfirmBulkDelete(false);
@@ -707,151 +792,15 @@ export default function MappingsPage() {
             action={{ label: '+ Add Mapping', onClick: openForm }}
           />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                  <input type="checkbox" checked={mappings.length > 0 && selectedIds.size === mappings.length} onChange={toggleSelectAll} />
-                </th>
-                <SortableTh sortKey="stepPath" active={sortKey} dir={sortDir} onClick={toggleSort}>Process Activity</SortableTh>
-                <SortableTh sortKey="target" active={sortKey} dir={sortDir} onClick={toggleSort}>Target</SortableTh>
-                <SortableTh sortKey="linkType" active={sortKey} dir={sortDir} onClick={toggleSort}>Link Type</SortableTh>
-                <th scope="col" style={thStyle}>AI Suggested</th>
-                <th scope="col" style={thStyle}>Notes</th>
-                <th scope="col" style={{ ...thStyle, width: 60, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((m) => (
-                <tr
-                  key={m.id}
-                  style={{ transition: 'background 0.1s', background: selectedIds.has(m.id) ? '#f0f9ff' : '' }}
-                  onMouseEnter={(e) => { if (!selectedIds.has(m.id)) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                  onMouseLeave={(e) => { if (!selectedIds.has(m.id)) e.currentTarget.style.background = ''; }}
-                >
-                  <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
-                    <input type="checkbox" checked={selectedIds.has(m.id)} onChange={() => toggleSelect(m.id)} />
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 300 }}>
-                    {m.stepInfo ? (
-                      <TruncatedText text={formatStepPath(m.stepInfo)} />
-                    ) : (
-                      <span
-                        title={`Original processStepId: ${m.processStepId}\nThe activity this mapping pointed at no longer exists — likely deleted or regenerated. Delete the row to clean it up.`}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          padding: '2px 8px', borderRadius: 4,
-                          fontSize: 12, fontWeight: 600,
-                          background: '#fee2e2', color: '#991b1b',
-                          border: '1px solid #fca5a5',
-                        }}
-                      >
-                        <span aria-hidden="true">⚠</span>
-                        Activity deleted ({shortId(m.processStepId)})
-                      </span>
-                    )}
-                  </td>
-                  <td style={tdStyle}>
-                    {(() => {
-                      const t = resolveTarget(m);
-                      if (t.kind === 'orphan' || t.kind === 'unknown') {
-                        return (
-                          <span
-                            title={t.sub ? `Original id: ${t.sub}` : 'No target linked.'}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 6,
-                              padding: '2px 8px', borderRadius: 4,
-                              fontSize: 12, fontWeight: 600,
-                              background: t.kind === 'orphan' ? '#fee2e2' : 'var(--color-bg)',
-                              color: t.kind === 'orphan' ? '#991b1b' : 'var(--color-text-muted)',
-                              border: t.kind === 'orphan' ? '1px solid #fca5a5' : '1px solid var(--color-border)',
-                            }}
-                          >
-                            {t.kind === 'orphan' && <span aria-hidden="true">⚠</span>}
-                            {t.label}
-                          </span>
-                        );
-                      }
-                      const kindLabel =
-                        t.kind === 'asset' ? 'Asset' :
-                        t.kind === 'policy' ? 'Document' :
-                        'Attachment';
-                      const kindColor =
-                        t.kind === 'asset' ? { bg: '#dbeafe', fg: '#1e40af' } :
-                        t.kind === 'policy' ? { bg: '#ede9fe', fg: '#5b21b6' } :
-                        { bg: '#fef3c7', fg: '#92400e' };
-                      return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span
-                            style={{
-                              display: 'inline-block', padding: '1px 6px', borderRadius: 3,
-                              fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                              background: kindColor.bg, color: kindColor.fg,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            {kindLabel}
-                          </span>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 500 }}>{t.label}</div>
-                            {t.sub && (
-                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.sub}</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td style={tdStyle}>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        background: 'var(--color-primary-light)',
-                        color: 'var(--color-primary)',
-                      }}
-                    >
-                      {m.linkType}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>
-                    {m.aiSuggested ? (
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '2px 8px',
-                          borderRadius: 4,
-                          fontSize: 11,
-                          fontWeight: 500,
-                          background: '#dbeafe',
-                          color: '#1d4ed8',
-                        }}
-                      >
-                        AI Suggested
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Manual</span>
-                    )}
-                  </td>
-                  <td
-                    style={{
-                      ...tdStyle,
-                      color: m.notes ? 'var(--color-text-secondary)' : 'var(--color-text-muted)',
-                      maxWidth: 200,
-                    }}
-                  >
-                    {m.notes || '--'}
-                  </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(m.id)} />}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            rows={sorted}
+            columns={mappingColumns}
+            rowKey={(m) => m.id}
+            selection={sel}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all mappings"
+            emptyMessage="No mappings match the current filters."
+          />
         )}
       </div>
 
