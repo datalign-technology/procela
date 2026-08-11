@@ -370,17 +370,6 @@ export default function GovernanceCalendarPage() {
 
   // ── Derived ──
 
-  const activeCount = useMemo(() => events.filter((e) => e.status === 'ACTIVE').length, [events]);
-
-  const upcomingThisMonth = useMemo(() => {
-    const now = new Date();
-    const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
-    return upcoming.filter((o) => {
-      const d = new Date(o.occursAt);
-      return d >= now && d <= in30;
-    }).length;
-  }, [upcoming]);
-
   const filteredEvents = useMemo(() => {
     let result = events;
     if (filterType) result = result.filter((e) => e.eventType === filterType);
@@ -445,11 +434,6 @@ export default function GovernanceCalendarPage() {
       <PageHeader
         title="Governance Calendar"
         subtitle="Recurring events and activities that keep your program running."
-        meta={
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-            {activeCount} active event{activeCount === 1 ? '' : 's'} &middot; {upcomingThisMonth} upcoming this month
-          </p>
-        }
         actions={<>
           {events.length > 0 && (
             <div style={{ display: 'inline-flex', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>

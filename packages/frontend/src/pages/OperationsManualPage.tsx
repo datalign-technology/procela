@@ -174,11 +174,6 @@ export default function OperationsManualPage() {
       <PageHeader
         title="Operations Manual"
         subtitle="Role-specific guidance for running your governance program."
-        meta={manuals.length > 0 ? (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-            {manuals.length} manual{manuals.length === 1 ? '' : 's'} &middot; Click a card to expand
-          </p>
-        ) : undefined}
         actions={<>
           <button style={btnSecondary} onClick={handleSeed} disabled={seeding}>{seedLabel}</button>
           {canWrite && <button style={btnPrimary} onClick={() => setShowAddManual(true)}>+ Add Manual</button>}

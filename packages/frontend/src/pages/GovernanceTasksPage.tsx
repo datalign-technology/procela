@@ -44,15 +44,6 @@ interface GovernanceTask {
   updatedAt: string;
 }
 
-interface TaskSummary {
-  total: number;
-  open: number;
-  inProgress: number;
-  completed: number;
-  cancelled: number;
-  overdue: number;
-}
-
 interface Person {
   id: string;
   name: string;
@@ -156,7 +147,6 @@ export default function GovernanceTasksPage() {
 
   const taskCols = useColumnPicker<TaskColId>('procela.governanceTasks.visibleCols.v1', TASK_COLUMN_DEFS);
   const [tasks, setTasks] = useState<GovernanceTask[]>([]);
-  const [summary, setSummary] = useState<TaskSummary | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -176,13 +166,11 @@ export default function GovernanceTasksPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [tasksRes, summaryRes, peopleRes] = await Promise.all([
+      const [tasksRes, peopleRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GovernanceTask[] }>(`/governance-tasks${query}`),
-        apiClient.get<{ success: boolean; data: TaskSummary }>(`/governance-tasks/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
       ]);
       setTasks(tasksRes.data || []);
-      setSummary(summaryRes.data || null);
       setPeople(peopleRes.data || []);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
@@ -343,15 +331,6 @@ export default function GovernanceTasksPage() {
       <PageHeader
         title="Governance Tasks"
         subtitle="Track and manage governance tasks, reviews, and approvals."
-        meta={summary ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{summary.total} tasks</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{summary.open} open</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span style={{ color: summary.overdue > 0 ? '#dc2626' : undefined }}>{summary.overdue} overdue</span>
-          </div>
-        ) : undefined}
         actions={
           <>
             <ColumnPicker state={taskCols} />

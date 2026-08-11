@@ -547,9 +547,6 @@ export default function ConnectionsPage() {
     }
     return true;
   });
-  const connectedCount = visibleConnections.filter((c) => c.status === 'CONNECTED').length;
-  const errorCount = visibleConnections.filter((c) => c.status === 'ERROR' || c.status === 'DISCONNECTED').length;
-  const untestedCount = visibleConnections.filter((c) => c.status === 'UNTESTED').length;
   const filterSystem = systemFilter ? systems.find((s) => s.id === systemFilter) : null;
 
   // Sort: comparators keyed by column name; URL persists ?sort=&dir=
@@ -738,15 +735,6 @@ export default function ConnectionsPage() {
         subtitle={filterSystem
           ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>
           : 'Connect to external data sources. Test verifies reachability (TCP or HTTP probe); credential validation happens when real drivers are wired in.'}
-        meta={connections.length > 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{connections.length} connections</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{connectedCount} connected</span>
-            {errorCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span style={{ color: 'var(--color-error)' }}>{errorCount} error</span></>}
-            {untestedCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span>{untestedCount} untested</span></>}
-          </div>
-        ) : undefined}
         actions={
           <>
             <SavedViewsMenu

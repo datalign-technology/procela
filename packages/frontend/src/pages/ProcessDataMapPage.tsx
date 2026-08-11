@@ -184,14 +184,6 @@ export default function ProcessDataMapPage() {
       <PageHeader
         title="Process ↔ Data map"
         subtitle="Visual bridge between the business hierarchy and the catalog. Click an activity or asset to focus its connections."
-        meta={data && (
-          <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--color-text-muted)' }}>
-            <span>{data.stats.activityCount} activities</span>
-            <span>{data.stats.assetCount} mapped assets</span>
-            <span>{data.stats.edgeCount} mappings</span>
-            <span>{data.stats.mappedActivityCount}/{data.stats.activityCount} activities have at least one mapping</span>
-          </div>
-        )}
       />
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '12px 0', flexWrap: 'wrap' }}>

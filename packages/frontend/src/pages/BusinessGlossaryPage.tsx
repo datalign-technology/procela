@@ -492,17 +492,6 @@ export default function BusinessGlossaryPage() {
       <PageHeader
         title="Business Glossary"
         subtitle="Agreed-upon definitions for key business terms across the organization."
-        meta={terms.length > 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{terms.length} terms</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{terms.filter((t) => t.status === 'APPROVED').length} approved</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{terms.filter((t) => t.status === 'DRAFT').length} draft</span>
-            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-            <span>{new Set(terms.map((t) => t.category).filter(Boolean)).size} categories</span>
-          </div>
-        ) : undefined}
         actions={
           <>
             {canWrite && terms.length === 0 && (
