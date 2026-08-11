@@ -7,7 +7,6 @@ import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { apiClient } from '../api/client';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import { useTierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
@@ -24,7 +23,6 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
-import SortableTh from '../components/SortableTh';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
@@ -32,6 +30,7 @@ import BulkSelectHint from '../components/BulkSelectHint';
 import { useSortedList } from '../hooks/useSortedList';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useToastStore } from '../stores/toastStore';
 import { errorMessage, errorToast } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
@@ -413,7 +412,6 @@ export default function DataAssetsPage() {
   // shared hook + component. Storage key and column defs declared above.
   const colPicker = useColumnPicker<ColumnId>(COLUMN_STORAGE_KEY, COLUMN_DEFS);
   const isVisible = colPicker.isVisible;
-  const visibleColCount = colPicker.visibleCount;
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -983,6 +981,269 @@ export default function DataAssetsPage() {
       setViewing360(res.data || null);
     } catch { /* */ }
     finally { setLoading360(false); }
+  };
+
+  const assetColumns = ([
+    {
+      key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 380 },
+      render: (asset: DataAssetEntity) => (
+        <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            {/* Name is a link to the detail modal for everyone - editors and
+              *  viewers both. Renaming happens via the row's Edit pencil. */}
+            <button
+              type="button"
+              onClick={() => open360(asset.id)}
+              title="Click to view details"
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
+              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+            >
+              {asset.name}
+            </button>
+            <OriginBadge origin={asset.origin} />
+            <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
+            <RowCountChip rowCount={asset.rowCount} />
+            {asset.sensitivityTags && asset.sensitivityTags.length > 0 && (
+              <span
+                title={`Sensitivity: ${asset.sensitivityTags.join(', ')}`}
+                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', background: '#fee2e2', color: '#991b1b', padding: '1px 6px', borderRadius: 3 }}
+              >
+                {asset.sensitivityTags[0]}{asset.sensitivityTags.length > 1 ? ` +${asset.sensitivityTags.length - 1}` : ''}
+              </span>
+            )}
+            <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+          </div>
+          <div
+            style={{ fontSize: 12, fontWeight: 400, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}
+            title={asset.description || undefined}
+          >
+            {asset.description || '--'}
+          </div>
+        </div>
+      ),
+    },
+    isVisible('system') && {
+      key: 'system', header: 'System', sortable: true,
+      render: (asset: DataAssetEntity) => systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
+    },
+    isVisible('source') && {
+      key: 'source', header: 'Source', cellStyle: { fontSize: 12, color: 'var(--color-text-secondary)' },
+      render: (asset: DataAssetEntity) => {
+        const binding = primaryBindingOf(asset.id);
+        const connName = binding ? connectionNameById[binding.connectionId] : undefined;
+        return binding ? (
+          <span title={`Linked to connection ${connName || binding.connectionId}`}>
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              {binding.sourceAsset}{binding.sourceColumn ? `.${binding.sourceColumn}` : ''}
+            </code>
+          </span>
+        ) : (
+          <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>
+        );
+      },
+    },
+    isVisible('tier') && {
+      key: 'tier', header: 'Tier',
+      render: (asset: DataAssetEntity) => {
+        const inherited = isInheritedAsset(asset.orgId, activeOrgId);
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {canWrite && !inherited ? (
+              <select
+                value={asset.governanceTier || 'BRONZE'}
+                onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
+                style={{ fontSize: 13, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
+              >
+                {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
+              </select>
+            ) : (
+              <span>{tierLabel(asset.governanceTier)}</span>
+            )}
+            {canWrite && !inherited && asset.suggestedTier && compareTier(asset.suggestedTier, asset.governanceTier) > 0 && (
+              <button
+                onClick={() => inlineSaveField(asset.id, 'governanceTier', asset.suggestedTier!)}
+                title={`This asset meets the criteria for ${tierLabel(asset.suggestedTier)}. Click to promote.`}
+                style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 999, background: '#dcfce7', color: '#166534', border: '1px solid #86efac', cursor: 'pointer', alignSelf: 'flex-start' }}
+              >
+                {'↑'} Promote to {tierLabel(asset.suggestedTier)}
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+    isVisible('health') && {
+      key: 'health', header: 'Health',
+      render: (asset: DataAssetEntity) => {
+        const inherited = isInheritedAsset(asset.orgId, activeOrgId);
+        return canWrite && !inherited ? (
+          <InlineCellEdit
+            value={asset.healthScore != null ? String(asset.healthScore) : ''}
+            onSave={(v) => inlineSaveField(asset.id, 'healthScore', v)}
+            type="number"
+          />
+        ) : (
+          <span>{asset.healthScore != null ? `${asset.healthScore}%` : '—'}</span>
+        );
+      },
+    },
+    isVisible('domain') && {
+      key: 'domain', header: 'Domain', sortable: true,
+      render: (asset: DataAssetEntity) => asset.domainName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
+    },
+    isVisible('owner') && {
+      key: 'owner', header: 'Owner', sortable: true,
+      render: (asset: DataAssetEntity) => asset.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
+    },
+    isVisible('steward') && {
+      key: 'steward', header: 'Steward',
+      render: (asset: DataAssetEntity) => asset.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 180,
+      render: (asset: DataAssetEntity) => {
+        const binding = primaryBindingOf(asset.id);
+        const inherited = isInheritedAsset(asset.orgId, activeOrgId);
+        const inheritedHint = inherited
+          ? `Owned at ${getOrgName(asset.orgId)}. Switch the "Working in..." scope to ${getOrgName(asset.orgId)} to edit.`
+          : '';
+        return (
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            {binding ? (
+              <>
+                <IconButton size="sm" icon="refresh" label="Change connection" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('change'); }} />
+                <IconButton size="sm" icon="unlink" label="Unlink" onClick={() => unlinkPrimary(asset)} />
+              </>
+            ) : (
+              <>
+                <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
+                <IconButton size="sm" icon="search" label="Suggest source" onClick={() => openSuggestSource(asset)} />
+              </>
+            )}
+            {canWrite && (
+              <>
+                <IconButton size="sm" icon="edit" label={inheritedHint || 'Edit'} disabled={inherited} onClick={() => openEdit(asset)} />
+                <IconButton size="sm" icon="copy" label={inheritedHint || 'Duplicate'} disabled={inherited} onClick={() => openDuplicate(asset)} />
+                <IconButton size="sm" icon="trash" label={inheritedHint || 'Delete'} variant="danger" disabled={inherited} onClick={() => setConfirmDelete(asset.id)} />
+              </>
+            )}
+          </div>
+        );
+      },
+    },
+  ].filter(Boolean) as DataTableColumn<DataAssetEntity>[]);
+
+  const renderAssetExpansion = (asset: DataAssetEntity) => {
+    const binding = primaryBindingOf(asset.id);
+    const cols = columnsMap[asset.id] || [];
+    return (
+      <div style={{ background: '#fafbfc', padding: '12px 20px 12px 60px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Columns ({cols.length})
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {binding && (
+              <button
+                onClick={() => autoDiscoverColumns(asset.id)}
+                disabled={discovering === asset.id}
+                style={{ padding: '4px 10px', fontSize: 11, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: discovering === asset.id ? 'not-allowed' : 'pointer', opacity: discovering === asset.id ? 0.6 : 1 }}
+              >
+                {discovering === asset.id ? 'Discovering…' : 'Auto-discover columns'}
+              </button>
+            )}
+          </div>
+        </div>
+        {columnsLoading === asset.id ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading…'}</div>
+        ) : cols.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
+            {binding
+              ? 'No columns yet. Click "Auto-discover columns" to populate from the linked connection.'
+              : 'No columns yet. Link this asset to a connection first, then discover its columns.'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {cols.map((col) => {
+              const colRules = col.rules || [];
+              const isColExpanded = expandedColumnIds.has(col.id);
+              const h = col.healthScore;
+              const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
+              return (
+                <div key={col.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  {/* Column row */}
+                  <div
+                    onClick={() => toggleColumnExpand(col.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: isColExpanded ? '#f0f9ff' : undefined }}
+                    onMouseEnter={(e) => { if (!isColExpanded) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { if (!isColExpanded) e.currentTarget.style.background = ''; }}
+                  >
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 12, flexShrink: 0 }}>
+                      {colRules.length > 0 ? (isColExpanded ? '▼' : '▶') : '•'}
+                    </span>
+                    <span style={{ fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 13, minWidth: 120 }}>
+                      {col.columnName}
+                    </span>
+                    <span style={{ minWidth: 90 }} onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={col.dataType || ''}
+                        onChange={(e) => updateColumnType(asset.id, col.id, e.target.value)}
+                        style={{ fontSize: 11, color: col.dataType ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', border: 'none', background: 'transparent', cursor: 'pointer', padding: '1px 2px', fontFamily: 'inherit' }}
+                        title="Click to set data type"
+                      >
+                        <option value="">{col.dataType || 'Set type...'}</option>
+                        {standardDataTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {col.description || ''}
+                    </span>
+                    {h != null && (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: hc, minWidth: 40, textAlign: 'right' }}>{h}%</span>
+                    )}
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', minWidth: 60, textAlign: 'right' }}>
+                      {colRules.length > 0 ? `${colRules.length} rule${colRules.length === 1 ? '' : 's'}` : ''}
+                    </span>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => deleteColumn(asset.id, col.id)} />
+                    </div>
+                  </div>
+                  {/* Expanded rules under this column */}
+                  {isColExpanded && colRules.length > 0 && (
+                    <div style={{ paddingLeft: 46, paddingBottom: 8 }}>
+                      {colRules.map((rule) => {
+                        const rc = rule.status === 'PASSING' ? '#16a34a' : rule.status === 'FAILING' ? '#dc2626' : rule.status === 'WARNING' ? '#ca8a04' : '#64748b';
+                        return (
+                          <div key={rule.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px', fontSize: 12, borderLeft: `3px solid ${rc}`, marginBottom: 2, borderRadius: '0 4px 4px 0', background: 'var(--color-bg)' }}>
+                            <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {rule.name}
+                            </span>
+                            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{rule.dimension}</span>
+                            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{rule.ruleType || 'manual'}</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: rc, minWidth: 35, textAlign: 'right' }}>
+                              {rule.currentScore}%
+                            </span>
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: rc + '18', color: rc }}>
+                              {rule.status}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {isColExpanded && colRules.length === 0 && (
+                    <div style={{ paddingLeft: 46, paddingBottom: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                      No rules defined for this column. Add rules on the Data Quality page.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -1687,342 +1948,22 @@ export default function DataAssetsPage() {
             action={canOwnHere ? { label: '+ Add Data Asset', onClick: openAdd } : undefined}
           />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                  <input type="checkbox" ref={(el) => { if (el) el.indeterminate = sel.someSelected; }} checked={sel.allSelected} onChange={sel.toggleAll} aria-label="Select all assets" />
-                </th>
-                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                {isVisible('system') && <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>}
-                {isVisible('source') && <th scope="col" style={thStyle}>Source</th>}
-                {isVisible('tier') && <th scope="col" style={thStyle}>Tier</th>}
-                {isVisible('health') && <th scope="col" style={thStyle}>Health</th>}
-                {isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>}
-                {isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
-                {isVisible('steward') && <th scope="col" style={thStyle}>Steward</th>}
-                <th scope="col" style={{ ...thStyle, width: 180, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((asset) => {
-                const binding = primaryBindingOf(asset.id);
-                const connName = binding ? connectionNameById[binding.connectionId] : undefined;
-                const isExpanded = expandedAssetId === asset.id;
-                const cols = columnsMap[asset.id] || [];
-                // Rows whose orgId differs from the active scope are
-                // inherited from above (or rolled up from below) — every
-                // edit surface in the row is gated by this flag.
-                const inherited = isInheritedAsset(asset.orgId, activeOrgId);
-                const inheritedHint = inherited
-                  ? `Owned at ${getOrgName(asset.orgId)}. Switch the "Working in..." scope to ${getOrgName(asset.orgId)} to edit.`
-                  : '';
-                return (
-                  <React.Fragment key={asset.id}>
-                  <tr id={`row-${asset.id}`} style={{ transition: 'background 0.1s', background: sel.isSelected(asset.id) ? 'var(--color-primary-light)' : '' }} onMouseEnter={(e) => { if (!sel.isSelected(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!sel.isSelected(asset.id)) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} title={inherited ? inheritedHint : undefined}>
-                      <input type="checkbox" checked={sel.isSelected(asset.id)} disabled={inherited} onChange={() => sel.toggle(asset.id)} />
-                    </td>
-                    {/* maxWidth caps the Asset column so a long description
-                      *  sub-label ellipsises within the cell instead of
-                      *  stretching the table and forcing a horizontal
-                      *  scroll. flex:1 + minWidth:0 on the inner wrapper
-                      *  lets the name row and description shrink to fit. */}
-                    <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 380 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); toggleExpandColumns(asset.id); }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 10, padding: 0, width: 14, flexShrink: 0 }}
-                          title={isExpanded ? 'Collapse columns' : 'Expand columns'}
-                        >
-                          {isExpanded ? '\u25BC' : '\u25B6'}
-                        </button>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                          {/* Name is a link to the detail modal for everyone -
-                            *  editors and viewers both. Renaming happens via
-                            *  the row's Edit pencil so the click target on the
-                            *  most natural column does the most expected thing
-                            *  (open detail), not the least (start editing). */}
-                          <button
-                            type="button"
-                            onClick={() => open360(asset.id)}
-                            title="Click to view details"
-                            style={{
-                              background: 'none', border: 'none', padding: 0,
-                              color: 'var(--color-primary)', cursor: 'pointer',
-                              font: 'inherit', fontWeight: 500, textAlign: 'left',
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-                          >
-                            {asset.name}
-                          </button>
-                          <OriginBadge origin={asset.origin} />
-                          <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
-                          <RowCountChip rowCount={asset.rowCount} />
-                          {asset.sensitivityTags && asset.sensitivityTags.length > 0 && (
-                            <span
-                              title={`Sensitivity: ${asset.sensitivityTags.join(', ')}`}
-                              style={{
-                                fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
-                                background: '#fee2e2', color: '#991b1b',
-                                padding: '1px 6px', borderRadius: 3,
-                              }}
-                            >
-                              {asset.sensitivityTags[0]}{asset.sensitivityTags.length > 1 ? ` +${asset.sensitivityTags.length - 1}` : ''}
-                            </span>
-                          )}
-                          <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
-                        </div>
-                        <div
-                          style={{ fontSize: 12, fontWeight: 400, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}
-                          title={asset.description || undefined}
-                        >
-                          {asset.description || '--'}
-                        </div>
-                        </div>
-                      </div>
-                    </td>
-                    {isVisible('system') && (
-                      <td style={tdStyle}>
-                        {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
-                      </td>
-                    )}
-                    {isVisible('source') && (
-                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                        {binding ? (
-                          <span title={`Linked to connection ${connName || binding.connectionId}`}>
-                            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                              {binding.sourceAsset}{binding.sourceColumn ? `.${binding.sourceColumn}` : ''}
-                            </code>
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>
-                        )}
-                      </td>
-                    )}
-                    {isVisible('tier') && (
-                      <td style={tdStyle} title={inherited ? inheritedHint : undefined}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {canWrite && !inherited ? (
-                            <select
-                              value={asset.governanceTier || 'BRONZE'}
-                              onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
-                              style={{ fontSize: 13, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
-                            >
-                              {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
-                            </select>
-                          ) : (
-                            <span>{tierLabel(asset.governanceTier)}</span>
-                          )}
-                          {canWrite && !inherited && asset.suggestedTier && compareTier(asset.suggestedTier, asset.governanceTier) > 0 && (
-                            <button
-                              onClick={() => inlineSaveField(asset.id, 'governanceTier', asset.suggestedTier!)}
-                              title={`This asset meets the criteria for ${tierLabel(asset.suggestedTier)}. Click to promote.`}
-                              style={{
-                                fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 999,
-                                background: '#dcfce7', color: '#166534', border: '1px solid #86efac',
-                                cursor: 'pointer', alignSelf: 'flex-start',
-                              }}
-                            >
-                              {'↑'} Promote to {tierLabel(asset.suggestedTier)}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                    {isVisible('health') && (
-                      <td style={tdStyle} title={inherited ? inheritedHint : undefined}>
-                        {canWrite && !inherited ? (
-                          <InlineCellEdit
-                            value={asset.healthScore != null ? String(asset.healthScore) : ''}
-                            onSave={(v) => inlineSaveField(asset.id, 'healthScore', v)}
-                            type="number"
-                          />
-                        ) : (
-                          <span>{asset.healthScore != null ? `${asset.healthScore}%` : '—'}</span>
-                        )}
-                      </td>
-                    )}
-                    {isVisible('domain') && (
-                      <td style={tdStyle}>
-                        {asset.domainName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
-                      </td>
-                    )}
-                    {isVisible('owner') && (
-                      <td style={tdStyle}>
-                        {asset.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
-                      </td>
-                    )}
-                    {isVisible('steward') && (
-                      <td style={tdStyle}>
-                        {asset.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
-                      </td>
-                    )}
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        {binding ? (
-                          <>
-                            <IconButton size="sm" icon="refresh" label="Change connection" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('change'); }} />
-                            <IconButton size="sm" icon="unlink" label="Unlink" onClick={() => unlinkPrimary(asset)} />
-                          </>
-                        ) : (
-                          <>
-                            <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
-                            <IconButton size="sm" icon="search" label="Suggest source" onClick={() => openSuggestSource(asset)} />
-                          </>
-                        )}
-                        {canWrite && (
-                          <>
-                            <IconButton size="sm" icon="edit" label={inheritedHint || 'Edit'} disabled={inherited} onClick={() => openEdit(asset)} />
-                            <IconButton size="sm" icon="copy" label={inheritedHint || 'Duplicate'} disabled={inherited} onClick={() => openDuplicate(asset)} />
-                            <IconButton size="sm" icon="trash" label={inheritedHint || 'Delete'} variant="danger" disabled={inherited} onClick={() => setConfirmDelete(asset.id)} />
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {/* Expanded columns section */}
-                  {isExpanded && (
-                    <tr>
-                      <td colSpan={3 + visibleColCount} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
-                        <div style={{ padding: '12px 20px 12px 60px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                              Columns ({cols.length})
-                            </span>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              {binding && (
-                                <button
-                                  onClick={() => autoDiscoverColumns(asset.id)}
-                                  disabled={discovering === asset.id}
-                                  style={{
-                                    padding: '4px 10px', fontSize: 11, fontWeight: 500,
-                                    background: 'var(--color-primary)', color: '#fff',
-                                    border: 'none', borderRadius: 4, cursor: discovering === asset.id ? 'not-allowed' : 'pointer',
-                                    opacity: discovering === asset.id ? 0.6 : 1,
-                                  }}
-                                >
-                                  {discovering === asset.id ? 'Discovering\u2026' : 'Auto-discover columns'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          {columnsLoading === asset.id ? (
-                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading\u2026'}</div>
-                          ) : cols.length === 0 ? (
-                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
-                              {binding
-                                ? 'No columns yet. Click "Auto-discover columns" to populate from the linked connection.'
-                                : 'No columns yet. Link this asset to a connection first, then discover its columns.'}
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                              {cols.map((col) => {
-                                const colRules = col.rules || [];
-                                const isColExpanded = expandedColumnIds.has(col.id);
-                                const h = col.healthScore;
-                                const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
-                                return (
-                                  <div key={col.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                    {/* Column row */}
-                                    <div
-                                      onClick={() => toggleColumnExpand(col.id)}
-                                      style={{
-                                        display: 'flex', alignItems: 'center', gap: 10,
-                                        padding: '8px 12px',
-                                        cursor: 'pointer',
-                                        background: isColExpanded ? '#f0f9ff' : undefined,
-                                      }}
-                                      onMouseEnter={(e) => { if (!isColExpanded) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                                      onMouseLeave={(e) => { if (!isColExpanded) e.currentTarget.style.background = ''; }}
-                                    >
-                                      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 12, flexShrink: 0 }}>
-                                        {colRules.length > 0 ? (isColExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
-                                      </span>
-                                      <span style={{ fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 13, minWidth: 120 }}>
-                                        {col.columnName}
-                                      </span>
-                                      <span style={{ minWidth: 90 }} onClick={(e) => e.stopPropagation()}>
-                                        <select
-                                          value={col.dataType || ''}
-                                          onChange={(e) => updateColumnType(asset.id, col.id, e.target.value)}
-                                          style={{
-                                            fontSize: 11, color: col.dataType ? 'var(--color-text-secondary)' : 'var(--color-text-muted)',
-                                            border: 'none', background: 'transparent', cursor: 'pointer',
-                                            padding: '1px 2px', fontFamily: 'inherit',
-                                          }}
-                                          title="Click to set data type"
-                                        >
-                                          <option value="">{col.dataType || 'Set type...'}</option>
-                                          {standardDataTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-                                        </select>
-                                      </span>
-                                      <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {col.description || ''}
-                                      </span>
-                                      {h != null && (
-                                        <span style={{ fontSize: 11, fontWeight: 600, color: hc, minWidth: 40, textAlign: 'right' }}>{h}%</span>
-                                      )}
-                                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', minWidth: 60, textAlign: 'right' }}>
-                                        {colRules.length > 0 ? `${colRules.length} rule${colRules.length === 1 ? '' : 's'}` : ''}
-                                      </span>
-                                      <div onClick={(e) => e.stopPropagation()}>
-                                        <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => deleteColumn(asset.id, col.id)} />
-                                      </div>
-                                    </div>
-                                    {/* Expanded rules under this column */}
-                                    {isColExpanded && colRules.length > 0 && (
-                                      <div style={{ paddingLeft: 46, paddingBottom: 8 }}>
-                                        {colRules.map((rule) => {
-                                          const rc = rule.status === 'PASSING' ? '#16a34a' : rule.status === 'FAILING' ? '#dc2626' : rule.status === 'WARNING' ? '#ca8a04' : '#64748b';
-                                          return (
-                                            <div key={rule.id} style={{
-                                              display: 'flex', alignItems: 'center', gap: 10,
-                                              padding: '4px 10px', fontSize: 12,
-                                              borderLeft: `3px solid ${rc}`,
-                                              marginBottom: 2, borderRadius: '0 4px 4px 0',
-                                              background: 'var(--color-bg)',
-                                            }}>
-                                              <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {rule.name}
-                                              </span>
-                                              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{rule.dimension}</span>
-                                              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{rule.ruleType || 'manual'}</span>
-                                              <span style={{ fontSize: 11, fontWeight: 600, color: rc, minWidth: 35, textAlign: 'right' }}>
-                                                {rule.currentScore}%
-                                              </span>
-                                              <span style={{
-                                                fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
-                                                background: rc + '18', color: rc,
-                                              }}>
-                                                {rule.status}
-                                              </span>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                    {isColExpanded && colRules.length === 0 && (
-                                      <div style={{ paddingLeft: 46, paddingBottom: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
-                                        No rules defined for this column. Add rules on the Data Quality page.
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            rows={sorted}
+            columns={assetColumns}
+            rowKey={(a) => a.id}
+            rowId={(a) => `row-${a.id}`}
+            selection={sel}
+            isRowDisabled={(a) => isInheritedAsset(a.orgId, activeOrgId)}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
+            selectAllLabel="Select all assets"
+            emptyMessage="No data assets match the current filters."
+            expansion={{
+              expandedIds: expandedAssetId ? new Set([expandedAssetId]) : new Set(),
+              onToggleExpanded: toggleExpandColumns,
+              renderExpandedRow: renderAssetExpansion,
+            }}
+          />
         )}
       </div>
         </div>
