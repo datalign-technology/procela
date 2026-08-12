@@ -233,6 +233,10 @@ export default function ProcessDataMapPage() {
         </div>
       )}
 
+      {!data && !error && (
+        <div role="status" aria-label="Loading" style={{ textAlign: 'center', padding: 48, color: 'var(--color-text-muted)' }}>Loading…</div>
+      )}
+
       {data && activities.length === 0 && assets.length === 0 && (
         <EmptyState
           icon={renderNavIcon('/processes/data-map')}
