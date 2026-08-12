@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import IconButton from './IconButton';
+import SectionLabel from './SectionLabel';
 import { ColumnPickerState } from '../hooks/useColumnPicker';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -34,9 +35,9 @@ export default function ColumnPicker<T extends string>({ state }: ColumnPickerPr
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>
+            <SectionLabel marginBottom={0}>
               Columns
-            </span>
+            </SectionLabel>
             <button
               onClick={() => state.reset()}
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-primary)', padding: 0 }}

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import Modal from './Modal';
+import SectionLabel from './SectionLabel';
 
 interface Attachment {
   id: string;
@@ -144,9 +145,9 @@ export default function AttachmentsPanel({ entityType, entityId, orgId, disabled
     <div style={{ marginTop: 8, padding: '8px 10px', background: '#fafbfc', borderRadius: 4, border: '1px solid var(--color-border)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: hideHeader ? 'flex-end' : 'space-between', marginBottom: 6 }}>
         {!hideHeader && (
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <SectionLabel marginBottom={0}>
             Attachments ({attachments.length})
-          </div>
+          </SectionLabel>
         )}
         {!disabled && (
           <button onClick={() => setShowModal(true)}

@@ -3,6 +3,7 @@ import { Check, AlertTriangle, X } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import StatusBadge from '../../components/StatusBadge';
 import HelpPopover from '../../components/HelpPopover';
+import SectionLabel from '../../components/SectionLabel';
 import { tierLabel } from '../../lib/governanceTier';
 import { clickable } from '../../lib/a11y';
 import { badgeColor } from '../../lib/badgeColors';
@@ -580,7 +581,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           as a quiet help-tip rather than an input field. */}
       {nodeInputsOutputs && (
         <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>From template</span>
+          <SectionLabel marginBottom={0}>From template</SectionLabel>
           <HelpPopover id={`io-prose-${nodeId}`} title="Inputs & Outputs (from the template)">
             <p style={{ margin: 0, textTransform: 'none', letterSpacing: 'normal' }}>{nodeInputsOutputs}</p>
             <p style={{ marginTop: 8, marginBottom: 0, fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 'normal' }}>
@@ -609,9 +610,9 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           const filledCount = expected.filter((p) => findMatches(p, list).length > 0).length;
           return (
             <div key={kind} style={{ flex: 1, minWidth: 240 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+              <SectionLabel marginBottom={4}>
                 {kind === 'input' ? 'Inputs' : 'Outputs'} ({list.length}{expected.length > 0 ? ` · ${filledCount} of ${expected.length} expected` : ''})
-              </div>
+              </SectionLabel>
               {expected.length > 0 && (
                 <div style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {expected.map((p) => renderExpected(p, kind))}
@@ -627,9 +628,9 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
                   when there's at least one extra so the section title
                   doesn't appear empty. */}
               {expected.length > 0 && extras.length > 0 && (
-                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 2px' }}>
+                <SectionLabel style={{ marginTop: 8 }} marginBottom={2}>
                   Additional
-                </div>
+                </SectionLabel>
               )}
               {extras.map(renderRow)}
               {!disabled && renderAddRow(linkType)}
@@ -639,9 +640,9 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
       </div>
       {transforms.length > 0 && (
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+          <SectionLabel marginBottom={4}>
             Transforms ({transforms.length})
-          </div>
+          </SectionLabel>
           {transforms.map(renderRow)}
         </div>
       )}

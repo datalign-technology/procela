@@ -6,6 +6,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 import EmptyState from '../components/EmptyState';
 import ExportMenu from '../components/ExportMenu';
 import Button from '../components/Button';
@@ -389,14 +390,14 @@ export default function AnalysisPage() {
           minHeight: 56,
         }}
       >
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>
+        <SectionLabel marginBottom={6}>
           {label}
           {hasAny && values.length < MAX_DIMS_PER_AXIS && (
             <span style={{ marginLeft: 8, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--color-text-muted)' }}>
               · drop another to sub-group
             </span>
           )}
-        </div>
+        </SectionLabel>
         {hasAny ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
             {values.map((dim, i) => (
@@ -449,15 +450,15 @@ export default function AnalysisPage() {
       <div style={{ display: 'flex', gap: 16 }}>
         {/* Left palette */}
         <aside style={{ width: 220, flexShrink: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+          <SectionLabel>
             Dimensions
-          </div>
+          </SectionLabel>
           {dimensions.map((d) => <Tile key={d.id} d={d} />)}
 
-          <div style={{ marginTop: 16, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <SectionLabel style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Saved Reports</span>
             <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>{reports.length}</span>
-          </div>
+          </SectionLabel>
           <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6 }}>
             Also listed under <Link to="/reports?tab=analysis" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Reports → Analysis</Link>.
           </div>
@@ -529,7 +530,7 @@ export default function AnalysisPage() {
           {/* Filter chips */}
           {filters.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Filters</span>
+              <SectionLabel marginBottom={0}>Filters</SectionLabel>
               {filters.map((f, i) => (
                 <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999, background: 'var(--color-bg)', border: '1px solid var(--color-border)', fontSize: 11 }}>
                   <span style={{ color: 'var(--color-text-muted)' }}>{dimensionLabel(f.dim)}:</span>
@@ -934,9 +935,9 @@ function DrillPanel({
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {rows.map((r) => (
             <li key={r.factId} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}>
-              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 2 }}>
+              <SectionLabel marginBottom={2}>
                 {r.factType.replace(/-/g, ' ')}
-              </div>
+              </SectionLabel>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {Object.entries(r.refs).map(([dim, v]) => v ? (
                   <span key={dim} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 3, background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>

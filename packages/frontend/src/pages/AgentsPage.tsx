@@ -7,6 +7,7 @@ import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -770,9 +771,9 @@ export default function AgentsPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       {/* DAMA Roles */}
                       <div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                        <SectionLabel marginBottom={6}>
                           Assigned DAMA Roles
-                        </div>
+                        </SectionLabel>
                         {roles.length === 0 ? (
                           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No roles assigned</div>
                         ) : (
@@ -787,9 +788,9 @@ export default function AgentsPage() {
                       </div>
                       {/* Execution History */}
                       <div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                        <SectionLabel marginBottom={6}>
                           Execution History ({execs.length})
-                        </div>
+                        </SectionLabel>
                         {execs.length === 0 ? (
                           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No executions yet</div>
                         ) : (

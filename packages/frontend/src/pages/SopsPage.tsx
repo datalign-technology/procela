@@ -7,6 +7,7 @@ import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -336,18 +337,18 @@ export default function SopsPage() {
     <div style={{ maxWidth: 800, padding: 16 }}>
       {sop.purpose && (
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Purpose</div>
+          <SectionLabel marginBottom={4}>Purpose</SectionLabel>
           <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>{sop.purpose}</div>
         </div>
       )}
       {sop.triggerEvent && (
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Trigger</div>
+          <SectionLabel marginBottom={4}>Trigger</SectionLabel>
           <div style={{ fontSize: 13 }}>{sop.triggerEvent}</div>
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Steps</div>
+        <SectionLabel marginBottom={0}>Steps</SectionLabel>
         {canWrite && (
           <Button
             variant="secondary"
@@ -512,7 +513,7 @@ export default function SopsPage() {
           {/* Steps editor */}
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Steps ({form.steps.length})</label>
+              <SectionLabel marginBottom={0}>Steps ({form.steps.length})</SectionLabel>
               <Button variant="secondary" size="sm" onClick={addStep}>+ Add Step</Button>
             </div>
             {form.steps.map((step, idx) => (

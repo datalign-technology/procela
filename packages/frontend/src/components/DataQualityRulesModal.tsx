@@ -6,6 +6,7 @@ import { useToastStore } from '../stores/toastStore';
 import { useOrgContext } from '../stores/orgContext';
 import IconButton from './IconButton';
 import Button from './Button';
+import SectionLabel from './SectionLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Data Quality Rules modal — shared between DataAssetsPage (legacy entry)
@@ -517,9 +518,9 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
             : rules;
           return (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+          <SectionLabel marginBottom={6}>
             Active rules ({displayRules.length}{selectedColumnId ? ` for ${selectedColumn?.columnName || 'column'}` : ''})
-          </div>
+          </SectionLabel>
           {displayRules.length === 0 ? (
             <div style={{ padding: '12px 14px', border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
               No rules yet. Pick a template below to add one.
@@ -638,17 +639,17 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               <>
                 {suggestedAvailable.length > 0 && (
                   <>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                    <SectionLabel marginBottom={6}>
                       Suggested for {columnName ? <code>{columnName}</code> : 'this asset'}
-                    </div>
+                    </SectionLabel>
                     <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, marginBottom: 16 }}>
                       {suggestedAvailable.map(templateRow)}
                     </div>
                   </>
                 )}
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                <SectionLabel marginBottom={6}>
                   All rule templates
-                </div>
+                </SectionLabel>
                 {noneLeft ? (
                   <div style={{ padding: '12px 14px', border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
                     All built-in templates are already in use for this asset. Use the Custom rule template to add another bespoke check.

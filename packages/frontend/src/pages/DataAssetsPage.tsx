@@ -1132,9 +1132,9 @@ export default function DataAssetsPage() {
     return (
       <div style={{ background: '#fafbfc', padding: '12px 20px 12px 60px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <SectionLabel marginBottom={0}>
             Columns ({cols.length})
-          </span>
+          </SectionLabel>
           <div style={{ display: 'flex', gap: 6 }}>
             {binding && (
               <button

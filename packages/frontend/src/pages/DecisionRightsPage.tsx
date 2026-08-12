@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
@@ -218,9 +219,9 @@ function ExpandedRaciDetails({ row, people, groups, showRecommends, showApproves
 }) {
   const Item = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 4 }}>
+      <SectionLabel marginBottom={4}>
         {label}
-      </div>
+      </SectionLabel>
       <div style={{ fontSize: 12 }}>{children}</div>
     </div>
   );

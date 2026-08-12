@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
@@ -458,9 +459,9 @@ export default function GovernanceGroupDetailPage() {
             border: `1px solid ${requiredFilled === requiredExpected.length ? '#bbf7d0' : '#fde68a'}`,
             borderRadius: 'var(--radius-md)',
           }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 6 }}>
+            <SectionLabel marginBottom={6}>
               Expected roles ({requiredFilled}/{requiredExpected.length} required filled)
-            </div>
+            </SectionLabel>
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
               Governance roles are <strong>org-wide</strong> — assigning one here is the
               same assignment shown on the Governance Roles page and the Governance

@@ -1,4 +1,5 @@
 import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 import Page from '../components/Page';
 import Card from '../components/Card';
 import { openTrainingWindow } from '../components/navConfig';
@@ -109,9 +110,9 @@ export default function HelpPage() {
       {/* On this page — anchor links so a user can jump straight to a
           section instead of scrolling a 12-section wall of text. */}
       <Card padding={24} marginBottom={24} role="navigation" aria-label="Help contents">
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 10 }}>
+        <SectionLabel marginBottom={10}>
           On this page
-        </div>
+        </SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '4px 16px' }}>
           {HELP_SECTIONS.map((s) => (
             <a

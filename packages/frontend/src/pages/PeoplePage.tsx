@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 import Button from '../components/Button';
 import FieldStack from '../components/FieldStack';
 import SkillGapBadge from '../components/SkillGapBadge';
@@ -1250,7 +1251,7 @@ export default function PeoplePage() {
                 {/* Organizations */}
                 {previewData.orgAssignments.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Organizations</div>
+                    <SectionLabel marginBottom={6}>Organizations</SectionLabel>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                       {previewData.orgAssignments.map((o) => (
                         <span key={o.id} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>{o.name}</span>
@@ -1262,7 +1263,7 @@ export default function PeoplePage() {
                 {/* Governance Roles */}
                 {previewData.damaRoles.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Governance Roles</div>
+                    <SectionLabel marginBottom={6}>Governance Roles</SectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {previewData.damaRoles.map((r) => (
                         <div key={r.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1277,7 +1278,7 @@ export default function PeoplePage() {
                 {/* Governance Groups */}
                 {previewData.governanceGroups.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Groups</div>
+                    <SectionLabel marginBottom={6}>Groups</SectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {previewData.governanceGroups.map((g) => (
                         <div key={g.groupId} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
@@ -1292,7 +1293,7 @@ export default function PeoplePage() {
                 {/* Owned Processes */}
                 {previewData.ownedProcessNodes.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Owned Processes</div>
+                    <SectionLabel marginBottom={6}>Owned Processes</SectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {previewData.ownedProcessNodes.slice(0, 8).map((p) => (
                         <div key={p.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
@@ -1310,7 +1311,7 @@ export default function PeoplePage() {
                 {/* Data Assets */}
                 {previewData.dataAssets.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Data Assets</div>
+                    <SectionLabel marginBottom={6}>Data Assets</SectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {previewData.dataAssets.slice(0, 6).map((a) => (
                         <div key={a.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
