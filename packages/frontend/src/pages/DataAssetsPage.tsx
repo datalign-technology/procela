@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
+import FieldStack from '../components/FieldStack';
 import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
@@ -2141,8 +2142,9 @@ export default function DataAssetsPage() {
                   })()}
                 </div>
 
+                <FieldStack gap="section">
                 {/* Data Domain */}
-                <div style={{ marginBottom: 16 }}>
+                <div>
                   <SectionLabel>Data Domain</SectionLabel>
                   {viewing360.domain ? (
                     <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
@@ -2158,7 +2160,7 @@ export default function DataAssetsPage() {
                 </div>
 
                 {/* Mappings */}
-                <div style={{ marginBottom: 16 }}>
+                <div>
                   <SectionLabel>Process Mappings ({viewing360.mappings.length})</SectionLabel>
                   {viewing360.mappings.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No process mappings for this asset</p>
@@ -2179,7 +2181,7 @@ export default function DataAssetsPage() {
 
                 {/* Comments — uses the shared threaded panel with @mention
                   *  autocomplete and notifications. */}
-                <div style={{ marginBottom: 16 }}>
+                <div>
                   <SectionLabel>Discussion</SectionLabel>
                   <CommentsPanel
                     entityType="DataAsset"
@@ -2187,10 +2189,11 @@ export default function DataAssetsPage() {
                     entityLabel={`Data Asset: ${viewing360.asset.name}`}
                   />
                 </div>
-                <div style={{ marginBottom: 16 }}>
+                <div>
                   <SectionLabel>Activity</SectionLabel>
                   <ActivityFeed entityType="DataAsset" entityId={viewing360.asset.id} inline initialRows={5} />
                 </div>
+                </FieldStack>
               </>
             ) : null}
       </Modal>
