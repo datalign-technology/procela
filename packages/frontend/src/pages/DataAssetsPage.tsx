@@ -22,6 +22,7 @@ import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import HelpPopover from '../components/HelpPopover';
@@ -138,27 +139,6 @@ const selectStyle: React.CSSProperties = {
   appearance: 'auto' as any,
 };
 
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-primary)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
 
 interface Asset360Data {
   asset: DataAssetEntity;
@@ -1446,12 +1426,13 @@ export default function DataAssetsPage() {
           </select>
         )}
         {hasActiveFilters && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOrigin(''); setSearchQuery(''); }}
-            style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
           >
             Clear Filters
-          </button>
+          </Button>
         )}
         {hasActiveFilters && (
           <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
@@ -1856,24 +1837,24 @@ export default function DataAssetsPage() {
           )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
+            <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
             {!editingId && (
-              <button
-                style={{ ...btnSecondary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
+              <Button
+                variant="secondary"
                 disabled={!form.name.trim()}
                 onClick={() => handleSave(true)}
                 title="Save this asset and keep the form open to add another"
               >
                 Save & Add Another
-              </button>
+              </Button>
             )}
-            <button
-              style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
+            <Button
+              variant="primary"
               disabled={!form.name.trim()}
               onClick={() => handleSave(false)}
             >
               {editingId ? 'Save Changes' : 'Add Data Asset'}
-            </button>
+            </Button>
           </div>
         </SectionCard>
       )}

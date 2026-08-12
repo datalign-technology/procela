@@ -16,6 +16,7 @@ import ColumnPicker from '../components/ColumnPicker';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import Button from '../components/Button';
 import PersonPicker from '../components/PersonPicker';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
@@ -147,11 +148,6 @@ const inputStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 const btnSecondary: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
@@ -1050,12 +1046,13 @@ export default function SystemsPage() {
               <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
             </select>
             {(filterCriticality || searchQuery || filterType) && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => { setFilterCriticality(''); setSearchQuery(''); setFilterType(''); }}
-                style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
               >
                 Clear Filters
-              </button>
+              </Button>
             )}
             {(filterCriticality || searchQuery || filterType) && (
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
@@ -1081,7 +1078,7 @@ export default function SystemsPage() {
           )}
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
             <input ref={fileInputRef} type="file" accept=".csv,.json,.txt" onChange={handleFileRead} style={{ display: 'none' }} />
-            <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => fileInputRef.current?.click()}>Browse File</button>
+            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Browse File</Button>
           </div>
           <textarea
             style={{ ...inputStyle, width: '100%', minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }}
@@ -1091,8 +1088,8 @@ export default function SystemsPage() {
           />
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name (required), Description, Type</span>
-            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !importText.trim() || !activeOrgId ? 0.6 : 1, cursor: !importText.trim() || !activeOrgId ? 'not-allowed' : 'pointer' }} disabled={!importText.trim() || !activeOrgId} onClick={handleImport}>Import</button>
+            <Button variant="secondary" onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</Button>
+            <Button variant="primary" disabled={!importText.trim() || !activeOrgId} onClick={handleImport}>Import</Button>
           </div>
         </div>
       )}
@@ -1334,13 +1331,15 @@ export default function SystemsPage() {
                         );
                       })}
                     </div>
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
                       onClick={add}
-                      style={{ ...btnSecondary, marginTop: 8, fontSize: 12, padding: '6px 12px' }}
+                      style={{ marginTop: 8 }}
                     >
                       + Add integration
-                    </button>
+                    </Button>
                     {form.connectivity === 'INTEGRATED' && form.integrations.length === 0 && (
                       <div style={{
                         marginTop: 6, padding: '6px 10px', fontSize: 11, lineHeight: 1.4,
@@ -1428,20 +1427,20 @@ export default function SystemsPage() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
+            <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
             {!editingId && (
-              <button
-                style={{ ...btnSecondary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
+              <Button
+                variant="secondary"
                 disabled={!form.name.trim()}
                 onClick={() => handleSave(true)}
                 title="Save this system and keep the form open to add another"
               >
                 Save & Add Another
-              </button>
+              </Button>
             )}
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!form.name.trim()} onClick={() => handleSave(false)}>
+            <Button variant="primary" disabled={!form.name.trim()} onClick={() => handleSave(false)}>
               {editingId ? 'Save Changes' : 'Add System'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
