@@ -12,6 +12,7 @@ import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import SectionCard from '../components/SectionCard';
 import PersonPicker from '../components/PersonPicker';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
@@ -201,16 +202,6 @@ const inputStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 interface FormData {
   // A role assignment is held by exactly one of (person, agent). The form
@@ -687,18 +678,18 @@ export default function DamaRolesPage() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
+            <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
             {(() => {
               const idFilled = form.assigneeType === 'agent' ? !!form.agentId : !!form.personId;
               const incomplete = !idFilled || !form.scopeId;
               return (
-                <button
-                  style={{ ...btnPrimary, opacity: incomplete ? 0.6 : 1, cursor: incomplete ? 'not-allowed' : 'pointer' }}
+                <Button
+                  variant="primary"
                   disabled={incomplete}
                   onClick={handleSave}
                 >
                   Assign Role
-                </button>
+                </Button>
               );
             })()}
           </div>
@@ -1471,13 +1462,14 @@ function RolePreviewPane({
       )}
 
       <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-border)' }}>
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={onAssign}
-          style={{ ...btnPrimary, width: '100%', padding: '6px 12px', fontSize: 12 }}
+          style={{ width: '100%' }}
         >
           + Assign
-        </button>
+        </Button>
       </div>
     </Card>
   );

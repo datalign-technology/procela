@@ -14,6 +14,7 @@ import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import SectionCard from '../components/SectionCard';
 import { SkeletonRows } from '../components/Skeleton';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
@@ -115,14 +116,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
 const EVENT_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
@@ -493,7 +486,7 @@ export default function GovernanceCalendarPage() {
             </div>
           )}
           {canWrite && events.length === 0 && (
-            <button style={btnSecondary} onClick={handleSeed}>Seed Standard Events</button>
+            <Button variant="secondary" onClick={handleSeed}>Seed Standard Events</Button>
           )}
           {canWrite && <IconButton icon="plus" label="Add event" variant="primary" onClick={openAdd} />}
         </>}
@@ -658,14 +651,14 @@ export default function GovernanceCalendarPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
+            <Button variant="secondary" onClick={closeForm}>Cancel</Button>
+            <Button
+              variant="primary"
               disabled={!form.name.trim()}
               onClick={handleSave}
             >
               {editingId ? 'Save Changes' : 'Add Event'}
-            </button>
+            </Button>
           </div>
         </SectionCard>
       )}
@@ -711,12 +704,13 @@ export default function GovernanceCalendarPage() {
             {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           {hasActiveFilters && (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => { setFilterType(''); setFilterCadence(''); setFilterStatus(''); }}
-              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
             >
               Clear Filters
-            </button>
+            </Button>
           )}
           {hasActiveFilters && (
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
@@ -733,12 +727,12 @@ export default function GovernanceCalendarPage() {
         <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
           {/* Month navigation */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-            <button onClick={prevMonth} style={{ ...btnSecondary, padding: '4px 12px', fontSize: 12 }}>&larr;</button>
+            <Button variant="secondary" size="sm" onClick={prevMonth}>&larr;</Button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 16, fontWeight: 700 }}>{calMonthLabel}</span>
-              <button onClick={goToday} style={{ ...btnSecondary, padding: '3px 10px', fontSize: 11 }}>Today</button>
+              <Button variant="secondary" size="sm" onClick={goToday}>Today</Button>
             </div>
-            <button onClick={nextMonth} style={{ ...btnSecondary, padding: '4px 12px', fontSize: 12 }}>&rarr;</button>
+            <Button variant="secondary" size="sm" onClick={nextMonth}>&rarr;</Button>
           </div>
           {/* Day headers */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
