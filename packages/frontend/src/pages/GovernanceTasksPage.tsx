@@ -400,19 +400,19 @@ export default function GovernanceTasksPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
           />
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <select aria-label="Filter by status" style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">All Statuses</option>
             {TASK_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+          <select aria-label="Filter by priority" style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
             <option value="">All Priorities</option>
             {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+          <select aria-label="Filter by type" style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
             <option value="">All Types</option>
             {TASK_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
           </select>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
+          <select aria-label="Filter by assignee" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
             <option value="">All Assignees</option>
             {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
           </select>
@@ -470,6 +470,7 @@ export default function GovernanceTasksPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title *</label>
               <input
                 autoFocus
+                aria-label="Title"
                 style={inputStyle}
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -479,6 +480,7 @@ export default function GovernanceTasksPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <textarea
+                aria-label="Description"
                 style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -487,19 +489,19 @@ export default function GovernanceTasksPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
-              <select style={selectStyle} value={form.taskType} onChange={(e) => setForm({ ...form, taskType: e.target.value })}>
+              <select aria-label="Type" style={selectStyle} value={form.taskType} onChange={(e) => setForm({ ...form, taskType: e.target.value })}>
                 {TASK_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Priority</label>
-              <select style={selectStyle} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+              <select aria-label="Priority" style={selectStyle} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
                 {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assignee</label>
-              <select style={selectStyle} value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}>
+              <select aria-label="Assignee" style={selectStyle} value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}>
                 <option value="">-- Unassigned --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
@@ -508,6 +510,7 @@ export default function GovernanceTasksPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Due Date</label>
               <input
                 type="date"
+                aria-label="Due Date"
                 style={inputStyle}
                 value={form.dueDate}
                 onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
@@ -515,7 +518,7 @@ export default function GovernanceTasksPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Automation Mode</label>
-              <select style={selectStyle} value={form.automationMode} onChange={(e) => setForm({ ...form, automationMode: e.target.value })}>
+              <select aria-label="Automation Mode" style={selectStyle} value={form.automationMode} onChange={(e) => setForm({ ...form, automationMode: e.target.value })}>
                 {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>

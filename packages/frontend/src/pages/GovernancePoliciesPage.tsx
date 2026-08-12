@@ -436,21 +436,21 @@ export default function GovernancePoliciesPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={labelStyle}>Name *</label>
-                    <input autoFocus style={inputStyle} value={controlForm.name} onChange={(e) => setControlForm({ ...controlForm, name: e.target.value })} />
+                    <input autoFocus aria-label="Name" style={inputStyle} value={controlForm.name} onChange={(e) => setControlForm({ ...controlForm, name: e.target.value })} />
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={labelStyle}>Description</label>
-                    <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={controlForm.description} onChange={(e) => setControlForm({ ...controlForm, description: e.target.value })} />
+                    <textarea aria-label="Description" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={controlForm.description} onChange={(e) => setControlForm({ ...controlForm, description: e.target.value })} />
                   </div>
                   <div>
                     <label style={labelStyle}>Control Type</label>
-                    <select style={selectStyle} value={controlForm.controlType} onChange={(e) => setControlForm({ ...controlForm, controlType: e.target.value })}>
+                    <select aria-label="Control Type" style={selectStyle} value={controlForm.controlType} onChange={(e) => setControlForm({ ...controlForm, controlType: e.target.value })}>
                       {CONTROL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
                     <label style={labelStyle}>Automation Mode</label>
-                    <select style={selectStyle} value={controlForm.automationMode} onChange={(e) => setControlForm({ ...controlForm, automationMode: e.target.value })}>
+                    <select aria-label="Automation Mode" style={selectStyle} value={controlForm.automationMode} onChange={(e) => setControlForm({ ...controlForm, automationMode: e.target.value })}>
                       {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </div>
@@ -590,6 +590,7 @@ export default function GovernancePoliciesPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Name *</label>
               <input autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
@@ -599,29 +600,29 @@ export default function GovernancePoliciesPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>
-              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <textarea aria-label="Description" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
             <div>
               <label style={labelStyle}>Document Type</label>
-              <select style={selectStyle} value={form.documentType} onChange={(e) => setForm({ ...form, documentType: e.target.value as DocumentType })}>
+              <select aria-label="Document Type" style={selectStyle} value={form.documentType} onChange={(e) => setForm({ ...form, documentType: e.target.value as DocumentType })}>
                 {DOCUMENT_TYPES.map((t) => <option key={t} value={t}>{DOCUMENT_TYPE_LABEL[t]}</option>)}
               </select>
             </div>
             <div>
               <label style={labelStyle}>Category</label>
-              <select style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
               <label style={labelStyle}>Status</label>
-              <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
               <label style={labelStyle}>Owner</label>
-              <select style={selectStyle} value={form.ownerAssignmentId} onChange={(e) => setForm({ ...form, ownerAssignmentId: e.target.value })}>
+              <select aria-label="Owner" style={selectStyle} value={form.ownerAssignmentId} onChange={(e) => setForm({ ...form, ownerAssignmentId: e.target.value })}>
                 <option value="">-- Unassigned --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>

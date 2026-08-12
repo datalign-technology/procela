@@ -637,14 +637,14 @@ export default function DataQualityPage() {
           <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Data Asset:</label>
-              <select style={{ ...selectStyle, width: 'auto', minWidth: 180 }} value={filterAssetId} onChange={(e) => setFilterAssetId(e.target.value)}>
+              <select aria-label="Data Asset" style={{ ...selectStyle, width: 'auto', minWidth: 180 }} value={filterAssetId} onChange={(e) => setFilterAssetId(e.target.value)}>
                 <option value="">All</option>
                 {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Dimension:</label>
-              <select style={{ ...selectStyle, width: 'auto', minWidth: 150 }} value={filterDimension} onChange={(e) => setFilterDimension(e.target.value)}>
+              <select aria-label="Dimension" style={{ ...selectStyle, width: 'auto', minWidth: 150 }} value={filterDimension} onChange={(e) => setFilterDimension(e.target.value)}>
                 <option value="">All</option>
                 {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
               </select>
@@ -670,14 +670,14 @@ export default function DataQualityPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Asset *</label>
-              <select style={selectStyle} value={form.dataAssetId} onChange={(e) => updateField('dataAssetId', e.target.value)}>
+              <select aria-label="Data Asset" style={selectStyle} value={form.dataAssetId} onChange={(e) => updateField('dataAssetId', e.target.value)}>
                 <option value="">-- Select data asset --</option>
                 {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Dimension</label>
-              <select style={selectStyle} value={form.dimension} onChange={(e) => updateField('dimension', e.target.value)}>
+              <select aria-label="Dimension" style={selectStyle} value={form.dimension} onChange={(e) => updateField('dimension', e.target.value)}>
                 {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
@@ -685,6 +685,7 @@ export default function DataQualityPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Rule Name *</label>
               <input
                 autoFocus
+                aria-label="Rule Name"
                 style={inputStyle}
                 value={form.name}
                 onChange={(e) => updateField('name', e.target.value)}
@@ -698,6 +699,7 @@ export default function DataQualityPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="range"
+                  aria-label="Threshold"
                   min={0}
                   max={100}
                   value={form.threshold}
@@ -706,6 +708,7 @@ export default function DataQualityPage() {
                 />
                 <input
                   type="number"
+                  aria-label="Threshold"
                   min={0}
                   max={100}
                   value={form.threshold}
@@ -725,6 +728,7 @@ export default function DataQualityPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="range"
+                  aria-label="Weight"
                   min={1}
                   max={10}
                   value={form.weight}
@@ -733,6 +737,7 @@ export default function DataQualityPage() {
                 />
                 <input
                   type="number"
+                  aria-label="Weight"
                   min={1}
                   max={10}
                   value={form.weight}
@@ -744,6 +749,7 @@ export default function DataQualityPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input
+                aria-label="Description"
                 style={inputStyle}
                 value={form.description}
                 onChange={(e) => updateField('description', e.target.value)}
@@ -1106,14 +1112,14 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
       <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>System:</label>
-          <select style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterSystem} onChange={(e) => setFilterSystem(e.target.value)}>
+          <select aria-label="System" style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterSystem} onChange={(e) => setFilterSystem(e.target.value)}>
             <option value="">All</option>
             {systemOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Owner:</label>
-          <select style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+          <select aria-label="Owner" style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
             <option value="">All</option>
             {ownerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>

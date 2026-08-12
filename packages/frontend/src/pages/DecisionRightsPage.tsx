@@ -592,6 +592,7 @@ export default function DecisionRightsPage() {
               <label style={labelStyle}>Decision *</label>
               <input
                 autoFocus
+                aria-label="Decision"
                 style={inputStyle}
                 value={form.decision}
                 onChange={(e) => setForm({ ...form, decision: e.target.value })}
@@ -601,6 +602,7 @@ export default function DecisionRightsPage() {
             <div>
               <label style={labelStyle}>Category</label>
               <select
+                aria-label="Category"
                 style={selectStyle}
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value as DecisionCategory })}
@@ -627,6 +629,7 @@ export default function DecisionRightsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>
               <textarea
+                aria-label="Description"
                 style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -636,6 +639,7 @@ export default function DecisionRightsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Decider ({form.deciderType.toLowerCase()})</label>
               <select
+                aria-label="Decider"
                 style={selectStyle}
                 value={form.decider}
                 onChange={(e) => setForm({ ...form, decider: e.target.value })}
@@ -673,6 +677,7 @@ export default function DecisionRightsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Escalation Path</label>
               <textarea
+                aria-label="Escalation Path"
                 style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.escalationPath}
                 onChange={(e) => setForm({ ...form, escalationPath: e.target.value })}

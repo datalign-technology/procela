@@ -205,7 +205,7 @@ export default function BrandingPage() {
               )}
             </div>
             <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={onFileSelected} style={{ display: 'none' }} />
+              <input ref={fileInputRef} type="file" aria-label="Logo" accept="image/*" onChange={onFileSelected} style={{ display: 'none' }} />
               <button
                 onClick={() => fileInputRef.current?.click()}
                 style={{ padding: '6px 12px', fontSize: 12, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer' }}
@@ -225,6 +225,7 @@ export default function BrandingPage() {
             <label style={labelStyle}>Company name</label>
             <input
               type="text"
+              aria-label="Company name"
               value={draft.companyName}
               maxLength={80}
               onChange={(e) => patch({ companyName: e.target.value })}
@@ -238,6 +239,7 @@ export default function BrandingPage() {
             <label style={{ ...labelStyle, marginTop: 18 }}>Logo URL</label>
             <input
               type="text"
+              aria-label="Logo URL"
               value={draft.logoUrl.startsWith('data:') ? '' : draft.logoUrl}
               onChange={(e) => patch({ logoUrl: e.target.value })}
               style={textInputStyle}
@@ -351,12 +353,14 @@ function ColorField({ label, hint, value, onChange }: ColorFieldProps) {
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <input
           type="color"
+          aria-label={label}
           value={/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value) ? value : '#000000'}
           onChange={(e) => onChange(e.target.value)}
           style={{ width: 36, height: 36, padding: 0, border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', background: 'transparent' }}
         />
         <input
           type="text"
+          aria-label={label}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onBlur={commitText}

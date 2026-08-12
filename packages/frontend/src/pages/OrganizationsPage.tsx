@@ -90,7 +90,7 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
   };
   return (
     <>
-      <input ref={inputRef} type="file" accept={accept} onChange={handleChange} style={{ display: 'none' }} />
+      <input ref={inputRef} type="file" aria-label={label || 'Browse file'} accept={accept} onChange={handleChange} style={{ display: 'none' }} />
       <Button variant="secondary" size="sm" onClick={() => inputRef.current?.click()}>{label || 'Browse File'}</Button>
     </>
   );
@@ -505,13 +505,13 @@ export default function OrganizationsPage() {
             <button onClick={() => { setShowImport(false); setImportText(''); }} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <select style={{ ...inputStyle, width: 'auto', minWidth: 180, appearance: 'auto' as any, fontSize: 12 }} value={importParent} onChange={(e) => setImportParent(e.target.value)}>
+            <select aria-label="Import under organization" style={{ ...inputStyle, width: 'auto', minWidth: 180, appearance: 'auto' as any, fontSize: 12 }} value={importParent} onChange={(e) => setImportParent(e.target.value)}>
               <option value="">Import as top-level</option>
               {orgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
             </select>
             <FilePicker accept=".csv,.json,.txt" onFileRead={(content, fileName) => { setImportText(content); if (fileName.endsWith('.json')) setImportFormat('json'); else setImportFormat('csv'); }} />
           </div>
-          <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={importText} onChange={(e) => setImportText(e.target.value)}
+          <textarea aria-label="Import data (CSV or JSON)" style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={importText} onChange={(e) => setImportText(e.target.value)}
             placeholder={'Name,Parent,Type,Industry,Description\nAcme Corp,,company,Manufacturing,Parent company'} />
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name, Parent, Type, Industry, Description</span>
@@ -529,6 +529,7 @@ export default function OrganizationsPage() {
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: orgValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={orgForm.name}
                 onChange={(e) => { const v = e.target.value; setOrgForm({ ...orgForm, name: v }); if (orgValidation.touched.name) orgValidation.validateField('name', v, orgForm); }}
@@ -538,13 +539,13 @@ export default function OrganizationsPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
-              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}>
+              <select aria-label="Type" style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}>
                 {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent</label>
-              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.parentId || ''} onChange={(e) => setOrgForm({ ...orgForm, parentId: e.target.value || null })}>
+              <select aria-label="Parent" style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.parentId || ''} onChange={(e) => setOrgForm({ ...orgForm, parentId: e.target.value || null })}>
                 <option value="">-- No parent (top-level) --</option>
                 {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
@@ -566,7 +567,7 @@ export default function OrganizationsPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
+              <input aria-label="Description" style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
@@ -704,6 +705,7 @@ export default function OrganizationsPage() {
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
                     <input autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: orgValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={orgForm.name}
                 onChange={(e) => { const v = e.target.value; setOrgForm({ ...orgForm, name: v }); if (orgValidation.touched.name) orgValidation.validateField('name', v, orgForm); }}
@@ -713,13 +715,13 @@ export default function OrganizationsPage() {
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
-                    <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}>
+                    <select aria-label="Type" style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}>
                       {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                     </select>
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent</label>
-                    <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.parentId || ''} onChange={(e) => setOrgForm({ ...orgForm, parentId: e.target.value || null })}>
+                    <select aria-label="Parent" style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.parentId || ''} onChange={(e) => setOrgForm({ ...orgForm, parentId: e.target.value || null })}>
                       <option value="">-- No parent (top-level) --</option>
                       {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
                     </select>
@@ -739,7 +741,7 @@ export default function OrganizationsPage() {
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-                    <input style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
+                    <input aria-label="Description" style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
                   </div>
                 </FieldStack>
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>

@@ -973,10 +973,10 @@ function SaveDialog({
           {isUpdate ? 'Update saved report' : 'Save report'}
         </h3>
         <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Name</label>
-        <input value={name} onChange={(e) => onChangeName(e.target.value)} autoFocus
+        <input aria-label="Name" value={name} onChange={(e) => onChangeName(e.target.value)} autoFocus
           style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 6, marginBottom: 12 }} />
         <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Description (optional)</label>
-        <textarea value={description} onChange={(e) => onChangeDesc(e.target.value)} rows={2}
+        <textarea aria-label="Description" value={description} onChange={(e) => onChangeDesc(e.target.value)} rows={2}
           style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 6, marginBottom: 16, resize: 'vertical' }} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Button variant="secondary" onClick={onCancel}>Cancel</Button>

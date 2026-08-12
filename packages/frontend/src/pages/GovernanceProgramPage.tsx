@@ -844,14 +844,14 @@ export default function GovernanceProgramPage() {
                   </div>
                   {activeTab === 'scope' && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>In Scope</label><textarea style={textareaStyle} value={inScope} onChange={(e) => setInScope(e.target.value)} placeholder="What data, systems, and processes are governed by this program?" /></div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Out of Scope</label><textarea style={textareaStyle} value={outOfScope} onChange={(e) => setOutOfScope(e.target.value)} placeholder="What is explicitly excluded from this program?" /></div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries &amp; Constraints</label><textarea style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational / geographic / functional boundaries, plus budget, timeline, regulatory or resource constraints to respect" /></div>
+                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>In Scope</label><textarea aria-label="In Scope" style={textareaStyle} value={inScope} onChange={(e) => setInScope(e.target.value)} placeholder="What data, systems, and processes are governed by this program?" /></div>
+                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Out of Scope</label><textarea aria-label="Out of Scope" style={textareaStyle} value={outOfScope} onChange={(e) => setOutOfScope(e.target.value)} placeholder="What is explicitly excluded from this program?" /></div>
+                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries &amp; Constraints</label><textarea aria-label="Boundaries & Constraints" style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational / geographic / functional boundaries, plus budget, timeline, regulatory or resource constraints to respect" /></div>
                     </div>
                   )}
                   {activeTab === 'principles' && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vision</label><textarea style={textareaStyle} value={vision} onChange={(e) => setVision(e.target.value)} placeholder="What does success look like for your data governance program?" /></div>
+                      <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vision</label><textarea aria-label="Vision" style={textareaStyle} value={vision} onChange={(e) => setVision(e.target.value)} placeholder="What does success look like for your data governance program?" /></div>
                       <div style={{ gridColumn: '1 / -1' }}>
                         <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Guiding Principles</label>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
@@ -865,7 +865,7 @@ export default function GovernanceProgramPage() {
                           ))}
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
-                          <input style={inputStyle} value={newPrinciple} onChange={(e) => setNewPrinciple(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPrinciple(); } }} placeholder="e.g. Data is a shared asset; treat it like one" />
+                          <input aria-label="Guiding Principles" style={inputStyle} value={newPrinciple} onChange={(e) => setNewPrinciple(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPrinciple(); } }} placeholder="e.g. Data is a shared asset; treat it like one" />
                           <Button variant="secondary" onClick={addPrinciple}>Add</Button>
                         </div>
                       </div>
@@ -875,7 +875,7 @@ export default function GovernanceProgramPage() {
                       <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Decision Rights</label><div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Defined on the <Link to="/decision-rights" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Decision Rights</Link> page — who decides / recommends / approves for each decision.</div></div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Operating Model</label>
-                        <select style={selectStyle} value={operatingModel} onChange={(e) => setOperatingModel(e.target.value as Program['principles']['operatingModel'])}>
+                        <select aria-label="Operating Model" style={selectStyle} value={operatingModel} onChange={(e) => setOperatingModel(e.target.value as Program['principles']['operatingModel'])}>
                           <option value="">-- Select --</option><option value="CENTRALIZED">Centralized</option><option value="FEDERATED">Federated</option><option value="HYBRID">Hybrid</option>
                         </select>
                         <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>Centralized = one central team. Federated = domains self-govern. Hybrid = shared.</div>
@@ -885,8 +885,8 @@ export default function GovernanceProgramPage() {
                   <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
                     <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--color-text-secondary)' }}>Program Dates</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Start Date</label><input type="date" style={inputStyle} value={targetStartDate} onChange={(e) => setTargetStartDate(e.target.value)} /></div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Launch Date</label><input type="date" style={inputStyle} value={targetLaunchDate} onChange={(e) => setTargetLaunchDate(e.target.value)} /></div>
+                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Start Date</label><input type="date" aria-label="Target Start Date" style={inputStyle} value={targetStartDate} onChange={(e) => setTargetStartDate(e.target.value)} /></div>
+                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Launch Date</label><input type="date" aria-label="Target Launch Date" style={inputStyle} value={targetLaunchDate} onChange={(e) => setTargetLaunchDate(e.target.value)} /></div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
@@ -1002,10 +1002,11 @@ export default function GovernanceProgramPage() {
                                         const isPeopleOnly = PEOPLE_ONLY_ROLE_TYPES.has(role.roleType);
                                         return (
                                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                                            <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}</select>
+                                            <select aria-label={`Assign ${role.label} to a person`} style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}</select>
                                             <Button variant="primary" size="sm" disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'person')}>Assign</Button>
                                             <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
                                             <select
+                                              aria-label={`Assign ${role.label} to an agent`}
                                               disabled={isPeopleOnly}
                                               aria-disabled={isPeopleOnly}
                                               title={isPeopleOnly ? PEOPLE_ONLY_REASON : undefined}
@@ -1183,6 +1184,7 @@ export default function GovernanceProgramPage() {
             Reason (recorded in the audit log)
           </label>
           <input
+            aria-label="Reason (recorded in the audit log)"
             value={statusReason}
             onChange={(e) => setStatusReason(e.target.value)}
             placeholder="e.g. running a 30-day pilot ahead of full rollout"
@@ -1219,6 +1221,7 @@ export default function GovernanceProgramPage() {
             Reason (optional — recorded in the audit log)
           </label>
           <input
+            aria-label="Reason (optional — recorded in the audit log)"
             value={statusReason}
             onChange={(e) => setStatusReason(e.target.value)}
             placeholder="Why is the status changing?"

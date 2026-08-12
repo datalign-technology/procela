@@ -293,6 +293,7 @@ export default function ComparisonPage() {
                 Left Panel
               </label>
               <select
+                aria-label="Left Panel"
                 value={leftId}
                 onChange={(e) => setLeftId(e.target.value)}
                 style={{
@@ -323,6 +324,7 @@ export default function ComparisonPage() {
                 Right Panel
               </label>
               <select
+                aria-label="Right Panel"
                 value={rightId}
                 onChange={(e) => setRightId(e.target.value)}
                 style={{

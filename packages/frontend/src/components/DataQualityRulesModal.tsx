@@ -341,6 +341,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                   Allowed values (comma-separated)
                 </label>
                 <input
+                  aria-label="Allowed values (comma-separated)"
                   style={{ ...inputStyle, fontSize: 12 }}
                   placeholder="e.g. active, inactive, suspended"
                   value={(configParams.allowedValues || []).join(', ')}
@@ -355,13 +356,13 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Min</label>
-                  <input type="number" style={{ ...inputStyle, fontSize: 12 }}
+                  <input type="number" aria-label="Min" style={{ ...inputStyle, fontSize: 12 }}
                     value={configParams.min ?? ''}
                     onChange={(e) => setConfigParams({ ...configParams, min: e.target.value === '' ? undefined : Number(e.target.value) })} />
                 </div>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Max</label>
-                  <input type="number" style={{ ...inputStyle, fontSize: 12 }}
+                  <input type="number" aria-label="Max" style={{ ...inputStyle, fontSize: 12 }}
                     value={configParams.max ?? ''}
                     onChange={(e) => setConfigParams({ ...configParams, max: e.target.value === '' ? undefined : Number(e.target.value) })} />
                 </div>
@@ -371,13 +372,13 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Min length</label>
-                  <input type="number" style={{ ...inputStyle, fontSize: 12 }}
+                  <input type="number" aria-label="Min length" style={{ ...inputStyle, fontSize: 12 }}
                     value={configParams.minLength ?? ''}
                     onChange={(e) => setConfigParams({ ...configParams, minLength: e.target.value === '' ? undefined : Number(e.target.value) })} />
                 </div>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Max length</label>
-                  <input type="number" style={{ ...inputStyle, fontSize: 12 }}
+                  <input type="number" aria-label="Max length" style={{ ...inputStyle, fontSize: 12 }}
                     value={configParams.maxLength ?? ''}
                     onChange={(e) => setConfigParams({ ...configParams, maxLength: e.target.value === '' ? undefined : Number(e.target.value) })} />
                 </div>
@@ -411,6 +412,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                     : 'SQL query'}
                 </label>
                 <textarea
+                  aria-label={(configParams.language || 'js') === 'js' ? 'Expression' : 'SQL query'}
                   style={{ ...inputStyle, fontSize: 12, fontFamily: 'var(--font-mono)', minHeight: 70, whiteSpace: 'pre' }}
                   placeholder={(configParams.language || 'js') === 'js'
                     ? "value !== null && /^MSB-\\d+$/.test(value)"
@@ -458,6 +460,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
                 <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Column:</label>
                 <select
+                  aria-label="Column"
                   value={selectedColumnId}
                   onChange={(e) => handleColumnChange(e.target.value)}
                   style={{ ...inputStyle, width: 'auto', minWidth: 180, fontSize: 12, padding: '4px 8px' }}
@@ -549,6 +552,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                             {/* Schedule selector */}
                             <select
+                              aria-label="Schedule frequency"
                               value={r.scheduleFrequency || 'NEVER'}
                               disabled={!r.ruleType}
                               onChange={(e) => updateSchedule(r, e.target.value as ScheduleFrequency)}

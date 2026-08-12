@@ -328,6 +328,7 @@ export default function OrgDeleteCleanupDialog({
           }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Default for everything:</label>
             <select
+              aria-label="Default for everything"
               value={defaultAction}
               onChange={(e) => {
                 const v = e.target.value as ActionType;
@@ -346,6 +347,7 @@ export default function OrgDeleteCleanupDialog({
             </select>
             {defaultAction === 'move' && (
               <select
+                aria-label="Default move target"
                 value={defaultTarget}
                 onChange={(e) => { setDefaultTarget(e.target.value); setPerCategory({}); }}
                 style={{
@@ -417,6 +419,7 @@ export default function OrgDeleteCleanupDialog({
                             )}
                           </div>
                           <select
+                            aria-label={`Action for ${c.label}`}
                             value={a.type}
                             onChange={(e) => setAction(c.key, e.target.value as ActionType)}
                             style={{
@@ -433,6 +436,7 @@ export default function OrgDeleteCleanupDialog({
                           </select>
                           {a.type === 'move' ? (
                             <select
+                              aria-label={`Move target for ${c.label}`}
                               value={a.targetOrgId || ''}
                               onChange={(e) => setTarget(c.key, e.target.value)}
                               style={{
@@ -486,6 +490,7 @@ export default function OrgDeleteCleanupDialog({
             </label>
             <input
               type="text"
+              aria-label="Type DELETE to confirm"
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
               autoComplete="off"

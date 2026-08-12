@@ -509,6 +509,7 @@ export default function GovernanceCalendarPage() {
               <label style={labelStyle}>Name *</label>
               <input
                 autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: eventValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -520,6 +521,7 @@ export default function GovernanceCalendarPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>
               <textarea
+                aria-label="Description"
                 style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -528,6 +530,7 @@ export default function GovernanceCalendarPage() {
             <div>
               <label style={labelStyle}>Event Type</label>
               <select
+                aria-label="Event Type"
                 style={selectStyle}
                 value={form.eventType}
                 onChange={(e) => setForm({ ...form, eventType: e.target.value })}
@@ -538,6 +541,7 @@ export default function GovernanceCalendarPage() {
             <div>
               <label style={labelStyle}>Cadence</label>
               <select
+                aria-label="Cadence"
                 style={selectStyle}
                 value={form.cadence}
                 onChange={(e) => setForm({ ...form, cadence: e.target.value })}
@@ -551,6 +555,7 @@ export default function GovernanceCalendarPage() {
                 type="number"
                 min={1}
                 max={31}
+                aria-label="Day of Month (1-31)"
                 style={inputStyle}
                 value={form.dayOfMonth}
                 onChange={(e) => setForm({ ...form, dayOfMonth: e.target.value })}
@@ -563,6 +568,7 @@ export default function GovernanceCalendarPage() {
                 type="number"
                 min={0}
                 max={6}
+                aria-label="Day of Week (0=Sun)"
                 style={inputStyle}
                 value={form.dayOfWeek}
                 onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}
@@ -572,6 +578,7 @@ export default function GovernanceCalendarPage() {
             <div>
               <label style={labelStyle}>Time of Day (HH:MM)</label>
               <input
+                aria-label="Time of Day (HH:MM)"
                 style={inputStyle}
                 value={form.timeOfDay}
                 onChange={(e) => setForm({ ...form, timeOfDay: e.target.value })}
@@ -583,6 +590,7 @@ export default function GovernanceCalendarPage() {
               <input
                 type="number"
                 min={5}
+                aria-label="Duration (minutes)"
                 style={inputStyle}
                 value={form.durationMinutes}
                 onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })}
@@ -591,6 +599,7 @@ export default function GovernanceCalendarPage() {
             <div>
               <label style={labelStyle}>Status</label>
               <select
+                aria-label="Status"
                 style={selectStyle}
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as 'ACTIVE' | 'PAUSED' })}
@@ -643,6 +652,7 @@ export default function GovernanceCalendarPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Agenda Template</label>
               <textarea
+                aria-label="Agenda Template"
                 style={{ ...inputStyle, minHeight: 80, resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }}
                 value={form.agendaTemplate}
                 onChange={(e) => setForm({ ...form, agendaTemplate: e.target.value })}
@@ -680,6 +690,7 @@ export default function GovernanceCalendarPage() {
       {events.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
+            aria-label="Filter by type"
             style={{ ...selectStyle, width: 'auto', minWidth: 150 }}
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
@@ -688,6 +699,7 @@ export default function GovernanceCalendarPage() {
             {EVENT_TYPES.map((t) => <option key={t} value={t}>{formatTypeLabel(t)}</option>)}
           </select>
           <select
+            aria-label="Filter by cadence"
             style={{ ...selectStyle, width: 'auto', minWidth: 130 }}
             value={filterCadence}
             onChange={(e) => setFilterCadence(e.target.value)}
@@ -696,6 +708,7 @@ export default function GovernanceCalendarPage() {
             {CADENCES.map((c) => <option key={c} value={c}>{formatTypeLabel(c)}</option>)}
           </select>
           <select
+            aria-label="Filter by status"
             style={{ ...selectStyle, width: 'auto', minWidth: 120 }}
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}

@@ -142,7 +142,7 @@ export default function OperationsManualPage() {
       <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowAddManual(false)}>
         <div style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 400, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }} onClick={(e) => e.stopPropagation()}>
           <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>Add Manual</h3>
-          <input style={inputStyle} value={newManualLabel} onChange={(e) => setNewManualLabel(e.target.value)} placeholder="Manual name" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleAddManual()} />
+          <input aria-label="Manual name" style={inputStyle} value={newManualLabel} onChange={(e) => setNewManualLabel(e.target.value)} placeholder="Manual name" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleAddManual()} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
             <Button variant="secondary" onClick={() => { setShowAddManual(false); setNewManualLabel(''); }}>Cancel</Button>
             <Button variant="primary" onClick={handleAddManual} disabled={!newManualLabel.trim()}>Add</Button>
@@ -265,8 +265,8 @@ export default function OperationsManualPage() {
                       {/* Header editing */}
                       {editingHeader === m.id ? (
                         <div style={{ marginBottom: 16 }}>
-                          <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={headerForm.label} onChange={(e) => setHeaderForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label" />
-                          <textarea style={{ ...inputStyle, minHeight: 80 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
+                          <input aria-label="Label" style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={headerForm.label} onChange={(e) => setHeaderForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label" />
+                          <textarea aria-label="Purpose" style={{ ...inputStyle, minHeight: 80 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
                           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                             <Button variant="primary" onClick={() => saveHeader(m.id)}>Save</Button>
                             <Button variant="secondary" onClick={() => setEditingHeader(null)}>Cancel</Button>
@@ -306,7 +306,7 @@ export default function OperationsManualPage() {
                                       </ul>}
                                   {canWrite && (
                                     <div style={{ display: 'flex', gap: 4 }}>
-                                      <input style={{ ...inputStyle, flex: 1, fontSize: 12, padding: '4px 8px' }} value={addInputs[sectionKey] || ''} onChange={(e) => setAddInputs((p) => ({ ...p, [sectionKey]: e.target.value }))}
+                                      <input aria-label={`Add ${s.name} item`} style={{ ...inputStyle, flex: 1, fontSize: 12, padding: '4px 8px' }} value={addInputs[sectionKey] || ''} onChange={(e) => setAddInputs((p) => ({ ...p, [sectionKey]: e.target.value }))}
                                         placeholder="Add item..." onKeyDown={(e) => e.key === 'Enter' && addItem(m.id, s.key)} />
                                       <Button variant="primary" size="sm"
                                         onClick={() => addItem(m.id, s.key)} disabled={!(addInputs[sectionKey] || '').trim()}>Add</Button>
@@ -322,7 +322,7 @@ export default function OperationsManualPage() {
                       {/* Custom Content */}
                       <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
                         <h4 style={{ fontSize: 12, fontWeight: 600, margin: '0 0 6px' }}>Custom Content</h4>
-                        <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit', lineHeight: 1.6, fontSize: 12 }} value={m.customContent}
+                        <textarea aria-label="Custom Content" style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit', lineHeight: 1.6, fontSize: 12 }} value={m.customContent}
                           onChange={(e) => { const v = e.target.value; setManuals((prev) => prev.map((x) => x.id === m.id ? { ...x, customContent: v } : x)); }}
                           onBlur={(e) => saveCustomContent(m.id, e.target.value)} placeholder="Paste or type additional content here..." readOnly={!canWrite} />
                       </div>
