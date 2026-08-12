@@ -5,6 +5,7 @@ import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
+import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -96,14 +97,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   DRAFT:        { bg: '#f3f4f6', color: '#6b7280' },
@@ -433,7 +426,7 @@ export default function GovernancePoliciesPage() {
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h3 style={{ fontSize: 14, fontWeight: 600 }}>Controls for {pol.name}</h3>
-              {canWrite && <button style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12 }} onClick={openAddControl}>+ Add Control</button>}
+              {canWrite && <Button variant="primary" size="sm" onClick={openAddControl}>+ Add Control</Button>}
             </div>
 
             {/* Control Add/Edit Form */}
@@ -467,11 +460,11 @@ export default function GovernancePoliciesPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-                  <button style={{ ...btnSecondary, padding: '6px 12px', fontSize: 12 }} onClick={closeControlForm}>Cancel</button>
-                  <button style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12, opacity: !controlForm.name.trim() ? 0.6 : 1, cursor: !controlForm.name.trim() ? 'not-allowed' : 'pointer' }}
+                  <Button variant="secondary" size="sm" onClick={closeControlForm}>Cancel</Button>
+                  <Button variant="primary" size="sm"
                     disabled={!controlForm.name.trim()} onClick={handleSaveControl}>
                     {editingControlId ? 'Save' : 'Add'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -639,10 +632,10 @@ export default function GovernancePoliciesPage() {
                 text") had no read surface. Stored values are retained. */}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!form.name.trim()} onClick={handleSave}>
+            <Button variant="secondary" onClick={closeForm}>Cancel</Button>
+            <Button variant="primary" disabled={!form.name.trim()} onClick={handleSave}>
               {editingId ? 'Save Changes' : `Add ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}`}
-            </button>
+            </Button>
           </div>
         </div>
       )}

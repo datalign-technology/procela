@@ -7,6 +7,7 @@ import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -71,14 +72,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 const CATEGORIES = ['ONBOARDING', 'QUALITY', 'INCIDENT', 'ACCESS', 'REQUEST', 'REVIEW', 'ESCALATION', 'OTHER'];
 const CATEGORY_LABELS: Record<string, string> = {
@@ -356,7 +349,9 @@ export default function SopsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Steps</div>
         {canWrite && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={async (e) => {
               e.stopPropagation();
               const newStep = { order: (sop.steps?.length || 0) + 1, title: 'New step', description: '', estimatedMinutes: 0 };
@@ -365,8 +360,7 @@ export default function SopsPage() {
               addToast('success', 'Step added');
               fetchData();
             }}
-            style={{ ...btnSecondary, fontSize: 11, padding: '3px 10px' }}
-          >+ Add Step</button>
+          >+ Add Step</Button>
         )}
       </div>
       <ol style={{ paddingLeft: 0, listStyle: 'none', margin: 0 }}>
@@ -452,12 +446,13 @@ export default function SopsPage() {
         </select>
         {(filterCategory || filterStatus || filterOwner || searchQuery) && (
           <>
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterOwner(''); setSearchQuery(''); }}
-              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
             >
               Clear Filters
-            </button>
+            </Button>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
               Showing {filtered.length} of {sops.length}
             </span>
@@ -518,7 +513,7 @@ export default function SopsPage() {
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Steps ({form.steps.length})</label>
-              <button onClick={addStep} style={{ ...btnSecondary, fontSize: 11, padding: '4px 10px' }}>+ Add Step</button>
+              <Button variant="secondary" size="sm" onClick={addStep}>+ Add Step</Button>
             </div>
             {form.steps.map((step, idx) => (
               <div key={idx} style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: 10, marginBottom: 6, background: 'var(--color-bg)' }}>
@@ -541,10 +536,10 @@ export default function SopsPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.title.trim() ? 0.6 : 1, cursor: !form.title.trim() ? 'not-allowed' : 'pointer' }} disabled={!form.title.trim()} onClick={handleSave}>
+            <Button variant="secondary" onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm); }}>Cancel</Button>
+            <Button variant="primary" disabled={!form.title.trim()} onClick={handleSave}>
               {editingId ? 'Save Changes' : 'Create SOP'}
-            </button>
+            </Button>
           </div>
         </Card>
       )}

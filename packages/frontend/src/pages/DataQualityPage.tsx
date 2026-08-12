@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -131,30 +132,6 @@ const selectStyle: React.CSSProperties = {
   ...inputStyle,
   appearance: 'auto' as any,
 };
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-primary)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-
 
 function Badge({ label, colors }: { label: string; colors: { bg: string; color: string } }) {
   return (
@@ -775,14 +752,14 @@ export default function DataQualityPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: (!form.name.trim() || !form.dataAssetId) ? 0.6 : 1, cursor: (!form.name.trim() || !form.dataAssetId) ? 'not-allowed' : 'pointer' }}
+            <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
+            <Button
+              variant="primary"
               disabled={!form.name.trim() || !form.dataAssetId}
               onClick={handleSave}
             >
               {editingId ? 'Save Changes' : 'Add Rule'}
-            </button>
+            </Button>
           </div>
         </Card>
       )}
