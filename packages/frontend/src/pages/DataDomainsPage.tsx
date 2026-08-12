@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import { INDUSTRIES } from '../types';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
@@ -33,8 +34,6 @@ interface DataAssetOption { id: string; name: string; }
 
 const inputStyle: React.CSSProperties = { border: '1px solid var(--color-border)', borderRadius: 4, padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)' };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = { padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer' };
-const btnSecondary: React.CSSProperties = { padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer' };
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
 
 interface FormData { name: string; description: string; status: string; }
@@ -458,8 +457,8 @@ export default function DataDomainsPage() {
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={handleSave}>{editingId ? 'Save Changes' : 'Add Domain'}</button>
+            <Button variant="secondary" onClick={closeForm}>Cancel</Button>
+            <Button variant="primary" disabled={!form.name.trim()} onClick={handleSave}>{editingId ? 'Save Changes' : 'Add Domain'}</Button>
           </div>
         </Card>
       )}
@@ -590,7 +589,7 @@ export default function DataDomainsPage() {
                       Pick the fields to change. Empty fields are left untouched. Status changes that aren't a valid transition for a given domain will be skipped.
                     </p>
                   </div>
-                  <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 12 }} onClick={clearBulkSelection}>Clear selection</button>
+                  <Button variant="secondary" size="sm" onClick={clearBulkSelection}>Clear selection</Button>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
@@ -614,14 +613,14 @@ export default function DataDomainsPage() {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
-                  <button style={{ ...btnSecondary, color: '#991b1b', borderColor: '#fca5a5' }} disabled={applyingBulk} onClick={() => setConfirmBulkDelete(true)}>
+                  <Button variant="secondary" style={{ color: '#991b1b', borderColor: '#fca5a5' }} disabled={applyingBulk} onClick={() => setConfirmBulkDelete(true)}>
                     Delete {bulkSelectedIds.size} domain{bulkSelectedIds.size !== 1 ? 's' : ''}
-                  </button>
+                  </Button>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button style={btnSecondary} disabled={applyingBulk} onClick={clearBulkSelection}>Cancel</button>
-                    <button style={{ ...btnPrimary, opacity: applyingBulk ? 0.6 : 1 }} disabled={applyingBulk} onClick={handleBulkApply}>
+                    <Button variant="secondary" disabled={applyingBulk} onClick={clearBulkSelection}>Cancel</Button>
+                    <Button variant="primary" disabled={applyingBulk} onClick={handleBulkApply}>
                       {applyingBulk ? 'Applying…' : 'Apply changes'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -653,7 +652,7 @@ export default function DataDomainsPage() {
                     <div style={labelStyle}>Status Transitions</div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       {(transitions[selectedDomain.status] || []).map((s) => (
-                        <button key={s} onClick={() => handleStatusChange(selectedDomain.id, s)} style={{ ...btnSecondary, padding: '4px 12px', fontSize: 12 }}>{s.replace(/_/g, ' ')}</button>
+                        <Button key={s} variant="secondary" size="sm" onClick={() => handleStatusChange(selectedDomain.id, s)}>{s.replace(/_/g, ' ')}</Button>
                       ))}
                     </div>
                   </div>
@@ -719,7 +718,7 @@ export default function DataDomainsPage() {
 
                 {/* Save */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button style={btnPrimary} onClick={handleDetailSave}>Save Governance Details</button>
+                  <Button variant="primary" onClick={handleDetailSave}>Save Governance Details</Button>
                 </div>
 
                 {/* Timestamps */}
@@ -818,10 +817,10 @@ export default function DataDomainsPage() {
               <div><div style={{ fontSize: 12, fontWeight: 500 }}>Also create Stewardship Teams</div></div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button style={btnSecondary} onClick={() => setShowGeneratePreview(false)}>Cancel</button>
-              <button style={{ ...btnPrimary, opacity: generatedDomains.some((d) => d.selected) ? 1 : 0.6 }} disabled={!generatedDomains.some((d) => d.selected)} onClick={handleApplyGenerated}>
+              <Button variant="secondary" onClick={() => setShowGeneratePreview(false)}>Cancel</Button>
+              <Button variant="primary" disabled={!generatedDomains.some((d) => d.selected)} onClick={handleApplyGenerated}>
                 Create {generatedDomains.filter((d) => d.selected).length} Domains
-              </button>
+              </Button>
             </div>
           </div>
         </div>

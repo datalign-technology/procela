@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import FieldStack from '../components/FieldStack';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
@@ -116,14 +117,6 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 const typeBadge = (type: string): React.CSSProperties => {
   const colors: Record<string, { bg: string; color: string }> = {
     company: { bg: '#dbeafe', color: '#1e40af' }, division: { bg: '#ede9fe', color: '#5b21b6' },
@@ -183,7 +176,7 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
   return (
     <>
       <input ref={inputRef} type="file" accept={accept} onChange={handleChange} style={{ display: 'none' }} />
-      <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => inputRef.current?.click()}>{label || 'Browse File'}</button>
+      <Button variant="secondary" size="sm" onClick={() => inputRef.current?.click()}>{label || 'Browse File'}</Button>
     </>
   );
 }
@@ -875,12 +868,13 @@ export default function PeoplePage() {
                 )}
                 {(filterAppRole || filterGovRole || filterSkillId || searchQuery || selectedOrgId) && (
                   <>
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => { setFilterAppRole(''); setFilterGovRole(''); setFilterSkillId(''); setSearchQuery(''); applyOrgFilter(''); }}
-                      style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
                     >
                       Clear Filters
-                    </button>
+                    </Button>
                     <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                       Showing {filteredPeople.length} of {people.length}
                     </span>
@@ -1026,16 +1020,16 @@ export default function PeoplePage() {
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
                     <SaveIndicator state={personFormSave} />
-                    <button style={btnSecondary} onClick={() => { setShowPersonForm(false); setEditingPersonId(null); setPersonFormSave('idle'); }}>Cancel</button>
+                    <Button variant="secondary" onClick={() => { setShowPersonForm(false); setEditingPersonId(null); setPersonFormSave('idle'); }}>Cancel</Button>
                     {(() => {
                       // Add requires both a name and at least one org;
                       // Edit only requires a non-empty name (orgs/role
                       // are managed separately).
                       const invalid = !personForm.name.trim() || (!editingPersonId && personForm.orgIds.length === 0) || personFormSave === 'saving';
                       return (
-                        <button style={{ ...btnPrimary, opacity: invalid ? 0.6 : 1, cursor: invalid ? 'not-allowed' : 'pointer' }} disabled={invalid} onClick={handleSavePerson}>
+                        <Button variant="primary" disabled={invalid} onClick={handleSavePerson}>
                           {editingPersonId ? 'Save' : 'Add'}
-                        </button>
+                        </Button>
                       );
                     })()}
                   </div>
@@ -1068,12 +1062,12 @@ export default function PeoplePage() {
                     placeholder={'Name,Email,Role,Title,Org\nJane Smith,jane@co.com,EDITOR,Director of Operations,Tidewater Utilities > Tidewater Electric'} />
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
                     <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>Columns: Name (required), Email, Role, Title, Org. Rows with an Org column land in that org (full path "Parent &gt; Child" or unique name); rows without it use the Default org above.</span>
-                    <button style={btnSecondary} onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }}>Cancel</button>
-                    <button
-                      style={{ ...btnPrimary, opacity: (!peopleImportText.trim() || !peopleImportOrgId) ? 0.6 : 1, cursor: (!peopleImportText.trim() || !peopleImportOrgId) ? 'not-allowed' : 'pointer' }}
+                    <Button variant="secondary" onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }}>Cancel</Button>
+                    <Button
+                      variant="primary"
                       disabled={!peopleImportText.trim() || !peopleImportOrgId}
                       onClick={handlePeopleImport}
-                    >Import</button>
+                    >Import</Button>
                   </div>
                 </Card>
               )}
@@ -1321,12 +1315,13 @@ export default function PeoplePage() {
                 )}
 
                 {/* Full detail link */}
-                <button
+                <Button
+                  variant="primary"
+                  fullWidth
                   onClick={() => navigate(`/people/${previewPersonId}`)}
-                  style={{ ...btnPrimary, width: '100%', textAlign: 'center', fontSize: 12, padding: '8px 12px' }}
                 >
                   Open Full Detail
-                </button>
+                </Button>
                 </FieldStack>
               </div>
             ) : (

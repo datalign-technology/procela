@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
 import PageHeader from '../components/PageHeader';
+import Button from '../components/Button';
 import { SkeletonRows } from '../components/Skeleton';
 
 // ── Types ──
@@ -33,14 +34,6 @@ const SECTIONS: SectionDef[] = [
 const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)', width: '100%',
-};
-const btnPrimary: React.CSSProperties = {
-  padding: '6px 14px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)',
-  color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '6px 14px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)',
-  color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const card: React.CSSProperties = {
   background: 'var(--color-surface)', border: '1px solid var(--color-border)',
@@ -150,8 +143,8 @@ export default function OperationsManualPage() {
           <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>Add Manual</h3>
           <input style={inputStyle} value={newManualLabel} onChange={(e) => setNewManualLabel(e.target.value)} placeholder="Manual name" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleAddManual()} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-            <button style={btnSecondary} onClick={() => { setShowAddManual(false); setNewManualLabel(''); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !newManualLabel.trim() ? 0.6 : 1, cursor: !newManualLabel.trim() ? 'not-allowed' : 'pointer' }} onClick={handleAddManual} disabled={!newManualLabel.trim()}>Add</button>
+            <Button variant="secondary" onClick={() => { setShowAddManual(false); setNewManualLabel(''); }}>Cancel</Button>
+            <Button variant="primary" onClick={handleAddManual} disabled={!newManualLabel.trim()}>Add</Button>
           </div>
         </div>
       </div>
@@ -175,8 +168,8 @@ export default function OperationsManualPage() {
         title="Operations Manual"
         subtitle="Role-specific guidance for running your governance program."
         actions={<>
-          <button style={btnSecondary} onClick={handleSeed} disabled={seeding}>{seedLabel}</button>
-          {canWrite && <button style={btnPrimary} onClick={() => setShowAddManual(true)}>+ Add Manual</button>}
+          <Button variant="secondary" onClick={handleSeed} disabled={seeding}>{seedLabel}</Button>
+          {canWrite && <Button variant="primary" onClick={() => setShowAddManual(true)}>+ Add Manual</Button>}
         </>}
       />
 
@@ -196,8 +189,8 @@ export default function OperationsManualPage() {
                 <input type="checkbox" checked={selectedIds.size === manuals.length && manuals.length > 0} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} /> Select all
               </label>
             )}
-            <button style={{ ...btnSecondary, padding: '4px 12px', fontSize: 11 }} onClick={() => setExpandedCards(new Set(manuals.map((m) => m.id)))}>Expand All</button>
-            <button style={{ ...btnSecondary, padding: '4px 12px', fontSize: 11 }} onClick={() => setExpandedCards(new Set())}>Collapse All</button>
+            <Button variant="secondary" size="sm" onClick={() => setExpandedCards(new Set(manuals.map((m) => m.id)))}>Expand All</Button>
+            <Button variant="secondary" size="sm" onClick={() => setExpandedCards(new Set())}>Collapse All</Button>
           </div>
 
           <BulkActionBar count={selectedIds.size} onClear={() => setSelectedIds(new Set())}>
@@ -273,8 +266,8 @@ export default function OperationsManualPage() {
                           <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={headerForm.label} onChange={(e) => setHeaderForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label" />
                           <textarea style={{ ...inputStyle, minHeight: 80 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
                           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                            <button style={btnPrimary} onClick={() => saveHeader(m.id)}>Save</button>
-                            <button style={btnSecondary} onClick={() => setEditingHeader(null)}>Cancel</button>
+                            <Button variant="primary" onClick={() => saveHeader(m.id)}>Save</Button>
+                            <Button variant="secondary" onClick={() => setEditingHeader(null)}>Cancel</Button>
                           </div>
                         </div>
                       ) : m.purpose ? (
@@ -313,8 +306,8 @@ export default function OperationsManualPage() {
                                     <div style={{ display: 'flex', gap: 4 }}>
                                       <input style={{ ...inputStyle, flex: 1, fontSize: 12, padding: '4px 8px' }} value={addInputs[sectionKey] || ''} onChange={(e) => setAddInputs((p) => ({ ...p, [sectionKey]: e.target.value }))}
                                         placeholder="Add item..." onKeyDown={(e) => e.key === 'Enter' && addItem(m.id, s.key)} />
-                                      <button style={{ ...btnPrimary, padding: '4px 10px', fontSize: 11, opacity: !(addInputs[sectionKey] || '').trim() ? 0.6 : 1, cursor: !(addInputs[sectionKey] || '').trim() ? 'not-allowed' : 'pointer' }}
-                                        onClick={() => addItem(m.id, s.key)} disabled={!(addInputs[sectionKey] || '').trim()}>Add</button>
+                                      <Button variant="primary" size="sm"
+                                        onClick={() => addItem(m.id, s.key)} disabled={!(addInputs[sectionKey] || '').trim()}>Add</Button>
                                     </div>
                                   )}
                                 </div>
