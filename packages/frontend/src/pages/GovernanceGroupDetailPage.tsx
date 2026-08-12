@@ -519,6 +519,7 @@ export default function GovernanceGroupDetailPage() {
         )}
 
         {/* Members table */}
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr>
@@ -601,6 +602,7 @@ export default function GovernanceGroupDetailPage() {
             })}
           </tbody>
         </table>
+        </div>
 
         {/* Add-member panel — supports both people and agent advisors.
             Agents are locked to the ADVISOR group role so the row keeps
@@ -705,6 +707,7 @@ export default function GovernanceGroupDetailPage() {
             No decision rights reference this group.
           </div>
         ) : (
+          <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr>
@@ -727,6 +730,7 @@ export default function GovernanceGroupDetailPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </SectionShell>
 
@@ -797,6 +801,7 @@ export default function GovernanceGroupDetailPage() {
             No RACI assignments for this group's members.
           </div>
         ) : (
+          <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr>
@@ -829,6 +834,7 @@ export default function GovernanceGroupDetailPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </SectionShell>
 

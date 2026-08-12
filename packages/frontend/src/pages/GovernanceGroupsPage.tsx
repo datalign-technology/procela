@@ -1353,6 +1353,7 @@ export default function GovernanceGroupsPage() {
                 </p>
               ) : (
                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                  <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
@@ -1413,6 +1414,7 @@ export default function GovernanceGroupsPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
 

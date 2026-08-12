@@ -324,6 +324,7 @@ export default function ExecutiveReportPage() {
         {/* Section 4: Gap Analysis */}
         <div style={sectionStyle}>
           <h2 style={sectionTitleStyle}>4. Gap Analysis</h2>
+          <div style={{ overflowX: 'auto' }}>
           <table style={tableStyle}>
             <thead>
               <tr>
@@ -383,6 +384,7 @@ export default function ExecutiveReportPage() {
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Section 5: Governance Structure */}
@@ -403,6 +405,7 @@ export default function ExecutiveReportPage() {
             </div>
           </div>
           {govGroups.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
             <table style={tableStyle}>
               <thead>
                 <tr>
@@ -431,6 +434,7 @@ export default function ExecutiveReportPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
 

@@ -719,6 +719,7 @@ export default function DataLineagePage() {
                   Auto-derived from imported source manifests (dbt). Re-importing the same manifest updates these in place. Edges not re-seen in {staleAfterDays} days are flagged stale.
                 </p>
                 <Card padding={0} shadow="none">
+                  <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
@@ -748,6 +749,7 @@ export default function DataLineagePage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </Card>
               </div>
             );
@@ -926,6 +928,7 @@ function DbtCloudConnectionsPanel({
         Each refresh pulls the manifest from the most recent successful run of the configured job and reconciles it like the manual upload would.
       </p>
       <Card padding={0} shadow="none">
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'var(--color-bg)' }}>
@@ -984,6 +987,7 @@ function DbtCloudConnectionsPanel({
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );

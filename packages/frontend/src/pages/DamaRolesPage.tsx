@@ -1234,6 +1234,7 @@ function RolesTable({ catalog, damaRoles, filterRoleType, domains, systems, data
   };
 
   return (
+    <div style={{ overflowX: 'auto' }}>
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr style={{ background: 'var(--color-bg)' }}>
@@ -1354,6 +1355,7 @@ function RolesTable({ catalog, damaRoles, filterRoleType, domains, systems, data
         })}
       </tbody>
     </table>
+    </div>
   );
 }
 
