@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
+import { clickable } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
@@ -184,7 +185,7 @@ function SidebarItem({ label, count, active, onClick }: {
 }) {
   return (
     <div
-      onClick={onClick}
+      {...clickable(onClick, { label: `${label} (${count})`, pressed: active })}
       style={{
         padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
         fontWeight: active ? 600 : 400,

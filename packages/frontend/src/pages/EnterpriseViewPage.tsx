@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader';
 import { useTierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
+import { clickable } from '../lib/a11y';
 import { badgeColor } from '../lib/badgeColors';
 import HelpPopover from '../components/HelpPopover';
 import EnterpriseDiagram from '../components/EnterpriseDiagram';
@@ -333,7 +334,8 @@ export default function EnterpriseViewPage() {
               const isOpen = expandedCols.has(type);
               return (
                 <div key={type} style={cardStyle(type, count)}
-                  onClick={() => count > 0 && toggleCol(type)}>
+                  {...clickable(() => toggleCol(type), { label: `Expand ${cfg.plural}`, disabled: count === 0 })}
+                  aria-expanded={count > 0 ? isOpen : undefined}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
                       <div style={{ fontSize: 24, fontWeight: 700, color: cfg.color }}>{count}</div>
@@ -385,7 +387,8 @@ export default function EnterpriseViewPage() {
             <div key={type} style={{ marginBottom: 16 }}>
               {/* Section header */}
               <div
-                onClick={() => toggleCol(type)}
+                {...clickable(() => toggleCol(type), { label: `Toggle ${cfg.plural} section` })}
+                aria-expanded={isOpen}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
                   background: cfg.bg, borderRadius: 'var(--radius-md)',
@@ -409,7 +412,7 @@ export default function EnterpriseViewPage() {
                     const statusColor = n.status ? getStatusColor(n.status) : null;
                     return (
                       <div key={n.id}
-                        onClick={() => selectNode(n)}
+                        {...clickable(() => selectNode(n), { label: `Select ${n.label}` })}
                         style={{
                           display: 'flex', alignItems: 'flex-start', gap: 10,
                           padding: '10px 12px', borderRadius: 'var(--radius-md)',
@@ -591,7 +594,7 @@ export default function EnterpriseViewPage() {
                     const direction = e.source === selected.id ? '\u2192' : '\u2190';
                     return (
                       <div key={e.id}
-                        onClick={() => setSelected(other)}
+                        {...clickable(() => setSelected(other), { label: `Select ${other.label}` })}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px',
                           borderRadius: 4, cursor: 'pointer', fontSize: 12,
@@ -632,7 +635,7 @@ export default function EnterpriseViewPage() {
                       </div>
                       {items.map((n) => (
                         <div key={n.id}
-                          onClick={() => setSelected(n)}
+                          {...clickable(() => setSelected(n), { label: `Select ${n.label}` })}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px',
                             borderRadius: 4, cursor: 'pointer', fontSize: 12,

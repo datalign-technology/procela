@@ -4,6 +4,7 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import { INDUSTRIES } from '../types';
+import { clickable } from '../lib/a11y';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -530,7 +531,7 @@ export default function DataDomainsPage() {
                 const isActive = selectedDomainId === d.id;
                 const isChecked = bulkSelectedIds.has(d.id);
                 return (
-                  <div key={d.id} onClick={() => openDetail(d)} style={{
+                  <div key={d.id} {...clickable(() => openDetail(d), { label: `Open domain ${d.name}` })} style={{
                     padding: '10px 12px', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 8,
                     background: isActive ? '#dbeafe' : isChecked ? '#f0f9ff' : 'transparent',

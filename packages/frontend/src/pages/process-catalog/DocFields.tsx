@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import PersonPicker from '../../components/PersonPicker';
 import { GOVERNANCE_ROLES } from '../../types';
 import { inputStyle, ROLE_OPTIONS, type SystemRef } from '../ProcessCatalogPage';
+import { clickable } from '../../lib/a11y';
 
 // ── Inline Edit ──
 
@@ -13,7 +14,7 @@ export function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, pla
   const [draft, setDraft] = useState(value);
   if (!editing || disabled) {
     return (
-      <span onClick={() => { if (!disabled) { setDraft(value); setEditing(true); } }}
+      <span {...clickable(() => { setDraft(value); setEditing(true); }, { label: 'Edit field', disabled })}
         style={{ cursor: disabled ? 'default' : 'pointer', fontSize, fontWeight, opacity: disabled ? 0.7 : 1 }}
         title={disabled ? 'Locked — change status to Draft to edit' : 'Click to edit'}>
         {value || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{placeholder}</span>}
@@ -66,7 +67,7 @@ export function DocField({ label, value, onSave, disabled, placeholder }: {
       ) : (
         <>
           <span
-            onClick={() => { if (!disabled) { setDraft(value); setEditing(true); } }}
+            {...clickable(() => { setDraft(value); setEditing(true); }, { label: `Edit ${label}`, disabled })}
             style={{ cursor: disabled ? 'default' : 'pointer', color: value ? 'var(--color-text)' : 'var(--color-text-muted)', fontStyle: value ? 'normal' : 'italic', opacity: disabled ? 0.6 : 1 }}
             title={disabled ? 'Locked' : 'Click to edit'}
           >

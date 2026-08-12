@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import Button from './Button';
+import { clickable } from '../lib/a11y';
 
 // ──────────────────────────────────────────────────────────────────────────
 // LinkConnectionModal — three-step flow for pointing a Data Asset at a
@@ -219,12 +220,12 @@ export default function LinkConnectionModal({
                   return (
                     <div key={a.name}>
                       <div
-                        onClick={() => {
+                        {...clickable(() => {
                           // Clicking the row picks the whole-asset binding and toggles cols.
                           setPickedAsset(a.name);
                           setPickedColumn('');
                           if (hasCols) toggleExpand(a.name);
-                        }}
+                        }, { label: `Select asset ${a.name}` })}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8,
                           padding: '8px 12px', borderBottom: '1px solid var(--color-border)',

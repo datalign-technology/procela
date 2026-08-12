@@ -23,7 +23,7 @@ import { useToastStore } from '../stores/toastStore';
 // Lazy: only renders when the user opens the connection picker.
 const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 import { SkeletonRows } from '../components/Skeleton';
-import { activateOnKey } from '../lib/a11y';
+import { activateOnKey, clickable } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 // ── Types ──
@@ -773,7 +773,7 @@ export default function OrganizationsPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                       <span style={{ color: 'var(--color-text-muted)' }}>Parent</span>
                       <span style={{ fontWeight: 500, cursor: 'pointer', color: 'var(--color-primary)' }}
-                        onClick={() => setDetailOrgId(detailOrg.parentId)}>
+                        {...clickable(() => setDetailOrgId(detailOrg.parentId), { label: 'Go to parent organization' })}>
                         {flatOrgs.find((o) => o.id === detailOrg.parentId)?.name || '--'}
                       </span>
                     </div>

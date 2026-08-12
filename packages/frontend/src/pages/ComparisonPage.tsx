@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
+import { clickable } from '../lib/a11y';
 
 // ── Types ──
 
@@ -95,7 +96,8 @@ function CompareTreeNode({
       >
         {/* Expand/collapse */}
         <span
-          onClick={() => hasChildren && setExpanded((v) => !v)}
+          {...clickable(() => setExpanded((v) => !v), { label: `Expand ${node.name}`, disabled: !hasChildren })}
+          aria-expanded={hasChildren ? expanded : undefined}
           style={{
             fontSize: 10,
             color: config.color,

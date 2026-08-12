@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { usePermissions } from '../hooks/usePermissions';
+import { clickable } from '../lib/a11y';
 import ConfirmDialog from '../components/ConfirmDialog';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
@@ -211,12 +212,13 @@ export default function OperationsManualPage() {
                 }}>
                   {/* Card header */}
                   <div
+                    {...clickable(() => toggleCard(m.id), { label: `Toggle manual ${m.label}` })}
+                    aria-expanded={isExpanded}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
                       cursor: 'pointer', userSelect: 'none',
                       borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none',
                     }}
-                    onClick={() => toggleCard(m.id)}
                   >
                     {canWrite && (
                       <input type="checkbox" checked={isSelected}
@@ -282,7 +284,7 @@ export default function OperationsManualPage() {
                           const expanded = expandedSections.has(sectionKey);
                           return (
                             <div key={s.key} style={{ borderLeft: `3px solid ${s.accentColor}`, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-                              <div onClick={() => toggleSection(m.id, s.key)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}>
+                              <div {...clickable(() => toggleSection(m.id, s.key), { label: `Toggle ${s.name} section` })} aria-expanded={expanded} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}>
                                 <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
                                 <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: s.accentColor, flexShrink: 0 }} />
                                 <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{s.name}</span>

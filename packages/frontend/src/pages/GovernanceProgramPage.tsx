@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
+import { clickable, activateOnKeyStop } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
@@ -193,7 +194,8 @@ function PhaseCard({
 
   return (
     <div
-      onClick={onToggle}
+      {...clickable(onToggle, { label: `Toggle Phase ${phaseNum}` })}
+      aria-expanded={expanded}
       style={{
         background: 'var(--color-surface)',
         border: expanded ? `2px solid ${color}` : isCurrent ? `2px solid ${color}` : '1px solid var(--color-border)',
@@ -256,17 +258,23 @@ function PhaseCard({
           const hashParts = isHash ? link.slice(1).split(':') : [];
           const targetPhase = isHash ? parseInt(hashParts[0]) : 0;
           const targetTab = hashParts[1] || undefined;
+          const goToCheck = () => {
+            if (isHash) {
+              onExpandPhase(targetPhase, targetTab);
+            } else {
+              navigate(link);
+            }
+          };
           return (
             <div
               key={idx}
-              onClick={link ? (e) => {
-                e.stopPropagation();
-                if (isHash) {
-                  onExpandPhase(targetPhase, targetTab);
-                } else {
-                  navigate(link);
-                }
-              } : undefined}
+              {...(link ? {
+                role: 'button',
+                tabIndex: 0,
+                'aria-label': `Go to ${check.label}`,
+                onClick: (e: React.MouseEvent) => { e.stopPropagation(); goToCheck(); },
+                onKeyDown: activateOnKeyStop(goToCheck),
+              } : {})}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
                 padding: '5px 8px', borderRadius: 4,
@@ -919,7 +927,8 @@ export default function GovernanceProgramPage() {
                       const isGroupExpanded = expandedRoleGroups.has(group.groupType);
                       return (
                         <div key={group.groupType} style={{ marginBottom: 8 }}>
-                          <div onClick={() => setExpandedRoleGroups((prev) => { const next = new Set(prev); if (next.has(group.groupType)) next.delete(group.groupType); else next.add(group.groupType); return next; })}
+                          <div {...clickable(() => setExpandedRoleGroups((prev) => { const next = new Set(prev); if (next.has(group.groupType)) next.delete(group.groupType); else next.add(group.groupType); return next; }), { label: `Toggle ${group.label}` })}
+                            aria-expanded={isGroupExpanded}
                             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer', borderRadius: 'var(--radius-md)', border: `1px solid ${isGroupExpanded ? group.color + '40' : 'var(--color-border)'}`, background: isGroupExpanded ? group.color + '08' : 'var(--color-surface)', transition: 'background-color 0.12s' }}
                             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = group.color + '0d'; }}
                             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = isGroupExpanded ? group.color + '08' : 'var(--color-surface)'; }}>
@@ -1052,7 +1061,7 @@ export default function GovernanceProgramPage() {
                       };
                       const target = actionMap[check.label];
                       return (
-                        <div key={idx} onClick={() => { if (target?.route === '/governance-program') expandAndScroll(2); else if (target) navigate(target.route); }}
+                        <div key={idx} {...clickable(() => { if (target?.route === '/governance-program') expandAndScroll(2); else if (target) navigate(target.route); }, { label: target ? target.label : check.label })}
                           style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderLeft: `4px solid ${check.done ? '#22c55e' : '#d1d5db'}`, borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'background-color 0.12s' }}
                           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface)'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg)'; }}>
