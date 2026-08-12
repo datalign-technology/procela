@@ -349,6 +349,69 @@ the brand primary is teal). Do NOT hand-roll a selection bar.
 
 ---
 
+## Badges & indicators
+
+Small display primitives for the recurring "value that should read as a
+visual, not raw text" cases. `<StatusBadge>` (documented above where it's
+first used) covers semantic state pills; these three cover the other
+recurring ones.
+
+### `<Avatar>`
+
+The initials-in-a-circle marker for a person. Background is derived
+deterministically from the name, so the same person is always the same
+colour across the app.
+
+```tsx
+import Avatar from '@/components/Avatar';
+
+<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+  <Avatar name={person.name} />          {/* sm (24px), list rows */}
+  <span>{person.name}</span>
+</div>
+```
+
+Sizes `sm` (24) / `md` (32) / `lg` (40). The fills are a fixed decorative
+hex palette (not `--color-*` tokens) — a person's colour must be stable,
+not theme-derived. `initialsOf(name)` is exported for the rare case you
+need the initials without the circle.
+
+### `<HealthBar>`
+
+Compact horizontal gauge for a 0–100 health score. Fill colour follows the
+app-wide thresholds (**≥80** success / **≥50** warning / else error) via
+the semantic `--color-*` tokens, so it retunes with the theme instead of
+drifting to a bespoke hex. Renders an em-dash when the score is unset.
+
+```tsx
+import HealthBar from '@/components/HealthBar';
+
+<HealthBar score={asset.healthScore} />   {/* bar + "72%" */}
+```
+
+Do NOT print a bare `{score}%` in a list cell — use `HealthBar` so health
+reads consistently wherever it appears. `healthColorVar(score)` is exported
+for callers that need just the token (e.g. a number coloured to match).
+
+### `<TierBadge>`
+
+The coloured pill for a governance tier (Bronze / Silver / Gold). Label
+comes from `useTierLabel` so it tracks the plain↔DAMA terminology toggle;
+colour comes from the `TIER_COLORS` ramp in `lib/governanceTier`.
+
+```tsx
+import TierBadge from '@/components/TierBadge';
+
+<TierBadge tier={asset.governanceTier} />
+```
+
+Use it for the **read-only** display of a tier; keep an inline `<select>`
+for the editable case (as Data Assets does — badge for viewers/inherited
+rows, select for editors). Do NOT render a tier as plain `tierLabel(...)`
+text.
+
+---
+
 ## Interactive
 
 ### `<SecondaryButton>`
