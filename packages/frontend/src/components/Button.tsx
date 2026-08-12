@@ -21,20 +21,15 @@ import React from 'react';
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export type ButtonSize = 'sm' | 'md';
 
-interface ButtonProps {
-  children: React.ReactNode;
-  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  type?: 'button' | 'submit';
+// Extends the native button attributes, so `title`, `id`, `name`,
+// `onMouseEnter`, `aria-*`, etc. pass straight through to the element —
+// which is what lets it be a drop-in for the hand-rolled `<button
+// style={btnPrimary} …>` call sites (many carry a `title` tooltip).
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  disabled?: boolean;
   loading?: boolean;
   fullWidth?: boolean;
-  // Caller-supplied style is merged after defaults so per-page tweaks
-  // (e.g. extra margin in a wizard footer) still win.
-  style?: React.CSSProperties;
-  // Pass-through for accessible naming when children isn't human text.
-  'aria-label'?: string;
   // Inline left/right adornment — keep it small; for a true icon-only
   // button use IconButton.
   leadingIcon?: React.ReactNode;
@@ -69,8 +64,9 @@ const sizeStyle: Record<ButtonSize, React.CSSProperties> = {
 };
 
 export default function Button({
-  children, onClick, type = 'button', variant = 'secondary', size = 'md',
-  disabled, loading, fullWidth, style, leadingIcon, ...rest
+  children, type = 'button', variant = 'secondary', size = 'md',
+  disabled, loading, fullWidth, style, leadingIcon,
+  onMouseDown, onMouseUp, onMouseLeave, ...rest
 }: ButtonProps) {
   const v = variantStyle[variant];
   const s = sizeStyle[size];
@@ -79,10 +75,9 @@ export default function Button({
   return (
     <button
       type={type}
-      onClick={onClick}
       disabled={isDisabled}
-      aria-label={rest['aria-label']}
       aria-busy={loading || undefined}
+      {...rest}
       style={{
         ...v,
         ...s,
@@ -98,9 +93,9 @@ export default function Button({
         transition: 'background-color 0.12s, border-color 0.12s, transform 0.05s',
         ...style,
       }}
-      onMouseDown={(e) => { if (!isDisabled) e.currentTarget.style.transform = 'scale(0.98)'; }}
-      onMouseUp={(e) => { e.currentTarget.style.transform = ''; }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = ''; }}
+      onMouseDown={(e) => { if (!isDisabled) e.currentTarget.style.transform = 'scale(0.98)'; onMouseDown?.(e); }}
+      onMouseUp={(e) => { e.currentTarget.style.transform = ''; onMouseUp?.(e); }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = ''; onMouseLeave?.(e); }}
     >
       {leadingIcon && <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center' }}>{leadingIcon}</span>}
       <span>{loading ? 'Saving…' : children}</span>

@@ -52,10 +52,18 @@ drift with edits.
 
 ## P2 — Shared-component adoption gaps (biggest by volume)
 
-- **☐ C1 [HIGH] No shared button primitive.** `btnPrimary` + `btnSecondary`
-  style objects hand-rolled in **23 pages** (46 copies); `SecondaryButton`
-  is imported by **zero pages**. → create a `<Button>` primitive + adopt
-  `SecondaryButton`. Single biggest consistency win.
+- **⏳ C1 [HIGH] Button primitive under-adopted.** *(Correction: the audit
+  first read this as "no shared button primitive" — a `<Button>` primitive
+  **already exists** at `components/Button.tsx` with primary/secondary/danger/
+  ghost variants + sm/md sizes + loading/fullWidth. It was just adopted by
+  only **3 files**; the scan matched on a CSS class and missed the
+  component.)* The real gap: `btnPrimary`/`btnSecondary` `CSSProperties`
+  objects are still hand-rolled in **29 files** (~150 call sites). `Button`'s
+  `secondary` variant already matches `btnSecondary` exactly, so adoption is
+  a faithful swap. **Done:** `Button` given a test (was untested) + enhanced
+  to forward native props (`title` etc.) so it's a true drop-in; documented
+  in the README; **SkillsPage** migrated as the reference. **Remaining:** the
+  other 28 files — a batched worktree-agent sweep like the DataTable series.
 - **☐ C2 [HIGH] Hand-rolled `Card`.** surface + border + radius + shadow
   repeated inline across ~20 pages; drives the padding **16-vs-20** drift.
   → adopt `<Card>`.

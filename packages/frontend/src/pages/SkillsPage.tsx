@@ -4,6 +4,7 @@ import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import PageHeader from '../components/PageHeader';
+import Button from '../components/Button';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -65,14 +66,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 const CATEGORY_BADGES: Record<string, { bg: string; color: string }> = {
   DATA_QUALITY:  { bg: '#d1fae5', color: '#065f46' },
@@ -307,18 +300,14 @@ export default function SkillsPage() {
         subtitle="Define and manage the skills your data governance team and AI agents need."
         actions={
           <>
-            <button
-              style={{
-                ...btnSecondary,
-                opacity: skills.length > 0 || seeding ? 0.6 : 1,
-                cursor: skills.length > 0 || seeding ? 'not-allowed' : 'pointer',
-              }}
+            <Button
+              variant="secondary"
               disabled={skills.length > 0 || seeding}
               onClick={handleSeed}
               title={skills.length > 0 ? 'Skills already exist for this organization' : 'Seed standard DAMA-aligned skills'}
             >
               {seeding ? 'Seeding...' : 'Seed Standard Skills'}
-            </button>
+            </Button>
             {filtered.length > 0 && (
               <ExportMenu build={buildSkillsExport} />
             )}
@@ -351,12 +340,9 @@ export default function SkillsPage() {
         </select>
         {(filterCategory || searchQuery) && (
           <>
-            <button
-              onClick={() => { setFilterCategory(''); setSearchQuery(''); }}
-              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
-            >
+            <Button variant="secondary" size="sm" onClick={() => { setFilterCategory(''); setSearchQuery(''); }}>
               Clear Filters
-            </button>
+            </Button>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
               Showing {filtered.length} of {skills.length}
             </span>
@@ -396,14 +382,14 @@ export default function SkillsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
+            <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
+            <Button
+              variant="primary"
               disabled={!form.name.trim()}
               onClick={handleSave}
             >
               {editingId ? 'Save' : 'Add'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -454,8 +440,8 @@ export default function SkillsPage() {
             <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Delete this skill?</h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>This cannot be undone.</p>
             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-              <button style={btnSecondary} onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button style={{ ...btnPrimary, background: 'var(--color-error)' }} onClick={() => handleDelete(confirmDelete)}>Delete</button>
+              <Button variant="secondary" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+              <Button variant="danger" onClick={() => handleDelete(confirmDelete)}>Delete</Button>
             </div>
           </div>
         </div>
