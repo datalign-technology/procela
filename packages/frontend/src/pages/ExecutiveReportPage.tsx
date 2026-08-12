@@ -173,7 +173,7 @@ export default function ExecutiveReportPage() {
     return (
       <div>
         <PageHeader title="Executive Report" />
-        <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
+        <div style={{ color: 'var(--color-error)' }}>Error: {error}</div>
       </div>
     );
   }

@@ -461,7 +461,7 @@ export default function ScorecardPage() {
     return (
       <div>
         <PageHeader title="Governance Maturity Scorecard" />
-        <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
+        <div style={{ color: 'var(--color-error)' }}>Error: {error}</div>
       </div>
     );
   }

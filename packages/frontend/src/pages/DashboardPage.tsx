@@ -999,7 +999,7 @@ export default function DashboardPage() {
       <div>
         <PageHeader title="Dashboard">
         </PageHeader>
-        <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
+        <div style={{ color: 'var(--color-error)' }}>Error: {error}</div>
       </div>
     );
   }

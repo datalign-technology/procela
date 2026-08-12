@@ -213,7 +213,7 @@ export function ControlsPicker({ selected, options, onChange, disabled }: {
               <span key={id} title="Referenced control has been deleted" style={{ background: '#fef3c7', border: '1px solid #fbbf24', color: '#92400e', padding: '1px 6px', borderRadius: 3, fontSize: 10 }}>
                 Unknown control
                 {!disabled && (
-                  <button onClick={() => toggle(id)} style={{ background: 'transparent', border: 'none', color: '#92400e', cursor: 'pointer', marginLeft: 4, padding: 0 }}>×</button>
+                  <button onClick={() => toggle(id)} aria-label="Remove control" style={{ background: 'transparent', border: 'none', color: '#92400e', cursor: 'pointer', marginLeft: 4, padding: 0 }}><span aria-hidden="true">×</span></button>
                 )}
               </span>
             );
@@ -222,7 +222,7 @@ export function ControlsPicker({ selected, options, onChange, disabled }: {
             <span key={id} title={opt.name} style={{ background: '#e0e7ff', color: '#3730a3', padding: '1px 6px', borderRadius: 3, fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <strong>{opt.code}</strong> {opt.name}
               {!disabled && (
-                <button onClick={() => toggle(id)} style={{ background: 'transparent', border: 'none', color: '#3730a3', cursor: 'pointer', padding: 0 }}>×</button>
+                <button onClick={() => toggle(id)} aria-label={`Remove ${opt.name}`} style={{ background: 'transparent', border: 'none', color: '#3730a3', cursor: 'pointer', padding: 0 }}><span aria-hidden="true">×</span></button>
               )}
             </span>
           );

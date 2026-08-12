@@ -15,6 +15,7 @@ import { activateOnKey, activateOnKeyStop } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
@@ -991,23 +992,9 @@ export default function GovernanceGroupsPage() {
         </Card>
       )}
 
-      {/* Bulk Action Bar */}
-      {checkedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{checkedIds.size} selected</span>
-          <button onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Delete Selected
-          </button>
-          <button onClick={() => setCheckedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Clear Selection
-          </button>
-        </div>
-      )}
+      <BulkActionBar count={checkedIds.size} onClear={() => setCheckedIds(new Set())}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
+      </BulkActionBar>
 
       {/* Master-Detail Layout: Tree (left) + Detail (right). The left
           panel grows on wider screens so long group names (e.g.

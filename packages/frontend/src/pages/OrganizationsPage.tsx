@@ -10,6 +10,7 @@ import { INDUSTRIES } from '../types';
 import Combobox from '../components/Combobox';
 import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import type { CleanupActions } from '../components/OrgDeleteCleanupDialog';
 // Lazy: only renders when the user confirms an org delete.
 const OrgDeleteCleanupDialog = lazy(() => import('../components/OrgDeleteCleanupDialog'));
@@ -617,30 +618,12 @@ export default function OrganizationsPage() {
         </div>
       )}
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Clear Selection
-          </button>
-          <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 'auto' }}>
-            Note: deleting a parent removes its descendants too.
-          </span>
-        </div>
-      )}
+      <BulkActionBar count={selectedIds.size} onClear={() => setSelectedIds(new Set())}>
+        <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
+        <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+          Note: deleting a parent removes its descendants too.
+        </span>
+      </BulkActionBar>
 
       <ConfirmDialog
         open={confirmBulkDelete}
