@@ -5,6 +5,7 @@ import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -215,16 +216,6 @@ const inputStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 const btnIcon: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
@@ -901,8 +892,9 @@ export default function GovernanceGroupsPage() {
             </div>
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Get started quickly by creating the core governance groups in one click.</div>
           </div>
-          <button
-            style={{ ...btnPrimary, whiteSpace: 'nowrap', flexShrink: 0 }}
+          <Button
+            variant="primary"
+            style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
             onClick={async () => {
               if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
               try {
@@ -926,7 +918,7 @@ export default function GovernanceGroupsPage() {
             }}
           >
             Create Recommended Structure
-          </button>
+          </Button>
         </div>
       ) : (
         <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '6px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
@@ -984,10 +976,10 @@ export default function GovernanceGroupsPage() {
                 purpose. Stored values are retained on the record. */}
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() || !form.type ? 0.6 : 1, cursor: !form.name.trim() || !form.type ? 'not-allowed' : 'pointer' }} disabled={!form.name.trim() || !form.type} onClick={handleSave}>
+            <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
+            <Button variant="primary" disabled={!form.name.trim() || !form.type} onClick={handleSave}>
               {editingId ? 'Save Changes' : 'Add Group'}
-            </button>
+            </Button>
           </div>
         </Card>
       )}
@@ -1051,12 +1043,13 @@ export default function GovernanceGroupsPage() {
                       covers everything this side panel does and adds decisions,
                       policies, calendar, and a RACI snapshot. The side panel
                       stays for the quick scan use case. */}
-                  <button
-                    style={{ ...btnPrimary, fontSize: 12, padding: '4px 12px' }}
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={() => navigate(`/governance-groups/${selectedGroupDetail.id}`)}
                   >
                     Open full composition →
-                  </button>
+                  </Button>
                   <button style={{ ...btnIcon, fontSize: 12 }} onClick={() => { setSelectedGroupId(null); setSelectedGroupDetail(null); }}>Close</button>
                 </div>
               </div>
@@ -1242,13 +1235,14 @@ export default function GovernanceGroupsPage() {
                                             <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
                                           ))}
                                         </select>
-                                        <button
-                                          style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
+                                        <Button
+                                          variant="primary"
+                                          size="sm"
                                           disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
                                           onClick={() => handleAssignDamaRole('person')}
                                         >
                                           Assign
-                                        </button>
+                                        </Button>
                                       </>
                                     )}
                                     {canAddPerson && canAddAgent && (
@@ -1266,13 +1260,15 @@ export default function GovernanceGroupsPage() {
                                             <option key={a.id} value={a.id}>{a.name}</option>
                                           ))}
                                         </select>
-                                        <button
-                                          style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: '#7c3aed', opacity: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 'not-allowed' : 'pointer' }}
+                                        <Button
+                                          variant="primary"
+                                          size="sm"
+                                          style={{ background: '#7c3aed', borderColor: '#7c3aed' }}
                                           disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
                                           onClick={() => handleAssignDamaRole('agent')}
                                         >
                                           Assign
-                                        </button>
+                                        </Button>
                                       </>
                                     )}
                                     {isPeopleOnly && canAddPerson && (
@@ -1287,15 +1283,17 @@ export default function GovernanceGroupsPage() {
                                         >
                                           <option value="">Agent…</option>
                                         </select>
-                                        <button
+                                        <Button
                                           type="button"
+                                          variant="primary"
+                                          size="sm"
                                           disabled
                                           aria-disabled="true"
                                           title={PEOPLE_ONLY_REASON}
-                                          style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', opacity: 0.6, cursor: 'not-allowed' }}
+                                          style={{ background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}
                                         >
                                           Assign
-                                        </button>
+                                        </Button>
                                       </>
                                     )}
                                   </div>
@@ -1331,14 +1329,15 @@ export default function GovernanceGroupsPage() {
                         {groupRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
                       </select>
                     </div>
-                    <button style={btnSecondary} onClick={() => { setShowAddMember(false); setMemberPersonId(''); setMemberRole('MEMBER'); }}>Cancel</button>
-                    <button
-                      style={{ ...btnPrimary, opacity: !memberPersonId ? 0.6 : 1, cursor: !memberPersonId ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                    <Button variant="secondary" onClick={() => { setShowAddMember(false); setMemberPersonId(''); setMemberRole('MEMBER'); }}>Cancel</Button>
+                    <Button
+                      variant="primary"
+                      style={{ whiteSpace: 'nowrap' }}
                       disabled={!memberPersonId}
                       onClick={() => { handleAddMember(); setShowAddMember(false); }}
                     >
                       Add
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>

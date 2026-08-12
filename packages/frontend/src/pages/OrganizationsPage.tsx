@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import FieldStack from '../components/FieldStack';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
@@ -40,14 +41,6 @@ interface OrgFlat {
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
-};
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const btnIcon: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
@@ -98,7 +91,7 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
   return (
     <>
       <input ref={inputRef} type="file" accept={accept} onChange={handleChange} style={{ display: 'none' }} />
-      <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => inputRef.current?.click()}>{label || 'Browse File'}</button>
+      <Button variant="secondary" size="sm" onClick={() => inputRef.current?.click()}>{label || 'Browse File'}</Button>
     </>
   );
 }
@@ -522,8 +515,8 @@ export default function OrganizationsPage() {
             placeholder={'Name,Parent,Type,Industry,Description\nAcme Corp,,company,Manufacturing,Parent company'} />
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name, Parent, Type, Industry, Description</span>
-            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !importText.trim() ? 0.6 : 1, cursor: !importText.trim() ? 'not-allowed' : 'pointer' }} disabled={!importText.trim()} onClick={handleImport}>Import</button>
+            <Button variant="secondary" onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</Button>
+            <Button variant="primary" disabled={!importText.trim()} onClick={handleImport}>Import</Button>
           </div>
         </Card>
       )}
@@ -577,10 +570,10 @@ export default function OrganizationsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1, cursor: !orgForm.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
+            <Button variant="secondary" onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</Button>
+            <Button variant="primary" disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
               {editingOrgId ? 'Save' : 'Add'}
-            </button>
+            </Button>
           </div>
         </Card>
       )}
@@ -750,10 +743,10 @@ export default function OrganizationsPage() {
                   </div>
                 </FieldStack>
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-                  <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</button>
-                  <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1, cursor: !orgForm.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
+                  <Button variant="secondary" onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</Button>
+                  <Button variant="primary" disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
                     {editingOrgId ? 'Save' : 'Add'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : detailOrg ? (
