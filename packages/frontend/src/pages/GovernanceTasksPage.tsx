@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -90,14 +91,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 // ── Badge helpers ──
 
@@ -425,12 +418,13 @@ export default function GovernanceTasksPage() {
           </select>
           {(filterStatus || filterPriority || filterType || filterAssignee || searchQuery) && (
             <>
-              <button
-                style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterType(''); setFilterAssignee(''); setSearchQuery(''); }}
               >
                 Clear Filters
-              </button>
+              </Button>
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                 Showing {filtered.length} of {tasks.length}
               </span>
@@ -532,14 +526,14 @@ export default function GovernanceTasksPage() {
                 are retained. */}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: !form.title.trim() ? 0.6 : 1, cursor: !form.title.trim() ? 'not-allowed' : 'pointer' }}
+            <Button variant="secondary" onClick={closeForm}>Cancel</Button>
+            <Button
+              variant="primary"
               disabled={!form.title.trim()}
               onClick={handleSave}
             >
               {editingId ? 'Save Changes' : 'Add Task'}
-            </button>
+            </Button>
           </div>
         </div>
       )}

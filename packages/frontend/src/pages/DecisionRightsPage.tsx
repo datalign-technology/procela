@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import Button from '../components/Button';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -123,14 +124,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
 function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties {
@@ -529,13 +522,13 @@ export default function DecisionRightsPage() {
         actions={
           <>
             {canWrite && rows.length === 0 && (
-              <button
-                style={{ ...btnSecondary, opacity: seeding ? 0.6 : 1, cursor: seeding ? 'not-allowed' : 'pointer' }}
+              <Button
+                variant="secondary"
                 disabled={seeding}
                 onClick={handleSeed}
               >
                 {seeding ? 'Seeding...' : 'Seed Standard Decisions'}
-              </button>
+              </Button>
             )}
             <SavedViewsMenu
               pageKey="decision-rights"
@@ -687,14 +680,14 @@ export default function DecisionRightsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: !form.decision.trim() ? 0.6 : 1, cursor: !form.decision.trim() ? 'not-allowed' : 'pointer' }}
+            <Button variant="secondary" onClick={closeForm}>Cancel</Button>
+            <Button
+              variant="primary"
               disabled={!form.decision.trim()}
               onClick={handleSave}
             >
               {editingId ? 'Save Changes' : 'Add Decision Right'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
