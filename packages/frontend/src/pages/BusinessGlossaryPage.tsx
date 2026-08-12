@@ -681,7 +681,7 @@ export default function BusinessGlossaryPage() {
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !filterCategory ? 600 : 400,
-              background: !filterCategory ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              background: !filterCategory ? 'var(--color-primary-light)' : 'transparent',
               color: !filterCategory ? 'var(--color-primary)' : 'var(--color-text)',
             }}
             onMouseEnter={(e) => { if (filterCategory) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -701,7 +701,7 @@ export default function BusinessGlossaryPage() {
                 style={{
                   padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                   fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  background: isActive ? 'var(--color-primary-light)' : 'transparent',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}

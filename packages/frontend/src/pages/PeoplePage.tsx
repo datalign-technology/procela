@@ -220,7 +220,7 @@ function OrgSidebarTree({ nodes, selectedId, onSelect, peopleCounts }: {
             padding: '4px 6px', paddingLeft: 6 + depth * 14,
             fontSize: 12, borderRadius: 4, cursor: 'pointer',
             fontWeight: isSelected ? 600 : 400,
-            background: isSelected ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+            background: isSelected ? 'var(--color-primary-light)' : 'transparent',
             color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
           }}
           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -758,7 +758,7 @@ export default function PeoplePage() {
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !selectedOrgId ? 600 : 400,
-              background: !selectedOrgId ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              background: !selectedOrgId ? 'var(--color-primary-light)' : 'transparent',
               color: !selectedOrgId ? 'var(--color-primary)' : 'var(--color-text)',
             }}
             onMouseEnter={(e) => { if (selectedOrgId) e.currentTarget.style.background = 'var(--color-bg)'; }}

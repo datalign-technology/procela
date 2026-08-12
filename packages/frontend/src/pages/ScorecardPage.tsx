@@ -188,7 +188,7 @@ function MaturityChart({ snapshots }: ChartProps) {
       <polyline
         points={polylinePoints}
         fill="none"
-        stroke="var(--color-primary, #3b82f6)"
+        stroke="var(--color-primary)"
         strokeWidth={2.5}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -197,7 +197,7 @@ function MaturityChart({ snapshots }: ChartProps) {
       {/* Area fill under the line */}
       <polygon
         points={`${points[0].x},${scaleY(0)} ${polylinePoints} ${points[points.length - 1].x},${scaleY(0)}`}
-        fill="var(--color-primary, #3b82f6)"
+        fill="var(--color-primary)"
         opacity={0.08}
       />
 

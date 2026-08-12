@@ -110,7 +110,7 @@ export default function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
           background: 'var(--color-surface)',
           borderRadius: 'var(--radius-md)',
           maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          boxShadow: 'var(--shadow-xl)',
           padding: 24,
         }}
       >

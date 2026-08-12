@@ -92,7 +92,7 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
     }}>
       <div ref={cardRef} role="dialog" aria-modal="true" aria-label="Welcome — set up your workspace" style={{
         background: 'var(--color-surface)', borderRadius: 12, maxWidth: 560, width: '95vw',
-        boxShadow: '0 24px 80px rgba(0,0,0,0.25)', overflow: 'hidden',
+        boxShadow: 'var(--shadow-xl)', overflow: 'hidden',
       }}>
         {/* Progress bar — hidden in tour-only mode where there is just
             one screen and a progress bar would be misleading. */}

@@ -278,14 +278,14 @@ function MyDashboard() {
           to="/governance-work?tab=tasks"
           label="Open Tasks"
           value={s.openTasks || 0}
-          valueColor={(s.overdueTasks || 0) > 0 ? '#dc2626' : 'var(--color-text)'}
+          valueColor={(s.overdueTasks || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}
           sub={(s.overdueTasks || 0) > 0 ? { text: `${s.overdueTasks} overdue`, color: 'var(--color-error)' } : null}
         />
         <MyDashboardTile
           to="/governance-work?tab=issues"
           label="Open Issues"
           value={s.openIssues || 0}
-          valueColor={(s.criticalIssues || 0) > 0 ? '#dc2626' : 'var(--color-text)'}
+          valueColor={(s.criticalIssues || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}
           sub={(s.criticalIssues || 0) > 0 ? { text: `${s.criticalIssues} critical`, color: 'var(--color-error)' } : null}
         />
         <MyDashboardTile
@@ -347,7 +347,7 @@ function MyDashboard() {
               {(data.upcomingEvents || []).slice(0, 5).map((e, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12 }}>{e.name}</span>
-                  <span style={{ fontSize: 10, color: e.daysAway === 0 ? '#dc2626' : 'var(--color-text-muted)', fontWeight: e.daysAway === 0 ? 600 : 400 }}>
+                  <span style={{ fontSize: 10, color: e.daysAway === 0 ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: e.daysAway === 0 ? 600 : 400 }}>
                     {e.daysAway === 0 ? 'Today' : e.daysAway === 1 ? 'Tomorrow' : `In ${e.daysAway} days`}
                   </span>
                 </div>
@@ -394,7 +394,7 @@ function MyDashboard() {
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
                 <span style={priorityBadge(t.priority)}>{t.priority}</span>
                 <span style={{ flex: 1 }}>{t.title}</span>
-                {t.dueDate && <span style={{ fontSize: 10, color: t.isOverdue ? '#dc2626' : 'var(--color-text-muted)' }}>{t.isOverdue ? 'Overdue' : new Date(t.dueDate).toLocaleDateString()}</span>}
+                {t.dueDate && <span style={{ fontSize: 10, color: t.isOverdue ? 'var(--color-error)' : 'var(--color-text-muted)' }}>{t.isOverdue ? 'Overdue' : new Date(t.dueDate).toLocaleDateString()}</span>}
                 <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{t.status.replace(/_/g, ' ')}</span>
               </div>
             ))}
@@ -868,7 +868,7 @@ function ProgramMaturity() {
             <SectionLabel marginBottom={6}>Next steps to advance</SectionLabel>
             {recommendations.slice(0, 3).map((r, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 12 }}>
-                <span style={{ color: r.priority === 'HIGH' ? '#dc2626' : '#d97706', fontSize: 8 }}>●</span>
+                <span style={{ color: r.priority === 'HIGH' ? 'var(--color-error)' : 'var(--color-warning)', fontSize: 8 }}>●</span>
                 <span style={{ flex: 1 }}>{r.action}</span>
                 <Link to={r.link} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: 11, flexShrink: 0 }}>Go</Link>
               </div>

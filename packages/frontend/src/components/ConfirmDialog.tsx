@@ -114,7 +114,7 @@ export default function ConfirmDialog({
         style={{
           background: '#fff',
           borderRadius: '12px',
-          boxShadow: '0 4px 24px rgba(0, 0, 0, 0.15)',
+          boxShadow: 'var(--shadow-xl)',
           padding: '24px',
           maxWidth: '460px',
           width: '100%',

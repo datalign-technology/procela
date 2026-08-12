@@ -105,7 +105,7 @@ export default function Modal({
           width: `min(${width}px, 100%)`,
           maxHeight: '85vh',
           display: 'flex', flexDirection: 'column',
-          boxShadow: '0 20px 60px rgba(15, 23, 42, 0.35)',
+          boxShadow: 'var(--shadow-xl)',
           overflow: 'hidden',
         }}
       >

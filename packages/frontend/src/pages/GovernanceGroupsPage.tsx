@@ -310,7 +310,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
           padding: '6px 10px', paddingLeft: 10 + depth * 18,
           borderBottom: '1px solid var(--color-border)',
           borderLeft: `3px solid ${typeColor.color}`,
-          background: isSelected ? 'var(--color-primary-light, #f0f7ff)' : undefined,
+          background: isSelected ? 'var(--color-primary-light)' : undefined,
           cursor: 'pointer', transition: 'background 0.1s',
           minWidth: 0,
         }}

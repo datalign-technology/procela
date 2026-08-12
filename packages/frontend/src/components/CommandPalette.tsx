@@ -241,7 +241,7 @@ export default function CommandPalette({ open, onClose }: Props) {
           background: 'var(--color-surface)',
           width: 'min(640px, 92vw)',
           borderRadius: 'var(--radius-md)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+          boxShadow: 'var(--shadow-xl)',
           overflow: 'hidden',
           display: 'flex', flexDirection: 'column',
           maxHeight: '70vh',

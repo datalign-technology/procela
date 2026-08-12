@@ -848,7 +848,7 @@ function SidebarItem({ label, count, active, onClick, accent, indent }: {
         padding: `5px 8px 5px ${indent ? 18 : 8}px`,
         fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
         fontWeight: active ? 600 : 400,
-        background: active ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+        background: active ? 'var(--color-primary-light)' : 'transparent',
         color: active ? 'var(--color-primary)' : 'var(--color-text)',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         borderLeft: accent ? `3px solid ${accent}` : '3px solid transparent',

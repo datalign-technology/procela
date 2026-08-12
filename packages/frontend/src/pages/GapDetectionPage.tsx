@@ -259,8 +259,8 @@ export default function GapDetectionPage() {
           scrolls to whatever the first non-zero section is. */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
         <SummaryCard label="Total Gaps" count={summary.totalGaps} color="#64748b" onClick={() => scrollToFirstGap(data, null)} />
-        <SummaryCard label="Critical" count={criticalCount} color="#dc2626" onClick={() => scrollToFirstGap(data, 'critical')} />
-        <SummaryCard label="Warning" count={warningCount} color="#d97706" onClick={() => scrollToFirstGap(data, 'warning')} />
+        <SummaryCard label="Critical" count={criticalCount} color="var(--color-error)" onClick={() => scrollToFirstGap(data, 'critical')} />
+        <SummaryCard label="Warning" count={warningCount} color="var(--color-warning)" onClick={() => scrollToFirstGap(data, 'warning')} />
         <SummaryCard label="Informational" count={infoCount} color="#2563eb" onClick={() => scrollToFirstGap(data, 'info')} />
       </div>
 
@@ -378,7 +378,7 @@ function SummaryCard({ label, count, color, onClick }: {
         e.currentTarget.style.transform = '';
       }}
     >
-      <div style={{ fontSize: 22, fontWeight: 700, color: count > 0 ? color : '#16a34a' }}>{count}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: count > 0 ? color : 'var(--color-success)' }}>{count}</div>
       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>{label}</div>
     </button>
   );

@@ -501,7 +501,7 @@ export default function SopsPage() {
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Applicable Roles</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {DAMA_ROLES.map((r) => (
-                  <label key={r} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: form.applicableRoles.includes(r) ? 'var(--color-primary-light, #dbeafe)' : 'var(--color-surface)', cursor: 'pointer' }}>
+                  <label key={r} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: form.applicableRoles.includes(r) ? 'var(--color-primary-light)' : 'var(--color-surface)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={form.applicableRoles.includes(r)} onChange={() => toggleRole(r)} style={{ cursor: 'pointer' }} />
                     {ROLE_LABELS[r]}
                   </label>

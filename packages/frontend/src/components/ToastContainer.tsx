@@ -1,8 +1,8 @@
 import { useToastStore } from '@/stores/toastStore';
 
 const borderColors: Record<string, string> = {
-  success: '#16a34a',
-  error: '#dc2626',
+  success: 'var(--color-success)',
+  error: 'var(--color-error)',
   info: '#2563eb',
 };
 

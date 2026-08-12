@@ -273,7 +273,7 @@ export default function OrgDeleteCleanupDialog({
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#fff', borderRadius: 12,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+          boxShadow: 'var(--shadow-xl)',
           width: '100%', maxWidth: 720, maxHeight: '90vh',
           display: 'flex', flexDirection: 'column',
         }}

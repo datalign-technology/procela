@@ -351,7 +351,7 @@ export function OrgPickerModal({
         style={{
           background: 'var(--color-surface)',
           borderRadius: 10,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          boxShadow: 'var(--shadow-xl)',
           padding: 20,
           maxWidth: 520, width: '92vw',
           display: 'flex', flexDirection: 'column',

@@ -985,7 +985,7 @@ export default function SystemsPage() {
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !filterType ? 600 : 400,
-              background: !filterType ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              background: !filterType ? 'var(--color-primary-light)' : 'transparent',
               color: !filterType ? 'var(--color-primary)' : 'var(--color-text)',
             }}
             onMouseEnter={(e) => { if (filterType) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -1004,7 +1004,7 @@ export default function SystemsPage() {
                 style={{
                   padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                   fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  background: isActive ? 'var(--color-primary-light)' : 'transparent',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}
@@ -1022,7 +1022,7 @@ export default function SystemsPage() {
               style={{
                 padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                 fontWeight: filterType === '__none__' ? 600 : 400,
-                background: filterType === '__none__' ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                background: filterType === '__none__' ? 'var(--color-primary-light)' : 'transparent',
                 color: filterType === '__none__' ? 'var(--color-primary)' : 'var(--color-text-muted)',
                 fontStyle: 'italic',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
