@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
@@ -1067,9 +1068,9 @@ export default function ConnectionsPage() {
 
           {/* Type-specific fields */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, padding: 16, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-            <div style={{ gridColumn: '1 / -1', fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+            <SectionLabel marginBottom={4} style={{ gridColumn: '1 / -1' }}>
               {TYPE_LABELS[form.connectionType] || form.connectionType} Configuration
-            </div>
+            </SectionLabel>
             {renderTypeFields()}
           </div>
 

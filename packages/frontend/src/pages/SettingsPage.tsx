@@ -8,6 +8,7 @@ import { errorMessage } from '../lib/errorToast';
 import Page from '../components/Page';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
@@ -409,7 +410,7 @@ export default function SettingsPage() {
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current mode</span>
+            <SectionLabel marginBottom={0}>Current mode</SectionLabel>
             <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 6, overflow: 'hidden' }}>
               {(['simple', 'review', 'advanced'] as const).map((mode) => (
                 <button
@@ -453,7 +454,7 @@ export default function SettingsPage() {
             </ul>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sidebar entry</span>
+            <SectionLabel marginBottom={0}>Sidebar entry</SectionLabel>
             <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 6, overflow: 'hidden' }}>
               {GET_STARTED_OPTIONS.map((opt, i) => (
                 <button
@@ -588,7 +589,7 @@ export default function SettingsPage() {
           {/* Preview panel — a scaled-down mock of the sign-in card
               rendered from the same fields the login page reads. */}
           <div style={{ width: 260, padding: 14, border: '1px solid var(--color-border)', borderRadius: 8, background: 'var(--color-bg)' }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Preview</div>
+            <SectionLabel>Preview</SectionLabel>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 24 }}>{branding.brandGlyph || '⬛'}</span>
               <span style={{ fontSize: 18, fontWeight: 700 }}>{branding.brandDisplayName || 'Procela'}</span>
@@ -1538,9 +1539,9 @@ function MfaPanel() {
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <img src={enrolling.qrDataUrl} alt="MFA QR code" width={180} height={180} style={{ border: '1px solid var(--color-border)', borderRadius: 4, background: '#fff' }} />
           <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+            <SectionLabel marginBottom={4}>
               Can't scan? Type this:
-            </div>
+            </SectionLabel>
             <div style={{
               fontFamily: 'var(--font-mono, monospace)', fontSize: 13,
               background: 'var(--color-surface)', border: '1px solid var(--color-border)',
@@ -1624,9 +1625,9 @@ function MfaPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Authenticator app (TOTP) */}
       <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+        <SectionLabel>
           Authenticator app
-        </div>
+        </SectionLabel>
         {renderTotp()}
 
         {/* Backup-codes running-low nudge. Shown when enrolled and
@@ -1690,9 +1691,9 @@ function MfaPanel() {
           whether TOTP is set up — they're independent second-factor
           methods, either one (or both) satisfies the login gate. */}
       <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+        <SectionLabel>
           Security keys
-        </div>
+        </SectionLabel>
         <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 10 }}>
           Hardware keys (YubiKey, Titan) or platform authenticators (Touch ID,
           Windows Hello, Android fingerprint). Faster than typing a code; users

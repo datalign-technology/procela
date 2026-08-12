@@ -5,6 +5,7 @@ import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
@@ -408,7 +409,7 @@ function ConnectPickerModal({
 
         {alreadyOnThis.length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Already on this system</div>
+            <SectionLabel marginBottom={4}>Already on this system</SectionLabel>
             <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
               {alreadyOnThis.map((c) => renderConn(c, false))}
             </div>
@@ -417,7 +418,7 @@ function ConnectPickerModal({
 
         {unassigned.length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Unassigned ({unassigned.length})</div>
+            <SectionLabel marginBottom={4}>Unassigned ({unassigned.length})</SectionLabel>
             <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
               {unassigned.map((c) => renderConn(c, true))}
             </div>
@@ -426,7 +427,7 @@ function ConnectPickerModal({
 
         {onOtherSystems.length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Already on other systems ({onOtherSystems.length})</div>
+            <SectionLabel marginBottom={4}>Already on other systems ({onOtherSystems.length})</SectionLabel>
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Linking adds this system without unlinking it from the others.</div>
             <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
               {onOtherSystems.map((c) => renderConn(c, true))}

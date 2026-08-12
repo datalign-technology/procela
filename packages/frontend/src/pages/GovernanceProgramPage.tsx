@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/errorToast';
 import { clickable, activateOnKeyStop } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
@@ -229,14 +230,14 @@ function PhaseCard({
           {isCompleted ? '✓' : phaseNum}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <SectionLabel marginBottom={0} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>Phase {phaseNum}</span>
             {isCurrent && !isCompleted && (
               <span style={{ background: color, color: '#fff', fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 999, letterSpacing: '0.04em' }}>
                 YOU ARE HERE
               </span>
             )}
-          </div>
+          </SectionLabel>
           <div style={{ fontSize: isCurrent && !isCompleted ? 16 : 14, fontWeight: 700, color: 'var(--color-text)' }}>
             {phase.name || PHASE_TITLES[phaseNum]}
           </div>
@@ -668,9 +669,9 @@ export default function GovernanceProgramPage() {
         meta={status ? (
           <div style={{ maxWidth: 600, width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <SectionLabel marginBottom={0}>
                 Overall Progress
-              </span>
+              </SectionLabel>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-primary)' }}>
                 {status.overallProgress}%
               </span>

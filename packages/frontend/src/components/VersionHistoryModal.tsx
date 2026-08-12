@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import Modal from './Modal';
+import SectionLabel from './SectionLabel';
 import { getStatusColor } from '@/lib/statusBadge';
 
 interface ProcessNodeSnapshot {
@@ -70,23 +71,23 @@ export default function VersionHistoryModal({ nodeId, onClose }: VersionHistoryM
         {viewing ? (
             <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: 16 }}>
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</div>
+                <SectionLabel marginBottom={0}>Name</SectionLabel>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{viewing.snapshot.name}</div>
               </div>
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</div>
+                <SectionLabel marginBottom={0}>Description</SectionLabel>
                 <div style={{ fontSize: 13 }}>{viewing.snapshot.description || '(none)'}</div>
               </div>
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status at this version</div>
+                <SectionLabel marginBottom={0}>Status at this version</SectionLabel>
                 <span style={statusBadge(viewing.status)}>{viewing.status}</span>
               </div>
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Level</div>
+                <SectionLabel marginBottom={0}>Level</SectionLabel>
                 <div style={{ fontSize: 13 }}>{viewing.snapshot.level}</div>
               </div>
               <div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Note</div>
+                <SectionLabel marginBottom={0}>Note</SectionLabel>
                 <div style={{ fontSize: 13 }}>{viewing.note}</div>
               </div>
             </div>

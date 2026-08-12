@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
+import SectionLabel from './SectionLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // WhereUsed — a consistent cross-layer detail panel.
@@ -78,9 +79,9 @@ export default function WhereUsed({
           <div key={g.title}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <SectionLabel marginBottom={0}>
                   {g.title}
-                </div>
+                </SectionLabel>
                 {g.hint && (
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>
                     {g.hint}

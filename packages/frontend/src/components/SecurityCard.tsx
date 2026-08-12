@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { errorToast, successToast } from '../lib/errorToast';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from './ConfirmDialog';
+import SectionLabel from './SectionLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SecurityCard — admin-only panel for credential lifecycle actions on
@@ -43,15 +44,6 @@ const cardStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-md)',
   padding: 16,
   marginBottom: 16,
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  marginBottom: 10,
 };
 
 export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
@@ -130,7 +122,7 @@ export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
 
   return (
     <div style={cardStyle} data-testid="security-card">
-      <div style={sectionTitleStyle}>Security</div>
+      <SectionLabel marginBottom={10}>Security</SectionLabel>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {/* Account status row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

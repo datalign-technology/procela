@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import SectionLabel from './SectionLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SkillPicker — reusable multi-select skill tagging component.
@@ -189,9 +190,9 @@ export default function SkillPicker({
   return (
     <div>
       {label && (
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        <SectionLabel marginBottom={6}>
           {label} ({selectedSkillIds.length} selected)
-        </div>
+        </SectionLabel>
       )}
       <div style={{
         maxHeight,

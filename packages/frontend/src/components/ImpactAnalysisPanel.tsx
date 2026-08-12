@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
+import SectionLabel from './SectionLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ImpactAnalysisPanel — "if this asset changes, what breaks and who
@@ -118,11 +119,7 @@ export default function ImpactAnalysisPanel({ assetId, onNavigateToActivity, onN
         marginBottom: 10, gap: 12,
       }}>
         <div>
-          <div style={{
-            fontSize: 11, fontWeight: 600,
-            color: 'var(--color-text-muted)',
-            textTransform: 'uppercase', letterSpacing: '0.05em',
-          }}>Impact analysis</div>
+          <SectionLabel marginBottom={0}>Impact analysis</SectionLabel>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 3 }}>
             If this asset changes, retires, or fails — this is what breaks and who to tell.
           </div>
@@ -157,14 +154,9 @@ export default function ImpactAnalysisPanel({ assetId, onNavigateToActivity, onN
           {/* Affected activities */}
           {activities.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{
-                fontSize: 10, fontWeight: 600,
-                color: 'var(--color-text-muted)',
-                textTransform: 'uppercase', letterSpacing: '0.04em',
-                marginBottom: 6,
-              }}>
+              <SectionLabel marginBottom={6}>
                 Affected activities ({activities.length})
-              </div>
+              </SectionLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {activities.map((a) => (
                   <div key={a.id} style={{
@@ -213,14 +205,9 @@ export default function ImpactAnalysisPanel({ assetId, onNavigateToActivity, onN
           {/* People to notify */}
           {people.length > 0 && (
             <div>
-              <div style={{
-                fontSize: 10, fontWeight: 600,
-                color: 'var(--color-text-muted)',
-                textTransform: 'uppercase', letterSpacing: '0.04em',
-                marginBottom: 6,
-              }}>
+              <SectionLabel marginBottom={6}>
                 Notify ({people.length})
-              </div>
+              </SectionLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {people.map((p) => (
                   <div key={p.id} style={{

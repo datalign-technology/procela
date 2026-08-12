@@ -6,6 +6,7 @@ import { useToastStore } from '../stores/toastStore';
 import { useOrgContext } from '../stores/orgContext';
 import WizardProgress from './WizardProgress';
 import Button from './Button';
+import SectionLabel from './SectionLabel';
 
 interface SyncConnectionWizardProps {
   open: boolean;
@@ -581,7 +582,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
         {step === 4 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Connection</div>
+              <SectionLabel marginBottom={6}>Connection</SectionLabel>
               <div style={{ fontSize: 13, fontWeight: 500 }}>{name}</div>
               <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
                 {connectionMode === 'saved'
@@ -597,12 +598,12 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
               </div>
             </div>
             <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Target</div>
+              <SectionLabel marginBottom={6}>Target</SectionLabel>
               <div style={{ fontSize: 13 }}>{ENTITY_LABELS[targetEntity]} — match on <strong>{matchKey}</strong></div>
               <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>Organization: {orgList.find((o) => o.id === targetOrgId)?.name || targetOrgId}</div>
             </div>
             <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Field Mapping</div>
+              <SectionLabel marginBottom={6}>Field Mapping</SectionLabel>
               {Object.entries(fieldMapping).filter(([, v]) => v.trim()).map(([target, source]) => (
                 <div key={target} style={{ fontSize: 12, display: 'flex', gap: 6, marginBottom: 2 }}>
                   <span style={{ color: 'var(--color-text-muted)', minWidth: 100 }}>{target}</span>
@@ -612,7 +613,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
               ))}
             </div>
             <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Schedule</div>
+              <SectionLabel marginBottom={6}>Schedule</SectionLabel>
               <div style={{ fontSize: 12 }}>
                 {scheduleEnabled
                   ? `Polling ${INTERVALS.find((i) => i.value === intervalMinutes)?.label.toLowerCase() || `every ${intervalMinutes} min`}`

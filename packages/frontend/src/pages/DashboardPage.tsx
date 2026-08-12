@@ -7,6 +7,7 @@ import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
@@ -360,7 +361,7 @@ function MyDashboard() {
       {/* My Domains */}
       {(data.myDomains || []).length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>My Domains</div>
+          <SectionLabel>My Domains</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
             {(data.myDomains || []).map((d) => {
               const healthPct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
@@ -385,7 +386,7 @@ function MyDashboard() {
       {(data.myTasks || []).length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>My Tasks</span>
+            <SectionLabel marginBottom={0}>My Tasks</SectionLabel>
             <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks?.length ?? 0}</Link>
           </div>
           <Card padding={0} style={{ overflow: 'hidden' }}>
@@ -405,7 +406,7 @@ function MyDashboard() {
       {(data.myIssues || []).length > 0 && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>My Issues</span>
+            <SectionLabel marginBottom={0}>My Issues</SectionLabel>
             <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues?.length ?? 0}</Link>
           </div>
           <Card padding={0} style={{ overflow: 'hidden' }}>
@@ -864,7 +865,7 @@ function ProgramMaturity() {
         </div>
         {recommendations.length > 0 && (
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Next steps to advance</div>
+            <SectionLabel marginBottom={6}>Next steps to advance</SectionLabel>
             {recommendations.slice(0, 3).map((r, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 12 }}>
                 <span style={{ color: r.priority === 'HIGH' ? '#dc2626' : '#d97706', fontSize: 8 }}>●</span>

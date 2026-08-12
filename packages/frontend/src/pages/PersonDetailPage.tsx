@@ -12,6 +12,7 @@ import OrgPicker from '../components/OrgPicker';
 import SkillPicker from '../components/SkillPicker';
 import OrgRolePill from '../components/OrgRolePill';
 import SecurityCard from '../components/SecurityCard';
+import SectionLabel from '../components/SectionLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PersonDetailPage — the "Person 360" view promoted from a modal to its
@@ -74,15 +75,6 @@ const cardStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-md)',
   padding: 16,
   marginBottom: 16,
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  marginBottom: 10,
 };
 
 interface FlatOrg { id: string; parentId: string | null; name: string; type: string; }
@@ -328,7 +320,7 @@ export default function PersonDetailPage() {
 
       {/* Identity summary */}
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Identity</div>
+        <SectionLabel marginBottom={10}>Identity</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2 }}>Application role</div>
@@ -366,7 +358,7 @@ export default function PersonDetailPage() {
           that subtree first, with a one-click expand to all orgs. */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={sectionTitleStyle}>Assigned organizations ({(data.person.orgIds || []).length})</div>
+          <SectionLabel marginBottom={10}>Assigned organizations ({(data.person.orgIds || []).length})</SectionLabel>
           {busy && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Saving\u2026</span>}
         </div>
         {/* Selected chips — compact summary above the picker. Each
@@ -464,7 +456,7 @@ export default function PersonDetailPage() {
       {/* Governance roles */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={sectionTitleStyle}>Governance roles ({data.damaRoles.length})</div>
+          <SectionLabel marginBottom={10}>Governance roles ({data.damaRoles.length})</SectionLabel>
         </div>
         {data.damaRoles.length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No governance roles assigned.</div>
@@ -511,7 +503,7 @@ export default function PersonDetailPage() {
 
       {/* Governance groups */}
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Governance groups</div>
+        <SectionLabel marginBottom={10}>Governance groups</SectionLabel>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {data.allGroups.map((group) => {
             const membership = data.governanceGroups.find((g) => g.groupId === group.id);
@@ -560,7 +552,7 @@ export default function PersonDetailPage() {
       {/* Related processes */}
       {data.ownedProcessNodes.length > 0 && (
         <div style={cardStyle}>
-          <div style={sectionTitleStyle}>Owned process nodes ({data.ownedProcessNodes.length})</div>
+          <SectionLabel marginBottom={10}>Owned process nodes ({data.ownedProcessNodes.length})</SectionLabel>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {data.ownedProcessNodes.map((pn) => (
               <li key={pn.id} style={{ fontSize: 13, padding: '4px 10px', background: 'var(--color-bg)', borderRadius: 6 }}>
@@ -628,9 +620,9 @@ function DomainResponsibilities({ allDomains, personId, busy, onToggleOwner, onT
 
   return (
     <div style={cardStyle}>
-      <div style={sectionTitleStyle}>
+      <SectionLabel marginBottom={10}>
         Data domain responsibilities{assigned.length > 0 ? ` (${assigned.length})` : ''}
-      </div>
+      </SectionLabel>
 
       {allDomains.length === 0 && (
         <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data domains defined in the system.</div>

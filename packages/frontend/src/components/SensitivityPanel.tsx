@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiClient } from '../api/client';
 import { successToast, errorToast } from '../lib/errorToast';
+import SectionLabel from './SectionLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SensitivityPanel — the Suggest & Review flow for AI-generated data
@@ -126,9 +127,9 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <SectionLabel marginBottom={0}>
             Sensitivity
-          </div>
+          </SectionLabel>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 3 }}>
             {committed.length === 0 && !suggestions
               ? 'Not classified. Ask the AI to suggest tags, then Accept the ones that fit.'
@@ -191,9 +192,9 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <SectionLabel marginBottom={0}>
               Suggestions from the classifier
-            </div>
+            </SectionLabel>
             {suggestions.map((s) => {
               const c = TAG_PALETTE[s.tag];
               const conf = CONFIDENCE_STYLES[s.confidence];
