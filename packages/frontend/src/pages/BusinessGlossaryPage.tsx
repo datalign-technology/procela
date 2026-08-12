@@ -722,7 +722,7 @@ export default function BusinessGlossaryPage() {
             <div style={{ position: 'relative', width: 200 }}>
               <input
                 type="text"
-                placeholder="Search terms..."
+                aria-label="Search terms" placeholder="Search terms..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Escape' && searchQuery) setSearchQuery(''); }}

@@ -23,7 +23,7 @@ export function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, pla
   }
   return (
     <div>
-      <input autoFocus style={{ ...inputStyle, fontSize, fontWeight, width: '100%' }} value={draft}
+      <input autoFocus aria-label="Value" style={{ ...inputStyle, fontSize, fontWeight, width: '100%' }} value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => { if (draft.trim() && draft !== value) onSave(draft.trim()); setEditing(false); }}
         onKeyDown={(e) => {
@@ -53,7 +53,7 @@ export function DocField({ label, value, onSave, disabled, placeholder }: {
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
       {editing && !disabled ? (
         <div style={{ flex: 1 }}>
-          <input autoFocus style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%' }}
+          <input autoFocus aria-label={label} style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%' }}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={doSave}
@@ -90,6 +90,7 @@ export function DocDropdown({ label, value, options, onSave, disabled, placehold
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
       <select
+        aria-label={label}
         value={value}
         onChange={(e) => { onSave(e.target.value); setSaved(true); setTimeout(() => setSaved(false), 1500); }}
         disabled={disabled}
@@ -131,6 +132,7 @@ export function TierField({ value, onSave, disabled }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Criticality:</span>
       <select
+        aria-label="Criticality"
         value={value}
         onChange={(e) => { onSave(e.target.value); setSaved(true); setTimeout(() => setSaved(false), 1500); }}
         disabled={disabled}
@@ -167,6 +169,7 @@ export function RtoField({ value, onSave, disabled }: {
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>RTO (hours):</span>
       <input
         type="number"
+        aria-label="RTO (hours)"
         min={0}
         step={0.5}
         value={draft}
@@ -232,6 +235,7 @@ export function ControlsPicker({ selected, options, onChange, disabled }: {
         {!disabled && (
           available.length > 0 ? (
             <select
+              aria-label="Add control"
               value={adding}
               onChange={(e) => add(e.target.value)}
               style={{ fontSize: 10, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
@@ -348,6 +352,7 @@ export function DocRoleField({ value, onSave, disabled, domain }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, flexWrap: 'wrap' }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Responsible Role:</span>
       <select
+        aria-label="Responsible Role"
         value={value}
         onChange={(e) => onSave(e.target.value)}
         disabled={disabled}
@@ -418,6 +423,7 @@ export function DocMultiSelect({ label, selected, options, onSave, disabled, pla
         ))}
         {!disabled && available.length > 0 && (
           <select
+            aria-label={`Add ${label}`}
             value=""
             onChange={(e) => { if (e.target.value) onSave([...selected, e.target.value]); }}
             style={{
@@ -475,6 +481,7 @@ export function DocSystemsField({ selected, options, onSave, disabled }: {
         })}
         {!disabled && available.length > 0 && (
           <select
+            aria-label="Add system"
             value=""
             onChange={(e) => { if (e.target.value) onSave([...selected, e.target.value]); }}
             style={{

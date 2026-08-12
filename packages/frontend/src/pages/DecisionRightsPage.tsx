@@ -552,7 +552,7 @@ export default function DecisionRightsPage() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             type="search"
-            placeholder="Search decisions, decider, escalation..."
+            aria-label="Search decisions" placeholder="Search decisions, decider, escalation..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{

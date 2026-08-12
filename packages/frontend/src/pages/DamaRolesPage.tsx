@@ -486,7 +486,7 @@ export default function DamaRolesPage() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             type="search"
-            placeholder="Search by person, organization, or role..."
+            aria-label="Search roles" placeholder="Search by person, organization, or role..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
