@@ -837,6 +837,7 @@ export default function PeoplePage() {
                   style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
                 />
                 <select
+                  aria-label="Filter by app role"
                   style={{ ...inputStyle, width: 'auto', minWidth: 130, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
                   value={filterAppRole}
                   onChange={(e) => setFilterAppRole(e.target.value)}
@@ -847,6 +848,7 @@ export default function PeoplePage() {
                   ))}
                 </select>
                 <select
+                  aria-label="Filter by governance role"
                   style={{ ...inputStyle, width: 'auto', minWidth: 160, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
                   value={filterGovRole}
                   onChange={(e) => setFilterGovRole(e.target.value)}
@@ -985,15 +987,15 @@ export default function PeoplePage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-                      <input autoFocus style={inputStyle} value={personForm.name} onChange={(e) => setPersonForm({ ...personForm, name: e.target.value })} placeholder="Full name" />
+                      <input autoFocus aria-label="Name" style={inputStyle} value={personForm.name} onChange={(e) => setPersonForm({ ...personForm, name: e.target.value })} placeholder="Full name" />
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Email</label>
-                      <input style={inputStyle} value={personForm.email} onChange={(e) => setPersonForm({ ...personForm, email: e.target.value })} placeholder="email@example.com" />
+                      <input aria-label="Email" style={inputStyle} value={personForm.email} onChange={(e) => setPersonForm({ ...personForm, email: e.target.value })} placeholder="email@example.com" />
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title</label>
-                      <input style={inputStyle} value={personForm.title} onChange={(e) => setPersonForm({ ...personForm, title: e.target.value })} placeholder="e.g. Director of Operations" />
+                      <input aria-label="Title" style={inputStyle} value={personForm.title} onChange={(e) => setPersonForm({ ...personForm, title: e.target.value })} placeholder="e.g. Director of Operations" />
                     </div>
                     {/* The Add form keeps an Assigned Organization picker so
                         the new person lands in at least one org and is
@@ -1016,7 +1018,7 @@ export default function PeoplePage() {
                         </div>
                         <div>
                           <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Application Role</label>
-                          <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
+                          <select aria-label="Application Role" style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
                             {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
                           </select>
                           <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 2 }}>Controls platform permissions. Governance roles are assigned separately.</div>
@@ -1055,6 +1057,7 @@ export default function PeoplePage() {
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
                     <label style={{ fontSize: 11, fontWeight: 500 }}>Default org *</label>
                     <select
+                      aria-label="Default org"
                       style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any, fontSize: 12 }}
                       value={peopleImportOrgId}
                       onChange={(e) => setPeopleImportOrgId(e.target.value)}
@@ -1064,7 +1067,7 @@ export default function PeoplePage() {
                     </select>
                     <FilePicker accept=".csv,.json,.txt" onFileRead={(content, fn) => { setPeopleImportText(content); if (fn.endsWith('.json')) setPeopleImportFormat('json'); else setPeopleImportFormat('csv'); }} />
                   </div>
-                  <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={peopleImportText} onChange={(e) => setPeopleImportText(e.target.value)}
+                  <textarea aria-label="People to import (CSV or JSON)" style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={peopleImportText} onChange={(e) => setPeopleImportText(e.target.value)}
                     placeholder={'Name,Email,Role,Title,Org\nJane Smith,jane@co.com,EDITOR,Director of Operations,Tidewater Utilities > Tidewater Electric'} />
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
                     <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>Columns: Name (required), Email, Role, Title, Org. Rows with an Org column land in that org (full path "Parent &gt; Child" or unique name); rows without it use the Default org above.</span>
@@ -1121,6 +1124,7 @@ export default function PeoplePage() {
                           <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}></td>
                           <td style={tdStyle}>
                             <input
+                              aria-label="New person name"
                               value={quickName}
                               onChange={(e) => setQuickName(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAdd(); }}
@@ -1132,6 +1136,7 @@ export default function PeoplePage() {
                           <td style={tdStyle}></td>
                           <td style={tdStyle}>
                             <input
+                              aria-label="New person title"
                               value={quickTitle}
                               onChange={(e) => setQuickTitle(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAdd(); }}
