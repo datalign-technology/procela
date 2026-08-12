@@ -13,6 +13,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
 import PersonPicker from '../components/PersonPicker';
+import { renderNavIcon } from '../components/navIcons';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
 import { getRoleReference, RACI_COLOR, RACI_LABEL, Raci } from '../lib/roleDefinitions';
 
@@ -557,9 +558,10 @@ export default function GovernanceGroupDetailPage() {
                     <Link to={detailPath} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       {isAgent && (
                         <span title="AI Agent" style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 3,
                           fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
                           padding: '1px 6px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6',
-                        }}>⚙ Agent</span>
+                        }}>{renderNavIcon('/agents', { size: 11, strokeWidth: 2 })}Agent</span>
                       )}
                       {displayName}
                     </Link>
@@ -627,7 +629,9 @@ export default function GovernanceGroupDetailPage() {
                     border: 'none', borderRight: t === 'person' ? '1px solid var(--color-border)' : 'none',
                   }}
                 >
-                  {t === 'agent' ? '⚙ Agent' : 'Person'}
+                  {t === 'agent'
+                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{renderNavIcon('/agents', { size: 12, strokeWidth: 2 })}Agent</span>
+                    : 'Person'}
                 </button>
               );
             })}
