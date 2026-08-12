@@ -11,6 +11,7 @@ import StatusBadge from '../components/StatusBadge';
 import Page from '../components/Page';
 import WizardProgress from '../components/WizardProgress';
 import { useAuthStore } from '../stores/authStore';
+import Button from '../components/Button';
 
 // Empirical guess for a full 5×5×6 hierarchy's serialised JSON
 // length. Used to convert the running char count that the backend
@@ -51,16 +52,6 @@ interface GeneratedTemplate { valueStreams: TemplateValueStream[]; }
 const card: React.CSSProperties = {
   background: 'var(--color-surface)', border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)',
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: '10px 24px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '10px 24px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer',
 };
 
 // ── Component ──
@@ -299,7 +290,7 @@ export default function ValueStreamWizard() {
       <PageHeader
         title={activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}
         subtitle="AI generates a complete process hierarchy (Value Streams → Processes → Activities) based on your industry."
-        actions={<button style={btnSecondary} onClick={() => navigate('/processes')}>Back to Processes</button>}
+        actions={<Button variant="secondary" onClick={() => navigate('/processes')}>Back to Processes</Button>}
       />
 
       {/* Step bar. The Generate step's active fill is driven by the
@@ -415,14 +406,14 @@ export default function ValueStreamWizard() {
                   Choose a different industry
                 </button>
               </div>
-              <button
-                style={{ ...btnPrimary, opacity: blocked ? 0.5 : 1, cursor: blocked ? 'not-allowed' : 'pointer' }}
+              <Button
+                variant="primary"
                 disabled={blocked}
                 onClick={() => handleGenerate(orgIndustry)}
                 title={blocked ? 'Resolve the scope warning above first.' : undefined}
               >
                 Generate Processes
-              </button>
+              </Button>
             </>
           ) : (
             <div style={{ marginBottom: 16 }}>
@@ -437,14 +428,14 @@ export default function ValueStreamWizard() {
           {error && <p style={{ color: 'var(--color-error)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
           {!orgIndustry && (
-            <button
-              style={{ ...btnPrimary, opacity: !industry || loading || blocked ? 0.6 : 1, cursor: !industry || loading || blocked ? 'not-allowed' : 'pointer' }}
+            <Button
+              variant="primary"
               disabled={!industry || loading || blocked}
               onClick={() => setConfirmIndustry(industry)}
               title={blocked ? 'Resolve the scope warning above first.' : undefined}
             >
               {loading ? 'Generating\u2026' : 'Generate Processes'}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -528,25 +519,26 @@ export default function ValueStreamWizard() {
               </p>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button style={{ ...btnSecondary, fontSize: 12, padding: '6px 14px' }} onClick={selectAll}>
+              <Button variant="secondary" size="sm" onClick={selectAll}>
                 {template.valueStreams.every((vs) => vs.selected) ? 'Deselect All' : 'Select All'}
-              </button>
+              </Button>
               {/* "Regenerate" keeps the cached path — clears the
                   template locally so the next call hits the cache
                   again (same input, same output). "Regenerate from
                   AI" forces a fresh Claude call and replaces the
                   cached entry server-side. Two buttons because the
                   cost / latency difference matters. */}
-              <button style={{ ...btnSecondary, fontSize: 12, padding: '6px 14px' }} onClick={() => { setTemplate(null); setTemplateSource(null); }}>
+              <Button variant="secondary" size="sm" onClick={() => { setTemplate(null); setTemplateSource(null); }}>
                 Regenerate
-              </button>
-              <button
-                style={{ ...btnSecondary, fontSize: 12, padding: '6px 14px' }}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => handleGenerate(orgIndustry || industry, true)}
                 title="Bypass the cache and ask Claude for a fresh template. Replaces the stored version for this industry."
               >
                 Regenerate from AI
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -631,14 +623,15 @@ export default function ValueStreamWizard() {
 
           {/* Apply */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button style={btnSecondary} onClick={() => navigate('/processes')}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: selectedCount === 0 || applying ? 0.6 : 1, cursor: selectedCount === 0 || applying ? 'not-allowed' : 'pointer', padding: '12px 32px', fontSize: 15 }}
+            <Button variant="secondary" onClick={() => navigate('/processes')}>Cancel</Button>
+            <Button
+              variant="primary"
+              style={{ padding: '12px 32px', fontSize: 15 }}
               disabled={selectedCount === 0 || applying}
               onClick={handleApply}
             >
               {applying ? 'Applying...' : `Apply ${selectedCount} Value Stream${selectedCount !== 1 ? 's' : ''} to Catalog`}
-            </button>
+            </Button>
           </div>
         </div>
       )}

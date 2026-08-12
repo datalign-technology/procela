@@ -4,6 +4,7 @@ import { errorMessage } from '../lib/errorToast';
 import { useToastStore } from '../stores/toastStore';
 import { useOrgContext } from '../stores/orgContext';
 import WizardProgress from './WizardProgress';
+import Button from './Button';
 
 interface SyncConnectionWizardProps {
   open: boolean;
@@ -74,14 +75,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 const STEPS = ['Source', 'Connect', 'Map Fields', 'Schedule', 'Review'];
 
@@ -620,28 +613,28 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
 
         {/* Navigation */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
-          <button
-            style={btnSecondary}
+          <Button
+            variant="secondary"
             onClick={() => { if (step === 0) onClose(); else setStep((s) => s - 1); }}
           >
             {step === 0 ? 'Cancel' : 'Back'}
-          </button>
+          </Button>
           {step < 4 ? (
-            <button
-              style={{ ...btnPrimary, opacity: canAdvance() ? 1 : 0.5 }}
+            <Button
+              variant="primary"
               disabled={!canAdvance()}
               onClick={() => setStep((s) => s + 1)}
             >
               Next
-            </button>
+            </Button>
           ) : (
-            <button
-              style={{ ...btnPrimary, opacity: creating ? 0.6 : 1 }}
+            <Button
+              variant="primary"
               disabled={creating}
               onClick={handleCreate}
             >
               {creating ? 'Creating...' : 'Create Connection'}
-            </button>
+            </Button>
           )}
         </div>
       </div>
