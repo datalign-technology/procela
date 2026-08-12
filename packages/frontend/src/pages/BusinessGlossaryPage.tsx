@@ -928,7 +928,7 @@ export default function BusinessGlossaryPage() {
           {/* Table */}
           <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
             {loading ? (
-              <SkeletonRows rows={5} columns={6} />
+              <SkeletonRows rows={5} columns={canWrite ? 7 : 6} />
             ) : loadError && terms.length === 0 ? (
               <ErrorState title="Couldn't load glossary" message={loadError}
                 onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />

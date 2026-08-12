@@ -662,7 +662,7 @@ export default function GovernancePoliciesPage() {
         {loadError ? (
           <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
         ) : loading ? (
-          <SkeletonRows rows={5} columns={8} />
+          <SkeletonRows rows={5} columns={9} />
         ) : policies.length === 0 && !showForm ? (
           <EmptyState icon={renderNavIcon('/governance-policies')} title="No governance documents yet"
             description="Charters set the program's scope, policies set the rules, standards set the conventions, and frameworks set the structure. Create your first document to get started."

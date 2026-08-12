@@ -728,7 +728,7 @@ export default function PeoplePage() {
 
   if (loading) return (
     <Card padding={8} shadow="none" style={{ overflow: 'hidden' }}>
-      <SkeletonRows rows={6} columnWidths={[32, null, null, null, 70]} />
+      <SkeletonRows rows={6} columnWidths={activeOrgId ? [32, null, null, null, null, null, 70] : [32, null, null, null, null, 70]} />
     </Card>
   );
 

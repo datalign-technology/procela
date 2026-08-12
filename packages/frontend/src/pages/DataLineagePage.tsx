@@ -487,7 +487,7 @@ export default function DataLineagePage() {
     return (
       <div>
         <Card>
-          <SkeletonRows rows={5} columns={4} />
+          <SkeletonRows rows={5} columns={9} />
         </Card>
       </div>
     );

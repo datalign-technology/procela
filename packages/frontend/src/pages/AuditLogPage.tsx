@@ -217,7 +217,7 @@ export default function AuditLogPage() {
       </div>
 
       {entries === null ? (
-        <SkeletonRows rows={8} columnWidths={[140, 140, 100, 200, null]} />
+        <SkeletonRows rows={8} columnWidths={[140, 140, 100, null]} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon="◌"

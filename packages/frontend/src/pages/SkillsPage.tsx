@@ -246,7 +246,7 @@ export default function SkillsPage() {
   if (loading) return (
     <div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-        <SkeletonRows rows={5} columns={4} />
+        <SkeletonRows rows={5} columns={5} />
       </div>
     </div>
   );

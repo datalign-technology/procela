@@ -547,7 +547,7 @@ export default function GovernanceTasksPage() {
         {loadError ? (
           <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
         ) : loading ? (
-          <SkeletonRows rows={5} columns={8} />
+          <SkeletonRows rows={5} columns={9} />
         ) : tasks.length === 0 && !showForm ? (
           <EmptyState
             icon={renderNavIcon('/governance-work')}

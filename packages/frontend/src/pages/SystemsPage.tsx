@@ -1496,7 +1496,7 @@ export default function SystemsPage() {
         {loadError ? (
           <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
         ) : loading ? (
-          <SkeletonRows rows={5} columnWidths={[40, null, null, 140, 80]} />
+          <SkeletonRows rows={5} columnWidths={[40, null, null, null, 140, 80]} />
         ) : systems.length === 0 && !showForm ? (
           <EmptyState
             icon={renderNavIcon('/systems')}

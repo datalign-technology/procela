@@ -563,7 +563,7 @@ export default function SopsPage() {
         <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
       ) : loading ? (
         <Card shadow="none">
-          <SkeletonRows rows={5} columns={5} />
+          <SkeletonRows rows={5} columns={10} />
         </Card>
       ) : sops.length === 0 ? (
         <EmptyState
