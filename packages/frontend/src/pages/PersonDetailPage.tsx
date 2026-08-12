@@ -5,6 +5,7 @@ import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
+import { clickable } from '../lib/a11y';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import OrgPicker from '../components/OrgPicker';
@@ -120,7 +121,7 @@ function InlineField({ label, value, field, personId, onSaved }: {
     <div>
       <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{label}</div>
       <div
-        onClick={() => { setDraft(value); setEditing(true); }}
+        {...clickable(() => { setDraft(value); setEditing(true); }, { label: `Edit ${label}` })}
         style={{ fontSize: 13, cursor: 'pointer' }}
         title="Click to edit"
       >

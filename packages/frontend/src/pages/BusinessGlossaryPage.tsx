@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
+import { clickable, activateOnKeyStop } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
@@ -125,7 +126,11 @@ function InlineCellEdit({
   if (!editing) {
     return (
       <span
+        role="button"
+        tabIndex={0}
+        aria-label="Edit field"
         onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
+        onKeyDown={activateOnKeyStop(() => { setDraft(value); setEditing(true); })}
         style={{ cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
         title="Click to edit"
       >
@@ -669,7 +674,7 @@ export default function BusinessGlossaryPage() {
             Categories
           </div>
           <div
-            onClick={() => setFilterCategory('')}
+            {...clickable(() => setFilterCategory(''), { label: 'Show all terms', pressed: !filterCategory })}
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !filterCategory ? 600 : 400,
@@ -689,7 +694,7 @@ export default function BusinessGlossaryPage() {
             return (
               <div
                 key={cat}
-                onClick={() => setFilterCategory(isActive ? '' : cat)}
+                {...clickable(() => setFilterCategory(isActive ? '' : cat), { label: `Filter by ${cat}`, pressed: isActive })}
                 style={{
                   padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                   fontWeight: isActive ? 600 : 400,

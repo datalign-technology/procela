@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Bot, Paperclip, Lock } from 'lucide-react';
+import { clickable } from '../../lib/a11y';
 import StatusBadge from '../../components/StatusBadge';
 import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
@@ -250,7 +251,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {depth > 0 && (
             <div style={{ width: 1, height: 4, background: 'var(--color-border)' }} />
           )}
-          <span onClick={() => (hasChildren || canAddChildren) && toggleExpand(node.id)}
+          <span {...clickable(() => toggleExpand(node.id), { label: `Expand ${node.name}`, disabled: !(hasChildren || canAddChildren) })}
+            aria-expanded={hasChildren ? isExpanded : undefined}
             style={{ fontSize: 10, color: config.color, cursor: hasChildren || canAddChildren ? 'pointer' : 'default', userSelect: 'none', lineHeight: 1 }}>
             {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : isLeafLevel ? config.icon : '\u25B7'}
           </span>

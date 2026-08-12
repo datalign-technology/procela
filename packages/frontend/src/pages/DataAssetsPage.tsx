@@ -37,7 +37,7 @@ import HealthBar from '../components/HealthBar';
 import TierBadge from '../components/TierBadge';
 import { useToastStore } from '../stores/toastStore';
 import { errorMessage, errorToast } from '../lib/errorToast';
-import { clickable } from '../lib/a11y';
+import { clickable, activateOnKeyStop } from '../lib/a11y';
 // Lazy: only renders when the user clicks "Link to connection" on a row.
 const LinkConnectionModal = lazy(() => import('../components/LinkConnectionModal'));
 import UnsavedBanner from '../components/UnsavedBanner';
@@ -311,7 +311,11 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
   if (!editing) {
     return (
       <span
+        role="button"
+        tabIndex={0}
+        aria-label="Edit field"
         onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
+        onKeyDown={activateOnKeyStop(() => { setDraft(value); setEditing(true); })}
         style={{ cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
         title="Click to edit"
       >
@@ -1159,7 +1163,8 @@ export default function DataAssetsPage() {
                 <div key={col.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   {/* Column row */}
                   <div
-                    onClick={() => toggleColumnExpand(col.id)}
+                    {...clickable(() => toggleColumnExpand(col.id), { label: `Toggle column ${col.columnName}` })}
+                    aria-expanded={isColExpanded}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: isColExpanded ? '#f0f9ff' : undefined }}
                     onMouseEnter={(e) => { if (!isColExpanded) e.currentTarget.style.background = 'var(--color-bg)'; }}
                     onMouseLeave={(e) => { if (!isColExpanded) e.currentTarget.style.background = ''; }}

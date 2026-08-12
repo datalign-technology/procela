@@ -4,6 +4,7 @@ import { apiClient } from '../../api/client';
 import StatusBadge from '../../components/StatusBadge';
 import HelpPopover from '../../components/HelpPopover';
 import { tierLabel } from '../../lib/governanceTier';
+import { clickable } from '../../lib/a11y';
 import { badgeColor } from '../../lib/badgeColors';
 import { useToastStore } from '../../stores/toastStore';
 import type { MappingInfo, DataAssetRef, PolicyRef } from '../ProcessCatalogPage';
@@ -406,7 +407,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
     return (
       <div key={m.id}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '3px 0', flexWrap: 'wrap' }}>
-          <span onClick={() => setExpandedMapping(isExp ? null : m.id)} style={{ cursor: 'pointer', fontSize: 8, color: 'var(--color-text-muted)' }}>
+          <span {...clickable(() => setExpandedMapping(isExp ? null : m.id), { label: 'Show mapping details' })} aria-expanded={isExp} style={{ cursor: 'pointer', fontSize: 8, color: 'var(--color-text-muted)' }}>
             {isExp ? '▼' : '▶'}
           </span>
           {head}

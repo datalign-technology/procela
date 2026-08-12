@@ -28,7 +28,7 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
-import { clickable } from '../lib/a11y';
+import { clickable, activateOnKeyStop } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
@@ -197,7 +197,11 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
   if (!editing) {
     return (
       <span
+        role="button"
+        tabIndex={0}
+        aria-label="Edit field"
         onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
+        onKeyDown={activateOnKeyStop(() => { setDraft(value); setEditing(true); })}
         style={{ cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
         title="Click to edit"
       >

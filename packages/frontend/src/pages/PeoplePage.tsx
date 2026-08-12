@@ -18,6 +18,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import Avatar from '../components/Avatar';
 import { errorToast, errorMessage } from '../lib/errorToast';
+import { clickable, activateOnKeyStop } from '../lib/a11y';
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator';
 import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
@@ -195,8 +196,8 @@ function OrgSidebarTree({ nodes, selectedId, onSelect, peopleCounts }: {
     return new Set(nodes.map((n) => n.id));
   });
 
-  const toggle = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const toggle = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -212,7 +213,7 @@ function OrgSidebarTree({ nodes, selectedId, onSelect, peopleCounts }: {
     return (
       <div key={node.id}>
         <div
-          onClick={() => onSelect(node.id)}
+          {...clickable(() => onSelect(node.id), { label: `Select organization ${node.name}` })}
           style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 6px', paddingLeft: 6 + depth * 14,
@@ -226,7 +227,12 @@ function OrgSidebarTree({ nodes, selectedId, onSelect, peopleCounts }: {
         >
           {hasChildren ? (
             <span
+              role="button"
+              tabIndex={0}
+              aria-label={isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
+              aria-expanded={isExpanded}
               onClick={(e) => toggle(node.id, e)}
+              onKeyDown={activateOnKeyStop(() => toggle(node.id))}
               style={{ width: 14, textAlign: 'center', fontSize: 8, color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0 }}
             >
               {isExpanded ? '\u25BC' : '\u25B6'}

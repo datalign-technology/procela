@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import { renderNavIcon } from '../components/navIcons';
+import { clickable } from '../lib/a11y';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import { badgeColor } from '../lib/badgeColors';
@@ -294,7 +295,8 @@ export default function GapDetectionPage() {
               >
                 {/* Section header */}
                 <div
-                  onClick={() => count > 0 && toggleSection(section.key)}
+                  {...clickable(() => toggleSection(section.key), { label: `Toggle ${section.title}`, disabled: count === 0 })}
+                  aria-expanded={count > 0 ? isOpen : undefined}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
                     cursor: count > 0 ? 'pointer' : 'default',
