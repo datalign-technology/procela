@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import ConfirmDialog from './ConfirmDialog';
 
 // Settings → Connectors panel. Lists every paired on-prem connector
@@ -154,6 +155,26 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
   const [issuedCode, setIssuedCode] = useState<{ code: string; expiresAt: string } | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ConnectorRow | null>(null);
   const [detailTarget, setDetailTarget] = useState<ConnectorRow | null>(null);
+  const addRef = useRef<HTMLDivElement>(null);
+  const codeRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(addRef, addOpen);
+  useFocusTrap(codeRef, !!issuedCode);
+
+  // Esc closes the Add-connector dialog.
+  useEffect(() => {
+    if (!addOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAddOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [addOpen]);
+
+  // Esc closes the issued-code dialog.
+  useEffect(() => {
+    if (!issuedCode) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIssuedCode(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [issuedCode]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -311,12 +332,10 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
 
       {addOpen && (
         <div
-          role="dialog"
-          aria-modal="true"
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
           onClick={() => setAddOpen(false)}
         >
-          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', padding: 24, borderRadius: 8, width: 460, maxWidth: '90vw' }}>
+          <div ref={addRef} role="dialog" aria-modal="true" aria-label="Add connector" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', padding: 24, borderRadius: 8, width: 460, maxWidth: '90vw' }}>
             <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 16 }}>Add connector</h3>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: 6 }}>
               Connector name
@@ -353,12 +372,10 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
 
       {issuedCode && (
         <div
-          role="dialog"
-          aria-modal="true"
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
           onClick={() => setIssuedCode(null)}
         >
-          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', padding: 24, borderRadius: 8, width: 480, maxWidth: '90vw' }}>
+          <div ref={codeRef} role="dialog" aria-modal="true" aria-label="Connector code issued" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', padding: 24, borderRadius: 8, width: 480, maxWidth: '90vw' }}>
             <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 16 }}>Pairing code</h3>
             <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
               Enter this code into your on-prem connector within 10 minutes. The code can only be claimed once.
@@ -424,7 +441,16 @@ function ConnectorDetailDrawer({ row, systems, onClose, onSaved }: {
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(drawerRef, true);
   const dirty = name.trim() !== row.name || JSON.stringify(systemIds.slice().sort()) !== JSON.stringify(row.systemIds.slice().sort());
+
+  // Esc closes the drawer.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   useEffect(() => {
     setLoadingEvents(true);
@@ -456,12 +482,14 @@ function ConnectorDetailDrawer({ row, systems, onClose, onSaved }: {
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 1000 }}
       onClick={onClose}
     >
       <div
+        ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connector details"
         onClick={(e) => e.stopPropagation()}
         style={{ width: 480, maxWidth: '95vw', background: 'var(--color-surface)', height: '100%', boxShadow: '-8px 0 20px rgba(0,0,0,0.1)', overflowY: 'auto', padding: 24, boxSizing: 'border-box' }}
       >

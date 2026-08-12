@@ -28,6 +28,7 @@ import { badgeColor } from '../lib/badgeColors';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -152,6 +153,16 @@ export default function AgentsPage() {
   const [agentRoles, setAgentRoles] = useState<DamaRoleAssignment[]>([]);
   const [agentExecutions, setAgentExecutions] = useState<AgentExecution[]>([]);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
+  const confirmDeleteRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(confirmDeleteRef, !!confirmDelete);
+  useEffect(() => {
+    if (!confirmDelete) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setConfirmDelete(null);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [confirmDelete]);
 
   const selectedOrgId = searchParams.get('orgId') || '';
   const applyOrgFilter = (id: string) => {
@@ -808,7 +819,7 @@ export default function AgentsPage() {
 
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setConfirmDelete(null)}>
-          <div style={{ background: '#fff', borderRadius: 8, padding: 20, maxWidth: 400, width: '100%' }} onClick={(e) => e.stopPropagation()}>
+          <div ref={confirmDeleteRef} role="dialog" aria-modal="true" aria-label="Delete agent" style={{ background: '#fff', borderRadius: 8, padding: 20, maxWidth: 400, width: '100%' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Delete this agent?</h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>This cannot be undone.</p>
             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

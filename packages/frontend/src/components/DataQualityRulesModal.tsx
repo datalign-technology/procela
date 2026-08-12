@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import { useToastStore } from '../stores/toastStore';
 import { useOrgContext } from '../stores/orgContext';
@@ -108,6 +109,15 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
 }) {
   const addToast = useToastStore((s) => s.addToast);
   const activeOrgId = useOrgContext((s) => s.activeOrgId);
+
+  // Accessibility: trap focus in the modal and let Esc close it.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(cardRef, true);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const [rules, setRules] = useState<DQRule[]>([]);
   const [suggested, setSuggested] = useState<RuleTemplate[]>([]);
   const [generic, setGeneric] = useState<RuleTemplate[]>([]);
@@ -449,6 +459,10 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
       onClick={onClose}
     >
       <div
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Data quality rules"
         style={{ background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.15)', padding: 20, maxWidth: 820, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}
       >

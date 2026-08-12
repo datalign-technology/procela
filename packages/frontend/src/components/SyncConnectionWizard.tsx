@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../api/client';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { errorMessage } from '../lib/errorToast';
 import { useToastStore } from '../stores/toastStore';
 import { useOrgContext } from '../stores/orgContext';
@@ -101,6 +102,8 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
   const { orgs: contextOrgs } = useOrgContext();
   const [step, setStep] = useState(0);
   const [creating, setCreating] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(cardRef, true);
 
   // Step 1
   const [name, setName] = useState('');
@@ -157,6 +160,14 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
       setConnectionMode('inline');
     }
   }, [open, compatibleConnections.length, connectionMode]);
+
+  // Esc closes the wizard (the backdrop intentionally does not).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   // Step 3
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
@@ -293,7 +304,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', width: '100%', maxWidth: 600, maxHeight: '85vh', overflow: 'auto', padding: 24, boxShadow: 'var(--shadow-lg)' }}>
+      <div ref={cardRef} role="dialog" aria-modal="true" aria-label="Sync connection wizard" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', width: '100%', maxWidth: 600, maxHeight: '85vh', overflow: 'auto', padding: 24, boxShadow: 'var(--shadow-lg)' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
