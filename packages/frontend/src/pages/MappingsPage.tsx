@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import { usePermissions } from '../hooks/usePermissions';
@@ -104,30 +105,6 @@ const selectStyle: React.CSSProperties = {
   ...inputStyle,
   appearance: 'auto' as any,
 };
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-primary)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-
 
 const LINK_TYPES = ['consumes', 'produces', 'transforms', 'references'];
 
@@ -576,15 +553,16 @@ export default function MappingsPage() {
             </div>
           </div>
           {canWrite && (
-            <button
+            <Button
+              variant="secondary"
               onClick={() => setConfirmOrphanCleanup(true)}
               style={{
-                ...btnSecondary, padding: '6px 12px',
+                padding: '6px 12px',
                 background: '#fff', borderColor: '#fca5a5', color: '#991b1b',
               }}
             >
               Delete all orphans
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -714,16 +692,16 @@ export default function MappingsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>
+            <Button variant="secondary" onClick={handleCancel}>
               Cancel
-            </button>
-            <button
-              style={{ ...btnPrimary, opacity: canSave ? 1 : 0.6, cursor: !canSave ? 'not-allowed' : 'pointer' }}
+            </Button>
+            <Button
+              variant="primary"
               disabled={!canSave}
               onClick={handleSave}
             >
               Add Mapping
-            </button>
+            </Button>
           </div>
         </div>
       )}

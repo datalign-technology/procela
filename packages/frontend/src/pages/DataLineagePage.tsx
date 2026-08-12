@@ -2,6 +2,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import Button from '../components/Button';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
@@ -186,30 +187,6 @@ const selectStyle: React.CSSProperties = {
   ...inputStyle,
   appearance: 'auto' as any,
 };
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-primary)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-
 
 function Badge({ label, colors }: { label: string; colors: { bg: string; color: string } }) {
   return (
@@ -624,14 +601,14 @@ export default function DataLineagePage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: (!form.sourceSystemId || !form.targetSystemId || form.sourceSystemId === form.targetSystemId) ? 0.6 : 1, cursor: (!form.sourceSystemId || !form.targetSystemId || form.sourceSystemId === form.targetSystemId) ? 'not-allowed' : 'pointer' }}
+            <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
+            <Button
+              variant="primary"
               disabled={!form.sourceSystemId || !form.targetSystemId || form.sourceSystemId === form.targetSystemId}
               onClick={handleSave}
             >
               {editingId ? 'Save Changes' : 'Add Flow'}
-            </button>
+            </Button>
           </div>
         </Card>
       )}
