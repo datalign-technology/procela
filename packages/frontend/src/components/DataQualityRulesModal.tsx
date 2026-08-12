@@ -469,7 +469,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Data Quality Rules {'\u2014'} {asset.name}</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Data Quality Rules {'\u2014'} {asset.name}</h3>
             {/* Column picker — shown when the asset has columns defined */}
             {columns.length > 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
@@ -526,6 +526,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               No rules yet. Pick a template below to add one.
             </div>
           ) : (
+            <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid var(--color-border)', borderRadius: 4 }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)' }}>
@@ -620,6 +621,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
           );

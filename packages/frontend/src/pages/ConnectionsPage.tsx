@@ -1215,6 +1215,7 @@ export default function ConnectionsPage() {
                 <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
                   {'Click an asset to drill into its columns. To link a column to a Data Asset, go to Data Assets \u2192 Link.'}
                 </p>
+                <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'var(--color-bg)' }}>
@@ -1268,6 +1269,7 @@ export default function ConnectionsPage() {
                     })}
                   </tbody>
                 </table>
+                </div>
               </>
             )}
 

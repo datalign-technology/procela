@@ -842,6 +842,7 @@ export default function HelpPage() {
           Press <kbd style={kbdStyle}>Shift</kbd> + <kbd style={kbdStyle}>?</kbd> anywhere
           to open the full reference, or use the button below.
         </p>
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
           <tbody>
             {[
@@ -872,6 +873,7 @@ export default function HelpPage() {
             ))}
           </tbody>
         </table>
+        </div>
         <button
           onClick={() => window.dispatchEvent(new Event('procela:open-shortcuts'))}
           style={{

@@ -474,6 +474,7 @@ export default function GovernancePoliciesPage() {
             {controlsForPolicy(pol.id).length === 0 && !showControlForm ? (
               <p style={{ fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center', padding: 20 }}>No controls defined for this policy.</p>
             ) : (
+              <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
@@ -505,6 +506,7 @@ export default function GovernancePoliciesPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         )}

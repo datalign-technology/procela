@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot } from 'lucide-react';
+import { renderNavIcon } from '../components/navIcons';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -548,7 +548,9 @@ export default function DamaRolesPage() {
                           border: 'none', borderRight: t === 'person' ? '1px solid var(--color-border)' : 'none',
                         }}
                       >
-                        {t === 'agent' ? '⚙ Agent' : 'Person'}
+                        {t === 'agent'
+                          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{renderNavIcon('/agents', { size: 12, strokeWidth: 2 })}Agent</span>
+                          : 'Person'}
                       </button>
                     );
                   })}
@@ -1232,6 +1234,7 @@ function RolesTable({ catalog, damaRoles, filterRoleType, domains, systems, data
   };
 
   return (
+    <div style={{ overflowX: 'auto' }}>
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr style={{ background: 'var(--color-bg)' }}>
@@ -1352,6 +1355,7 @@ function RolesTable({ catalog, damaRoles, filterRoleType, domains, systems, data
         })}
       </tbody>
     </table>
+    </div>
   );
 }
 
@@ -1446,7 +1450,7 @@ function RolePreviewPane({
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 10, fontWeight: 700, flexShrink: 0,
                     }}>
-                      {isAgent ? <Bot size={13} strokeWidth={2.4} /> : displayName.charAt(0).toUpperCase()}
+                      {isAgent ? renderNavIcon('/agents', { size: 13, strokeWidth: 2.4 }) : displayName.charAt(0).toUpperCase()}
                     </span>
                     <span style={{ fontWeight: 500 }}>{displayName}</span>
                     <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>

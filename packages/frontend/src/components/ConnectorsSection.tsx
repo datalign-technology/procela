@@ -277,6 +277,7 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
           No connectors paired. Add one to start pulling live freshness signals from your on-prem data sources.
         </div>
       ) : (
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', textAlign: 'left' }}>
@@ -328,6 +329,7 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       {addOpen && (

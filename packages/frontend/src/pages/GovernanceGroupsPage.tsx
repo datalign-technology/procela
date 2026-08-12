@@ -1079,7 +1079,7 @@ export default function GovernanceGroupsPage() {
                       Governance roles are <strong>org-wide</strong>. Assigning one here is the
                       same assignment shown on the Governance Roles page and the Group
                       Composition view — not a separate, group-only role.
-                      Agents (<span style={{ color: '#5b21b6' }}>⚙</span>) appear here when they hold a role this group expects;
+                      Agents (<span style={{ color: '#5b21b6', display: 'inline-flex', verticalAlign: 'middle' }}>{renderNavIcon('/agents', { size: 12, strokeWidth: 2 })}</span>) appear here when they hold a role this group expects;
                       they are <strong>not group members</strong> — group membership is people only.
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1090,7 +1090,7 @@ export default function GovernanceGroupsPage() {
                         // assign role can hold one person AND any number of
                         // agents in parallel. "Filled" reflects whether the
                         // human seat is taken; agents are shown as separate
-                        // chips with the ⚙ marker.
+                        // chips with the agent icon marker.
                         const peopleAssigned = assigned.filter((a) => !a.agentId).length;
                         const agentsAssigned = assigned.filter((a) => !!a.agentId).length;
                         const isFilled = peopleAssigned > 0;
@@ -1353,6 +1353,7 @@ export default function GovernanceGroupsPage() {
                 </p>
               ) : (
                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                  <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
@@ -1413,6 +1414,7 @@ export default function GovernanceGroupsPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
 

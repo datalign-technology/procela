@@ -1051,6 +1051,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
             No columns defined. Auto-discover them from the Data Assets page.
           </div>
         ) : (
+          <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
@@ -1101,6 +1102,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     );

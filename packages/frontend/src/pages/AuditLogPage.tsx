@@ -231,6 +231,7 @@ export default function AuditLogPage() {
           background: 'var(--color-surface)', border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)', overflow: 'hidden',
         }}>
+          <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)', textAlign: 'left' }}>
@@ -265,6 +266,7 @@ export default function AuditLogPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
