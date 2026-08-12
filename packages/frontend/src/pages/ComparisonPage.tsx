@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Spinner from '../components/Spinner';
 import { useOrgContext } from '../stores/orgContext';
 import { clickable } from '../lib/a11y';
 
@@ -253,15 +254,7 @@ export default function ComparisonPage() {
       />
 
       {loading ? (
-        <p
-          style={{
-            color: 'var(--color-text-muted)',
-            textAlign: 'center',
-            padding: '4rem',
-          }}
-        >
-          Loading...
-        </p>
+        <Spinner center label="Loading…" />
       ) : valueStreams.length < 2 ? (
         <div
           style={{

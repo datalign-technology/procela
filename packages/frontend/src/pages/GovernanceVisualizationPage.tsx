@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
+import Spinner from '../components/Spinner';
 
 // ── Types ──
 
@@ -492,12 +493,7 @@ export default function GovernanceVisualizationPage() {
         }}
       >
         {loading ? (
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '4rem', color: 'var(--color-text-muted)',
-          }}>
-            Loading governance structure...
-          </div>
+          <Spinner center label="Loading…" />
         ) : error ? (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',

@@ -816,7 +816,7 @@ export default function ConnectionsPage() {
         return (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
             <IconButton size="sm" icon={isTesting ? 'refresh' : 'play'}
-              label={isTesting ? 'Testing...' : 'Test connection'}
+              label={isTesting ? 'Testing…' : 'Test connection'}
               disabled={isTesting}
               onClick={() => !isTesting && handleRowTest(conn.id)} />
             {conn.status === 'CONNECTED' && (

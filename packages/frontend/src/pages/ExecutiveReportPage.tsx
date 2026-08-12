@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import Spinner from '../components/Spinner';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
 import IconButton from '../components/IconButton';
@@ -164,7 +165,7 @@ export default function ExecutiveReportPage() {
     return (
       <div>
         <PageHeader title="Executive Report" />
-        <div style={{ color: 'var(--color-text-muted)' }}>Loading report data...</div>
+        <Spinner center label="Loading…" />
       </div>
     );
   }

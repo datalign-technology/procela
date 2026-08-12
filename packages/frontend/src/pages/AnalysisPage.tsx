@@ -7,6 +7,7 @@ import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
+import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
 import ExportMenu from '../components/ExportMenu';
 import Button from '../components/Button';
@@ -928,7 +929,7 @@ function DrillPanel({
       ariaLabel="Cell drill-down"
     >
       {loading ? (
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</div>
+        <Spinner label="Loading…" />
       ) : rows.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No records returned.</div>
       ) : (

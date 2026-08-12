@@ -7,6 +7,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 // code-split with React.lazy(); each page becomes its own chunk and
 // only downloads when the user navigates to it.
 import Layout from '@/components/Layout';
+import Spinner from '@/components/Spinner';
 import LoginPage from '@/pages/LoginPage';
 
 const OidcCompletePage           = lazy(() => import('@/pages/OidcCompletePage'));
@@ -62,15 +63,7 @@ const HelpTrainingPage           = lazy(() => import('@/pages/HelpTrainingPage')
 // skeleton on data load — a tiny "Loading…" line here keeps the
 // inter-route gap from flashing the dashboard background.
 function PageFallback() {
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      style={{ padding: '24px 16px', fontSize: 13, color: 'var(--color-text-muted)' }}
-    >
-      Loading…
-    </div>
-  );
+  return <Spinner label="Loading…" style={{ padding: '24px 16px', color: 'var(--color-text-muted)' }} />;
 }
 
 export default function App() {

@@ -23,6 +23,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import EmptyState from '../components/EmptyState';
+import Spinner from '../components/Spinner';
 import { renderNavIcon } from '../components/navIcons';
 
 interface Activity {
@@ -234,7 +235,7 @@ export default function ProcessDataMapPage() {
       )}
 
       {!data && !error && (
-        <div role="status" aria-label="Loading" style={{ textAlign: 'center', padding: 48, color: 'var(--color-text-muted)' }}>Loading…</div>
+        <Spinner center label="Loading…" />
       )}
 
       {data && activities.length === 0 && assets.length === 0 && (

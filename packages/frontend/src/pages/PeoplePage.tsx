@@ -5,6 +5,7 @@ import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
+import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import FieldStack from '../components/FieldStack';
 import SkillGapBadge from '../components/SkillGapBadge';
@@ -1228,7 +1229,7 @@ export default function PeoplePage() {
         {previewPersonId && (
           <Card padding={0} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}>
             {previewLoading ? (
-              <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>Loading...</div>
+              <Spinner center label="Loading…" />
             ) : previewData ? (
               <div style={{ padding: 16 }}>
                 {/* Header */}

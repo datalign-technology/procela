@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/errorToast';
 import { clickable, activateOnKeyStop } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Spinner from '../components/Spinner';
 import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -691,8 +692,8 @@ export default function GovernanceProgramPage() {
       </PageHeader>
 
       {loading && (
-        <Card padding={24} shadow="none" style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
-          Loading governance program...
+        <Card padding={24} shadow="none">
+          <Spinner center label="Loading…" />
         </Card>
       )}
 
@@ -891,7 +892,7 @@ export default function GovernanceProgramPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-                    <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving...' : 'Save Changes'}</Button>
+                    <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
                   </div>
                 </div>
               )}

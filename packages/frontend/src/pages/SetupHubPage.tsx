@@ -8,6 +8,7 @@ import { useToastStore } from '@/stores/toastStore';
 import ProgressRing from '@/components/ProgressRing';
 import Page from '@/components/Page';
 import PageHeader from '@/components/PageHeader';
+import Spinner from '@/components/Spinner';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SetupHubPage — "Get Started". A resumable, data-driven journey that walks
@@ -412,7 +413,7 @@ export default function SetupHubPage() {
       )}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 48, color: 'var(--color-text-muted)' }}>Loading your setup status…</div>
+        <Spinner center label="Loading your setup status…" />
       ) : (
         phases.map((ph) => {
           const phaseOpen = isPhaseOpen(ph);

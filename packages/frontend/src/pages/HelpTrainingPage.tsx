@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { renderMarkdown } from '../lib/markdown';
 import Page from '../components/Page';
 import PageHeader from '../components/PageHeader';
+import Spinner from '../components/Spinner';
 
 // ──────────────────────────────────────────────────────────────────────────
 // HelpTrainingPage — Tidewater Utilities training walkthrough.
@@ -75,7 +76,7 @@ export default function HelpTrainingPage() {
       )}
 
       {!error && markdown === null && (
-        <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Loading…</div>
+        <Spinner label="Loading…" />
       )}
 
       {markdown !== null && <div>{renderMarkdown(markdown)}</div>}
