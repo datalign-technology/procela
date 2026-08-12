@@ -471,10 +471,41 @@ other two branches.
 
 ## Interactive
 
+### `<Button>`
+
+The text-button primitive. Replaces the `btnPrimary` / `btnSecondary`
+`CSSProperties` objects hand-rolled across ~29 pages. Extends the native
+button element, so `onClick` / `type` / `title` / `disabled` / `aria-*` all
+pass through, and `disabled` (or `loading`) auto-applies the dimmed /
+not-allowed styling — call sites no longer hand-roll `opacity` + `cursor`.
+
+```tsx
+import Button from '@/components/Button';
+
+<Button variant="primary" onClick={save} disabled={!valid}>Save</Button>
+<Button variant="secondary" onClick={cancel}>Cancel</Button>
+<Button variant="danger" onClick={remove}>Delete</Button>
+<Button variant="primary" loading={saving}>Save</Button>   {/* → "Saving…", disabled, aria-busy */}
+```
+
+Variants map to intent, not colour: **primary** (solid teal — the main
+action), **secondary** (outlined neutral — default), **danger** (solid
+red — destructive confirms), **ghost** (borderless — inline cancel).
+Sizes: `sm` (28h, row actions) / `md` (34h, default). All colours are
+`--color-*` tokens. Extras: `loading`, `fullWidth`, `leadingIcon`.
+
+Migrating a hand-rolled button: `<button style={btnPrimary} onClick={x}>`
+→ `<Button variant="primary" onClick={x}>`; drop any `opacity`/`cursor`
+disabled overrides (Button owns them); map a small size override
+(`padding:'4px 12px'`) to `size="sm"`. `Button`'s `secondary` matches the
+old `btnSecondary` exactly, so it's a faithful swap.
+
 ### `<SecondaryButton>`
 
-The neutral Cancel / Close / Later affordance. Do NOT hand-roll the
-`transparent bg + grey border + grey text` button style.
+The neutral Cancel / Close / Later affordance (transparent bg + border +
+muted text — distinct from `<Button variant="ghost">`, which is
+borderless). Do NOT hand-roll the `transparent bg + grey border + grey
+text` button style.
 
 ```tsx
 import SecondaryButton from '@/components/SecondaryButton';
