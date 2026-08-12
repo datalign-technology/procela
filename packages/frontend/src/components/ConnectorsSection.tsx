@@ -294,7 +294,7 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
                 .map((id) => systems.find((s) => s.id === id)?.name)
                 .filter((n): n is string => !!n);
               return (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--color-border-subtle, #f1f5f9)' }}>
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
                   <td style={{ padding: '8px 4px', fontWeight: 500 }}>
                     <button
                       onClick={() => setDetailTarget(r)}
@@ -535,7 +535,7 @@ function ConnectorDetailDrawer({ row, systems, onClose, onSaved }: {
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12 }}>
             {events.map((e) => (
-              <li key={e.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--color-border-subtle, #f1f5f9)' }}>
+              <li key={e.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontWeight: 500 }}>{EVENT_LABEL[e.type] || e.type}</span>
                   <span style={{ color: 'var(--color-text-muted)' }} title={new Date(e.ts).toLocaleString()}>{relativeTime(e.ts)}</span>

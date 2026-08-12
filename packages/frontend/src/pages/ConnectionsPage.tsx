@@ -1187,7 +1187,7 @@ export default function ConnectionsPage() {
             {!discoveringId && discoverSimulated && (
               <div style={{
                 display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', marginBottom: 16,
-                background: 'var(--color-warning-light, #fffbeb)', border: '1px solid var(--color-warning)',
+                background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)',
                 borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--color-text-secondary)',
               }}>
                 <span aria-hidden style={{ color: 'var(--color-warning)', fontWeight: 600 }}>{'⚠'}</span>
