@@ -8,6 +8,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
+import Button from '../components/Button';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
@@ -81,14 +82,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -632,7 +625,7 @@ export default function BusinessGlossaryPage() {
           )}
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
             <input ref={fileInputRef} type="file" accept=".csv,.json,.txt" onChange={handleFileRead} style={{ display: 'none' }} />
-            <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => fileInputRef.current?.click()}>Browse File</button>
+            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Browse File</Button>
           </div>
           <textarea
             style={{ ...inputStyle, width: '100%', minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 11 }}
@@ -644,14 +637,14 @@ export default function BusinessGlossaryPage() {
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>
               CSV columns: Term (required), Definition, Category, Status, Synonyms (; or | separated), Context, Source of Truth
             </span>
-            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: !importText.trim() || !activeOrgId ? 0.6 : 1, cursor: !importText.trim() || !activeOrgId ? 'not-allowed' : 'pointer' }}
+            <Button variant="secondary" onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</Button>
+            <Button
+              variant="primary"
               disabled={!importText.trim() || !activeOrgId}
               onClick={handleImport}
             >
               Import
-            </button>
+            </Button>
           </div>
         </Card>
       )}
@@ -752,12 +745,13 @@ export default function BusinessGlossaryPage() {
               {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()} ({terms.filter((t) => t.status === s).length})</option>)}
             </select>
             {(filterStatus || searchQuery || filterCategory) && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => { setFilterStatus(''); setSearchQuery(''); setFilterCategory(''); }}
-                style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
               >
                 Clear Filters
-              </button>
+              </Button>
             )}
             {(filterStatus || searchQuery || filterCategory) && (
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
@@ -837,14 +831,14 @@ export default function BusinessGlossaryPage() {
                     are retained on the record (still round-tripped on save). */}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-                    <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-                    <button
-                      style={{ ...btnPrimary, opacity: (!form.term.trim() || !form.definition.trim() || isDuplicate) ? 0.6 : 1, cursor: (!form.term.trim() || !form.definition.trim() || isDuplicate) ? 'not-allowed' : 'pointer' }}
+                    <Button variant="secondary" onClick={closeForm}>Cancel</Button>
+                    <Button
+                      variant="primary"
                       disabled={!form.term.trim() || !form.definition.trim() || isDuplicate}
                       onClick={handleSave}
                     >
                       {editingId ? 'Save Changes' : 'Add Term'}
-                    </button>
+                    </Button>
                   </div>
                 </>
                 );
@@ -885,11 +879,11 @@ export default function BusinessGlossaryPage() {
                 ))}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                <button style={btnSecondary} onClick={() => { setShowGeneratePreview(false); setGeneratedTerms([]); }}>Cancel</button>
-                <button style={{ ...btnPrimary, opacity: generatedTerms.filter((t) => t.selected).length === 0 ? 0.6 : 1 }}
+                <Button variant="secondary" onClick={() => { setShowGeneratePreview(false); setGeneratedTerms([]); }}>Cancel</Button>
+                <Button variant="primary"
                   disabled={generatedTerms.filter((t) => t.selected).length === 0} onClick={handleApplyGenerated}>
                   Add {generatedTerms.filter((t) => t.selected).length} Terms
-                </button>
+                </Button>
               </div>
             </Card>
           )}

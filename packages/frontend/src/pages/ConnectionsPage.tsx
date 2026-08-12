@@ -9,6 +9,7 @@ import { useToastStore } from '../stores/toastStore';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from './../components/IconButton';
+import Button from '../components/Button';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from './../components/EmptyState';
@@ -80,16 +81,6 @@ const inputStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 
 
@@ -622,13 +613,14 @@ export default function ConnectionsPage() {
                         e.target.value = '';
                       }}
                     />
-                    <button
+                    <Button
                       type="button"
-                      style={{ ...btnSecondary, padding: '6px 12px', fontSize: 12 }}
+                      variant="secondary"
+                      size="sm"
                       onClick={() => document.getElementById('local-file-input')?.click()}
                     >
                       {pendingFile || existingFile ? 'Choose Different File' : 'Browse\u2026'}
-                    </button>
+                    </Button>
                     {pendingFile ? (
                       <span style={{ fontSize: 12, color: 'var(--color-text)' }}>
                         <strong>{pendingFile.name}</strong> ({formatBytes(pendingFile.size)})
@@ -960,12 +952,13 @@ export default function ConnectionsPage() {
             </select>
             {(searchQuery || systemFilter || filterConnType) && (
               <>
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => { setSearchQuery(''); setSystemFilter(''); setFilterConnType(''); }}
-                  style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
                 >
                   Clear Filters
-                </button>
+                </Button>
                 <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                   Showing {visibleConnections.length} of {connections.length}
                 </span>
@@ -1079,22 +1072,22 @@ export default function ConnectionsPage() {
           )}
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel} disabled={uploading || formTesting}>Cancel</button>
-            <button
-              style={{ ...btnSecondary, opacity: !form.name.trim() || uploading || formTesting ? 0.6 : 1, cursor: !form.name.trim() || uploading || formTesting ? 'not-allowed' : 'pointer' }}
+            <Button variant="secondary" onClick={handleCancel} disabled={uploading || formTesting}>Cancel</Button>
+            <Button
+              variant="secondary"
               disabled={!form.name.trim() || uploading || formTesting}
               title={!form.name.trim() ? 'Enter a connection name first.' : ''}
               onClick={handleTest}
             >
               {formTesting ? 'Testing\u2026' : 'Test'}
-            </button>
-            <button
-              style={{ ...btnPrimary, opacity: !form.name.trim() || uploading ? 0.6 : 1, cursor: !form.name.trim() || uploading ? 'not-allowed' : 'pointer' }}
+            </Button>
+            <Button
+              variant="primary"
               disabled={!form.name.trim() || uploading}
               onClick={handleSave}
             >
               {uploading ? 'Uploading\u2026' : editingId ? 'Save Changes' : 'Add Connection'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1258,7 +1251,7 @@ export default function ConnectionsPage() {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-              <button style={btnSecondary} onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); }}>Close</button>
+              <Button variant="secondary" onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); }}>Close</Button>
             </div>
           </div>
         </div>
