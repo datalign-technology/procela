@@ -1326,7 +1326,7 @@ export default function DataAssetsPage() {
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !filterCategory ? 600 : 400,
-              background: !filterCategory ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              background: !filterCategory ? 'var(--color-primary-light)' : 'transparent',
               color: !filterCategory ? 'var(--color-primary)' : 'var(--color-text)',
             }}
             onMouseEnter={(e) => { if (filterCategory) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -1351,7 +1351,7 @@ export default function DataAssetsPage() {
                 style={{
                   padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                   fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  background: isActive ? 'var(--color-primary-light)' : 'transparent',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}
@@ -1369,7 +1369,7 @@ export default function DataAssetsPage() {
               style={{
                 padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                 fontWeight: filterCategory === '__none__' ? 600 : 400,
-                background: filterCategory === '__none__' ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                background: filterCategory === '__none__' ? 'var(--color-primary-light)' : 'transparent',
                 color: filterCategory === '__none__' ? 'var(--color-primary)' : 'var(--color-text-muted)',
                 fontStyle: 'italic',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -1404,7 +1404,7 @@ export default function DataAssetsPage() {
               style={{
                 padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
                 border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                background: active ? 'var(--color-primary-light, #dbeafe)' : 'var(--color-surface)',
+                background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
                 color: active ? 'var(--color-primary)' : 'var(--color-text)',
                 cursor: 'pointer',
               }}

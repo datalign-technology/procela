@@ -937,7 +937,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               <span style={{ fontSize: 11 }}>{'\u2192'}</span>
               <span style={{ fontWeight: 500 }}>{warning}</span>
               {guidedLevel && (
-                <button style={{ ...btnAdd, fontSize: 10, padding: '1px 8px', borderColor: '#d97706', color: 'var(--color-warning)', background: '#fff', fontWeight: 600 }}
+                <button style={{ ...btnAdd, fontSize: 10, padding: '1px 8px', borderColor: 'var(--color-warning)', color: 'var(--color-warning)', background: '#fff', fontWeight: 600 }}
                   onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }}>
                   + Add {LEVEL_CONFIG[guidedLevel].label}
                 </button>
@@ -948,10 +948,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {completeness && (
             <div style={{ fontSize: 10, marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: 'var(--color-success)' }}>{'\u2713'} Value Stream</span>
-              <span style={{ color: completeness.hasProcess ? '#16a34a' : '#d97706' }}>
+              <span style={{ color: completeness.hasProcess ? 'var(--color-success)' : 'var(--color-warning)' }}>
                 {completeness.hasProcess ? '\u2713' : '\u2717'} Process
               </span>
-              <span style={{ color: completeness.hasActivity ? '#16a34a' : '#d97706' }}>
+              <span style={{ color: completeness.hasActivity ? 'var(--color-success)' : 'var(--color-warning)' }}>
                 {completeness.hasActivity ? '\u2713' : '\u2717'} Activity
               </span>
               {completeness.complete && <span style={{ color: 'var(--color-success)', fontWeight: 500 }}>Ready</span>}

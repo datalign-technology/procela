@@ -55,7 +55,7 @@ export default function SkillGapsWidget() {
           const heldPct = (r.heldByPeople / maxRequired) * 100;
           const critical = r.heldByPeople === 0;
           const tight = r.heldByPeople > 0 && r.gapScore >= 2;
-          const color = critical ? '#dc2626' : tight ? '#d97706' : '#16a34a';
+          const color = critical ? 'var(--color-error)' : tight ? 'var(--color-warning)' : 'var(--color-success)';
           return (
             <div key={r.skillId} style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>

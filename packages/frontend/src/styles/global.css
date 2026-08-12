@@ -120,9 +120,11 @@ ol {
   --color-bg: #f8fafc;
   --color-surface: #ffffff;
   --color-border: #e2e8f0;
+  --color-border-subtle: #f1f5f9; /* fainter divider/fill — was a bare inline literal */
 
   --color-success: #16a34a;
   --color-warning: #d97706;
+  --color-warning-light: #fffbeb; /* warning callout background — was a bare inline literal */
   --color-error: #dc2626;
 
   --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -149,6 +151,7 @@ ol {
     0 2px 4px -2px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
     0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 60px rgba(15, 23, 42, 0.35); /* modal / overlay layer */
 }
 
 body {

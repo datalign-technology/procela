@@ -774,8 +774,8 @@ export default function DataDomainsPage() {
             aria-label="Select industry"
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: 'var(--color-surface)', borderRadius: 10,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: 24,
+              background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)',
+              boxShadow: 'var(--shadow-xl)', padding: 24,
               maxWidth: 480, width: '92vw',
             }}
           >
@@ -828,7 +828,7 @@ export default function DataDomainsPage() {
 
       {showGeneratePreview && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1050, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowGeneratePreview(false)}>
-          <div ref={generatePreviewRef} role="dialog" aria-modal="true" aria-label="Generated domains preview" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: 24, maxWidth: 600, width: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
+          <div ref={generatePreviewRef} role="dialog" aria-modal="true" aria-label="Generated domains preview" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xl)', padding: 24, maxWidth: 600, width: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Suggested Data Domains</h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16 }}>Uncheck any you don't need; the rest will be created as DRAFT domains.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

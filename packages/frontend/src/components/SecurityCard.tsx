@@ -328,7 +328,7 @@ export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
           <div style={{
             background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
             padding: 24, maxWidth: 480, width: '90%',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+            boxShadow: 'var(--shadow-xl)',
           }}>
             <div id="forget-person-title" style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
               Erase {person.name}?

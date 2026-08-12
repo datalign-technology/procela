@@ -956,7 +956,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     padding: '1.5rem',
     width: 'min(420px, 100%)',
-    boxShadow: '0 20px 60px rgba(15, 23, 42, 0.35)',
+    boxShadow: 'var(--shadow-xl)',
   },
   modalTitle: {
     fontSize: '1.125rem',

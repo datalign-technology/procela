@@ -168,7 +168,7 @@ export default function LinkConnectionModal({
         role="dialog"
         aria-modal="true"
         aria-label="Link to connection"
-        style={{ background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.15)', padding: 20, maxWidth: 640, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}
+        style={{ background: '#fff', borderRadius: 12, boxShadow: 'var(--shadow-xl)', padding: 20, maxWidth: 640, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>

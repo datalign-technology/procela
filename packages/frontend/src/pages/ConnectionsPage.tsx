@@ -896,7 +896,7 @@ export default function ConnectionsPage() {
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !filterConnType ? 600 : 400,
-              background: !filterConnType ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              background: !filterConnType ? 'var(--color-primary-light)' : 'transparent',
               color: !filterConnType ? 'var(--color-primary)' : 'var(--color-text)',
             }}
             onMouseEnter={(e) => { if (filterConnType) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -916,7 +916,7 @@ export default function ConnectionsPage() {
                 style={{
                   padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                   fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  background: isActive ? 'var(--color-primary-light)' : 'transparent',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}
@@ -1170,7 +1170,7 @@ export default function ConnectionsPage() {
             role="dialog"
             aria-modal="true"
             aria-label="Discover data assets"
-            style={{ background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.15)', padding: 24, maxWidth: 640, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}
+            style={{ background: '#fff', borderRadius: 12, boxShadow: 'var(--shadow-xl)', padding: 24, maxWidth: 640, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -1187,7 +1187,7 @@ export default function ConnectionsPage() {
             {!discoveringId && discoverSimulated && (
               <div style={{
                 display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', marginBottom: 16,
-                background: 'var(--color-warning-light, #fffbeb)', border: '1px solid var(--color-warning)',
+                background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)',
                 borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--color-text-secondary)',
               }}>
                 <span aria-hidden style={{ color: 'var(--color-warning)', fontWeight: 600 }}>{'⚠'}</span>
