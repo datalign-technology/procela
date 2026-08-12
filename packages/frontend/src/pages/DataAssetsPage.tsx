@@ -1947,7 +1947,7 @@ export default function DataAssetsPage() {
         {loadError ? (
           <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
         ) : loading ? (
-          <SkeletonRows rows={5} columnWidths={[40, null, null, null, 180]} />
+          <SkeletonRows rows={5} columnWidths={[40, null, null, null, null, null, null, null, null, null, 180]} />
         ) : assets.length === 0 && !showForm ? (
           <EmptyState
             icon={renderNavIcon('/data-assets')}

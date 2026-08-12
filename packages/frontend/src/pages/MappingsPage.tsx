@@ -458,9 +458,7 @@ export default function MappingsPage() {
     {
       key: 'notes', header: 'Notes', cellStyle: { maxWidth: 200 },
       render: (m) => (
-        <span style={{ color: m.notes ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>
-          {m.notes || '--'}
-        </span>
+        <TruncatedText text={m.notes} emptyPlaceholder="--" />
       ),
     },
     {
@@ -752,7 +750,7 @@ export default function MappingsPage() {
         }}
       >
         {loading ? (
-          <SkeletonRows rows={5} columns={4} />
+          <SkeletonRows rows={5} columns={7} />
         ) : loadError && mappings.length === 0 ? (
           <ErrorState
             title="Couldn't load mappings"

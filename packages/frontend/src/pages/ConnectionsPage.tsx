@@ -1138,7 +1138,7 @@ export default function ConnectionsPage() {
         {loadError ? (
           <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
         ) : loading ? (
-          <SkeletonRows rows={5} columnWidths={[32, null, null, null]} />
+          <SkeletonRows rows={5} columnWidths={[32, null, null, null, null, null, null, null]} />
         ) : visibleConnections.length === 0 && !showForm ? (
           <EmptyState
             icon={renderNavIcon('/connections')}

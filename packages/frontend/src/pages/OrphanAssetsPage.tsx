@@ -17,6 +17,7 @@ import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import EmptyState from '../components/EmptyState';
+import TruncatedText from '../components/TruncatedText';
 import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 
@@ -101,9 +102,7 @@ export default function OrphanAssetsPage() {
                   <td style={tdStyle}>
                     <Link to={`/data-assets?id=${a.id}`} style={{ fontWeight: 500 }}>{a.name}</Link>
                     {a.description && (
-                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                        {a.description.length > 120 ? a.description.slice(0, 120) + '…' : a.description}
-                      </div>
+                      <TruncatedText text={a.description} style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 320 }} />
                     )}
                   </td>
                   <td style={tdStyle}>{a.systemName || '—'}</td>

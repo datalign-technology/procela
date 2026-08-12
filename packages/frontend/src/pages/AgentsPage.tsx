@@ -407,7 +407,7 @@ export default function AgentsPage() {
   if (loading) return (
     <div>
       <Card shadow="none">
-        <SkeletonRows rows={5} columns={4} />
+        <SkeletonRows rows={5} columns={9} />
       </Card>
     </div>
   );

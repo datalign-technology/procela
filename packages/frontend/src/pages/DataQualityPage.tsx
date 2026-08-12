@@ -387,7 +387,7 @@ export default function DataQualityPage() {
     return (
       <div>
         <Card shadow="none">
-          <SkeletonRows rows={5} columns={4} />
+          <SkeletonRows rows={5} columns={12} />
         </Card>
       </div>
     );

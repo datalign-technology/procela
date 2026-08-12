@@ -852,7 +852,7 @@ export default function GovernanceCalendarPage() {
           {/* All events table */}
           <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
             {loading ? (
-              <SkeletonRows rows={5} columns={6} />
+              <SkeletonRows rows={5} columns={7} />
             ) : events.length === 0 && !showForm ? (
               <EmptyState
                 icon={renderNavIcon('/governance-calendar')}

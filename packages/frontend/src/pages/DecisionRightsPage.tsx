@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import TruncatedText from '../components/TruncatedText';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -473,9 +474,7 @@ export default function DecisionRightsPage() {
             {r.decision}
           </button>
           {r.description && (
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 480 }}>
-              {r.description}
-            </div>
+            <TruncatedText text={r.description} style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 480 }} />
           )}
         </>
       ),
@@ -756,7 +755,7 @@ export default function DecisionRightsPage() {
           {loadError ? (
             <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
           ) : loading ? (
-            <SkeletonRows rows={5} columns={5} />
+            <SkeletonRows rows={5} columns={6} />
           ) : rows.length === 0 && !showForm ? (
             <EmptyState
               icon={renderNavIcon('/decision-rights')}
