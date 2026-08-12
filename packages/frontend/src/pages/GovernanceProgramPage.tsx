@@ -13,6 +13,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
 import type { RolePriority } from '../types';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
+import Button from '../components/Button';
 
 // ESSENTIAL reads as success, RECOMMENDED as info, OPTIONAL as neutral —
 // same mapping the RoleDetailDrawer uses so priority chips look identical
@@ -111,16 +112,6 @@ const textareaStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 const PHASE_COLORS: Record<number, string> = {
   1: '#3b82f6',
@@ -867,7 +858,7 @@ export default function GovernanceProgramPage() {
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <input style={inputStyle} value={newPrinciple} onChange={(e) => setNewPrinciple(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPrinciple(); } }} placeholder="e.g. Data is a shared asset; treat it like one" />
-                          <button type="button" style={btnSecondary} onClick={addPrinciple}>Add</button>
+                          <Button variant="secondary" onClick={addPrinciple}>Add</Button>
                         </div>
                       </div>
                       {/* Decision Rights is a structured entity of its own —
@@ -891,7 +882,7 @@ export default function GovernanceProgramPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-                    <button style={{ ...btnPrimary, opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }} disabled={saving} onClick={handleSave}>{saving ? 'Saving...' : 'Save Changes'}</button>
+                    <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving...' : 'Save Changes'}</Button>
                   </div>
                 </div>
               )}
@@ -1003,7 +994,7 @@ export default function GovernanceProgramPage() {
                                         return (
                                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
                                             <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}</select>
-                                            <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'person')}>Assign</button>
+                                            <Button variant="primary" size="sm" disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'person')}>Assign</Button>
                                             <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
                                             <select
                                               disabled={isPeopleOnly}
@@ -1016,16 +1007,18 @@ export default function GovernanceProgramPage() {
                                               <option value="">Agent…</option>
                                               {!isPeopleOnly && agentsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                                             </select>
-                                            <button
+                                            <Button
                                               type="button"
+                                              variant="primary"
+                                              size="sm"
                                               disabled={isPeopleOnly || !roleAgentSelections[role.roleType] || !!assigningRole}
                                               aria-disabled={isPeopleOnly}
                                               title={isPeopleOnly ? PEOPLE_ONLY_REASON : undefined}
-                                              style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, background: isPeopleOnly ? 'var(--color-bg)' : '#7c3aed', color: isPeopleOnly ? 'var(--color-text-muted)' : undefined, border: isPeopleOnly ? '1px solid var(--color-border)' : undefined, opacity: isPeopleOnly ? 0.6 : (!roleAgentSelections[role.roleType] || assigningRole ? 0.6 : 1), cursor: isPeopleOnly || !roleAgentSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }}
+                                              style={{ background: isPeopleOnly ? 'var(--color-bg)' : '#7c3aed', color: isPeopleOnly ? 'var(--color-text-muted)' : undefined, border: isPeopleOnly ? '1px solid var(--color-border)' : undefined }}
                                               onClick={() => handleAssignRole(role.roleType, 'agent')}
                                             >
                                               Assign
-                                            </button>
+                                            </Button>
                                           </div>
                                         );
                                       })()
@@ -1092,12 +1085,12 @@ export default function GovernanceProgramPage() {
                       const isPrimary = to === 'ACTIVE';
                       const isDanger = to === 'COMPLETED';
                       return (
-                        <button
+                        <Button
                           key={to}
+                          variant="primary"
                           disabled={!isAdmin || statusBusy}
                           title={!isAdmin ? 'Only an admin / program owner can change the program status' : undefined}
                           style={{
-                            ...btnPrimary, fontSize: 13,
                             background: !isAdmin ? 'var(--color-border)'
                               : isDanger ? '#b91c1c'
                               : isPrimary ? 'var(--color-primary)'
@@ -1105,7 +1098,6 @@ export default function GovernanceProgramPage() {
                             color: !isAdmin ? 'var(--color-text-muted)'
                               : (isPrimary || isDanger) ? '#fff' : 'var(--color-text)',
                             border: isPrimary || isDanger ? 'none' : '1px solid var(--color-border)',
-                            cursor: !isAdmin || statusBusy ? 'not-allowed' : 'pointer',
                           }}
                           onClick={() => {
                             if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
@@ -1123,7 +1115,7 @@ export default function GovernanceProgramPage() {
                           }}
                         >
                           {label}
-                        </button>
+                        </Button>
                       );
                     })}
                     {!isAdmin && (

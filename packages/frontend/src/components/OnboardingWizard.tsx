@@ -5,6 +5,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
+import Button from './Button';
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -15,15 +16,6 @@ interface OnboardingWizardProps {
    *  another organization. */
   mode?: 'first-run' | 'tour-only';
 }
-
-const btnPrimary: React.CSSProperties = {
-  padding: '10px 24px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '10px 24px', background: 'var(--color-surface)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer',
-};
 
 const PHASE_INFO = [
   { num: 1, title: 'Define', description: 'Describe how your business works using a structured process hierarchy. No technical knowledge required.', color: '#3b82f6' },
@@ -135,9 +127,9 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 {isTour ? (
-                  <button style={btnPrimary} onClick={onComplete}>Got it</button>
+                  <Button variant="primary" onClick={onComplete}>Got it</Button>
                 ) : (
-                  <button style={btnPrimary} onClick={() => setStep(1)}>Get Started</button>
+                  <Button variant="primary" onClick={() => setStep(1)}>Get Started</Button>
                 )}
               </div>
             </>
@@ -193,14 +185,14 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <button style={btnSecondary} onClick={() => setStep(0)}>Back</button>
-                <button
-                  style={{ ...btnPrimary, opacity: !orgName.trim() || saving ? 0.6 : 1, cursor: !orgName.trim() || saving ? 'not-allowed' : 'pointer' }}
+                <Button variant="secondary" onClick={() => setStep(0)}>Back</Button>
+                <Button
+                  variant="primary"
                   disabled={!orgName.trim() || saving}
                   onClick={handleCreateOrg}
                 >
                   {saving ? 'Creating...' : 'Create Organization'}
-                </button>
+                </Button>
               </div>
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--color-border)', textAlign: 'center', fontSize: 12, color: 'var(--color-text-muted)' }}>
                 Already have organization data?{' '}
@@ -250,13 +242,13 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                <button
-                  style={{ ...btnPrimary, opacity: generating ? 0.6 : 1, cursor: generating ? 'not-allowed' : 'pointer' }}
+                <Button
+                  variant="primary"
                   disabled={generating}
                   onClick={handleFinish}
                 >
                   {generating ? 'Setting up...' : generateTemplate ? 'Generate & Continue' : 'Continue to Dashboard'}
-                </button>
+                </Button>
               </div>
             </>
           )}

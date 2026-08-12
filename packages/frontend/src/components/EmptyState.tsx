@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import Button from './Button';
 
 // ──────────────────────────────────────────────────────────────────────────
 // EmptyState — the standard "no data yet" panel. Replaces the random
@@ -30,28 +31,6 @@ interface EmptyStateProps {
   children?: ReactNode;              // extra footer content (e.g. learn-more link)
 }
 
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 18px',
-  background: 'var(--color-primary)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 18px',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
 export default function EmptyState({ icon, title, description, action, secondaryAction, children }: EmptyStateProps) {
   return (
     <div style={{
@@ -77,20 +56,20 @@ export default function EmptyState({ icon, title, description, action, secondary
       {(action || secondaryAction) && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
           {action && (
-            <button
+            <Button
+              variant={action.variant === 'secondary' ? 'secondary' : 'primary'}
               onClick={action.onClick}
-              style={action.variant === 'secondary' ? btnSecondary : btnPrimary}
             >
               {action.label}
-            </button>
+            </Button>
           )}
           {secondaryAction && (
-            <button
+            <Button
+              variant={secondaryAction.variant === 'primary' ? 'primary' : 'secondary'}
               onClick={secondaryAction.onClick}
-              style={secondaryAction.variant === 'primary' ? btnPrimary : btnSecondary}
             >
               {secondaryAction.label}
-            </button>
+            </Button>
           )}
         </div>
       )}
