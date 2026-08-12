@@ -524,9 +524,9 @@ export default function SopsPage() {
               <div key={idx} style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: 10, marginBottom: 6, background: 'var(--color-bg)' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 4 }}>
-                    <button onClick={() => moveStep(idx, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 10, color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)' }}>▲</button>
+                    <button onClick={() => moveStep(idx, -1)} disabled={idx === 0} aria-label="Move step up" style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 10, color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)' }}><span aria-hidden="true">▲</span></button>
                     <span style={{ fontSize: 11, fontWeight: 700, textAlign: 'center' }}>{idx + 1}</span>
-                    <button onClick={() => moveStep(idx, 1)} disabled={idx === form.steps.length - 1} style={{ background: 'none', border: 'none', cursor: idx === form.steps.length - 1 ? 'default' : 'pointer', fontSize: 10, color: idx === form.steps.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)' }}>▼</button>
+                    <button onClick={() => moveStep(idx, 1)} disabled={idx === form.steps.length - 1} aria-label="Move step down" style={{ background: 'none', border: 'none', cursor: idx === form.steps.length - 1 ? 'default' : 'pointer', fontSize: 10, color: idx === form.steps.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)' }}><span aria-hidden="true">▼</span></button>
                   </div>
                   <div style={{ flex: 1 }}>
                     <input style={{ ...inputStyle, marginBottom: 4 }} value={step.title} onChange={(e) => updateStep(idx, { title: e.target.value })} placeholder="Step title" />

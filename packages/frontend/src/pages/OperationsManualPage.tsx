@@ -4,6 +4,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
@@ -41,7 +42,6 @@ const btnSecondary: React.CSSProperties = {
   padding: '6px 14px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)',
   color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
-const btnDanger: React.CSSProperties = { ...btnSecondary, color: 'var(--color-error)', borderColor: '#fca5a5' };
 const card: React.CSSProperties = {
   background: 'var(--color-surface)', border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)',
@@ -200,13 +200,9 @@ export default function OperationsManualPage() {
             <button style={{ ...btnSecondary, padding: '4px 12px', fontSize: 11 }} onClick={() => setExpandedCards(new Set())}>Collapse All</button>
           </div>
 
-          {selectedIds.size > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-              <button style={{ ...btnDanger, fontSize: 12, padding: '4px 12px' }} onClick={() => setConfirmBulkDelete(true)}>Delete Selected</button>
-              <button style={{ ...btnSecondary, fontSize: 12, padding: '4px 12px' }} onClick={() => setSelectedIds(new Set())}>Clear Selection</button>
-            </div>
-          )}
+          <BulkActionBar count={selectedIds.size} onClear={() => setSelectedIds(new Set())}>
+            <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
+          </BulkActionBar>
 
           {/* 2-column card grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>

@@ -923,7 +923,7 @@ export default function BusinessGlossaryPage() {
           </BulkActionBar>
 
           {/* Table */}
-          <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
+          <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
             {loading ? (
               <SkeletonRows rows={5} columns={6} />
             ) : loadError && terms.length === 0 ? (

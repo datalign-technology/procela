@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import { renderMarkdown } from '../lib/markdown';
 import Page from '../components/Page';
+import PageHeader from '../components/PageHeader';
 
 // ──────────────────────────────────────────────────────────────────────────
 // HelpTrainingPage — Tidewater Utilities training walkthrough.
@@ -19,14 +20,6 @@ import Page from '../components/Page';
 // Retired — replaced by <Page width="narrow" padding="8px 0 32px">
 // which supplies the same maxWidth:820 + centred margin from the
 // shared width preset.
-
-const titleStyle: React.CSSProperties = {
-  fontSize: 28, fontWeight: 700, margin: '0 0 6px',
-};
-
-const subtitleStyle: React.CSSProperties = {
-  fontSize: 14, color: 'var(--color-text-muted)', margin: '0 0 24px',
-};
 
 const printBarStyle: React.CSSProperties = {
   display: 'flex', justifyContent: 'flex-end', marginBottom: 12,
@@ -54,10 +47,10 @@ export default function HelpTrainingPage() {
 
   return (
     <Page width="narrow" padding="8px 0 32px">
-      <h1 style={titleStyle}>Training Guide</h1>
-      <p style={subtitleStyle}>
-        A 90-minute click-by-click walkthrough of Procela using the Tidewater Utilities fixture data.
-      </p>
+      <PageHeader
+        title="Training Guide"
+        subtitle="A 90-minute click-by-click walkthrough of Procela using the Tidewater Utilities fixture data."
+      />
 
       <div style={printBarStyle}>
         <button
