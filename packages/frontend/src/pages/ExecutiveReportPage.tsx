@@ -279,7 +279,7 @@ export default function ExecutiveReportPage() {
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Activities</div>
             </div>
             <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: stats.coverage.percentage >= 70 ? '#22c55e' : stats.coverage.percentage >= 40 ? '#eab308' : '#ef4444' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: stats.coverage.percentage >= 70 ? 'var(--color-success)' : stats.coverage.percentage >= 40 ? 'var(--color-warning)' : 'var(--color-error)' }}>
                 {stats.coverage.percentage}%
               </div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Coverage</div>
@@ -339,7 +339,7 @@ export default function ExecutiveReportPage() {
                 <td style={tdStyle}>
                   <span style={{
                     padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, color: '#fff',
-                    background: unmappedActivities > 0 ? '#ef4444' : '#22c55e',
+                    background: unmappedActivities > 0 ? 'var(--color-error)' : 'var(--color-success)',
                   }}>
                     {unmappedActivities > 0 ? 'High' : 'Clear'}
                   </span>
@@ -351,7 +351,7 @@ export default function ExecutiveReportPage() {
                 <td style={tdStyle}>
                   <span style={{
                     padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, color: '#fff',
-                    background: stats.gaps.ungovernedAssets > 0 ? '#eab308' : '#22c55e',
+                    background: stats.gaps.ungovernedAssets > 0 ? 'var(--color-warning)' : 'var(--color-success)',
                   }}>
                     {stats.gaps.ungovernedAssets > 0 ? 'Medium' : 'Clear'}
                   </span>
@@ -363,7 +363,7 @@ export default function ExecutiveReportPage() {
                 <td style={tdStyle}>
                   <span style={{
                     padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, color: '#fff',
-                    background: stats.gaps.ownerlessItems > 0 ? '#eab308' : '#22c55e',
+                    background: stats.gaps.ownerlessItems > 0 ? 'var(--color-warning)' : 'var(--color-success)',
                   }}>
                     {stats.gaps.ownerlessItems > 0 ? 'Medium' : 'Clear'}
                   </span>

@@ -53,11 +53,11 @@ export default function ActiveFiltersBar({ filters, onClearAll, style }: ActiveF
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '3px 4px 3px 10px',
-            background: '#eff6ff',
-            border: '1px solid #bfdbfe',
+            background: 'var(--color-primary-light)',
+            border: '1px solid var(--color-primary)',
             borderRadius: 999,
             fontSize: 12,
-            color: '#1e40af',
+            color: 'var(--color-primary)',
           }}
         >
           <span style={{ fontWeight: 600 }}>{f.label}:</span>
@@ -67,7 +67,7 @@ export default function ActiveFiltersBar({ filters, onClearAll, style }: ActiveF
             aria-label={`Remove ${f.label} filter`}
             style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
-              color: '#1e40af', fontSize: 14, lineHeight: 1,
+              color: 'var(--color-primary)', fontSize: 14, lineHeight: 1,
               padding: '0 6px', borderRadius: 999,
             }}
           >

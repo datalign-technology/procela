@@ -85,8 +85,8 @@ export default function GovernanceSetupWizard() {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
-      border: '1px solid #93c5fd',
+      background: 'var(--color-primary-light)',
+      border: '1px solid var(--color-primary)',
       borderRadius: 'var(--radius-md)',
       padding: 20, marginBottom: 24,
     }}>

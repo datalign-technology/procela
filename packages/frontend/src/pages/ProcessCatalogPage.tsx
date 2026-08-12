@@ -1286,10 +1286,10 @@ export default function ProcessCatalogPage() {
       )}
       {showLevelGuide && totalNodes > 0 && (
         <div style={{
-          background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+          background: 'var(--color-primary-light)', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)',
           padding: '12px 16px', marginBottom: 12, fontSize: 12, lineHeight: 1.6,
         }}>
-          <div style={{ fontWeight: 600, marginBottom: 8, color: '#1e40af' }}>Process Hierarchy Guide</div>
+          <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>Process Hierarchy Guide</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div><strong>Value Stream *</strong> — A major end-to-end business flow, like "Customer Onboarding" or "Order Fulfillment."</div>
             <div><strong>Process *</strong> — A specific procedure within a value stream, like "Verify Identity" or "Generate Invoice."</div>
@@ -1298,7 +1298,7 @@ export default function ProcessCatalogPage() {
             <div><strong>Domain / Capability</strong> — Optional higher-level groupings for large organizations.</div>
             <div><strong>Task / Execution</strong> — Optional granular detail or system-level steps within an activity.</div>
           </div>
-          <div style={{ fontSize: 11, color: '#1e40af', marginTop: 8 }}>
+          <div style={{ fontSize: 11, color: 'var(--color-primary)', marginTop: 8 }}>
             Start by adding a Value Stream, then add Processes inside it, then Activities inside those. The other levels are optional.
           </div>
         </div>

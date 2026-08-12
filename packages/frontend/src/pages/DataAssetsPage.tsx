@@ -1162,7 +1162,7 @@ export default function DataAssetsPage() {
               const colRules = col.rules || [];
               const isColExpanded = expandedColumnIds.has(col.id);
               const h = col.healthScore;
-              const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
+              const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? 'var(--color-success)' : h >= 50 ? 'var(--color-warning)' : 'var(--color-error)';
               return (
                 <div key={col.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   {/* Column row */}
@@ -1208,6 +1208,7 @@ export default function DataAssetsPage() {
                   {isColExpanded && colRules.length > 0 && (
                     <div style={{ paddingLeft: 46, paddingBottom: 8 }}>
                       {colRules.map((rule) => {
+                        // Kept as hex (not tokenised): this value is alpha-blended below as `rc + '18'` for the badge tint, which only works with a hex string.
                         const rc = rule.status === 'PASSING' ? '#16a34a' : rule.status === 'FAILING' ? '#dc2626' : rule.status === 'WARNING' ? '#ca8a04' : '#64748b';
                         return (
                           <div key={rule.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px', fontSize: 12, borderLeft: `3px solid ${rc}`, marginBottom: 2, borderRadius: '0 4px 4px 0', background: 'var(--color-bg)' }}>

@@ -217,7 +217,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           padding: '6px 10px',
           background: filled ? '#f0fdf4' : '#fffbeb',
           border: '1px solid var(--color-border)',
-          borderLeft: `3px solid ${filled ? '#22c55e' : '#f59e0b'}`,
+          borderLeft: `3px solid ${filled ? 'var(--color-success)' : 'var(--color-warning)'}`,
           borderRadius: 4,
         }}
       >
@@ -225,7 +225,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span aria-hidden style={{
             width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-            background: filled ? '#22c55e' : '#f59e0b', color: '#fff',
+            background: filled ? 'var(--color-success)' : 'var(--color-warning)', color: '#fff',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}>{filled ? <Check size={9} strokeWidth={3.5} /> : <AlertTriangle size={9} strokeWidth={3} />}</span>
           <span style={{ fontWeight: 600, fontSize: 12 }}>{label}</span>

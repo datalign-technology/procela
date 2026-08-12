@@ -57,9 +57,9 @@ const DIMENSION_COLORS: Record<string, string> = {
 // Helpers
 // ---------------------------------------------------------------------------
 function overallColor(score: number): string {
-  if (score >= 70) return '#22c55e';
-  if (score >= 40) return '#eab308';
-  return '#ef4444';
+  if (score >= 70) return 'var(--color-success)';
+  if (score >= 40) return 'var(--color-warning)';
+  return 'var(--color-error)';
 }
 
 function overallLabel(score: number): string {
@@ -293,7 +293,7 @@ function DimensionSparkline({ snapshots, dimensionName, color }: SparklineProps)
         <span style={{
           fontSize: 11,
           fontWeight: 600,
-          color: delta > 0 ? '#22c55e' : delta < 0 ? '#ef4444' : 'var(--color-text-muted)',
+          color: delta > 0 ? 'var(--color-success)' : delta < 0 ? 'var(--color-error)' : 'var(--color-text-muted)',
         }}>
           {latest}% ({deltaStr})
         </span>

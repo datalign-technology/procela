@@ -539,7 +539,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               <tbody>
                 {displayRules.map((r) => {
                   const pr = r.lastRun?.passRate;
-                  const prColor = pr === undefined ? '#64748b' : pr >= 95 ? '#16a34a' : pr >= 80 ? '#ca8a04' : '#dc2626';
+                  const prColor = pr === undefined ? 'var(--color-text-muted)' : pr >= 95 ? 'var(--color-success)' : pr >= 80 ? 'var(--color-warning)' : 'var(--color-error)';
                   const isExpanded = expandedRuleIds.has(r.id);
                   return (
                     <React.Fragment key={r.id}>

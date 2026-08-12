@@ -373,7 +373,7 @@ function MyDashboard() {
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
                   <div style={{ height: 4, background: '#e5e7eb', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${healthPct}%`, background: healthPct >= 80 ? '#22c55e' : healthPct >= 50 ? '#f59e0b' : '#dc2626', borderRadius: 2 }} />
+                    <div style={{ height: '100%', width: `${healthPct}%`, background: healthPct >= 80 ? 'var(--color-success)' : healthPct >= 50 ? 'var(--color-warning)' : 'var(--color-error)', borderRadius: 2 }} />
                   </div>
                 </Link>
               );
@@ -487,10 +487,10 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
     { label: 'Systems',       value: stats.systems,                     color: '#5b21b6',
       to: '/systems', zero: stats.systems === 0 },
     { label: 'Coverage',      value: `${stats.coverage.percentage}%`,
-      color: stats.coverage.percentage >= 80 ? '#16a34a' : stats.coverage.percentage >= 50 ? '#ca8a04' : '#dc2626',
+      color: stats.coverage.percentage >= 80 ? 'var(--color-success)' : stats.coverage.percentage >= 50 ? 'var(--color-warning)' : 'var(--color-error)',
       to: '/mappings', zero: stats.coverage.percentage === 0 },
     { label: 'Avg Health',    value: `${stats.averageHealth}%`,
-      color: stats.averageHealth >= 80 ? '#16a34a' : stats.averageHealth >= 50 ? '#ca8a04' : '#dc2626',
+      color: stats.averageHealth >= 80 ? 'var(--color-success)' : stats.averageHealth >= 50 ? 'var(--color-warning)' : 'var(--color-error)',
       to: '/data-assets?sort=healthScore&dir=asc', zero: stats.averageHealth === 0 },
   ];
   return (
@@ -941,7 +941,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
     { label: 'Orphan data assets (no process uses them)', count: gaps.orphanAssets || 0, severity: 'warning' as const, link: '/data-assets/orphans' },
   ];
   const total = items.reduce((s, i) => s + i.count, 0);
-  const sevColors = { critical: '#dc2626', warning: '#d97706', info: '#2563eb' };
+  const sevColors = { critical: 'var(--color-error)', warning: 'var(--color-warning)', info: '#2563eb' };
 
   return (
     <div>
