@@ -6,6 +6,7 @@ import Spinner from '../components/Spinner';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
 import IconButton from '../components/IconButton';
+import { healthColorVar } from '../components/HealthBar';
 
 interface DashboardStats {
   valueStreams: number;
@@ -68,10 +69,10 @@ const sectionStyle: React.CSSProperties = {
 const sectionTitleStyle: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 700,
-  borderBottom: '2px solid var(--color-primary, #0f4f46)',
+  borderBottom: '2px solid var(--color-primary)',
   paddingBottom: 6,
   marginBottom: 16,
-  color: 'var(--color-primary, #0f4f46)',
+  color: 'var(--color-primary)',
 };
 
 const tableStyle: React.CSSProperties = {
@@ -83,7 +84,7 @@ const tableStyle: React.CSSProperties = {
 const thStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '8px 12px',
-  borderBottom: '2px solid var(--color-border, #e5e7eb)',
+  borderBottom: '2px solid var(--color-border)',
   fontWeight: 600,
   color: 'var(--color-text-secondary, #64748b)',
   fontSize: 12,
@@ -93,12 +94,12 @@ const thStyle: React.CSSProperties = {
 
 const tdStyle: React.CSSProperties = {
   padding: '8px 12px',
-  borderBottom: '1px solid var(--color-border, #e5e7eb)',
+  borderBottom: '1px solid var(--color-border)',
 };
 
 const metricBoxStyle: React.CSSProperties = {
-  background: 'var(--color-surface, #fff)',
-  border: '1px solid var(--color-border, #e5e7eb)',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
   borderRadius: 8,
   padding: 16,
   textAlign: 'center',
@@ -221,21 +222,21 @@ export default function ExecutiveReportPage() {
       </div>
 
       <div className="report-content" style={{
-        background: 'var(--color-surface, #fff)',
-        border: '1px solid var(--color-border, #e5e7eb)',
-        borderRadius: 'var(--radius-md, 8px)',
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
         padding: 40,
         boxShadow: 'var(--shadow-sm)',
       }}>
         {/* Report Header */}
-        <div style={{ textAlign: 'center', marginBottom: 40, borderBottom: '3px solid var(--color-primary, #0f4f46)', paddingBottom: 24 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--color-primary, #0f4f46)', margin: 0 }}>
+        <div style={{ textAlign: 'center', marginBottom: 40, borderBottom: '3px solid var(--color-primary)', paddingBottom: 24 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--color-primary)', margin: 0 }}>
             Procela Executive Report
           </h1>
           <div style={{ fontSize: 16, color: 'var(--color-text-secondary, #64748b)', marginTop: 8 }}>
             {activeOrgName || 'All Organizations'}
           </div>
-          <div style={{ fontSize: 13, color: 'var(--color-text-muted, #94a3b8)', marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 4 }}>
             Generated {today}
           </div>
         </div>
@@ -280,14 +281,14 @@ export default function ExecutiveReportPage() {
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Activities</div>
             </div>
             <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: stats.coverage.percentage >= 70 ? 'var(--color-success)' : stats.coverage.percentage >= 40 ? 'var(--color-warning)' : 'var(--color-error)' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: healthColorVar(stats.coverage.percentage) }}>
                 {stats.coverage.percentage}%
               </div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Coverage</div>
             </div>
           </div>
-          <div style={{ height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${stats.coverage.percentage}%`, background: '#0f4f46', borderRadius: 4 }} />
+          <div style={{ height: 8, background: 'var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${stats.coverage.percentage}%`, background: 'var(--color-primary)', borderRadius: 4 }} />
           </div>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             {stats.coverage.mapped} of {stats.coverage.mapped + stats.coverage.unmapped} activities mapped to data assets
@@ -298,20 +299,20 @@ export default function ExecutiveReportPage() {
         <div className="page-break" style={sectionStyle}>
           <h2 style={sectionTitleStyle}>3. Data Governance</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
-            <div style={{ ...metricBoxStyle, borderLeft: '4px solid #d4a017' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#d4a017' }}>{stats.governance.gold}</div>
+            <div style={{ ...metricBoxStyle, borderLeft: '4px solid var(--color-tier-gold)' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-tier-gold)' }}>{stats.governance.gold}</div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Certified</div>
             </div>
-            <div style={{ ...metricBoxStyle, borderLeft: '4px solid #9ca3af' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#9ca3af' }}>{stats.governance.silver}</div>
+            <div style={{ ...metricBoxStyle, borderLeft: '4px solid var(--color-tier-silver)' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-tier-silver)' }}>{stats.governance.silver}</div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Managed</div>
             </div>
-            <div style={{ ...metricBoxStyle, borderLeft: '4px solid #b45309' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#b45309' }}>{stats.governance.bronze}</div>
+            <div style={{ ...metricBoxStyle, borderLeft: '4px solid var(--color-tier-bronze)' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-tier-bronze)' }}>{stats.governance.bronze}</div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Uncertified</div>
             </div>
             <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: stats.averageHealth >= 80 ? '#22c55e' : stats.averageHealth >= 50 ? '#eab308' : '#ef4444' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: healthColorVar(stats.averageHealth) }}>
                 {stats.averageHealth}%
               </div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Avg Health</div>
@@ -377,7 +378,7 @@ export default function ExecutiveReportPage() {
                 <td style={tdStyle}>
                   <span style={{
                     padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, color: '#fff',
-                    background: (stats.gaps.ungovernedDomains ?? 0) > 0 ? '#3b82f6' : '#22c55e',
+                    background: (stats.gaps.ungovernedDomains ?? 0) > 0 ? 'var(--color-info)' : 'var(--color-success)',
                   }}>
                     {(stats.gaps.ungovernedDomains ?? 0) > 0 ? 'Info' : 'Clear'}
                   </span>
@@ -425,7 +426,7 @@ export default function ExecutiveReportPage() {
                       <span style={{
                         padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
                         color: '#fff',
-                        background: g.status === 'ACTIVE' ? '#22c55e' : '#9ca3af',
+                        background: g.status === 'ACTIVE' ? 'var(--color-success)' : 'var(--color-text-muted)',
                       }}>
                         {g.status}
                       </span>
@@ -441,11 +442,11 @@ export default function ExecutiveReportPage() {
 
         {/* Footer */}
         <div style={{
-          borderTop: '2px solid var(--color-border, #e5e7eb)',
+          borderTop: '2px solid var(--color-border)',
           paddingTop: 16,
           textAlign: 'center',
           fontSize: 11,
-          color: 'var(--color-text-muted, #94a3b8)',
+          color: 'var(--color-text-muted)',
         }}>
           Generated by Procela -- {today}
         </div>
