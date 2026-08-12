@@ -398,6 +398,7 @@ export default function PersonPicker({
                   <div style={{ padding: 8, position: 'sticky', top: 0, background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
                     <input
                       autoFocus
+                      aria-label="Search people"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="Search name, title, or org…"

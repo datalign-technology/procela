@@ -431,7 +431,7 @@ export default function PersonDetailPage() {
             return current.length === 1 && current[0] === orgId;
           }}
           maxHeight={260}
-          placeholder="Search organizations (press / to focus)"
+          aria-label="Search organizations" placeholder="Search organizations (press / to focus)"
         />
       </div>
 

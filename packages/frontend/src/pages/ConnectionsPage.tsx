@@ -923,7 +923,7 @@ export default function ConnectionsPage() {
             <div style={{ position: 'relative', width: 200 }}>
               <input
                 type="text"
-                placeholder="Search connections..."
+                aria-label="Search connections" placeholder="Search connections..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Escape' && searchQuery) setSearchQuery(''); }}

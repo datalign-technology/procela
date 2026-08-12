@@ -198,7 +198,7 @@ export default function AuditLogPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search entity, user, action…"
+          aria-label="Search audit log" placeholder="Search entity, user, action…"
           style={{
             flex: '1 1 240px', minWidth: 200,
             padding: '6px 12px', fontSize: 13,
