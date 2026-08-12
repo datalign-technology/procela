@@ -548,14 +548,14 @@ export default function DataLineagePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Source System *</label>
-              <select style={selectStyle} value={form.sourceSystemId} onChange={(e) => updateField('sourceSystemId', e.target.value)}>
+              <select aria-label="Source System" style={selectStyle} value={form.sourceSystemId} onChange={(e) => updateField('sourceSystemId', e.target.value)}>
                 <option value="">-- Select source system --</option>
                 {systemsList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target System *</label>
-              <select style={selectStyle} value={form.targetSystemId} onChange={(e) => updateField('targetSystemId', e.target.value)}>
+              <select aria-label="Target System" style={selectStyle} value={form.targetSystemId} onChange={(e) => updateField('targetSystemId', e.target.value)}>
                 <option value="">-- Select target system --</option>
                 {systemsList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
@@ -565,26 +565,26 @@ export default function DataLineagePage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Asset (optional)</label>
-              <select style={selectStyle} value={form.dataAssetId} onChange={(e) => updateField('dataAssetId', e.target.value)}>
+              <select aria-label="Data Asset (optional)" style={selectStyle} value={form.dataAssetId} onChange={(e) => updateField('dataAssetId', e.target.value)}>
                 <option value="">-- None --</option>
                 {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Flow Type</label>
-              <select style={selectStyle} value={form.flowType} onChange={(e) => updateField('flowType', e.target.value)}>
+              <select aria-label="Flow Type" style={selectStyle} value={form.flowType} onChange={(e) => updateField('flowType', e.target.value)}>
                 {FLOW_TYPES.map((ft) => <option key={ft} value={ft}>{ft.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Frequency</label>
-              <select style={selectStyle} value={form.frequency} onChange={(e) => updateField('frequency', e.target.value)}>
+              <select aria-label="Frequency" style={selectStyle} value={form.frequency} onChange={(e) => updateField('frequency', e.target.value)}>
                 {FREQUENCIES.map((f) => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              <select style={selectStyle} value={form.status} onChange={(e) => updateField('status', e.target.value)}>
+              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => updateField('status', e.target.value)}>
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
                 <option value="DEPRECATED">Deprecated</option>
@@ -593,6 +593,7 @@ export default function DataLineagePage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input
+                aria-label="Description"
                 style={inputStyle}
                 value={form.description}
                 onChange={(e) => updateField('description', e.target.value)}

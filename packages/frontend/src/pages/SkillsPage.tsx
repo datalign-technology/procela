@@ -331,6 +331,7 @@ export default function SkillsPage() {
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
         />
         <select
+          aria-label="Filter by category"
           style={{ ...inputStyle, width: 'auto', minWidth: 130, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
@@ -358,6 +359,7 @@ export default function SkillsPage() {
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
@@ -367,13 +369,14 @@ export default function SkillsPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>
-              <select style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                 {CATEGORIES.map((c) => <option key={c} value={c}>{formatCategory(c)}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <textarea
+                aria-label="Description"
                 style={{ ...inputStyle, minHeight: 60, resize: 'vertical', fontFamily: 'inherit' }}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}

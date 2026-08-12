@@ -328,6 +328,7 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
     return (
       <select
         autoFocus
+        aria-label="Edit field"
         value={draft}
         onChange={(e) => { onSave(e.target.value); setEditing(false); }}
         onBlur={() => setEditing(false)}
@@ -342,6 +343,7 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
   return (
     <input
       autoFocus
+      aria-label="Edit field"
       type={type}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
@@ -1040,6 +1042,7 @@ export default function DataAssetsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {canWrite && !inherited ? (
               <select
+                aria-label="Governance tier"
                 value={asset.governanceTier || 'BRONZE'}
                 onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
                 style={{ fontSize: 13, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
@@ -1177,6 +1180,7 @@ export default function DataAssetsPage() {
                     </span>
                     <span style={{ minWidth: 90 }} onClick={(e) => e.stopPropagation()}>
                       <select
+                        aria-label="Column data type"
                         value={col.dataType || ''}
                         onChange={(e) => updateColumnType(asset.id, col.id, e.target.value)}
                         style={{ fontSize: 11, color: col.dataType ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', border: 'none', background: 'transparent', cursor: 'pointer', padding: '1px 2px', fontFamily: 'inherit' }}
@@ -1418,14 +1422,14 @@ export default function DataAssetsPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
         />
-        <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
+        <select aria-label="Filter by tier" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
           <option value="">All Tiers</option>
           <option value="GOLD">{tierLabel('GOLD')} ({assets.filter((a) => a.governanceTier === 'GOLD').length})</option>
           <option value="SILVER">{tierLabel('SILVER')} ({assets.filter((a) => a.governanceTier === 'SILVER').length})</option>
           <option value="BRONZE">{tierLabel('BRONZE')} ({assets.filter((a) => !a.governanceTier || a.governanceTier === 'BRONZE').length})</option>
         </select>
         {systems.length > 0 && (
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterSystemId} onChange={(e) => setFilterSystemId(e.target.value)}>
+          <select aria-label="Filter by system" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterSystemId} onChange={(e) => setFilterSystemId(e.target.value)}>
             <option value="">All Systems</option>
             {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -1461,6 +1465,7 @@ export default function DataAssetsPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input
                 autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: formValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => updateField('name', e.target.value)}
@@ -1471,7 +1476,7 @@ export default function DataAssetsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Type</label>
-              <select style={selectStyle} value={form.dataType} onChange={(e) => updateField('dataType', e.target.value)}>
+              <select aria-label="Data Type" style={selectStyle} value={form.dataType} onChange={(e) => updateField('dataType', e.target.value)}>
                 <option value="">-- Select --</option>
                 <option value="MASTER">Master</option>
                 <option value="REFERENCE">Reference</option>
@@ -1483,6 +1488,7 @@ export default function DataAssetsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input
+                aria-label="Description"
                 style={inputStyle}
                 value={form.description}
                 onChange={(e) => updateField('description', e.target.value)}
@@ -1496,14 +1502,14 @@ export default function DataAssetsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Domain</label>
-              <select style={selectStyle} value={form.domainId} onChange={(e) => updateField('domainId', e.target.value)}>
+              <select aria-label="Domain" style={selectStyle} value={form.domainId} onChange={(e) => updateField('domainId', e.target.value)}>
                 <option value="">-- No domain --</option>
                 {domainsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Governance Tier <HelpPopover id="asset-tier" title="Governance Tiers">Uncertified = catalogued but not yet governed. Managed = owner and steward assigned, basic quality rules in place. Certified = fully governed, audit-ready.</HelpPopover></label>
-              <select style={selectStyle} value={form.governanceTier} onChange={(e) => updateField('governanceTier', e.target.value)}>
+              <select aria-label="Governance Tier" style={selectStyle} value={form.governanceTier} onChange={(e) => updateField('governanceTier', e.target.value)}>
                 {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
               </select>
             </div>
@@ -1666,14 +1672,14 @@ export default function DataAssetsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System</label>
-                  <select style={selectStyle} value={form.systemId} onChange={(e) => updateField('systemId', e.target.value)}>
+                  <select aria-label="System" style={selectStyle} value={form.systemId} onChange={(e) => updateField('systemId', e.target.value)}>
                     <option value="">-- Select system --</option>
                     {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Refresh Frequency <HelpPopover id="asset-refresh" title="Refresh Frequency">How often is this data updated from its source? Affects how stale the data might be when consumed by processes.</HelpPopover></label>
-                  <select style={selectStyle} value={form.refreshFrequency} onChange={(e) => updateField('refreshFrequency', e.target.value)}>
+                  <select aria-label="Refresh Frequency" style={selectStyle} value={form.refreshFrequency} onChange={(e) => updateField('refreshFrequency', e.target.value)}>
                     <option value="">-- Select --</option>
                     <option value="REAL_TIME">Real-time</option>
                     <option value="STREAMING">Streaming</option>
@@ -1691,6 +1697,7 @@ export default function DataAssetsPage() {
                     <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Retention <HelpPopover id="asset-retention" title="Retention Policy">How long is this data kept before deletion or archival? Add the regulatory or business reason for the policy.</HelpPopover></label>
                     <input
                       type="number"
+                      aria-label="Retention"
                       min={0}
                       style={inputStyle}
                       value={form.retentionDurationValue}
@@ -1701,6 +1708,7 @@ export default function DataAssetsPage() {
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Unit</label>
                     <select
+                      aria-label="Unit"
                       style={selectStyle}
                       value={form.retentionDurationUnit}
                       onChange={(e) => updateField('retentionDurationUnit', e.target.value)}
@@ -1714,6 +1722,7 @@ export default function DataAssetsPage() {
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Reason</label>
                     <input
+                      aria-label="Reason"
                       style={inputStyle}
                       value={form.retentionReason}
                       onChange={(e) => updateField('retentionReason', e.target.value)}
@@ -1750,6 +1759,7 @@ export default function DataAssetsPage() {
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection</label>
                     <select
+                      aria-label="Connection"
                       style={selectStyle}
                       value={form.sourceConnectionId}
                       onChange={(e) => {
@@ -1798,6 +1808,7 @@ export default function DataAssetsPage() {
                     </label>
                     {sourceDiscovered.length > 1 && (
                       <select
+                        aria-label={`Pick discovered ${lbl.label.toLowerCase()}`}
                         style={{ ...selectStyle, marginBottom: 4 }}
                         value=""
                         onChange={(e) => {
@@ -1811,6 +1822,7 @@ export default function DataAssetsPage() {
                       </select>
                     )}
                     <input
+                      aria-label={lbl.label}
                       style={{ ...inputStyle, border: formValidation.fieldError('sourceAsset') ? inputErrorBorder : inputStyle.border }}
                       value={form.sourceAsset}
                       onChange={(e) => updateAndRevalidate('sourceAsset', e.target.value)}
@@ -1824,7 +1836,7 @@ export default function DataAssetsPage() {
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Column (optional)</label>
-                    <input style={inputStyle} value={form.sourceColumn} onChange={(e) => updateField('sourceColumn', e.target.value)} placeholder="e.g. email, account_id" />
+                    <input aria-label="Column (optional)" style={inputStyle} value={form.sourceColumn} onChange={(e) => updateField('sourceColumn', e.target.value)} placeholder="e.g. email, account_id" />
                   </div>
                 </div>
               );
@@ -1871,6 +1883,7 @@ export default function DataAssetsPage() {
         <BulkActionButton onClick={() => bulkSetTier('SILVER')}>Set {tierLabel('SILVER')}</BulkActionButton>
         <BulkActionButton onClick={() => bulkSetTier('BRONZE')}>Set {tierLabel('BRONZE')}</BulkActionButton>
         <select
+          aria-label="Assign owner"
           onChange={(e) => { if (e.target.value) bulkSetOwner(e.target.value); e.target.value = ''; }}
           style={{
             padding: '5px 12px', fontSize: 12, fontWeight: 500,

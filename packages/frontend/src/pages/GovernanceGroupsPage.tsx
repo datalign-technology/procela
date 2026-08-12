@@ -936,6 +936,7 @@ export default function GovernanceGroupsPage() {
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
@@ -945,7 +946,7 @@ export default function GovernanceGroupsPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type *</label>
-              <select style={selectStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, parentId: form.parentId })}>
+              <select aria-label="Type" style={selectStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, parentId: form.parentId })}>
                 {typeOptions.map((t) => {
                   const isRecommended = recommendedTypes.length > 0 && recommendedTypes.includes(t);
                   const label = groupTypeLabels[t] || GROUP_TYPE_LABELS[t] || t;
@@ -955,21 +956,21 @@ export default function GovernanceGroupsPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent Group</label>
-              <select style={selectStyle} value={form.parentId || ''} onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}>
+              <select aria-label="Parent Group" style={selectStyle} value={form.parentId || ''} onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}>
                 <option value="">-- No parent (top-level) --</option>
                 {getValidParentOptions().map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of this group's purpose" />
+              <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of this group's purpose" />
             </div>
             {/* Charter removed: write-only — editable but rendered on no
                 detail panel or export. Description covers the group's
@@ -1226,6 +1227,7 @@ export default function GovernanceGroupsPage() {
                                     {canAddPerson && (
                                       <>
                                         <select
+                                          aria-label="Person"
                                           style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px' }}
                                           value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
                                           onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); if (e.target.value) setAssignRoleAgentId(''); }}
@@ -1251,6 +1253,7 @@ export default function GovernanceGroupsPage() {
                                     {canAddAgent && (
                                       <>
                                         <select
+                                          aria-label="Agent"
                                           style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: '#c4b5fd' }}
                                           value={assignRoleType === expected.roleType ? assignRoleAgentId : ''}
                                           onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRoleAgentId(e.target.value); if (e.target.value) setAssignRolePersonId(''); }}
@@ -1275,6 +1278,7 @@ export default function GovernanceGroupsPage() {
                                       <>
                                         <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
                                         <select
+                                          aria-label="Agent"
                                           aria-disabled="true"
                                           disabled
                                           title={PEOPLE_ONLY_REASON}
@@ -1318,14 +1322,14 @@ export default function GovernanceGroupsPage() {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
                     <div style={{ flex: 2 }}>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
-                      <select style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
+                      <select aria-label="Person" style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
                         <option value="">-- Select person --</option>
                         {availablePeople.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
                       </select>
                     </div>
                     <div style={{ flex: 1 }}>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Group Role</label>
-                      <select style={selectStyle} value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
+                      <select aria-label="Group Role" style={selectStyle} value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
                         {groupRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
                       </select>
                     </div>

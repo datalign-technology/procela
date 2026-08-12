@@ -506,6 +506,7 @@ export default function SettingsPage() {
           <div>
             <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Tenant slug</label>
             <input
+              aria-label="Tenant slug"
               value={branding.tenantSlug}
               onChange={(e) => setBranding((b) => ({ ...b, tenantSlug: e.target.value }))}
               placeholder="e.g. tidewater"
@@ -518,6 +519,7 @@ export default function SettingsPage() {
           <div>
             <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Display name</label>
             <input
+              aria-label="Display name"
               value={branding.brandDisplayName}
               onChange={(e) => setBranding((b) => ({ ...b, brandDisplayName: e.target.value }))}
               placeholder="e.g. Tidewater Utilities"
@@ -528,6 +530,7 @@ export default function SettingsPage() {
           <div>
             <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Glyph (emoji)</label>
             <input
+              aria-label="Glyph (emoji)"
               value={branding.brandGlyph}
               onChange={(e) => setBranding((b) => ({ ...b, brandGlyph: e.target.value }))}
               placeholder="e.g. ⚡ or 💧"
@@ -538,6 +541,7 @@ export default function SettingsPage() {
           <div>
             <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Primary color (#RRGGBB)</label>
             <input
+              aria-label="Primary color (#RRGGBB)"
               value={branding.brandPrimaryColor}
               onChange={(e) => setBranding((b) => ({ ...b, brandPrimaryColor: e.target.value }))}
               placeholder="#1a7a6d"
@@ -548,6 +552,7 @@ export default function SettingsPage() {
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>SSO button label</label>
             <input
+              aria-label="SSO button label"
               value={branding.ssoButtonLabel}
               onChange={(e) => setBranding((b) => ({ ...b, ssoButtonLabel: e.target.value }))}
               placeholder="e.g. Sign in with Tidewater SSO"
@@ -674,6 +679,7 @@ export default function SettingsPage() {
               <div>
                 <label style={labelStyle}>Provider</label>
                 <select
+                  aria-label="Provider"
                   value={formProvider}
                   onChange={(e) => {
                     setFormProvider(e.target.value as DisplayProvider);
@@ -702,6 +708,7 @@ export default function SettingsPage() {
                   <div>
                     <label style={labelStyle}>OIDC Issuer URL</label>
                     <input
+                      aria-label="OIDC Issuer URL"
                       type="url"
                       placeholder={formProvider === 'microsoft'
                         ? 'https://login.microsoftonline.com/{tenant-id}/v2.0'
@@ -718,6 +725,7 @@ export default function SettingsPage() {
                   <div>
                     <label style={labelStyle}>OIDC Client ID</label>
                     <input
+                      aria-label="OIDC Client ID"
                       type="text"
                       placeholder="Enter your client ID"
                       value={formClientId}
@@ -857,6 +865,7 @@ export default function SettingsPage() {
 
           <input
             ref={fileInputRef}
+            aria-label="Backup file to import"
             type="file"
             accept=".json"
             onChange={handleFileSelect}
@@ -1457,6 +1466,7 @@ function MfaPanel() {
             </div>
             {err && <div style={{ fontSize: 12, color: 'var(--color-error)', marginBottom: 6 }}>{err}</div>}
             <input
+              aria-label="Current password"
               type="password"
               value={disablePassword}
               onChange={(e) => setDisablePassword(e.target.value)}
@@ -1466,6 +1476,7 @@ function MfaPanel() {
               style={inputStyle}
             />
             <input
+              aria-label="6-digit code"
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -1541,6 +1552,7 @@ function MfaPanel() {
             <form onSubmit={verifyEnrollment}>
               {err && <div style={{ fontSize: 12, color: 'var(--color-error)', marginBottom: 6 }}>{err}</div>}
               <input
+                aria-label="6-digit code"
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
@@ -1653,6 +1665,7 @@ function MfaPanel() {
               Confirm with a code from your authenticator to generate a new set of 10 backup codes. The current set will be invalidated.
             </div>
             <input
+              aria-label="6-digit code"
               type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
               value={regenCode}
               onChange={(e) => setRegenCode(e.target.value.replace(/\D/g, ''))}

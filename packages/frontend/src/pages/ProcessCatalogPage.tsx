@@ -314,7 +314,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
     <div style={{ background: config.bg, border: `1px solid ${config.color}33`, borderRadius: 6, padding: 12, margin: '6px 0' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
         {validChildren.length > 1 ? (
-          <select style={{ ...inputStyle, width: 'auto', fontWeight: 500 }} value={level} onChange={(e) => setLevel(e.target.value as NodeLevel)}>
+          <select aria-label="Level" style={{ ...inputStyle, width: 'auto', fontWeight: 500 }} value={level} onChange={(e) => setLevel(e.target.value as NodeLevel)}>
             {validChildren.map((l) => (
               <option key={l} value={l}>
                 {LEVEL_CONFIG[l].icon} {LEVEL_CONFIG[l].label}{LEVEL_CONFIG[l].required ? ' *' : ''}
@@ -326,7 +326,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
             {config.icon} Add {config.label}
           </span>
         )}
-        <input autoFocus style={{ ...inputStyle, flex: 1 }} placeholder={`${config.label} name...`} value={name}
+        <input autoFocus aria-label={`${config.label} name`} style={{ ...inputStyle, flex: 1 }} placeholder={`${config.label} name...`} value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onAdd(name.trim(), description.trim(), level); if (e.key === 'Escape') onCancel(); }}
         />
@@ -334,7 +334,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
       <div style={{ fontSize: 11, color: config.color, marginBottom: 6, opacity: 0.8 }}>
         {config.hint}
       </div>
-      <input style={{ ...inputStyle, width: '100%', marginBottom: 8 }} placeholder="Description (optional)" value={description}
+      <input aria-label="Description" style={{ ...inputStyle, width: '100%', marginBottom: 8 }} placeholder="Description (optional)" value={description}
         onChange={(e) => setDescription(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onAdd(name.trim(), description.trim(), level); if (e.key === 'Escape') onCancel(); }}
       />

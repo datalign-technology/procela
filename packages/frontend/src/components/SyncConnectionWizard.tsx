@@ -314,11 +314,11 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           <div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection Name *</label>
-              <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder={`e.g. HR Database → ${ENTITY_LABELS[targetEntity]}`} />
+              <input aria-label="Connection Name" style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder={`e.g. HR Database → ${ENTITY_LABELS[targetEntity]}`} />
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Organization *</label>
-              <select style={selectStyle} value={targetOrgId} onChange={(e) => setTargetOrgId(e.target.value)}>
+              <select aria-label="Target Organization" style={selectStyle} value={targetOrgId} onChange={(e) => setTargetOrgId(e.target.value)}>
                 <option value="">-- Select organization --</option>
                 {orgList.map((o) => {
                   const typeLabel = o.type.charAt(0).toUpperCase() + o.type.slice(1);
@@ -389,7 +389,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             {connectionMode === 'saved' && (
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Saved Connection *</label>
-                <select style={selectStyle} value={savedConnectionId} onChange={(e) => setSavedConnectionId(e.target.value)}>
+                <select aria-label="Saved Connection" style={selectStyle} value={savedConnectionId} onChange={(e) => setSavedConnectionId(e.target.value)}>
                   <option value="">-- Select a saved connection --</option>
                   {compatibleConnections.map((c) => {
                     const detail = c.config?.host
@@ -414,7 +414,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Database Type</label>
-              <select style={selectStyle} value={dbType} onChange={(e) => setDbType(e.target.value as DbType)}>
+              <select aria-label="Database Type" style={selectStyle} value={dbType} onChange={(e) => setDbType(e.target.value as DbType)}>
                 <option value="POSTGRESQL">PostgreSQL</option>
                 <option value="MYSQL">MySQL</option>
                 <option value="SQLSERVER">SQL Server</option>
@@ -423,30 +423,30 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Host *</label>
-                <input style={inputStyle} value={host} onChange={(e) => setHost(e.target.value)} placeholder="e.g. db.company.com" />
+                <input aria-label="Host" style={inputStyle} value={host} onChange={(e) => setHost(e.target.value)} placeholder="e.g. db.company.com" />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Port</label>
-                <input style={inputStyle} value={port} onChange={(e) => setPort(e.target.value)} placeholder="5432" />
+                <input aria-label="Port" style={inputStyle} value={port} onChange={(e) => setPort(e.target.value)} placeholder="5432" />
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Database *</label>
-                <input style={inputStyle} value={database} onChange={(e) => setDatabase(e.target.value)} placeholder="procela_db" />
+                <input aria-label="Database" style={inputStyle} value={database} onChange={(e) => setDatabase(e.target.value)} placeholder="procela_db" />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Schema</label>
-                <input style={inputStyle} value={schema} onChange={(e) => setSchema(e.target.value)} placeholder="public" />
+                <input aria-label="Schema" style={inputStyle} value={schema} onChange={(e) => setSchema(e.target.value)} placeholder="public" />
               </div>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Table *</label>
-              <input style={inputStyle} value={table} onChange={(e) => setTable(e.target.value)} placeholder="e.g. employees, org_units" />
+              <input aria-label="Table" style={inputStyle} value={table} onChange={(e) => setTable(e.target.value)} placeholder="e.g. employees, org_units" />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Custom Query (optional)</label>
-              <textarea style={{ ...inputStyle, minHeight: 50, fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SELECT * FROM employees WHERE active = true" />
+              <textarea aria-label="Custom Query (optional)" style={{ ...inputStyle, minHeight: 50, fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SELECT * FROM employees WHERE active = true" />
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Overrides the table setting. Use this for filtered or joined data.</span>
             </div>
           </div>
@@ -456,11 +456,11 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>URL *</label>
-              <input style={inputStyle} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={sourceType === 'CSV_URL' ? 'https://example.com/data/people.csv' : 'https://api.example.com/v1/systems'} />
+              <input aria-label="URL" style={inputStyle} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={sourceType === 'CSV_URL' ? 'https://example.com/data/people.csv' : 'https://api.example.com/v1/systems'} />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Authorization Header (optional)</label>
-              <input style={inputStyle} value={authHeader} onChange={(e) => setAuthHeader(e.target.value)} placeholder="Bearer eyJhbG... or Basic dXNlcjpwYXNz" />
+              <input aria-label="Authorization Header (optional)" style={inputStyle} value={authHeader} onChange={(e) => setAuthHeader(e.target.value)} placeholder="Bearer eyJhbG... or Basic dXNlcjpwYXNz" />
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Sent as the Authorization header on each request</span>
             </div>
           </div>
@@ -470,12 +470,12 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Table *</label>
-              <input style={inputStyle} value={table} onChange={(e) => setTable(e.target.value)} placeholder="e.g. employees, org_units" />
+              <input aria-label="Table" style={inputStyle} value={table} onChange={(e) => setTable(e.target.value)} placeholder="e.g. employees, org_units" />
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Which table on the saved connection to read from</span>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Custom Query (optional)</label>
-              <textarea style={{ ...inputStyle, minHeight: 50, fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SELECT * FROM employees WHERE active = true" />
+              <textarea aria-label="Custom Query (optional)" style={{ ...inputStyle, minHeight: 50, fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SELECT * FROM employees WHERE active = true" />
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Overrides the table setting. Use this for filtered or joined data.</span>
             </div>
           </div>
@@ -485,7 +485,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Override URL (optional)</label>
-              <input style={inputStyle} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Leave blank to use the saved connection's base URL" />
+              <input aria-label="Override URL (optional)" style={inputStyle} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Leave blank to use the saved connection's base URL" />
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Useful when one base URL serves multiple endpoints</span>
             </div>
           </div>
@@ -517,6 +517,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
                   </span>
                   <span style={{ fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'center' }}>{'←'}</span>
                   <input
+                    aria-label={`Source column for ${f.label}`}
                     style={inputStyle}
                     value={fieldMapping[f.key] || ''}
                     onChange={(e) => setFieldMapping((prev) => ({ ...prev, [f.key]: e.target.value }))}
@@ -527,7 +528,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             </div>
             <div style={{ marginTop: 16, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Match Key</label>
-              <select style={selectStyle} value={matchKey} onChange={(e) => setMatchKey(e.target.value)}>
+              <select aria-label="Match Key" style={selectStyle} value={matchKey} onChange={(e) => setMatchKey(e.target.value)}>
                 {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
               </select>
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)', display: 'block', marginTop: 4 }}>
@@ -550,7 +551,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             {scheduleEnabled && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Polling Interval</label>
-                <select style={selectStyle} value={intervalMinutes} onChange={(e) => setIntervalMinutes(Number(e.target.value))}>
+                <select aria-label="Polling Interval" style={selectStyle} value={intervalMinutes} onChange={(e) => setIntervalMinutes(Number(e.target.value))}>
                   {INTERVALS.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
                 </select>
               </div>

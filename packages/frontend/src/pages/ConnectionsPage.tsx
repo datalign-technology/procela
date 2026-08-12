@@ -572,17 +572,17 @@ export default function ConnectionsPage() {
         return (
           <>
             {fieldRow('Database Type', (
-              <select style={selectStyle} value={form.config.dbType || ''} onChange={(e) => updateConfig('dbType', e.target.value)}>
+              <select aria-label="Database Type" style={selectStyle} value={form.config.dbType || ''} onChange={(e) => updateConfig('dbType', e.target.value)}>
                 <option value="">-- Select --</option>
                 {dbTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             ))}
-            {fieldRow('Host', <input style={inputStyle} value={form.config.host || ''} onChange={(e) => updateConfig('host', e.target.value)} placeholder="e.g. db.example.com" />)}
-            {fieldRow('Port', <input style={inputStyle} type="number" value={form.config.port || ''} onChange={(e) => updateConfig('port', e.target.value ? parseInt(e.target.value) : '')} placeholder="e.g. 5432" />)}
-            {fieldRow('Database', <input style={inputStyle} value={form.config.database || ''} onChange={(e) => updateConfig('database', e.target.value)} placeholder="e.g. production_db" />)}
-            {fieldRow('Schema', <input style={inputStyle} value={form.config.schema || ''} onChange={(e) => updateConfig('schema', e.target.value)} placeholder="e.g. public" />)}
-            {fieldRow('Username', <input style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="Database username" />)}
-            {fieldRow('Password', <input style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Database password'} />)}
+            {fieldRow('Host', <input aria-label="Host" style={inputStyle} value={form.config.host || ''} onChange={(e) => updateConfig('host', e.target.value)} placeholder="e.g. db.example.com" />)}
+            {fieldRow('Port', <input aria-label="Port" style={inputStyle} type="number" value={form.config.port || ''} onChange={(e) => updateConfig('port', e.target.value ? parseInt(e.target.value) : '')} placeholder="e.g. 5432" />)}
+            {fieldRow('Database', <input aria-label="Database" style={inputStyle} value={form.config.database || ''} onChange={(e) => updateConfig('database', e.target.value)} placeholder="e.g. production_db" />)}
+            {fieldRow('Schema', <input aria-label="Schema" style={inputStyle} value={form.config.schema || ''} onChange={(e) => updateConfig('schema', e.target.value)} placeholder="e.g. public" />)}
+            {fieldRow('Username', <input aria-label="Username" style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="Database username" />)}
+            {fieldRow('Password', <input aria-label="Password" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Database password'} />)}
           </>
         );
 
@@ -592,7 +592,7 @@ export default function ConnectionsPage() {
         return (
           <>
             {fieldRow('Storage Type', (
-              <select style={selectStyle} value={form.config.storageType || ''} onChange={(e) => updateConfig('storageType', e.target.value)}>
+              <select aria-label="Storage Type" style={selectStyle} value={form.config.storageType || ''} onChange={(e) => updateConfig('storageType', e.target.value)}>
                 <option value="">-- Select --</option>
                 {storageTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -603,6 +603,7 @@ export default function ConnectionsPage() {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <input
                       id="local-file-input"
+                      aria-label="File"
                       type="file"
                       accept=".csv,.tsv,.json,.jsonl,.ndjson,text/csv,application/json"
                       style={{ display: 'none' }}
@@ -646,9 +647,9 @@ export default function ConnectionsPage() {
               ), true)
             ) : (
               <>
-                {fieldRow('Bucket / Container', <input style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder="e.g. my-data-bucket" />)}
-                {fieldRow('Path', <input style={inputStyle} value={form.config.path || ''} onChange={(e) => updateConfig('path', e.target.value)} placeholder="e.g. /data/exports" />)}
-                {fieldRow('API Key / Access Key', <input style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
+                {fieldRow('Bucket / Container', <input aria-label="Bucket / Container" style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder="e.g. my-data-bucket" />)}
+                {fieldRow('Path', <input aria-label="Path" style={inputStyle} value={form.config.path || ''} onChange={(e) => updateConfig('path', e.target.value)} placeholder="e.g. /data/exports" />)}
+                {fieldRow('API Key / Access Key', <input aria-label="API Key / Access Key" style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
               </>
             )}
           </>
@@ -658,18 +659,18 @@ export default function ConnectionsPage() {
       case 'API':
         return (
           <>
-            {fieldRow('Base URL', <input style={inputStyle} value={form.config.baseUrl || ''} onChange={(e) => updateConfig('baseUrl', e.target.value)} placeholder="e.g. https://api.example.com" />, true)}
+            {fieldRow('Base URL', <input aria-label="Base URL" style={inputStyle} value={form.config.baseUrl || ''} onChange={(e) => updateConfig('baseUrl', e.target.value)} placeholder="e.g. https://api.example.com" />, true)}
             {fieldRow('Auth Type', (
-              <select style={selectStyle} value={form.config.authType || 'NONE'} onChange={(e) => updateConfig('authType', e.target.value)}>
+              <select aria-label="Auth Type" style={selectStyle} value={form.config.authType || 'NONE'} onChange={(e) => updateConfig('authType', e.target.value)}>
                 {authTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             ))}
-            {(form.config.authType === 'API_KEY') && fieldRow('API Key', <input style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'API key'} />)}
-            {(form.config.authType === 'OAUTH2') && fieldRow('Token', <input style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'OAuth2 token'} />)}
+            {(form.config.authType === 'API_KEY') && fieldRow('API Key', <input aria-label="API Key" style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'API key'} />)}
+            {(form.config.authType === 'OAUTH2') && fieldRow('Token', <input aria-label="Token" style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'OAuth2 token'} />)}
             {(form.config.authType === 'BASIC') && (
               <>
-                {fieldRow('Username', <input style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="Username" />)}
-                {fieldRow('Password', <input style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Password'} />)}
+                {fieldRow('Username', <input aria-label="Username" style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="Username" />)}
+                {fieldRow('Password', <input aria-label="Password" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Password'} />)}
               </>
             )}
           </>
@@ -679,15 +680,15 @@ export default function ConnectionsPage() {
         return (
           <>
             {fieldRow('Warehouse Type', (
-              <select style={selectStyle} value={form.config.warehouseType || ''} onChange={(e) => updateConfig('warehouseType', e.target.value)}>
+              <select aria-label="Warehouse Type" style={selectStyle} value={form.config.warehouseType || ''} onChange={(e) => updateConfig('warehouseType', e.target.value)}>
                 <option value="">-- Select --</option>
                 {warehouseTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             ))}
-            {fieldRow('Account', <input style={inputStyle} value={form.config.account || ''} onChange={(e) => updateConfig('account', e.target.value)} placeholder="e.g. org-account.snowflakecomputing.com" />)}
-            {fieldRow('Warehouse', <input style={inputStyle} value={form.config.warehouse || ''} onChange={(e) => updateConfig('warehouse', e.target.value)} placeholder="e.g. COMPUTE_WH" />)}
-            {fieldRow('Username', <input style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="Username" />)}
-            {fieldRow('Password', <input style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Password'} />)}
+            {fieldRow('Account', <input aria-label="Account" style={inputStyle} value={form.config.account || ''} onChange={(e) => updateConfig('account', e.target.value)} placeholder="e.g. org-account.snowflakecomputing.com" />)}
+            {fieldRow('Warehouse', <input aria-label="Warehouse" style={inputStyle} value={form.config.warehouse || ''} onChange={(e) => updateConfig('warehouse', e.target.value)} placeholder="e.g. COMPUTE_WH" />)}
+            {fieldRow('Username', <input aria-label="Username" style={inputStyle} value={form.credentials.username || ''} onChange={(e) => updateCreds('username', e.target.value)} placeholder="Username" />)}
+            {fieldRow('Password', <input aria-label="Password" style={inputStyle} type="password" value={form.credentials.password || ''} onChange={(e) => updateCreds('password', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Password'} />)}
           </>
         );
 
@@ -695,14 +696,14 @@ export default function ConnectionsPage() {
         return (
           <>
             {fieldRow('Spreadsheet Type', (
-              <select style={selectStyle} value={form.config.spreadsheetType || ''} onChange={(e) => updateConfig('spreadsheetType', e.target.value)}>
+              <select aria-label="Spreadsheet Type" style={selectStyle} value={form.config.spreadsheetType || ''} onChange={(e) => updateConfig('spreadsheetType', e.target.value)}>
                 <option value="">-- Select --</option>
                 <option value="SHAREPOINT">SharePoint</option>
                 <option value="GOOGLE_SHEETS">Google Sheets</option>
               </select>
             ))}
-            {fieldRow('Document URL', <input style={inputStyle} value={form.config.documentUrl || ''} onChange={(e) => updateConfig('documentUrl', e.target.value)} placeholder="e.g. https://docs.google.com/spreadsheets/d/..." />, true)}
-            {fieldRow('Token / API Key', <input style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Auth token'} />)}
+            {fieldRow('Document URL', <input aria-label="Document URL" style={inputStyle} value={form.config.documentUrl || ''} onChange={(e) => updateConfig('documentUrl', e.target.value)} placeholder="e.g. https://docs.google.com/spreadsheets/d/..." />, true)}
+            {fieldRow('Token / API Key', <input aria-label="Token / API Key" style={inputStyle} type="password" value={form.credentials.token || ''} onChange={(e) => updateCreds('token', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Auth token'} />)}
           </>
         );
 
@@ -946,7 +947,7 @@ export default function ConnectionsPage() {
                 </button>
               )}
             </div>
-            <select style={{ ...selectStyle, width: 'auto', minWidth: 160 }} value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
+            <select aria-label="Filter by system" style={{ ...selectStyle, width: 'auto', minWidth: 160 }} value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
               <option value="">All Systems</option>
               {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
             </select>
@@ -978,6 +979,7 @@ export default function ConnectionsPage() {
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection Name *</label>
               <input autoFocus
+                aria-label="Connection Name"
                 style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
@@ -1020,6 +1022,7 @@ export default function ConnectionsPage() {
                 })}
               </div>
               <select
+                aria-label="Systems served"
                 style={selectStyle}
                 value=""
                 onChange={(e) => {
@@ -1038,6 +1041,7 @@ export default function ConnectionsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection Type *</label>
               <select
+                aria-label="Connection Type"
                 style={selectStyle}
                 value={form.connectionType}
                 onChange={(e) => setForm({ ...form, connectionType: e.target.value, config: {}, credentials: {} })}

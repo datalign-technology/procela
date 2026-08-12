@@ -299,6 +299,7 @@ export default function ReportBuilderPage() {
           <div>
             <label style={labelStyle}>Name</label>
             <input
+              aria-label="Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Activities by Risk Level"
@@ -308,6 +309,7 @@ export default function ReportBuilderPage() {
           <div>
             <label style={labelStyle}>Description</label>
             <input
+              aria-label="Description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What this report shows…"
@@ -317,6 +319,7 @@ export default function ReportBuilderPage() {
           <div>
             <label style={labelStyle}>Visibility</label>
             <select
+              aria-label="Visibility"
               value={visibility}
               onChange={(e) => setVisibility(e.target.value as 'private' | 'org')}
               style={{ ...inputStyle, width: '100%' }}
@@ -335,6 +338,7 @@ export default function ReportBuilderPage() {
           <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</span>
         ) : (
           <select
+            aria-label="Starting entity"
             value={def.entity}
             onChange={(e) => pickEntity(e.target.value)}
             style={{ ...inputStyle, minWidth: 280 }}
@@ -444,6 +448,7 @@ export default function ReportBuilderPage() {
                   return (
                     <div key={idx} style={{ display: 'grid', gridTemplateColumns: '200px 180px 1fr 32px', gap: 8 }}>
                       <select
+                        aria-label="Filter field"
                         value={f.field}
                         onChange={(e) => updateFilter(idx, { field: e.target.value })}
                         style={inputStyle}
@@ -453,6 +458,7 @@ export default function ReportBuilderPage() {
                         ))}
                       </select>
                       <select
+                        aria-label="Filter operator"
                         value={f.op}
                         onChange={(e) => updateFilter(idx, { op: e.target.value as FilterOp })}
                         style={inputStyle}
@@ -464,6 +470,7 @@ export default function ReportBuilderPage() {
                       {opSpec?.takesValue ? (
                         field?.type === 'enum' ? (
                           <select
+                            aria-label="Filter value"
                             value={String(f.value ?? '')}
                             onChange={(e) => updateFilter(idx, { value: e.target.value })}
                             style={inputStyle}
@@ -475,6 +482,7 @@ export default function ReportBuilderPage() {
                           </select>
                         ) : (
                           <input
+                            aria-label="Filter value"
                             value={String(f.value ?? '')}
                             onChange={(e) => {
                               const raw = e.target.value;
@@ -503,6 +511,7 @@ export default function ReportBuilderPage() {
             <label style={labelStyle}>Sort by</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <select
+                aria-label="Sort field"
                 value={def.sort?.field || ''}
                 onChange={(e) => setSort(e.target.value, def.sort?.direction || 'asc')}
                 style={inputStyle}
@@ -513,6 +522,7 @@ export default function ReportBuilderPage() {
                 ))}
               </select>
               <select
+                aria-label="Sort direction"
                 value={def.sort?.direction || 'asc'}
                 onChange={(e) => def.sort && setSort(def.sort.field, e.target.value as 'asc' | 'desc')}
                 disabled={!def.sort}

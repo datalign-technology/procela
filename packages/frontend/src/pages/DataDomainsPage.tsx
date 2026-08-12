@@ -435,20 +435,20 @@ export default function DataDomainsPage() {
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Data Domain' : 'Add New Data Domain'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Customer Data" /></div>
+              <input autoFocus aria-label="Name" style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Customer Data" /></div>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
               {editingId ? (
-                <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                   <option value={form.status}>{form.status}</option>
                   {(transitions[form.status] || []).map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               ) : (
-                <select style={selectStyle} value="DRAFT" disabled><option value="DRAFT">Draft</option></select>
+                <select aria-label="Status" style={selectStyle} value="DRAFT" disabled><option value="DRAFT">Draft</option></select>
               )}
             </div>
             {/* Description absorbed the former "Scope Definition" field. */}
             <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" /></div>
+              <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" /></div>
           </div>
           {!editingId && (
             <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -596,7 +596,7 @@ export default function DataDomainsPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                   <div>
                     <label style={labelStyle}>Owner</label>
-                    <select style={selectStyle} value={bulkUpdates.ownerId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerId: e.target.value })}>
+                    <select aria-label="Owner" style={selectStyle} value={bulkUpdates.ownerId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerId: e.target.value })}>
                       <option value="">— No change —</option>
                       <option value="__unassign__">— Clear owner —</option>
                       {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
@@ -604,7 +604,7 @@ export default function DataDomainsPage() {
                   </div>
                   <div>
                     <label style={labelStyle}>Status</label>
-                    <select style={selectStyle} value={bulkUpdates.status} onChange={(e) => setBulkUpdates({ ...bulkUpdates, status: e.target.value })}>
+                    <select aria-label="Status" style={selectStyle} value={bulkUpdates.status} onChange={(e) => setBulkUpdates({ ...bulkUpdates, status: e.target.value })}>
                       <option value="">— No change —</option>
                       {(statusMode === 'advanced' ? ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'] : ['DRAFT', 'ACTIVE', 'DEPRECATED']).map((s) => (
                         <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
@@ -762,6 +762,7 @@ export default function DataDomainsPage() {
               Industry
             </label>
             <select
+              aria-label="Industry"
               value={pickedIndustry}
               onChange={(e) => setPickedIndustry(e.target.value)}
               autoFocus

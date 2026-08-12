@@ -535,7 +535,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                       <div style={{ marginTop: 4, padding: '6px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, flexWrap: 'wrap' }}>
                           <span style={{ color: '#6b21a8', fontWeight: 600 }}>Perform with agent:</span>
-                          <select value={selectedId} onChange={(e) => setRunAgentId(e.target.value)} disabled={running}
+                          <select aria-label="Perform with agent" value={selectedId} onChange={(e) => setRunAgentId(e.target.value)} disabled={running}
                             style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}>
                             {agentRoles!.map((a) => <option key={a.agentId} value={a.agentId}>{a.agentName || 'Agent'}{a.roleType ? ` — ${a.roleType}` : ''}</option>)}
                           </select>
@@ -640,12 +640,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 8 }}>
                                   <div>
                                     <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Name</label>
-                                    <input value={promoteName} onChange={(e) => setPromoteName(e.target.value)}
+                                    <input aria-label="Name" value={promoteName} onChange={(e) => setPromoteName(e.target.value)}
                                       style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, width: '100%', background: 'var(--color-surface)' }} />
                                   </div>
                                   <div>
                                     <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Document type</label>
-                                    <select value={promoteDocType} onChange={(e) => setPromoteDocType(e.target.value as typeof promoteDocType)}
+                                    <select aria-label="Document type" value={promoteDocType} onChange={(e) => setPromoteDocType(e.target.value as typeof promoteDocType)}
                                       style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, width: '100%', background: 'var(--color-surface)' }}>
                                       <option value="POLICY">Policy</option>
                                       <option value="STANDARD">Standard</option>
@@ -692,7 +692,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                               <div>
                                 <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Frequency</label>
-                                <select value={scheduleFrequency} onChange={(e) => setScheduleFrequency(e.target.value as typeof scheduleFrequency)}
+                                <select aria-label="Frequency" value={scheduleFrequency} onChange={(e) => setScheduleFrequency(e.target.value as typeof scheduleFrequency)}
                                   style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, width: '100%', background: 'var(--color-surface)' }}>
                                   <option value="ONCE">Once (run at this time)</option>
                                   <option value="HOURLY">Hourly</option>
@@ -703,7 +703,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                               </div>
                               <div>
                                 <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>{scheduleFrequency === 'ONCE' ? 'Run at' : 'First run at'}</label>
-                                <input type="datetime-local" value={scheduleStartLocal} onChange={(e) => setScheduleStartLocal(e.target.value)}
+                                <input type="datetime-local" aria-label={scheduleFrequency === 'ONCE' ? 'Run at' : 'First run at'} value={scheduleStartLocal} onChange={(e) => setScheduleStartLocal(e.target.value)}
                                   style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, width: '100%', background: 'var(--color-surface)' }} />
                               </div>
                             </div>
@@ -1015,6 +1015,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {needsComment && (
                 <input
                   autoFocus
+                  aria-label="Review comment"
                   value={reviewCommentDraft}
                   onChange={(e) => setReviewCommentDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }}
@@ -1039,7 +1040,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
             </div>
           );
         })() : (
-          <select value={node.status} onChange={(e) => {
+          <select aria-label="Status" value={node.status} onChange={(e) => {
               if (e.target.value === node.status) return;
               setPendingStatus(e.target.value);
             }}
@@ -1087,7 +1088,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
         {/* Tag add button / input */}
         {showTagInput ? (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-            <input autoFocus style={{ ...inputStyle, width: 80, fontSize: 10, padding: '1px 4px' }}
+            <input autoFocus aria-label="Tag" style={{ ...inputStyle, width: 80, fontSize: 10, padding: '1px 4px' }}
               placeholder="tag..."
               value={tagDraft}
               onChange={(e) => setTagDraft(e.target.value)}

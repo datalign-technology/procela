@@ -174,6 +174,7 @@ export default function LinkConnectionModal({
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>1. Connection</label>
           <select
+            aria-label="Connection"
             style={selectStyle}
             value={selectedConnId}
             onChange={(e) => { setSelectedConnId(e.target.value); setPickedAsset(''); setPickedColumn(''); setExpanded(new Set()); }}

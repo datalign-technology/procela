@@ -323,6 +323,7 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
             </label>
             <input
               type="text"
+              aria-label="Connector name"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="e.g. prod-warehouse"
@@ -472,6 +473,7 @@ function ConnectorDetailDrawer({ row, systems, onClose, onSaved }: {
         <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: 6 }}>Name</label>
         <input
           type="text"
+          aria-label="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}

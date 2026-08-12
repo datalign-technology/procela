@@ -317,6 +317,7 @@ export default function RaciMatrixPage() {
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
             <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Show columns by:</label>
             <select
+              aria-label="Show columns by"
               value={groupBy}
               onChange={(e) => setGroupBy(e.target.value as ColumnGroupBy)}
               style={{ fontSize: 12, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
@@ -333,7 +334,7 @@ export default function RaciMatrixPage() {
             </label>
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
             <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Show:</label>
-            <select value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value as any)}
+            <select aria-label="Show" value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value as any)}
               style={{ fontSize: 12, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}>
               <option value="all">All Processes</option>
               <option value="business">Business Only</option>

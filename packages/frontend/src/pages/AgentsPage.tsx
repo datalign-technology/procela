@@ -479,6 +479,7 @@ export default function AgentsPage() {
           <>
             <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Organization:</label>
             <select
+              aria-label="Organization"
               style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any, fontSize: 13 }}
               value={selectedOrgId}
               onChange={(e) => applyOrgFilter(e.target.value)}
@@ -523,6 +524,7 @@ export default function AgentsPage() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
             <label style={{ fontSize: 11, fontWeight: 500 }}>Assign to organization *</label>
             <select
+              aria-label="Assign to organization"
               style={{ ...inputStyle, width: 'auto', minWidth: 220, appearance: 'auto' as any, fontSize: 12 }}
               value={importOrgId}
               onChange={(e) => setImportOrgId(e.target.value)}
@@ -532,11 +534,12 @@ export default function AgentsPage() {
             </select>
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
-            <input ref={fileInputRef} type="file" accept={importFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onChange={handleFileRead} style={{ display: 'none' }} />
+            <input ref={fileInputRef} aria-label="Import file" type="file" accept={importFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onChange={handleFileRead} style={{ display: 'none' }} />
             <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Browse File</Button>
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or paste below. Columns: Name (required), Type, Provider, Description</span>
           </div>
           <textarea
+            aria-label="Import data"
             style={{ ...inputStyle, width: '100%', minHeight: 100, fontFamily: 'var(--font-mono)', fontSize: 11 }}
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
@@ -565,6 +568,7 @@ export default function AgentsPage() {
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
         />
         <select
+          aria-label="Filter by organization"
           value={selectedOrgId}
           onChange={(e) => applyOrgFilter(e.target.value)}
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 160, appearance: 'auto' as any }}
@@ -596,6 +600,7 @@ export default function AgentsPage() {
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
@@ -605,17 +610,17 @@ export default function AgentsPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
-              <select style={selectStyle} value={form.agentType} onChange={(e) => setForm({ ...form, agentType: e.target.value })}>
+              <select aria-label="Type" style={selectStyle} value={form.agentType} onChange={(e) => setForm({ ...form, agentType: e.target.value })}>
                 {agentTypes.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Provider</label>
-              <input style={inputStyle} value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} placeholder="e.g. Anthropic, Airflow, Custom" />
+              <input aria-label="Provider" style={inputStyle} value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} placeholder="e.g. Anthropic, Airflow, Custom" />
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })}>
+              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })}>
                 {agentStatuses.map((s) => (
                   <option
                     key={s}
@@ -634,11 +639,12 @@ export default function AgentsPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What the agent does" />
+              <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What the agent does" />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Instructions</label>
               <textarea
+                aria-label="Instructions"
                 style={{ ...inputStyle, minHeight: 90, fontFamily: 'inherit', resize: 'vertical' }}
                 value={form.instructions}
                 onChange={(e) => setForm({ ...form, instructions: e.target.value })}
@@ -650,7 +656,7 @@ export default function AgentsPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Responsible Person</label>
-              <select style={selectStyle} value={form.ownerPersonId} onChange={(e) => setForm({ ...form, ownerPersonId: e.target.value })}>
+              <select aria-label="Responsible Person" style={selectStyle} value={form.ownerPersonId} onChange={(e) => setForm({ ...form, ownerPersonId: e.target.value })}>
                 <option value="">-- Unassigned --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>

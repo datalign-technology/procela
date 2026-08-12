@@ -143,6 +143,7 @@ function InlineCellEdit({
     return (
       <select
         autoFocus
+        aria-label="Edit value"
         value={draft}
         onChange={(e) => { onSave(e.target.value); setEditing(false); }}
         onBlur={() => setEditing(false)}
@@ -157,6 +158,7 @@ function InlineCellEdit({
   return (
     <input
       autoFocus
+      aria-label="Edit value"
       type={type}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
@@ -633,6 +635,7 @@ export default function BusinessGlossaryPage() {
             <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Browse File</Button>
           </div>
           <textarea
+            aria-label="Terms to import (CSV or JSON)"
             style={{ ...inputStyle, width: '100%', minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 11 }}
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
@@ -745,7 +748,7 @@ export default function BusinessGlossaryPage() {
                 </button>
               )}
             </div>
-            <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <select aria-label="Filter by status" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
               <option value="">All Statuses</option>
               {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()} ({terms.filter((t) => t.status === s).length})</option>)}
             </select>
@@ -779,6 +782,7 @@ export default function BusinessGlossaryPage() {
                       <label style={labelStyle}>Term *</label>
                       <input
                         autoFocus
+                        aria-label="Term"
                         style={{ ...inputStyle, borderColor: isDuplicate ? '#fca5a5' : (inputStyle.border as string)?.includes('var') ? undefined : undefined }}
                         value={form.term}
                         onChange={(e) => setForm({ ...form, term: e.target.value })}
@@ -792,41 +796,41 @@ export default function BusinessGlossaryPage() {
                     </div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={labelStyle}>Definition *</label>
-                  <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.definition} onChange={(e) => setForm({ ...form, definition: e.target.value })} placeholder="Plain-language definition..." />
+                  <textarea aria-label="Definition" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.definition} onChange={(e) => setForm({ ...form, definition: e.target.value })} placeholder="Plain-language definition..." />
                 </div>
                 <div>
                   <label style={labelStyle}>Category</label>
-                  <select style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                     {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={labelStyle}>Status</label>
-                  <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                     {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={labelStyle}>Context</label>
-                  <input style={inputStyle} value={form.context} onChange={(e) => setForm({ ...form, context: e.target.value })} placeholder="Business context or usage notes..." />
+                  <input aria-label="Context" style={inputStyle} value={form.context} onChange={(e) => setForm({ ...form, context: e.target.value })} placeholder="Business context or usage notes..." />
                 </div>
                 <div>
                   <label style={labelStyle}>Synonyms (comma-separated)</label>
-                  <input style={inputStyle} value={form.synonyms} onChange={(e) => setForm({ ...form, synonyms: e.target.value })} placeholder="e.g. CLV, LTV" />
+                  <input aria-label="Synonyms (comma-separated)" style={inputStyle} value={form.synonyms} onChange={(e) => setForm({ ...form, synonyms: e.target.value })} placeholder="e.g. CLV, LTV" />
                 </div>
                 {/* Source of Truth removed: a free-text "system of record"
                     duplicated the structured System registry / sync. Stored
                     values are retained on the record. */}
                 <div>
                   <label style={labelStyle}>Primary Domain</label>
-                  <select style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
+                  <select aria-label="Primary Domain" style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
                     <option value="">-- No Domain --</option>
                     {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={labelStyle}>Owner</label>
-                  <select style={selectStyle} value={form.ownerAssignmentId} onChange={(e) => setForm({ ...form, ownerAssignmentId: e.target.value })}>
+                  <select aria-label="Owner" style={selectStyle} value={form.ownerAssignmentId} onChange={(e) => setForm({ ...form, ownerAssignmentId: e.target.value })}>
                     <option value="">-- Unassigned --</option>
                     {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
                   </select>
@@ -895,20 +899,20 @@ export default function BusinessGlossaryPage() {
 
           {/* Bulk Action Bar */}
           <BulkActionBar count={sel.count} onClear={clearBulkSelection} clearLabel="Clear Selection">
-            <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.status} onChange={(e) => setBulkUpdates({ ...bulkUpdates, status: e.target.value })}>
+            <select aria-label="Bulk set status" style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.status} onChange={(e) => setBulkUpdates({ ...bulkUpdates, status: e.target.value })}>
               <option value="">Status…</option>
               {STATUSES.map((s) => <option key={s} value={s}>Set {s}</option>)}
             </select>
-            <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.category} onChange={(e) => setBulkUpdates({ ...bulkUpdates, category: e.target.value })}>
+            <select aria-label="Bulk set category" style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.category} onChange={(e) => setBulkUpdates({ ...bulkUpdates, category: e.target.value })}>
               <option value="">Category…</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>Set {c}</option>)}
             </select>
-            <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.ownerPersonId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerPersonId: e.target.value })}>
+            <select aria-label="Bulk set owner" style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.ownerPersonId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerPersonId: e.target.value })}>
               <option value="">Owner…</option>
               <option value="__unassign__">Clear owner</option>
               {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
             </select>
-            <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.domainId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, domainId: e.target.value })}>
+            <select aria-label="Bulk set primary domain" style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.domainId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, domainId: e.target.value })}>
               <option value="">Primary Domain…</option>
               <option value="__unassign__">Clear domain</option>
               {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}

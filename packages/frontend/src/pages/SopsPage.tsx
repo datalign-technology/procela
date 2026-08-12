@@ -432,15 +432,15 @@ export default function SopsPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
         />
-        <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+        <select aria-label="Filter by category" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
           <option value="">All Categories</option>
           {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
         </select>
-        <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+        <select aria-label="Filter by status" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="">All Statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
         </select>
-        <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+        <select aria-label="Filter by owner" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
           <option value="">All Owners</option>
           {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
         </select>
@@ -467,32 +467,32 @@ export default function SopsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title *</label>
-              <input style={inputStyle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Onboard a new data asset" />
+              <input aria-label="Title" style={inputStyle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Onboard a new data asset" />
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>
-              <select style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                 {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Purpose</label>
-              <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit' }} value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} placeholder="What this SOP achieves..." />
+              <textarea aria-label="Purpose" style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit' }} value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} placeholder="What this SOP achieves..." />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Trigger Event</label>
-              <input style={inputStyle} value={form.triggerEvent} onChange={(e) => setForm({ ...form, triggerEvent: e.target.value })} placeholder="What triggers running this SOP..." />
+              <input aria-label="Trigger Event" style={inputStyle} value={form.triggerEvent} onChange={(e) => setForm({ ...form, triggerEvent: e.target.value })} placeholder="What triggers running this SOP..." />
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
-              <select style={selectStyle} value={form.ownerPersonId} onChange={(e) => setForm({ ...form, ownerPersonId: e.target.value })}>
+              <select aria-label="Owner" style={selectStyle} value={form.ownerPersonId} onChange={(e) => setForm({ ...form, ownerPersonId: e.target.value })}>
                 <option value="">-- No owner --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
               </select>
             </div>
@@ -524,8 +524,8 @@ export default function SopsPage() {
                     <button onClick={() => moveStep(idx, 1)} disabled={idx === form.steps.length - 1} aria-label="Move step down" style={{ background: 'none', border: 'none', cursor: idx === form.steps.length - 1 ? 'default' : 'pointer', fontSize: 10, color: idx === form.steps.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)' }}><span aria-hidden="true">▼</span></button>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <input style={{ ...inputStyle, marginBottom: 4 }} value={step.title} onChange={(e) => updateStep(idx, { title: e.target.value })} placeholder="Step title" />
-                    <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit', marginBottom: 4 }} value={step.description} onChange={(e) => updateStep(idx, { description: e.target.value })} placeholder="What to do in this step" />
+                    <input aria-label="Step title" style={{ ...inputStyle, marginBottom: 4 }} value={step.title} onChange={(e) => updateStep(idx, { title: e.target.value })} placeholder="Step title" />
+                    <textarea aria-label="Step description" style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit', marginBottom: 4 }} value={step.description} onChange={(e) => updateStep(idx, { description: e.target.value })} placeholder="What to do in this step" />
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     </div>
                   </div>

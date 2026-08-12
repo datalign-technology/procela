@@ -586,6 +586,7 @@ export default function MappingsPage() {
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Value Stream *</label>
               <select
+                aria-label="Value Stream"
                 style={selectStyle}
                 value={selectedVsId}
                 onChange={(e) => {
@@ -606,6 +607,7 @@ export default function MappingsPage() {
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Process *</label>
               <select
+                aria-label="Process"
                 style={selectStyle}
                 value={selectedProcId}
                 disabled={!selectedVsId}
@@ -628,6 +630,7 @@ export default function MappingsPage() {
                 Sub-Process {subProcesses.length > 0 ? '*' : <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>(optional)</span>}
               </label>
               <select
+                aria-label="Sub-Process"
                 style={selectStyle}
                 value={selectedSpId}
                 disabled={!selectedProcId || subProcesses.length === 0}
@@ -647,6 +650,7 @@ export default function MappingsPage() {
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Activity *</label>
               <select
+                aria-label="Activity"
                 style={selectStyle}
                 value={selectedStepId}
                 disabled={!selectedProcId || (subProcesses.length > 0 && !selectedSpId) || steps.length === 0}
@@ -662,7 +666,7 @@ export default function MappingsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Asset *</label>
-              <select style={selectStyle} value={selectedAssetId} onChange={(e) => setSelectedAssetId(e.target.value)}>
+              <select aria-label="Data Asset" style={selectStyle} value={selectedAssetId} onChange={(e) => setSelectedAssetId(e.target.value)}>
                 <option value="">-- Select data asset --</option>
                 {dataAssets.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -673,7 +677,7 @@ export default function MappingsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Link Type</label>
-              <select style={selectStyle} value={linkType} onChange={(e) => setLinkType(e.target.value)}>
+              <select aria-label="Link Type" style={selectStyle} value={linkType} onChange={(e) => setLinkType(e.target.value)}>
                 {LINK_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -684,6 +688,7 @@ export default function MappingsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Notes</label>
               <input
+                aria-label="Notes"
                 style={inputStyle}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

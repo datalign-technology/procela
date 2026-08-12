@@ -565,7 +565,7 @@ export default function DamaRolesPage() {
             {form.assigneeType === 'agent' ? (
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Agent *</label>
-                <select style={{ ...selectStyle, border: roleValidation.fieldError('agentId') ? inputErrorBorder : selectStyle.border }} value={form.agentId}
+                <select aria-label="Agent" style={{ ...selectStyle, border: roleValidation.fieldError('agentId') ? inputErrorBorder : selectStyle.border }} value={form.agentId}
                   onChange={(e) => setForm({ ...form, agentId: e.target.value })}
                   onBlur={() => { roleValidation.touch('agentId'); roleValidation.validateField('agentId', form.agentId, form); }}>
                   <option value="">-- Select agent --</option>
@@ -611,7 +611,7 @@ export default function DamaRolesPage() {
                   {ROLE_TYPE_LABELS[form.roleType] || form.roleType}
                 </div>
               ) : (
-                <select style={selectStyle} value={form.roleType} onChange={(e) => {
+                <select aria-label="Governance Role" style={selectStyle} value={form.roleType} onChange={(e) => {
                   const next = e.target.value;
                   // If the new role is people-only and Agent is
                   // currently selected, flip back to Person so the
@@ -664,7 +664,7 @@ export default function DamaRolesPage() {
             ) : (
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization *</label>
-                <select style={{ ...selectStyle, border: roleValidation.fieldError('scopeId') ? inputErrorBorder : selectStyle.border }} value={form.scopeId}
+                <select aria-label="Organization" style={{ ...selectStyle, border: roleValidation.fieldError('scopeId') ? inputErrorBorder : selectStyle.border }} value={form.scopeId}
                   onChange={(e) => setForm({ ...form, scopeId: e.target.value })}
                   onBlur={() => { roleValidation.touch('scopeId'); roleValidation.validateField('scopeId', form.scopeId, form); }}>
                   <option value="">-- Select organization --</option>

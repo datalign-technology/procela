@@ -214,6 +214,7 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
     return (
       <select
         autoFocus
+        aria-label="Edit field"
         value={draft}
         onChange={(e) => { onSave(e.target.value); setEditing(false); }}
         onBlur={() => setEditing(false)}
@@ -228,6 +229,7 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
   return (
     <input
       autoFocus
+      aria-label="Edit field"
       type={type}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
@@ -1043,7 +1045,7 @@ export default function SystemsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
             />
-            <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
+            <select aria-label="Filter by criticality" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
               <option value="">All Criticality</option>
               <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
               <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
@@ -1081,10 +1083,11 @@ export default function SystemsPage() {
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <input ref={fileInputRef} type="file" accept=".csv,.json,.txt" onChange={handleFileRead} style={{ display: 'none' }} />
+            <input ref={fileInputRef} aria-label="Import file" type="file" accept=".csv,.json,.txt" onChange={handleFileRead} style={{ display: 'none' }} />
             <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Browse File</Button>
           </div>
           <textarea
+            aria-label="Import data"
             style={{ ...inputStyle, width: '100%', minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }}
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
@@ -1109,6 +1112,7 @@ export default function SystemsPage() {
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus
+                aria-label="Name"
                 style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => { const v = e.target.value; setFormDirty({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
@@ -1118,18 +1122,18 @@ export default function SystemsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System Type</label>
-              <select style={selectStyle} value={form.systemType} onChange={(e) => setFormDirty({ ...form, systemType: e.target.value })}>
+              <select aria-label="System Type" style={selectStyle} value={form.systemType} onChange={(e) => setFormDirty({ ...form, systemType: e.target.value })}>
                 <option value="">-- Select type --</option>
                 {systemTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input style={inputStyle} value={form.description} onChange={(e) => setFormDirty({ ...form, description: e.target.value })} placeholder="Brief description of what this system does" />
+              <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setFormDirty({ ...form, description: e.target.value })} placeholder="Brief description of what this system does" />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Business Criticality <HelpPopover id="sys-criticality" title="Business Criticality">How critical is this system to daily operations? High = outage stops the business. Medium = workarounds exist. Low = minimal operational impact.</HelpPopover></label>
-              <select style={selectStyle} value={form.businessCriticality} onChange={(e) => setFormDirty({ ...form, businessCriticality: e.target.value })}>
+              <select aria-label="Business Criticality" style={selectStyle} value={form.businessCriticality} onChange={(e) => setFormDirty({ ...form, businessCriticality: e.target.value })}>
                 <option value="">-- Select --</option>
                 <option value="HIGH">High</option>
                 <option value="MEDIUM">Medium</option>
@@ -1138,7 +1142,7 @@ export default function SystemsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vendor / Platform</label>
-              <input style={inputStyle} value={form.vendor} onChange={(e) => setFormDirty({ ...form, vendor: e.target.value })} placeholder="e.g. SAP, Salesforce, Custom" />
+              <input aria-label="Vendor / Platform" style={inputStyle} value={form.vendor} onChange={(e) => setFormDirty({ ...form, vendor: e.target.value })} placeholder="e.g. SAP, Salesforce, Custom" />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
@@ -1216,6 +1220,7 @@ export default function SystemsPage() {
                 })}
               </div>
               <select
+                aria-label={`Add ${custodianLabel.toLowerCase()}`}
                 style={selectStyle}
                 value=""
                 onChange={(e) => {
@@ -1238,7 +1243,7 @@ export default function SystemsPage() {
                   How this system is reached. <strong>Integrated</strong>: a connection profile will be (or has been) configured. <strong>Manual</strong>: paper, spreadsheet, or human handoff — won't show as a connection gap. <strong>Vendor-managed</strong>: vendor owns the data; no API expected.
                 </HelpPopover>
               </label>
-              <select style={selectStyle} value={form.connectivity} onChange={(e) => setFormDirty({ ...form, connectivity: e.target.value as Connectivity })}>
+              <select aria-label="Connectivity" style={selectStyle} value={form.connectivity} onChange={(e) => setFormDirty({ ...form, connectivity: e.target.value as Connectivity })}>
                 <option value="INTEGRATED">Integrated (will connect)</option>
                 <option value="MANUAL">Manual (no integration)</option>
                 <option value="EXTERNAL">Vendor-managed</option>
@@ -1399,6 +1404,7 @@ export default function SystemsPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <select
+                    aria-label="Add an existing connection"
                     style={{ ...selectStyle, flex: 1 }}
                     value=""
                     onChange={(e) => {

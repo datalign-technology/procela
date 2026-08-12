@@ -411,6 +411,7 @@ export default function GovernanceIssuesPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title *</label>
               <input
                 autoFocus
+                aria-label="Title"
                 style={inputStyle}
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -420,6 +421,7 @@ export default function GovernanceIssuesPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <textarea
+                aria-label="Description"
                 style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -428,26 +430,26 @@ export default function GovernanceIssuesPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Issue Type</label>
-              <select style={selectStyle} value={form.issueType} onChange={(e) => setForm({ ...form, issueType: e.target.value })}>
+              <select aria-label="Issue Type" style={selectStyle} value={form.issueType} onChange={(e) => setForm({ ...form, issueType: e.target.value })}>
                 {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Severity</label>
-              <select style={selectStyle} value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+              <select aria-label="Severity" style={selectStyle} value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
                 {ISSUE_SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Domain</label>
-              <select style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
+              <select aria-label="Domain" style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
                 <option value="">-- No Domain --</option>
                 {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assigned To</label>
-              <select style={selectStyle} value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}>
+              <select aria-label="Assigned To" style={selectStyle} value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}>
                 <option value="">-- Unassigned --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
@@ -455,7 +457,7 @@ export default function GovernanceIssuesPage() {
             {editingId && (
               <div>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-                <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                   {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
