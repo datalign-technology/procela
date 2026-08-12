@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 
@@ -478,15 +479,7 @@ export default function ScorecardPage() {
       <PageHeader title="Governance Maturity Scorecard" />
 
       {/* Overall Score */}
-      <div style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        padding: 32,
-        boxShadow: 'var(--shadow-sm)',
-        marginBottom: 24,
-        textAlign: 'center',
-      }}>
+      <Card padding={32} marginBottom={24} style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
           Overall Maturity Score
         </div>
@@ -510,17 +503,10 @@ export default function ScorecardPage() {
         }}>
           {overallLabel(data.overall)}
         </div>
-      </div>
+      </Card>
 
       {/* Dimension Bars */}
-      <div style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        padding: 24,
-        boxShadow: 'var(--shadow-sm)',
-        marginBottom: 24,
-      }}>
+      <Card padding={24} marginBottom={24}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>Dimensions</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {data.dimensions.map((dim) => (
@@ -550,17 +536,10 @@ export default function ScorecardPage() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Maturity Over Time */}
-      <div style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        padding: 24,
-        boxShadow: 'var(--shadow-sm)',
-        marginBottom: 24,
-      }}>
+      <Card padding={24} marginBottom={24}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Maturity Over Time</h2>
           <button
@@ -589,18 +568,11 @@ export default function ScorecardPage() {
           </button>
         </div>
         <MaturityChart snapshots={snapshots} />
-      </div>
+      </Card>
 
       {/* Dimension Sparklines */}
       {snapshots.length >= 2 && (
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 24,
-          boxShadow: 'var(--shadow-sm)',
-          marginBottom: 24,
-        }}>
+        <Card padding={24} marginBottom={24}>
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Dimension Trends</h2>
           <div style={{
             display: 'grid',
@@ -624,18 +596,12 @@ export default function ScorecardPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Recommendations */}
       {lowDimensions.length > 0 && (
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 24,
-          boxShadow: 'var(--shadow-sm)',
-        }}>
+        <Card padding={24}>
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Recommendations</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {lowDimensions.map((dim) => (
@@ -663,7 +629,7 @@ export default function ScorecardPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

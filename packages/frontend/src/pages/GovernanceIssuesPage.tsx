@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -402,7 +403,7 @@ export default function GovernanceIssuesPage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
+        <Card padding={20} marginBottom={20}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
             {editingId ? 'Edit Issue' : 'Add New Issue'}
           </h3>
@@ -473,7 +474,7 @@ export default function GovernanceIssuesPage() {
               {editingId ? 'Save Changes' : 'Add Issue'}
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Table */}

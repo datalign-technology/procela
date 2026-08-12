@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
@@ -584,7 +585,7 @@ export default function GovernancePoliciesPage() {
 
       {/* Add/Edit Document Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
+        <Card padding={20} marginBottom={20}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? `Edit ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}` : `Add New ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}`}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -638,7 +639,7 @@ export default function GovernancePoliciesPage() {
               {editingId ? 'Save Changes' : `Add ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}`}
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       <ConfirmDialog

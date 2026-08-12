@@ -7,6 +7,7 @@ import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
@@ -247,7 +248,7 @@ function MyDashboard() {
   if (loading) return (
     <div style={{ marginBottom: 24 }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>My Dashboard</h2>
-      <div style={cardStyle}><SkeletonRows rows={4} columnWidths={[180, null, 90]} /></div>
+      <Card padding={20}><SkeletonRows rows={4} columnWidths={[180, null, 90]} /></Card>
     </div>
   );
 
@@ -301,7 +302,7 @@ function MyDashboard() {
       {/* Two-column: Attention + Schedule */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         {/* Needs Attention */}
-        <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', padding: '14px 16px' }}>
+        <Card padding="14px 16px" style={{ borderLeft: '4px solid #f59e0b' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Needs My Attention
           </div>
@@ -331,10 +332,10 @@ function MyDashboard() {
               ))}
             </div>
           )}
-        </div>
+        </Card>
 
         {/* My Schedule */}
-        <div style={{ ...cardStyle, borderLeft: '4px solid #3b82f6', padding: '14px 16px' }}>
+        <Card padding="14px 16px" style={{ borderLeft: '4px solid #3b82f6' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#1e40af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             My Schedule
           </div>
@@ -353,7 +354,7 @@ function MyDashboard() {
               <Link to="/governance-calendar" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 4 }}>View calendar</Link>
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* My Domains */}
@@ -387,7 +388,7 @@ function MyDashboard() {
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>My Tasks</span>
             <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks?.length ?? 0}</Link>
           </div>
-          <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+          <Card padding={0} style={{ overflow: 'hidden' }}>
             {(data.myTasks || []).slice(0, 5).map((t, i) => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
                 <span style={priorityBadge(t.priority)}>{t.priority}</span>
@@ -396,7 +397,7 @@ function MyDashboard() {
                 <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{t.status.replace(/_/g, ' ')}</span>
               </div>
             ))}
-          </div>
+          </Card>
         </div>
       )}
 
@@ -407,7 +408,7 @@ function MyDashboard() {
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>My Issues</span>
             <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues?.length ?? 0}</Link>
           </div>
-          <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+          <Card padding={0} style={{ overflow: 'hidden' }}>
             {(data.myIssues || []).slice(0, 5).map((issue, i) => (
               <div key={issue.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
                 <span style={priorityBadge(issue.severity)}>{issue.severity}</span>
@@ -416,7 +417,7 @@ function MyDashboard() {
                 <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.status.replace(/_/g, ' ')}</span>
               </div>
             ))}
-          </div>
+          </Card>
         </div>
       )}
     </div>
@@ -843,7 +844,7 @@ function ProgramMaturity() {
   return (
     <div style={{ marginBottom: 24 }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Program Maturity</h2>
-      <div style={{ ...cardStyle, padding: '16px 20px' }}>
+      <Card padding="16px 20px">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <div style={{
             width: 40, height: 40, borderRadius: '50%',
@@ -876,7 +877,7 @@ function ProgramMaturity() {
         <Link to="/governance-program" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 8, display: 'inline-block' }}>
           View full program →
         </Link>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -907,7 +908,7 @@ function StewardOnboarding() {
   return (
     <div style={{ marginBottom: 24 }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Steward Onboarding</h2>
-      <div style={{ ...cardStyle, padding: '16px 20px' }}>
+      <Card padding="16px 20px">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>{rate}% complete</span>
           <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{data.completed} of {data.total} tasks</span>
@@ -923,7 +924,7 @@ function StewardOnboarding() {
         <Link to="/governance-work?tab=tasks" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 6, display: 'inline-block' }}>
           View all stewardship tasks
         </Link>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -1061,14 +1062,15 @@ export default function DashboardPage() {
       </PageHeader>
 
       {showCustomize && (
-        <div style={{
-          ...cardStyle, marginBottom: 24, padding: 16,
+        <Card
+          padding={16}
+          marginBottom={24}
           // Theme tokens, not hardcoded blues — the panel was rendering
           // a fixed light-blue gradient that clashed on re-branded /
           // dark-themed tenants.
-          background: 'var(--color-bg)',
-          border: '1px solid var(--color-primary)',
-        }}>
+          borderColor="var(--color-primary)"
+          style={{ background: 'var(--color-bg)' }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Customize Dashboard</div>
             <button onClick={layout.reset} style={{ fontSize: 11, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Reset to Default</button>
@@ -1113,7 +1115,7 @@ export default function DashboardPage() {
           <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 8 }}>
             Reorder sections with arrows. Uncheck to hide. Your layout is saved automatically.
           </div>
-        </div>
+        </Card>
       )}
 
       {isEmptyOrg ? (

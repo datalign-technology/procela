@@ -12,6 +12,7 @@ import Page from '../components/Page';
 import WizardProgress from '../components/WizardProgress';
 import { useAuthStore } from '../stores/authStore';
 import Button from '../components/Button';
+import Card from '../components/Card';
 
 // Empirical guess for a full 5×5×6 hierarchy's serialised JSON
 // length. Used to convert the running char count that the backend
@@ -46,13 +47,6 @@ interface TemplateActivity { name: string; description: string; }
 interface TemplateProcess { name: string; description: string; purpose?: string; activities: TemplateActivity[]; subProcesses?: any[]; }
 interface TemplateValueStream { name: string; description: string; purpose?: string; businessOutcome?: string; processes: TemplateProcess[]; selected: boolean; }
 interface GeneratedTemplate { valueStreams: TemplateValueStream[]; }
-
-// ── Styles ──
-
-const card: React.CSSProperties = {
-  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)',
-};
 
 // ── Component ──
 
@@ -385,7 +379,7 @@ export default function ValueStreamWizard() {
 
       {/* Step 1: Industry + Generate */}
       {!template && !loading && (
-        <div style={card}>
+        <Card radius="lg" padding={24}>
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
             {orgIndustry ? 'Generate Process Hierarchy' : 'Select Industry'}
           </h2>
@@ -437,7 +431,7 @@ export default function ValueStreamWizard() {
               {loading ? 'Generating\u2026' : 'Generate Processes'}
             </Button>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Loading \u2014 real progress bar driven by chars streamed from
@@ -451,7 +445,7 @@ export default function ValueStreamWizard() {
         const displayFill = Math.min(0.95, rawFill);
         const pct = Math.round(displayFill * 100);
         return (
-          <div style={{ ...card, textAlign: 'center', padding: '2.5rem 2rem', border: '1px solid var(--color-primary)' }}>
+          <Card radius="lg" borderColor="var(--color-primary)" style={{ textAlign: 'center', padding: '2.5rem 2rem' }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, color: 'var(--color-primary)' }}>
               Generating process hierarchy
             </h2>
@@ -476,13 +470,13 @@ export default function ValueStreamWizard() {
                 AI is creating value streams, processes, and activities for {industry || orgIndustry}.
               </p>
             </div>
-          </div>
+          </Card>
         );
       })()}
 
       {/* Step 2: Review & Apply (combined preview + confirm) */}
       {template && !loading && (
-        <div style={card}>
+        <Card radius="lg" padding={24}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -633,7 +627,7 @@ export default function ValueStreamWizard() {
               {applying ? 'Applying...' : `Apply ${selectedCount} Value Stream${selectedCount !== 1 ? 's' : ''} to Catalog`}
             </Button>
           </div>
-        </div>
+        </Card>
       )}
       <ConfirmDialog
         open={!!confirmIndustry}

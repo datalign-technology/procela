@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
+import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import { usePermissions } from '../hooks/usePermissions';
@@ -569,16 +570,7 @@ export default function MappingsPage() {
 
       {/* Add Form */}
       {showForm && (
-        <div
-          style={{
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 20,
-            marginBottom: 20,
-            boxShadow: 'var(--shadow-sm)',
-          }}
-        >
+        <Card padding={20} marginBottom={20}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add New Mapping</h3>
 
           {/* Hierarchical step selection */}
@@ -708,7 +700,7 @@ export default function MappingsPage() {
               Add Mapping
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
 

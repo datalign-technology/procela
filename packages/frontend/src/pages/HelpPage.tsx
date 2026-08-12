@@ -1,15 +1,7 @@
 import PageHeader from '../components/PageHeader';
 import Page from '../components/Page';
+import Card from '../components/Card';
 import { openTrainingWindow } from '../components/navConfig';
-
-const sectionStyle: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: 24,
-  marginBottom: 20,
-  boxShadow: 'var(--shadow-sm)',
-};
 
 const h2Style: React.CSSProperties = {
   fontSize: 18,
@@ -116,7 +108,7 @@ export default function HelpPage() {
 
       {/* On this page — anchor links so a user can jump straight to a
           section instead of scrolling a 12-section wall of text. */}
-      <nav aria-label="Help contents" style={{ ...sectionStyle, marginBottom: 24 }}>
+      <Card padding={24} marginBottom={24} role="navigation" aria-label="Help contents">
         <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 10 }}>
           On this page
         </div>
@@ -131,10 +123,10 @@ export default function HelpPage() {
             </a>
           ))}
         </div>
-      </nav>
+      </Card>
 
       {/* 1. Getting Started */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-getting-started" style={h2Style}>1. Getting Started</h2>
         <p style={pStyle}>
           The fastest way in is the <strong>Get Started</strong> hub &mdash; a resumable, data-driven journey that walks an org through everything Procela needs. It sits at the top of the sidebar and at <code>/setup</code>.
@@ -165,10 +157,10 @@ export default function HelpPage() {
         <p style={pStyle}>
           The Get Started hub onboards the <em>organization</em> into Procela. The four-phase <strong>Governance Program</strong> journey (Foundation → Structural Design → People &amp; Processes → Operationalization), reached via <strong>Governance &rarr; Program</strong>, is the maturity model for the governance <em>program itself</em>. See Section 8 for the program journey.
         </p>
-      </div>
+      </Card>
 
       {/* 2. Navigation */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-navigation" style={h2Style}>2. Navigation</h2>
         <p style={pStyle}>The sidebar opens with <strong>Get Started</strong> for first-run onboarding (it auto-hides at 100%), then the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.</p>
         <ul style={listStyle}>
@@ -189,10 +181,10 @@ export default function HelpPage() {
           <li><strong>Working in &hellip;</strong> &mdash; Organization selector. Scopes every page to the selected org. Divisions are listed nested under their parent company (Tidewater Utilities ▸ Electric / Water), so you can drop into a division-scoped view without leaving the page. Single-tier companies render as a flat list.</li>
           <li><strong>Display preferences</strong> &mdash; the Plain / DAMA terminology toggle and the Cozy / Compact density toggle live in the <strong>user menu</strong> (click your name / avatar in the top-right corner). Per-user, persisted per browser, applied immediately. The Settings page is admin-only and holds org-wide configuration instead.</li>
         </ul>
-      </div>
+      </Card>
 
       {/* 3. Dashboard */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-dashboard" style={h2Style}>3. Dashboard</h2>
         <p style={pStyle}>The dashboard is personalized to your login. You must have a People record with your email to see personalized data.</p>
         <ul style={listStyle}>
@@ -207,10 +199,10 @@ export default function HelpPage() {
           <li><strong>Quick Actions</strong> &mdash; Shortcuts to common tasks</li>
         </ul>
         <p style={pStyle}>Click <strong>Customize</strong> to reorder or hide dashboard sections. Layout is saved automatically.</p>
-      </div>
+      </Card>
 
       {/* 4. Processes */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-processes" style={h2Style}>4. Processes</h2>
         <h3 style={h3Style}>Process Catalog</h3>
         <ul style={listStyle}>
@@ -241,10 +233,10 @@ export default function HelpPage() {
           <li><strong>Target column.</strong> A mapping can point at one of three things — a <strong>Data Asset</strong>, a <strong>Governance Document</strong> (charter / policy / standard / framework), or an <strong>Attachment</strong>. Each row carries a typed tag (<em>ASSET</em>, <em>DOCUMENT</em>, <em>ATTACHMENT</em>) plus the target's name and a sub-detail (governance tier for assets, code · type for documents, filename for attachments) so the three link kinds are visually distinct at a glance.</li>
           <li><strong>Orphan detection + cleanup.</strong> When the activity, asset, document, or attachment a mapping points at has been deleted (commonly: an agent draft was promoted, then the source activity got regenerated by the Process Wizard with new ids), the row renders the dangling side as an amber "Activity deleted" / "Data asset deleted" / "Governance document deleted" chip with the original id-prefix in the tooltip. A red banner above the table shows the total orphan count and a one-click <strong>Delete all orphans</strong> action — the surviving activities, assets, and documents are untouched. Orphans sort to the end of the table so the active rows stay together at the top.</li>
         </ul>
-      </div>
+      </Card>
 
       {/* 5. Data */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-data" style={h2Style}>5. Data</h2>
         <h3 style={h3Style}>Data Assets</h3>
         <ul style={listStyle}>
@@ -292,10 +284,10 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>A focused list of data assets that no process step references &mdash; candidates to either map to a step that uses them or retire. Sidebar: <strong>Data &rarr; Orphan Assets</strong> (<code>/data-assets/orphans</code>); the same orphans also surface in Gap Detection.</li>
         </ul>
-      </div>
+      </Card>
 
       {/* 6. Systems */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-systems" style={h2Style}>6. Systems</h2>
         <h3 style={h3Style}>Systems</h3>
         <ul style={listStyle}>
@@ -327,10 +319,10 @@ export default function HelpPage() {
         <p style={pStyle}>
           <strong>Connection vs on-prem connector?</strong> If Procela can reach the source over the internet with a credential &mdash; use a <em>Connection</em>. If it can't (on-prem database, air-gapped VPC, regulated environment) &mdash; use an <em>on-prem connector</em>. An org can mix and match; the resulting Data Assets look identical downstream. See the FAQ section for the install commands.
         </p>
-      </div>
+      </Card>
 
       {/* 7. Organizations */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-organizations" style={h2Style}>7. Organizations</h2>
         <p style={pStyle}>
           The "who" of the platform. The Organizations accordion gathers the four things that act on (or are acted on by) your data: the company tree itself, the humans, the AI agents, and the competencies those actors carry.
@@ -368,10 +360,10 @@ export default function HelpPage() {
             </ul>
           </li>
         </ul>
-      </div>
+      </Card>
 
       {/* 8. Governance */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-governance" style={h2Style}>8. Governance</h2>
         <h3 style={h3Style}>Governance Program</h3>
         <ul style={listStyle}>
@@ -445,10 +437,10 @@ export default function HelpPage() {
           Governance pages show prerequisite banners when prior steps haven't been completed.
           For example, the RACI page shows "Create domains and governance groups first" until those exist.
         </p>
-      </div>
+      </Card>
 
       {/* 9. Insights */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-insights" style={h2Style}>9. Insights</h2>
         <p style={pStyle}>
           Cross-cutting exploration and review surfaces that read across every part of the
@@ -489,10 +481,10 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>The full, queryable trail of every change &mdash; who did what to which entity and when. Filter by organization, entity type / id, or user, cap the result size, and export to CSV for a compliance reviewer. Sidebar: <strong>Insights &rarr; Review &rarr; Audit Log</strong> (<code>/audit-log</code>). Every row is hash-chained to the previous one; the <em>Verify integrity</em> action (see Security &amp; Account) walks the chain and flags any tampering.</li>
         </ul>
-      </div>
+      </Card>
 
       {/* 10. Security & Account */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-security" style={h2Style}>10. Security &amp; Account</h2>
         <p style={pStyle}>
           Procela ships with a layered sign-in stack — federated SSO, second-factor authentication, brute-force defences, and admin controls for credential lifecycle. Most of these are configurable per deployment; the defaults are sensible for a prototype but production deployments will want to set the env vars called out below. All settings below live under <strong>Settings</strong> unless noted; the credential-lifecycle admin actions live on the Person detail page.
@@ -588,10 +580,10 @@ export default function HelpPage() {
         <p style={pStyle}>
           TOTP secrets, OIDC client secrets, and SMTP passwords can all be stored encrypted at rest. Set <code>MFA_ENCRYPTION_KEY</code> (32+ chars random) for the local AES-256-GCM backend, or <code>KMS_PROVIDER=aws-kms|azure-kv|gcp-kms</code> with the matching cloud config for envelope encryption via AWS KMS, Azure Key Vault, or GCP KMS. To put an encrypted SMTP password or OIDC client secret in <code>.env</code>, POST the plaintext to <code>/api/v1/auth/encrypt-secret</code> (admin-only) and paste the <code>enc:v1:&hellip;</code> envelope it returns. Procela decrypts at boot.
         </p>
-      </div>
+      </Card>
 
       {/* 11. Cross-cutting Features */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-cross-cutting" style={h2Style}>11. Cross-cutting Features</h2>
         <p style={pStyle}>
           A handful of components show up on every detail page so the patterns stay the same as you move around the app.
@@ -640,10 +632,10 @@ export default function HelpPage() {
         <p style={pStyle}>
           The Comments panel and Activity feed live together on every detail surface, with the Role Detail drawer accessible from any role chip. Together they answer "what is this record, what's changed, and who am I talking to about it" without leaving the page.
         </p>
-      </div>
+      </Card>
 
       {/* 12. Key Concepts */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-key-concepts" style={h2Style}>12. Key Concepts</h2>
         <h3 style={h3Style}>DAMA Framework</h3>
         <p style={pStyle}>
@@ -693,12 +685,12 @@ export default function HelpPage() {
         <p style={pStyle}>
           Every list page has an Export button with format choices: CSV (open in any spreadsheet), Excel (.xlsx with proper types and sheet names), JSON (re-import or feed to the AI assistant), and Copy to clipboard (paste straight into Sheets / Numbers / a doc).
         </p>
-      </div>
+      </Card>
 
       {/* 13. FAQ — the keyboard-shortcuts section that used to live
           here was a duplicate of the formatted table further down the
           page. Removed when the L-pass appendix added the better one. */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-faq" style={h2Style}>13. Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>What is Procela?</h3>
@@ -837,12 +829,12 @@ export default function HelpPage() {
         <p style={pStyle}>
           Click <em>Revoke</em> on that row — the device gets booted to the login screen on its next API call. Then change your password from Settings (or use the forgot-password flow if you've forgotten it). If multiple unknown sessions show up, hit <em>Sign out everywhere</em> to invalidate everything in one shot and re-sign in from a known device.
         </p>
-      </div>
+      </Card>
 
       {/* Keyboard shortcuts — list the chords plus a button that pops
           the same overlay the user gets from Shift+? globally. Keeps
           discoverability high without forcing users to know the chord. */}
-      <div style={sectionStyle}>
+      <Card padding={24} marginBottom={20}>
         <h2 id="help-shortcuts" style={h2Style}>14. Keyboard shortcuts</h2>
         <p style={pStyle}>
           Procela has a small set of keyboard chords for the things you'll do most often.
@@ -889,7 +881,7 @@ export default function HelpPage() {
         >
           Open keyboard shortcuts overlay
         </button>
-      </div>
+      </Card>
     </Page>
   );
 }
