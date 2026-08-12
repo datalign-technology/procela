@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { CheckCircle2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
@@ -35,6 +36,8 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
   const [generateTemplate, setGenerateTemplate] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+  const cardRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(cardRef, true);
 
   const handleCreateOrg = async () => {
     if (!orgName.trim()) { setError('Organization name is required.'); return; }
@@ -87,7 +90,7 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
       position: 'fixed', inset: 0, zIndex: 2000,
       background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div style={{
+      <div ref={cardRef} role="dialog" aria-modal="true" aria-label="Welcome — set up your workspace" style={{
         background: 'var(--color-surface)', borderRadius: 12, maxWidth: 560, width: '95vw',
         boxShadow: '0 24px 80px rgba(0,0,0,0.25)', overflow: 'hidden',
       }}>

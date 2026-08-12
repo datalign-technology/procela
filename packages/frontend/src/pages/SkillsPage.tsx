@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
@@ -20,6 +20,7 @@ import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Skills Taxonomy — DAMA-aligned capabilities that agents (and people) can
@@ -98,6 +99,16 @@ export default function SkillsPage() {
   const [filterCategory, setFilterCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [seeding, setSeeding] = useState(false);
+  const confirmDeleteRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(confirmDeleteRef, !!confirmDelete);
+  useEffect(() => {
+    if (!confirmDelete) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setConfirmDelete(null);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [confirmDelete]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -439,7 +450,7 @@ export default function SkillsPage() {
 
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setConfirmDelete(null)}>
-          <div style={{ background: '#fff', borderRadius: 8, padding: 20, maxWidth: 400, width: '100%' }} onClick={(e) => e.stopPropagation()}>
+          <div ref={confirmDeleteRef} role="dialog" aria-modal="true" aria-label="Delete skill" style={{ background: '#fff', borderRadius: 8, padding: 20, maxWidth: 400, width: '100%' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Delete this skill?</h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>This cannot be undone.</p>
             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

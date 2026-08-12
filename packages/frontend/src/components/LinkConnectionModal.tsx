@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
 import Button from './Button';
 import { clickable } from '../lib/a11y';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 // ──────────────────────────────────────────────────────────────────────────
 // LinkConnectionModal — three-step flow for pointing a Data Asset at a
@@ -73,6 +74,15 @@ export default function LinkConnectionModal({
   const [saving, setSaving] = useState(false);
 
   const isChangeMode = !!existingBinding;
+
+  // Accessibility: trap focus in the modal and let Esc close it.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(cardRef, true);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   // ── Step 1: load connections for the org ──
   useEffect(() => {
@@ -154,6 +164,10 @@ export default function LinkConnectionModal({
       onClick={onClose}
     >
       <div
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Link to connection"
         style={{ background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.15)', padding: 20, maxWidth: 640, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}
       >

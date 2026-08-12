@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/client';
 import { errorMessage } from '@/lib/errorToast';
 import { useAuthStore } from '@/stores/authStore';
 import CaptchaPrompt from '@/components/CaptchaPrompt';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface AuthProvider {
   id: string;
@@ -95,6 +96,17 @@ export default function LoginPage() {
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+
+  // Accessibility: focus-trap the forgot-password modal while it's open,
+  // and let Esc dismiss it.
+  const forgotRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(forgotRef, forgotOpen);
+  useEffect(() => {
+    if (!forgotOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setForgotOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [forgotOpen]);
 
   // Surface a back-channel error from the OIDC callback. When the
   // backend hits a problem (state mismatch, token-exchange failure,
@@ -613,7 +625,7 @@ export default function LoginPage() {
           without confirming whether the email matched. */}
       {forgotOpen && (
         <div style={styles.modalScrim} onClick={() => setForgotOpen(false)}>
-          <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+          <div ref={forgotRef} role="dialog" aria-modal="true" aria-label="Reset password" style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
             {!forgotSubmitted ? (
               <>
                 <div style={styles.modalTitle}>Reset your password</div>
@@ -675,6 +687,11 @@ function ForcedChangeModal({ currentPassword, onDone }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
+  // Accessibility: trap focus in this forced flow. No Esc / dismiss —
+  // the user must set a new password before continuing.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(cardRef, true);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
@@ -695,7 +712,7 @@ function ForcedChangeModal({ currentPassword, onDone }: {
 
   return (
     <div style={styles.modalScrim}>
-      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+      <div ref={cardRef} role="dialog" aria-modal="true" aria-label="Change your password" style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalTitle}>Set a new password</div>
         <p style={styles.modalText}>
           Your account is using a temporary password. Choose a new one
@@ -1005,6 +1022,15 @@ function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
+  // Accessibility: trap focus in the MFA prompt and let Esc cancel it.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(cardRef, true);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
   const submitTotp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
@@ -1054,7 +1080,7 @@ function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
 
   return (
     <div style={styles.modalScrim}>
-      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+      <div ref={cardRef} role="dialog" aria-modal="true" aria-label="Two-factor authentication" style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalTitle}>
           {factor === 'webauthn'
             ? 'Use your security key'

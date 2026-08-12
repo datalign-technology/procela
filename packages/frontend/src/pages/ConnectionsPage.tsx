@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
@@ -26,6 +26,7 @@ import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { clickable } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -220,6 +221,16 @@ export default function ConnectionsPage() {
   const [discoveredAssets, setDiscoveredAssets] = useState<DiscoveredAsset[]>([]);
   const [discoverSimulated, setDiscoverSimulated] = useState(false);
   const [discoverModal, setDiscoverModal] = useState<{ connId: string; systemId: string; systemName: string } | null>(null);
+  const discoverModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(discoverModalRef, !!discoverModal);
+  useEffect(() => {
+    if (!discoverModal) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [discoverModal]);
   const [formTestResult, setFormTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [formTesting, setFormTesting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -1153,6 +1164,10 @@ export default function ConnectionsPage() {
           onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); }}
         >
           <div
+            ref={discoverModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Discover data assets"
             style={{ background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.15)', padding: 24, maxWidth: 640, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >

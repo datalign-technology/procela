@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -21,6 +21,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface DataDomain {
   id: string; orgId: string; name: string; description: string;
@@ -122,6 +123,26 @@ export default function DataDomainsPage() {
   // wants to override the auto-detected value.
   const [industryPickerOpen, setIndustryPickerOpen] = useState(false);
   const [pickedIndustry, setPickedIndustry] = useState<string>('');
+  const industryPickerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(industryPickerRef, industryPickerOpen);
+  useEffect(() => {
+    if (!industryPickerOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setIndustryPickerOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [industryPickerOpen]);
+  const generatePreviewRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(generatePreviewRef, showGeneratePreview);
+  useEffect(() => {
+    if (!showGeneratePreview) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setShowGeneratePreview(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showGeneratePreview]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -747,6 +768,10 @@ export default function DataDomainsPage() {
           onClick={() => setIndustryPickerOpen(false)}
         >
           <div
+            ref={industryPickerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Select industry"
             onClick={(e) => e.stopPropagation()}
             style={{
               background: 'var(--color-surface)', borderRadius: 10,
@@ -803,7 +828,7 @@ export default function DataDomainsPage() {
 
       {showGeneratePreview && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1050, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowGeneratePreview(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: 24, maxWidth: 600, width: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
+          <div ref={generatePreviewRef} role="dialog" aria-modal="true" aria-label="Generated domains preview" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: 24, maxWidth: 600, width: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Suggested Data Domains</h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16 }}>Uncheck any you don't need; the rest will be created as DRAFT domains.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
