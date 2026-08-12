@@ -11,6 +11,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -310,6 +311,7 @@ export default function DecisionRightsPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [groups, setGroups] = useState<GovernanceGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | DecisionCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -323,6 +325,7 @@ export default function DecisionRightsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [rowsRes, pplRes, grpRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DecisionRight[] }>(`/decision-rights${query}`),
@@ -332,7 +335,7 @@ export default function DecisionRightsPage() {
       setRows(rowsRes.data || []);
       setPeople(pplRes.data || []);
       setGroups(grpRes.data || []);
-    } catch { /* API may not be running */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load decision rights.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -749,7 +752,9 @@ export default function DecisionRightsPage() {
         )}
 
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-          {loading ? (
+          {loadError ? (
+            <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+          ) : loading ? (
             <SkeletonRows rows={5} columns={5} />
           ) : rows.length === 0 && !showForm ? (
             <EmptyState

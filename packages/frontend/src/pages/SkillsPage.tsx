@@ -12,6 +12,8 @@ import { ExportPayload } from '../lib/export';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
+import { errorMessage } from '../lib/errorToast';
 import { renderNavIcon } from '../components/navIcons';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
@@ -93,6 +95,7 @@ export default function SkillsPage() {
   const { addToast } = useToastStore();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -105,11 +108,12 @@ export default function SkillsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const res = await apiClient.get<{ success: boolean; data: Skill[] }>(
         activeOrgId ? `/skills?orgId=${activeOrgId}` : '/skills',
       );
       setSkills(res.data || []);
-    } catch { /* */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load skills.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -227,6 +231,12 @@ export default function SkillsPage() {
     headers: ['Name', 'Category', 'Description'],
     rows: filtered.map((s) => [s.name, formatCategory(s.category), s.description]),
   });
+
+  if (loadError) return (
+    <div>
+      <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+    </div>
+  );
 
   if (loading) return (
     <div>

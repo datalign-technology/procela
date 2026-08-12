@@ -15,6 +15,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
+import { errorMessage } from '../lib/errorToast';
 import { renderNavIcon } from '../components/navIcons';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
@@ -140,6 +142,7 @@ export default function AgentsPage() {
   const [agentTypes, setAgentTypes] = useState<string[]>(['AI', 'SERVICE_ACCOUNT', 'PIPELINE', 'BOT', 'OTHER']);
   const [agentStatuses, setAgentStatuses] = useState<string[]>(['ACTIVE', 'PAUSED', 'RETIRED']);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -166,6 +169,7 @@ export default function AgentsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [agentRes, orgRes, peopleRes, rolesRes, execsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Agent[]; agentTypes: string[]; agentStatuses: string[] }>('/agents'),
@@ -181,7 +185,7 @@ export default function AgentsPage() {
       setPeople(peopleRes.data || []);
       setAgentRoles((rolesRes.data || []).filter((r) => r.agentId));
       setAgentExecutions(execsRes.data || []);
-    } catch { /* */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load agents.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -386,6 +390,14 @@ export default function AgentsPage() {
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  if (loadError) return (
+    <div>
+      <Card shadow="none">
+        <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+      </Card>
+    </div>
+  );
 
   if (loading) return (
     <div>

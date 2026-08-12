@@ -12,6 +12,7 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
@@ -154,6 +155,7 @@ export default function GovernanceIssuesPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -168,6 +170,7 @@ export default function GovernanceIssuesPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [issuesRes, peopleRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GovernanceIssue[] }>(`/governance-issues${query}`),
@@ -177,7 +180,7 @@ export default function GovernanceIssuesPage() {
       setIssues(issuesRes.data || []);
       setPeople(peopleRes.data || []);
       setDomains(domainsRes.data || []);
-    } catch { /* API may not be running */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load governance issues.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -481,7 +484,9 @@ export default function GovernanceIssuesPage() {
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-        {loading ? (
+        {loadError ? (
+          <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+        ) : loading ? (
           <SkeletonRows rows={5} columnWidths={[32, null, null, null, null, null, null, null, 100]} />
         ) : issues.length === 0 && !showForm ? (
           <EmptyState

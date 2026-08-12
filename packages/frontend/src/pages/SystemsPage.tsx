@@ -18,6 +18,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import PersonPicker from '../components/PersonPicker';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
@@ -478,6 +479,7 @@ export default function SystemsPage() {
   const [filterCriticality, setFilterCriticality] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -497,6 +499,7 @@ export default function SystemsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [sysRes, connRes, peopleRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: SystemEntity[]; systemTypes: string[] }>(`/systems${query}`),
@@ -509,7 +512,7 @@ export default function SystemsPage() {
       setSystemTypes(sysRes.systemTypes || []);
       setConnections(connRes.data || []);
       setPeopleList(peopleRes.data || []);
-    } catch { /* */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load systems.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -1479,7 +1482,9 @@ export default function SystemsPage() {
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-        {loading ? (
+        {loadError ? (
+          <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+        ) : loading ? (
           <SkeletonRows rows={5} columnWidths={[40, null, null, 140, 80]} />
         ) : systems.length === 0 && !showForm ? (
           <EmptyState

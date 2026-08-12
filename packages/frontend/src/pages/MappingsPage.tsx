@@ -7,6 +7,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import { useToastStore } from '../stores/toastStore';
 import TruncatedText from '../components/TruncatedText';
@@ -778,11 +779,10 @@ export default function MappingsPage() {
         {loading ? (
           <SkeletonRows rows={5} columns={4} />
         ) : loadError && mappings.length === 0 ? (
-          <EmptyState
-            icon={'\u26a0'}
+          <ErrorState
             title="Couldn't load mappings"
-            description={loadError}
-            action={{ label: 'Retry', onClick: () => { setLoading(true); fetchData(); } }}
+            message={loadError}
+            onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }}
           />
         ) : mappings.length === 0 && !showForm ? (
           <EmptyState

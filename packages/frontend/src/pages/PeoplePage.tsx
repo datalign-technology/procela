@@ -10,12 +10,13 @@ import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import Avatar from '../components/Avatar';
-import { errorToast } from '../lib/errorToast';
+import { errorToast, errorMessage } from '../lib/errorToast';
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator';
 import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
@@ -277,6 +278,7 @@ export default function PeoplePage() {
   const [flatOrgs, setFlatOrgs] = useState<OrgFlat[]>([]);
   const [tree, setTree] = useState<OrgNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // People state
   const [people, setPeople] = useState<Person[]>([]);
@@ -351,6 +353,7 @@ export default function PeoplePage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       // Scope the org tree to the active "Working In" context so siblings
       // and ancestors are hidden even when the user has broader permissions.
       const orgQuery = activeOrgId ? `?scopeOrgId=${encodeURIComponent(activeOrgId)}` : '';
@@ -377,7 +380,7 @@ export default function PeoplePage() {
       setAllDataDomains(domainRes.data || []);
       setAllSkills(skillsRes.data || []);
       setSkillCoverageByPerson(coverageRes.data?.byPerson || {});
-    } catch { /* */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load people.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -716,6 +719,12 @@ export default function PeoplePage() {
       errorToast(e, 'Import failed');
     }
   };
+
+  if (loadError) return (
+    <Card padding={8} shadow="none" style={{ overflow: 'hidden' }}>
+      <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+    </Card>
+  );
 
   if (loading) return (
     <Card padding={8} shadow="none" style={{ overflow: 'hidden' }}>

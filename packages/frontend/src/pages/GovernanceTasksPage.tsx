@@ -12,6 +12,7 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
@@ -150,6 +151,7 @@ export default function GovernanceTasksPage() {
   const [tasks, setTasks] = useState<GovernanceTask[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -165,6 +167,7 @@ export default function GovernanceTasksPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [tasksRes, peopleRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GovernanceTask[] }>(`/governance-tasks${query}`),
@@ -172,7 +175,7 @@ export default function GovernanceTasksPage() {
       ]);
       setTasks(tasksRes.data || []);
       setPeople(peopleRes.data || []);
-    } catch { /* API may not be running */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load governance tasks.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -543,7 +546,9 @@ export default function GovernanceTasksPage() {
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-        {loading ? (
+        {loadError ? (
+          <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+        ) : loading ? (
           <SkeletonRows rows={5} columns={8} />
         ) : tasks.length === 0 && !showForm ? (
           <EmptyState

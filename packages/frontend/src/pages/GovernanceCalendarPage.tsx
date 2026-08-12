@@ -10,6 +10,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -174,6 +175,7 @@ export default function GovernanceCalendarPage() {
   const [upcoming, setUpcoming] = useState<UpcomingOccurrence[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -192,6 +194,7 @@ export default function GovernanceCalendarPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const upQuery = activeOrgId ? `?orgId=${activeOrgId}&days=30` : '?days=30';
       const [evRes, upRes, pplRes] = await Promise.all([
@@ -202,7 +205,7 @@ export default function GovernanceCalendarPage() {
       setEvents(evRes.data || []);
       setUpcoming(upRes.data || []);
       setPeople(pplRes.data || []);
-    } catch { /* API may not be running */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load the governance calendar.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -723,7 +726,9 @@ export default function GovernanceCalendarPage() {
         </div>
       )}
 
-      {viewMode === 'calendar' ? (
+      {loadError ? (
+        <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+      ) : viewMode === 'calendar' ? (
         /* ── Calendar Grid View ── */
         <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
           {/* Month navigation */}

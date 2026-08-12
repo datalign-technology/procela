@@ -12,6 +12,8 @@ import IconButton from './../components/IconButton';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from './../components/EmptyState';
+import ErrorState from '../components/ErrorState';
+import { errorMessage } from '../lib/errorToast';
 import { renderNavIcon } from './../components/navIcons';
 import StatusBadge from '../components/StatusBadge';
 import { useSortedList } from '../hooks/useSortedList';
@@ -213,6 +215,7 @@ export default function ConnectionsPage() {
   const [connections, setConnections] = useState<ConnectionProfile[]>([]);
   const [systems, setSystems] = useState<SystemEntity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -248,6 +251,7 @@ export default function ConnectionsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [connRes, sysRes] = await Promise.all([
         apiClient.get<{
@@ -268,7 +272,7 @@ export default function ConnectionsPage() {
       setAuthTypes(connRes.authTypes || []);
       setWarehouseTypes(connRes.warehouseTypes || []);
       setSystems(sysRes.data || []);
-    } catch { /* */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load connections.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -1121,7 +1125,9 @@ export default function ConnectionsPage() {
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-        {loading ? (
+        {loadError ? (
+          <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+        ) : loading ? (
           <SkeletonRows rows={5} columnWidths={[32, null, null, null]} />
         ) : visibleConnections.length === 0 && !showForm ? (
           <EmptyState
