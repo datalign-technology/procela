@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useToastStore } from '../stores/toastStore';
+import Button from './Button';
 
 // ── Types ──
 
@@ -27,30 +28,6 @@ interface MappingRecord {
   processStepId: string;
   dataAssetId: string;
 }
-
-// ── Styles ──
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-primary)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
 
 // ── Component ──
 
@@ -302,18 +279,18 @@ export default function BatchMappingWizard({ open, onClose, orgId, onCreated }: 
                 {existingMappings.size > 0 && ` · ${existingMappings.size} existing`}
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button style={btnSecondary} onClick={onClose}>
+                <Button variant="secondary" onClick={onClose}>
                   Cancel
-                </button>
-                <button
-                  style={{ ...btnPrimary, opacity: newMappings.size === 0 || applying ? 0.6 : 1 }}
+                </Button>
+                <Button
+                  variant="primary"
                   disabled={newMappings.size === 0 || applying}
                   onClick={handleApply}
                 >
                   {applying
                     ? 'Creating...'
                     : `Create ${newMappings.size} Mapping${newMappings.size !== 1 ? 's' : ''}`}
-                </button>
+                </Button>
               </div>
             </div>
           </>

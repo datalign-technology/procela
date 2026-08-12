@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
+import Button from './Button';
 
 // ──────────────────────────────────────────────────────────────────────────
 // LinkConnectionModal — three-step flow for pointing a Data Asset at a
@@ -50,14 +51,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
 
 export default function LinkConnectionModal({
   asset, activeOrgId, existingBinding, onClose, onLinked,
@@ -284,14 +277,14 @@ export default function LinkConnectionModal({
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button style={btnSecondary} onClick={onClose} disabled={saving}>Cancel</button>
-          <button
-            style={{ ...btnPrimary, opacity: canSave ? 1 : 0.6 }}
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button
+            variant="primary"
             disabled={!canSave}
             onClick={handleSave}
           >
             {saving ? 'Saving\u2026' : isChangeMode ? 'Change link' : 'Link'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

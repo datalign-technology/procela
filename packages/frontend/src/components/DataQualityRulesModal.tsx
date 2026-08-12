@@ -4,6 +4,7 @@ import { thStyle, tdStyle } from '../lib/tableStyles';
 import { useToastStore } from '../stores/toastStore';
 import { useOrgContext } from '../stores/orgContext';
 import IconButton from './IconButton';
+import Button from './Button';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Data Quality Rules modal — shared between DataAssetsPage (legacy entry)
@@ -77,14 +78,6 @@ interface AssetColumn {
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
-};
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 
 /**
@@ -330,13 +323,15 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
             </div>
             {showCommand && t.definition && <DefinitionBlock def={t.definition} label="Would execute" />}
           </div>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => handleAddClick(t)}
-            style={{ ...btnPrimary, padding: '4px 12px', fontSize: 11, whiteSpace: 'nowrap' }}
+            style={{ whiteSpace: 'nowrap' }}
             disabled={isConfiguring}
           >
             {isConfiguring ? 'Configure \u2193' : '+ Add'}
-          </button>
+          </Button>
         </div>
         {isConfiguring && (
           <div style={{ marginTop: 10, padding: 10, background: 'var(--color-bg)', borderRadius: 4 }}>
@@ -429,14 +424,16 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               </div>
             )}
             <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
-              <button
-                style={{ ...btnSecondary, padding: '4px 12px', fontSize: 11 }}
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => { setConfiguringTemplateId(null); setConfigParams({}); }}
-              >Cancel</button>
-              <button
-                style={{ ...btnPrimary, padding: '4px 12px', fontSize: 11 }}
+              >Cancel</Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => addFromTemplate(t, configParams)}
-              >Add rule</button>
+              >Add rule</Button>
             </div>
           </div>
         )}
@@ -649,7 +646,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          <button style={btnSecondary} onClick={onClose}>Close</button>
+          <Button variant="secondary" onClick={onClose}>Close</Button>
         </div>
       </div>
     </div>
