@@ -28,11 +28,15 @@ import type { SortDir } from '../hooks/useSortedList';
 //   - Loading skeletons and the "no data at all" empty hero stay in the
 //     page's outer branch (they depend on page-specific state).
 //
-// Expandable detail rows are supported via the `expansion` prop (caret
-// trigger): the page owns what the expanded region renders — including any
-// lazy fetch, nested sub-table, or quick-add controls — inside
-// `renderExpandedRow`. Quick-add rows pinned in the body and conditional
-// columns (People) remain out of scope.
+// Expandable detail rows are supported via the `expansion` prop (caret or
+// row-click trigger): the page owns what the expanded region renders —
+// including any lazy fetch, nested sub-table, or quick-add controls —
+// inside `renderExpandedRow`. Conditional columns are supported too — the
+// `columns` array is built with `.filter(Boolean)`, so gate an entry on a
+// boolean to add/drop it. The one shape still out of scope is a persistent
+// input row pinned inside `<tbody>` (People's quick-add row); there is no
+// slot for a non-data `<tr>` in the body, and adding one for a single
+// consumer isn't worth it.
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface DataTableColumn<T> {
