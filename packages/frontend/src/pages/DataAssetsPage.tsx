@@ -23,6 +23,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
@@ -394,6 +395,7 @@ export default function DataAssetsPage() {
   const [domainsList, setDomainsList] = useState<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }[]>([]);
   const [standardDataTypes, setStandardDataTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -507,6 +509,7 @@ export default function DataAssetsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [assetRes, connRes, peopleRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`),
@@ -538,7 +541,7 @@ export default function DataAssetsPage() {
       const map: Record<string, BindingRow[]> = {};
       for (const [id, bs] of entries) map[id] = bs;
       setBindingsByAsset(map);
-    } catch { /* API may not be running */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load data assets.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -1940,7 +1943,9 @@ export default function DataAssetsPage() {
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-        {loading ? (
+        {loadError ? (
+          <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+        ) : loading ? (
           <SkeletonRows rows={5} columnWidths={[40, null, null, null, 180]} />
         ) : assets.length === 0 && !showForm ? (
           <EmptyState

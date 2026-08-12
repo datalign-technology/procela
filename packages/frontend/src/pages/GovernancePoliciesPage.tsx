@@ -11,6 +11,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
@@ -170,6 +171,7 @@ export default function GovernancePoliciesPage() {
   // No, just session state for now (simple).
   const [showAgentPromotedOnly, setShowAgentPromotedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // documentType filter for the segmented control above the list.
   // 'ALL' shows everything; the four document types narrow the view.
   const [typeFilter, setTypeFilter] = useState<DocumentType | 'ALL'>('ALL');
@@ -190,6 +192,7 @@ export default function GovernancePoliciesPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       // Shape we need from /agent-executions for the join. The endpoint
       // already returns these fields; we only consume a subset.
@@ -220,7 +223,7 @@ export default function GovernancePoliciesPage() {
         }
       }
       setPromotionsByPolicy(byDoc);
-    } catch { /* API may not be running */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load governance documents.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -659,7 +662,9 @@ export default function GovernancePoliciesPage() {
 
       {/* Policies Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-        {loading ? (
+        {loadError ? (
+          <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+        ) : loading ? (
           <SkeletonRows rows={5} columns={8} />
         ) : policies.length === 0 && !showForm ? (
           <EmptyState icon={renderNavIcon('/governance-policies')} title="No governance documents yet"

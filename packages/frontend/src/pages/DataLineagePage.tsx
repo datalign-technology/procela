@@ -19,6 +19,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 
 interface LineageLink {
@@ -519,17 +520,11 @@ export default function DataLineagePage() {
     return (
       <div>
         <PageHeader title="Data Lineage" />
-        <Card padding={24} style={{ textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: 'var(--color-text-muted)' }}><AlertTriangle size={32} strokeWidth={1.8} /></div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Couldn't load data lineage</div>
-          <div style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 16 }}>{loadError}</div>
-          <button
-            onClick={() => { setLoading(true); fetchData(); }}
-            style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
-          >
-            Retry
-          </button>
-        </Card>
+        <ErrorState
+          title="Couldn't load data lineage"
+          message={loadError}
+          onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }}
+        />
       </div>
     );
   }

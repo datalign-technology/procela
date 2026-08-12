@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
-import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
@@ -11,6 +10,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
@@ -927,9 +927,8 @@ export default function BusinessGlossaryPage() {
             {loading ? (
               <SkeletonRows rows={5} columns={6} />
             ) : loadError && terms.length === 0 ? (
-              <EmptyState icon={<AlertTriangle size={36} strokeWidth={1.8} />} title="Couldn't load glossary"
-                description={loadError}
-                action={{ label: 'Retry', onClick: () => { setLoading(true); fetchData(); } }} />
+              <ErrorState title="Couldn't load glossary" message={loadError}
+                onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
             ) : terms.length === 0 && !showForm ? (
               <EmptyState icon={renderNavIcon('/business-glossary')} title="No glossary terms yet"
                 description="The business glossary is a shared dictionary of agreed-upon terms. Define terms so everyone speaks the same language."

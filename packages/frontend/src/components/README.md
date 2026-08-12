@@ -417,6 +417,58 @@ text.
 
 ---
 
+## States
+
+A data-fetching page has four render states, and every list page should
+handle all four in the same order: **error → loading → empty → data**.
+
+```tsx
+{loadError ? (
+  <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+) : loading ? (
+  <SkeletonRows rows={5} columns={4} />
+) : rows.length === 0 ? (
+  <EmptyState title="No systems yet" description="…" action={{ label: '+ Add', onClick: openAdd }} />
+) : (
+  <DataTable … />
+)}
+```
+
+### `<ErrorState>`
+
+The "couldn't load this" panel — the error-branch sibling of
+`<EmptyState>` (same surface / border / radius / centred padding, so the
+two read as one family). Props: `title?` (default "Couldn't load this"),
+`message?` (an `errorMessage(err)` string), `onRetry?` (renders a Retry
+button wired to it), `retryLabel?`.
+
+The list-consistency polish adopted it on **16 list pages** that used to
+**fail silently** — their `fetchData` swallowed the error in an empty
+`catch`, so a failed load rendered the *empty* state as if there were
+legitimately no data. The uniform fix each page now uses:
+
+```tsx
+const [loadError, setLoadError] = useState<string | null>(null);
+
+const fetchData = useCallback(async () => {
+  try {
+    setLoadError(null);          // clear on (re)load
+    …
+  } catch (err) {
+    setLoadError(errorMessage(err, 'Failed to load systems.'));
+  } finally {
+    setLoading(false);
+  }
+}, [deps]);
+```
+
+Do NOT swallow a primary-fetch error, and do NOT only `addToast` it (a
+toast is transient; the page is still blank). Set `loadError` and render
+`<ErrorState>`. `EmptyState` and `SkeletonRows` (from `Skeleton`) cover the
+other two branches.
+
+---
+
 ## Interactive
 
 ### `<SecondaryButton>`

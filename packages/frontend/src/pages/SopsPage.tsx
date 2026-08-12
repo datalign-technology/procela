@@ -13,6 +13,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
@@ -134,6 +135,7 @@ export default function SopsPage() {
   const [sops, setSops] = useState<Sop[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SopForm>(emptyForm);
@@ -148,6 +150,7 @@ export default function SopsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [sopsRes, peopleRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Sop[] }>(`/sops${query}`),
@@ -155,7 +158,7 @@ export default function SopsPage() {
       ]);
       setSops(sopsRes.data || []);
       setPeople(peopleRes.data || []);
-    } catch { /* */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load SOPs.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -560,7 +563,9 @@ export default function SopsPage() {
       </BulkActionBar>
 
       {/* Table */}
-      {loading ? (
+      {loadError ? (
+        <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+      ) : loading ? (
         <Card shadow="none">
           <SkeletonRows rows={5} columns={5} />
         </Card>

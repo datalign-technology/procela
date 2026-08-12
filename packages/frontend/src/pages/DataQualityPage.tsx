@@ -14,6 +14,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
+import { errorMessage } from '../lib/errorToast';
 import { renderNavIcon } from '../components/navIcons';
 import HelpPopover from '../components/HelpPopover';
 import ActiveFiltersBar from '../components/ActiveFiltersBar';
@@ -215,6 +217,7 @@ export default function DataQualityPage() {
   const [rules, setRules] = useState<QualityRule[]>([]);
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -230,6 +233,7 @@ export default function DataQualityPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [rulesRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: QualityRule[] }>(`/data-quality${query}`),
@@ -241,7 +245,7 @@ export default function DataQualityPage() {
       setSystemsList(assetsRes.systems || []);
       // Keep the legacy ref list in sync for the existing Rules-tab filter.
       setAssetsList(assets.map((a) => ({ id: a.id, name: a.name })));
-    } catch { /* API may not be running */ }
+    } catch (err) { setLoadError(errorMessage(err, 'Failed to load data quality.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -391,6 +395,16 @@ export default function DataQualityPage() {
   const updateField = (field: keyof FormData, value: string | number) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  if (loadError) {
+    return (
+      <div>
+        <Card shadow="none">
+          <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
+        </Card>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
