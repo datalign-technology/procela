@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
@@ -1045,7 +1046,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     return (
       <div style={{ padding: '12px 20px 12px 50px' }}>
         {loadingCols === a.id ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading columns…'}</div>
+          <Spinner label="Loading…" />
         ) : cols.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
             No columns defined. Auto-discover them from the Data Assets page.

@@ -467,6 +467,29 @@ toast is transient; the page is still blank). Set `loadError` and render
 `<ErrorState>`. `EmptyState` and `SkeletonRows` (from `Skeleton`) cover the
 other two branches.
 
+### `<Spinner>`
+
+The shared busy / loading indicator for **everything that isn't a
+table** — a full-area fetch, a viz canvas, a button mid-action, an
+overlay. It's a `currentColor` ring, so it tints to its context
+automatically (white on a primary button, muted in a page loader).
+
+```tsx
+<Spinner center label="Loading…" />   // full-area page loader (padded, centred)
+<Spinner label="Loading…" />          // inline loader inside a panel/section
+<Spinner size={14} />                 // bare ring (e.g. inside a busy button)
+```
+
+Props: `size` (default 16), `thickness` (2), `label` (text after the
+ring), `center` (padded centred block), `color` (defaults to
+`currentColor`), `style`.
+
+**Loader choice:** a still-loading **table/list** uses `<SkeletonRows>`
+(it keeps the final layout so nothing jumps); **everything else** uses
+`<Spinner>`. **Canonical copy is `Loading…`** with a real ellipsis
+(U+2026) — never `Loading...`. `<Button>` renders a `<Spinner>` itself
+when you pass `loading` (see below), so don't hand-roll a busy label.
+
 ---
 
 ## Interactive
@@ -485,7 +508,7 @@ import Button from '@/components/Button';
 <Button variant="primary" onClick={save} disabled={!valid}>Save</Button>
 <Button variant="secondary" onClick={cancel}>Cancel</Button>
 <Button variant="danger" onClick={remove}>Delete</Button>
-<Button variant="primary" loading={saving}>Save</Button>   {/* → "Saving…", disabled, aria-busy */}
+<Button variant="primary" loading={saving}>Save</Button>   {/* → <Spinner> + "Save", disabled, aria-busy */}
 ```
 
 Variants map to intent, not colour: **primary** (solid teal — the main

@@ -1,4 +1,5 @@
 import React from 'react';
+import Spinner from './Spinner';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Button — single source of truth for the text buttons that used to be
@@ -84,7 +85,7 @@ export default function Button({
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: leadingIcon ? 6 : 0,
+        gap: (leadingIcon || loading) ? 6 : 0,
         fontWeight: 500,
         borderRadius: 'var(--radius-md)',
         cursor: isDisabled ? 'not-allowed' : 'pointer',
@@ -97,8 +98,10 @@ export default function Button({
       onMouseUp={(e) => { e.currentTarget.style.transform = ''; onMouseUp?.(e); }}
       onMouseLeave={(e) => { e.currentTarget.style.transform = ''; onMouseLeave?.(e); }}
     >
-      {leadingIcon && <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center' }}>{leadingIcon}</span>}
-      <span>{loading ? 'Saving…' : children}</span>
+      {loading
+        ? <Spinner size={14} />
+        : leadingIcon && <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center' }}>{leadingIcon}</span>}
+      <span>{children}</span>
     </button>
   );
 }

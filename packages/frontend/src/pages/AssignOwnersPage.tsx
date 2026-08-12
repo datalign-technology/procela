@@ -7,6 +7,7 @@ import PersonPicker from '@/components/PersonPicker';
 import EmptyState from '@/components/EmptyState';
 import Page from '@/components/Page';
 import PageHeader from '@/components/PageHeader';
+import Spinner from '@/components/Spinner';
 import { CheckCircle2 } from 'lucide-react';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -186,7 +187,7 @@ export default function AssignOwnersPage() {
       />
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 48, color: 'var(--color-text-muted)' }}>Loading…</div>
+        <Spinner center label="Loading…" />
       ) : totalRemaining === 0 ? (
         <EmptyState
           icon={<CheckCircle2 size={36} strokeWidth={1.8} color="var(--color-success, #16a34a)" />}

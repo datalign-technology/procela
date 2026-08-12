@@ -4,6 +4,7 @@ import { apiClient } from '@/api/client';
 import { errorMessage } from '@/lib/errorToast';
 import { useAuthStore } from '@/stores/authStore';
 import CaptchaPrompt from '@/components/CaptchaPrompt';
+import Spinner from '@/components/Spinner';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface AuthProvider {
@@ -404,7 +405,7 @@ export default function LoginPage() {
         )}
 
         {providersLoading ? (
-          <div style={styles.loadingText}>Loading providers...</div>
+          <Spinner label="Loading…" />
         ) : (
           <>
             {/* SSO Providers — rendered only when the configured

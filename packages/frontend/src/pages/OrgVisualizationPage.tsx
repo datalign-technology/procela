@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
+import Spinner from '../components/Spinner';
 
 // ──────────────────────────────────────────────────────────────────────────
 // OrgVisualizationPage — full-page SVG view of the organization hierarchy.
@@ -351,9 +352,7 @@ export default function OrgVisualizationPage() {
         }}
       >
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem', color: 'var(--color-text-muted)' }}>
-            Loading organization hierarchy...
-          </div>
+          <Spinner center label="Loading…" />
         ) : error ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem', gap: 12 }}>
             <div style={{ color: 'var(--color-error, #dc2626)', fontSize: 14 }}>{error}</div>

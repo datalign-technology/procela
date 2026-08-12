@@ -6,6 +6,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import Page from '../components/Page';
 import PageHeader from '../components/PageHeader';
+import Spinner from '../components/Spinner';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Report Builder — Phase 2 of the Reports rebuild.
@@ -335,7 +336,7 @@ export default function ReportBuilderPage() {
       <div style={cardStyle}>
         <label style={labelStyle}>Starting entity</label>
         {!entitiesLoaded ? (
-          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</span>
+          <Spinner label="Loading…" />
         ) : (
           <select
             aria-label="Starting entity"

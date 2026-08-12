@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import Spinner from '../components/Spinner';
 import { INDUSTRIES } from '../types';
 import { clickable } from '../lib/a11y';
 import { useOrgContext } from '../stores/orgContext';
@@ -400,7 +401,7 @@ export default function DataDomainsPage() {
         actions={
           <>
             {canWrite && domains.length === 0 && (
-              <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
+              <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
             )}
             {domains.length > 0 && (
               <ExportMenu build={() => ({
@@ -496,12 +497,11 @@ export default function DataDomainsPage() {
            spinner pattern so users get the same "AI is working,
            expect 10–30s" signal across both wizards. */
         <Card padding="3rem" shadow="none" borderColor="var(--color-primary)" style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 12, animation: 'procelaDomainGenSpin 2s linear infinite' }}>⚙</div>
+          <Spinner size={28} thickness={3} color="var(--color-primary)" style={{ marginBottom: 12 }} />
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>Generating data domains…</h2>
           <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
             AI is suggesting domains based on your industry. This usually takes 10–30 seconds.
           </p>
-          <style>{`@keyframes procelaDomainGenSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </Card>
       ) : domains.length === 0 && !showForm ? (
         <EmptyState icon={renderNavIcon('/data-domains')} title="No data domains defined yet"

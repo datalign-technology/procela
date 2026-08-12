@@ -8,6 +8,7 @@ import { errorMessage } from '../lib/errorToast';
 import Page from '../components/Page';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Spinner from '../components/Spinner';
 import SectionLabel from '../components/SectionLabel';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
@@ -613,7 +614,7 @@ export default function SettingsPage() {
         <h2 style={sectionTitleStyle}>Authentication</h2>
 
         {authLoading ? (
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>Loading auth configuration...</p>
+          <Spinner label="Loading…" />
         ) : (
           <>
             {/* Current Provider Status */}
@@ -756,7 +757,7 @@ export default function SettingsPage() {
                     cursor: authSaving ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {authSaving ? 'Saving...' : 'Save Configuration'}
+                  {authSaving ? 'Saving…' : 'Save Configuration'}
                 </button>
               </div>
 
@@ -850,7 +851,7 @@ export default function SettingsPage() {
               cursor: exportLoading ? 'not-allowed' : 'pointer',
             }}
           >
-            {exportLoading ? 'Exporting...' : 'Export Backup'}
+            {exportLoading ? 'Exporting…' : 'Export Backup'}
           </button>
         </div>
 
@@ -909,7 +910,7 @@ export default function SettingsPage() {
                   cursor: importLoading ? 'not-allowed' : 'pointer',
                 }}
               >
-                {importLoading ? 'Importing...' : 'Import'}
+                {importLoading ? 'Importing…' : 'Import'}
               </button>
             </div>
           )}
@@ -1342,7 +1343,7 @@ function MfaPanel() {
   };
 
   if (loading) {
-    return <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Loading…</div>;
+    return <Spinner label="Loading…" />;
   }
 
   // renderTotp encapsulates the four states the TOTP sub-panel can

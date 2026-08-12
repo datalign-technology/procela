@@ -157,7 +157,7 @@ export default function OperationsManualPage() {
     <EmptyState icon={renderNavIcon('/organizations')} title="No organization selected" description="Select an organization from the header to view operations manuals." />
   );
 
-  const seedLabel = seeding ? 'Generating...' : 'Generate Standard Manuals';
+  const seedLabel = seeding ? 'Generating…' : 'Generate Standard Manuals';
 
   return (
     <div>

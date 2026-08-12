@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import Spinner from '../components/Spinner';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 
@@ -453,7 +454,7 @@ export default function ScorecardPage() {
     return (
       <div>
         <PageHeader title="Governance Maturity Scorecard" />
-        <div style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
+        <Spinner center label="Loading…" />
       </div>
     );
   }
@@ -564,7 +565,7 @@ export default function ScorecardPage() {
               (e.target as HTMLButtonElement).style.background = 'var(--color-surface)';
             }}
           >
-            {snapshotLoading ? 'Saving...' : 'Take Snapshot'}
+            {snapshotLoading ? 'Saving…' : 'Take Snapshot'}
           </button>
         </div>
         <MaturityChart snapshots={snapshots} />

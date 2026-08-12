@@ -34,12 +34,14 @@ describe('Button', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('loading: shows the saving label, disables, marks aria-busy', () => {
+  it('loading: keeps the label, shows a spinner, disables, marks aria-busy', () => {
     render(<Button loading>Save</Button>);
     const btn = screen.getByRole('button') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(btn).toHaveAttribute('aria-busy', 'true');
-    expect(btn.textContent).toContain('Saving');
+    // Keeps the real label (no hardcoded "Saving…") and renders the shared Spinner.
+    expect(btn.textContent).toContain('Save');
+    expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
   it('forwards aria-label and honours type=submit + style override', () => {

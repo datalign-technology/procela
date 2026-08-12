@@ -581,7 +581,7 @@ export default function BusinessGlossaryPage() {
         actions={
           <>
             {canWrite && terms.length === 0 && (
-              <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
+              <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
             )}
             {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
             {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}

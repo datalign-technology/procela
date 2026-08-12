@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import FieldStack from '../components/FieldStack';
+import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
@@ -1149,7 +1150,7 @@ export default function DataAssetsPage() {
           </div>
         </div>
         {columnsLoading === asset.id ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading…'}</div>
+          <Spinner label="Loading…" />
         ) : cols.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
             {binding
@@ -2029,7 +2030,7 @@ export default function DataAssetsPage() {
         ) : undefined}
       >
         {loading360 ? (
-          <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
+          <Spinner center label="Loading…" />
         ) : viewing360 ? (
           <>
                 {/* Asset Info */}
