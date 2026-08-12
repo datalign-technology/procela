@@ -11,6 +11,7 @@ import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
+import Card from '../components/Card';
 import { SkeletonRows } from '../components/Skeleton';
 
 // ── Types ──
@@ -36,11 +37,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)', width: '100%',
 };
-const card: React.CSSProperties = {
-  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)',
-};
-
 export default function OperationsManualPage() {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
@@ -204,8 +200,7 @@ export default function OperationsManualPage() {
               const isExpanded = expandedCards.has(m.id);
               const isSelected = selectedIds.has(m.id);
               return (
-                <div key={m.id} style={{
-                  ...card,
+                <Card key={m.id} padding={0} style={{
                   gridColumn: isExpanded ? '1 / -1' : undefined,
                   border: isSelected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                   transition: 'border-color 0.15s, box-shadow 0.15s',
@@ -328,7 +323,7 @@ export default function OperationsManualPage() {
                       </div>
                     </div>
                   )}
-                </div>
+                </Card>
               );
             })}
           </div>

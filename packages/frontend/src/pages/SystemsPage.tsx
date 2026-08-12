@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
+import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
@@ -1069,7 +1070,7 @@ export default function SystemsPage() {
 
       {/* Import Panel */}
       {showImport && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+        <Card padding={16} marginBottom={16}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Systems</h3>
@@ -1098,12 +1099,12 @@ export default function SystemsPage() {
             <Button variant="secondary" onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</Button>
             <Button variant="primary" disabled={!importText.trim() || !activeOrgId} onClick={handleImport}>Import</Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
+        <Card padding={20} marginBottom={20}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
             {editingId ? 'Edit System' : 'Add New System'}
           </h3>
@@ -1452,7 +1453,7 @@ export default function SystemsPage() {
               {editingId ? 'Save Changes' : 'Add System'}
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       <BulkActionBar count={sel.count} onClear={sel.clear}>

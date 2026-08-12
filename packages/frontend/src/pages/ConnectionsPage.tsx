@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -980,7 +981,7 @@ export default function ConnectionsPage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
+        <Card padding={20} marginBottom={20}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
             {editingId ? 'Edit Connection' : 'Add New Connection'}
           </h3>
@@ -1104,7 +1105,7 @@ export default function ConnectionsPage() {
               {uploading ? 'Uploading\u2026' : editingId ? 'Save Changes' : 'Add Connection'}
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Confirm dialogs */}

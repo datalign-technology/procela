@@ -5,6 +5,7 @@ import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
+import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -364,7 +365,7 @@ export default function SkillsPage() {
 
       {/* Add / Edit form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+        <Card padding={16} marginBottom={16}>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit Skill' : 'Add Skill'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
@@ -405,7 +406,7 @@ export default function SkillsPage() {
               {editingId ? 'Save' : 'Add'}
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       <BulkActionBar count={sel.count} onClear={sel.clear}>

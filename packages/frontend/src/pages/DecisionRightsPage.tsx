@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import Button from '../components/Button';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
@@ -585,7 +586,7 @@ export default function DecisionRightsPage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
+        <Card padding={20} marginBottom={20}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Decision Right' : 'Add Decision Right'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -695,7 +696,7 @@ export default function DecisionRightsPage() {
               {editingId ? 'Save Changes' : 'Add Decision Right'}
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       <ConfirmDialog
