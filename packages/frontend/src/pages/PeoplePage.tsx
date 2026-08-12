@@ -14,6 +14,7 @@ import { renderNavIcon } from '../components/navIcons';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import Avatar from '../components/Avatar';
 import { errorToast } from '../lib/errorToast';
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator';
 import { SkeletonRows } from '../components/Skeleton';
@@ -1158,15 +1159,18 @@ export default function PeoplePage() {
                             <input type="checkbox" checked={isSelected} onChange={() => sel.toggle(person.id)} />
                           </td>
                           <td style={{ ...tdStyle, fontWeight: 500 }}>
-                            <span
-                              onClick={() => setPreviewPersonId(previewPersonId === person.id ? null : person.id)}
-                              style={{ cursor: 'pointer', color: previewPersonId === person.id ? 'var(--color-primary)' : undefined }}
-                            >
-                              {person.name}
-                            </span>
-                            {person.syncStatus === 'MISSING_FROM_SOURCE' && (
-                              <span title="No longer found in the connected data source" style={{ display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: '#fef3c7', color: '#92400e', verticalAlign: 'middle' }}>NOT IN SOURCE</span>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Avatar name={person.name} />
+                              <span
+                                onClick={() => setPreviewPersonId(previewPersonId === person.id ? null : person.id)}
+                                style={{ cursor: 'pointer', color: previewPersonId === person.id ? 'var(--color-primary)' : undefined }}
+                              >
+                                {person.name}
+                              </span>
+                              {person.syncStatus === 'MISSING_FROM_SOURCE' && (
+                                <span title="No longer found in the connected data source" style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: '#fef3c7', color: '#92400e' }}>NOT IN SOURCE</span>
+                              )}
+                            </div>
                           </td>
                           <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
                           <td style={tdStyle}>

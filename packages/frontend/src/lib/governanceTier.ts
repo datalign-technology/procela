@@ -30,6 +30,20 @@ export const TIER_DESCRIPTION: Record<GovernanceTier, string> = {
   GOLD: 'Fully governed and certified. Audit-ready and suitable for regulatory use.',
 };
 
+// Badge palette for the tier — a metallic bronze / silver / gold ramp.
+// Paired bg+fg hex (like the other semantic-badge palettes) so it doesn't
+// drift when the `--color-*` tokens are retuned. Consumed by <TierBadge>.
+export const TIER_COLORS: Record<GovernanceTier, { bg: string; color: string }> = {
+  BRONZE: { bg: '#f5ede4', color: '#8a5a2b' },
+  SILVER: { bg: '#eef1f4', color: '#5b6b7b' },
+  GOLD:   { bg: '#fdf3d0', color: '#8a6d1f' },
+};
+
+/** Normalise any stored value to a known tier key (defaults to BRONZE). */
+export function tierKey(value: string | null | undefined): GovernanceTier {
+  return TIER_VALUES.includes(value as GovernanceTier) ? (value as GovernanceTier) : 'BRONZE';
+}
+
 function pick(mode: TerminologyMode, value: GovernanceTier): string {
   return mode === 'plain' ? TIER_LABEL_PLAIN[value] : TIER_LABEL[value];
 }

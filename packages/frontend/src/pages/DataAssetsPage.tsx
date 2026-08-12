@@ -31,6 +31,8 @@ import { useSortedList } from '../hooks/useSortedList';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import HealthBar from '../components/HealthBar';
+import TierBadge from '../components/TierBadge';
 import { useToastStore } from '../stores/toastStore';
 import { errorMessage, errorToast } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
@@ -1058,7 +1060,7 @@ export default function DataAssetsPage() {
                 {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
               </select>
             ) : (
-              <span>{tierLabel(asset.governanceTier)}</span>
+              <TierBadge tier={asset.governanceTier} />
             )}
             {canWrite && !inherited && asset.suggestedTier && compareTier(asset.suggestedTier, asset.governanceTier) > 0 && (
               <button
@@ -1084,7 +1086,7 @@ export default function DataAssetsPage() {
             type="number"
           />
         ) : (
-          <span>{asset.healthScore != null ? `${asset.healthScore}%` : '—'}</span>
+          <HealthBar score={asset.healthScore} />
         );
       },
     },
