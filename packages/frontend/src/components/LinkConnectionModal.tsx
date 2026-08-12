@@ -173,7 +173,7 @@ export default function LinkConnectionModal({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 600 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>
               {isChangeMode ? 'Change connection' : 'Link to connection'} {'\u2014'} {asset.name}
             </h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
