@@ -885,9 +885,9 @@ export default function GovernanceGroupsPage() {
 
       {/* Governance Hierarchy Guidance */}
       {flatGroups.length === 0 ? (
-        <div style={{ marginBottom: 12, padding: '14px 16px', background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)', borderRadius: 'var(--radius-md)', border: '1px solid #93c5fd', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ marginBottom: 12, padding: '14px 16px', background: 'var(--color-primary-light)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#1e40af', marginBottom: 2 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', marginBottom: 2 }}>
               Recommended structure: Council {'\u2192'} Office {'\u2192'} Committee {'\u2192'} Stewardship Teams {'\u2192'} Working Groups {'\u2192'} Communities of Practice
             </div>
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Get started quickly by creating the core governance groups in one click.</div>
@@ -1424,8 +1424,8 @@ export default function GovernanceGroupsPage() {
                     onClick={() => setShowRecommendations(true)}
                     style={{
                       padding: '6px 14px', fontSize: 12, fontWeight: 500,
-                      background: 'var(--color-surface)', color: '#1e40af',
-                      border: '1px solid #93c5fd', borderRadius: 'var(--radius-md)',
+                      background: 'var(--color-surface)', color: 'var(--color-primary)',
+                      border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)',
                       cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
                     }}
                   >
@@ -1459,8 +1459,8 @@ export default function GovernanceGroupsPage() {
                       <div key={rec.name} style={{
                         display: 'flex', alignItems: 'center', gap: 10,
                         padding: '10px 14px',
-                        background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
-                        border: '1px solid #bfdbfe',
+                        background: 'var(--color-primary-light)',
+                        border: '1px solid var(--color-primary)',
                         borderRadius: 'var(--radius-md)',
                       }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1477,8 +1477,8 @@ export default function GovernanceGroupsPage() {
                           disabled={creatingRec !== null}
                           style={{
                             padding: '5px 14px', fontSize: 11, fontWeight: 500,
-                            background: '#fff', color: '#1e40af',
-                            border: '1px solid #93c5fd', borderRadius: 4,
+                            background: '#fff', color: 'var(--color-primary)',
+                            border: '1px solid var(--color-primary)', borderRadius: 4,
                             cursor: creatingRec ? 'not-allowed' : 'pointer',
                             opacity: creatingRec ? 0.6 : 1,
                             whiteSpace: 'nowrap', flexShrink: 0,

@@ -150,7 +150,7 @@ function Badge({ label, colors }: { label: string; colors: { bg: string; color: 
 }
 
 function ScoreBar({ score, threshold }: { score: number; threshold: number }) {
-  const barColor = score >= threshold ? '#059669' : score >= threshold - 10 ? '#d97706' : '#dc2626';
+  const barColor = score >= threshold ? 'var(--color-success)' : score >= threshold - 10 ? 'var(--color-warning)' : 'var(--color-error)';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <div style={{
@@ -958,7 +958,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     const failing = rs.filter((r) => r.status === 'FAILING').length;
     const warn = rs.filter((r) => r.status === 'WARNING').length;
     const score = a.healthScore ?? 0;
-    const healthColor = rs.length === 0 ? 'var(--color-text-muted)' : score >= 80 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
+    const healthColor = rs.length === 0 ? 'var(--color-text-muted)' : score >= 80 ? 'var(--color-success)' : score >= 50 ? 'var(--color-warning)' : 'var(--color-error)';
     const totalWeight = rs.reduce((s, r) => s + r.weight, 0);
     const healthTooltip = rs.length === 0
       ? 'No rules defined. Add rules to calculate health.'
@@ -1064,7 +1064,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
             <tbody>
               {cols.map((col) => {
                 const h = col.healthScore;
-                const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
+                const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? 'var(--color-success)' : h >= 50 ? 'var(--color-warning)' : 'var(--color-error)';
                 return (
                   <tr key={col.id}>
                     <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
