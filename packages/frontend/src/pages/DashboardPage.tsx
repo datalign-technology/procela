@@ -910,7 +910,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
     { label: 'Ownerless processes', count: gaps.ownerlessItems || 0, severity: 'critical' as const, link: '/processes' },
     { label: 'Ungoverned assets (Uncertified)', count: gaps.ungovernedAssets || 0, severity: 'warning' as const, link: '/data-assets' },
     { label: 'Unowned domains', count: gaps.ungovernedDomains || 0, severity: 'warning' as const, link: '/data-domains' },
-    { label: 'Orphan data assets (no process uses them)', count: gaps.orphanAssets || 0, severity: 'warning' as const, link: '/data-assets/orphans' },
+    { label: 'Orphan data assets (no process uses them)', count: gaps.orphanAssets || 0, severity: 'warning' as const, link: '/data-assets?mapping=unmapped' },
   ];
   const total = items.reduce((s, i) => s + i.count, 0);
   const sevColors = { critical: 'var(--color-error)', warning: 'var(--color-warning)', info: 'var(--color-info)' };

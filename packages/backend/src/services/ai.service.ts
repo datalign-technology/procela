@@ -524,7 +524,7 @@ Return [] when no tag applies with any confidence.`,
       + '  - Process Catalog: /processes\n'
       + '  - Process ↔ Data Map: /processes/data-map\n'
       + '  - Data Assets: /data-assets\n'
-      + '  - Orphan Assets: /data-assets/orphans\n'
+      + '  - Orphan (unmapped) Assets: /data-assets?mapping=unmapped\n'
       + '  - Systems: /systems\n'
       + '  - Data Domains: /data-domains\n'
       + '  - Data Quality: /data-quality\n'

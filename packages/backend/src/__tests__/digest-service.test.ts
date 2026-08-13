@@ -155,9 +155,10 @@ describe('digest.service', () => {
       const titles = res.notifications.map((n) => n.title);
       assert.ok(titles.some((t) => /3 new orphan data assets/.test(t)),
         `expected an orphan-warning notification, got ${JSON.stringify(titles)}`);
-      // Link points at the orphan-assets page.
+      // Link points at the Data Assets catalog pre-filtered to unmapped
+      // (the Orphan Assets page folded into this filter).
       const orphanNote = res.notifications.find((n) => /orphan/i.test(n.title))!;
-      assert.strictEqual(orphanNote.link, '/data-assets/orphans');
+      assert.strictEqual(orphanNote.link, '/data-assets?mapping=unmapped');
     });
 
     it('does NOT fire the orphan warning on sub-threshold movement', async () => {

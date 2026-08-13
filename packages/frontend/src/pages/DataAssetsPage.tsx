@@ -120,6 +120,10 @@ interface DataAssetEntity {
    *  Advisory only — set by the backend, never persisted. The UI shows
    *  a Promote prompt when this exceeds the actual governanceTier. */
   suggestedTier?: 'BRONZE' | 'SILVER' | 'GOLD';
+  /** True when no process-step mapping points at this asset — the
+   *  "orphan" signal that used to live on its own page. Drives the
+   *  Unmapped row badge and the mapping-status filter. */
+  isOrphan?: boolean;
 }
 
 interface SystemRef {
@@ -222,6 +226,24 @@ const ORIGIN_BADGE: Record<string, { label: string; bg: string; fg: string; titl
   IMPORTED:            { label: 'Imported',  bg: '#fef3c7', fg: '#92400e', title: 'Created via bulk import' },
   SYNCED:              { label: 'Synced',    bg: '#dcfce7', fg: '#166534', title: 'Created by a sync connection' },
 };
+
+// "Unmapped" pill — shown when no process-step mapping references the
+// asset (backend `isOrphan`). This is the orphan signal that used to be
+// its own page; surfacing it inline lets a steward spot cleanup / fresh-
+// mapping candidates without leaving the catalog. Amber to read as
+// "worth a look", not an error. Palette kept as hex (semantic-badge
+// convention) so it doesn't drift when --color-warning is retuned.
+function UnmappedBadge({ isOrphan }: { isOrphan?: boolean }) {
+  if (!isOrphan) return null;
+  return (
+    <span
+      title="Not mapped to any process step — investigate, map it to a step, or retire it."
+      style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: '#fef3c7', color: '#92400e', letterSpacing: '0.02em' }}
+    >
+      Unmapped
+    </span>
+  );
+}
 
 function OriginBadge({ origin }: { origin?: string }) {
   if (!origin || origin === 'MANUAL') return null;
@@ -398,7 +420,23 @@ export default function DataAssetsPage() {
   const [filterTier, setFilterTier] = useState('');
   const [filterSystemId, setFilterSystemId] = useState('');
   const [filterOrigin, setFilterOrigin] = useState<'' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED'>('');
+  // Mapping-status filter — folds in the old Orphan Assets page. 'unmapped'
+  // shows only orphans (assets no process step uses); 'mapped' the inverse.
+  // Seeded from ?mapping= so /data-assets?mapping=unmapped (the redirect
+  // target for the retired /data-assets/orphans route) lands pre-filtered.
+  const [filterMapping, setFilterMapping] = useState<'' | 'mapped' | 'unmapped'>(
+    () => { const m = searchParams.get('mapping'); return m === 'mapped' || m === 'unmapped' ? m : ''; },
+  );
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Keep the URL in sync with the mapping filter so the view is
+  // shareable/bookmarkable and the browser back button restores it,
+  // mirroring how the retired orphans page was a distinct URL.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (filterMapping) next.set('mapping', filterMapping); else next.delete('mapping');
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+  }, [filterMapping]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Column visibility — toggleable from the Columns popover via the
   // shared hook + component. Storage key and column defs declared above.
@@ -581,6 +619,8 @@ export default function DataAssetsPage() {
     if (filterTier && (a.governanceTier || 'BRONZE') !== filterTier) return false;
     if (filterSystemId && a.systemId !== filterSystemId) return false;
     if (filterOrigin && (a.origin || 'MANUAL') !== filterOrigin) return false;
+    if (filterMapping === 'unmapped' && !a.isOrphan) return false;
+    if (filterMapping === 'mapped' && a.isOrphan) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       if (!a.name.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
@@ -588,7 +628,7 @@ export default function DataAssetsPage() {
     return true;
   });
 
-  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOrigin || searchQuery);
+  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOrigin || filterMapping || searchQuery);
 
   // URL-persisted sort.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -995,6 +1035,7 @@ export default function DataAssetsPage() {
               {asset.name}
             </button>
             <OriginBadge origin={asset.origin} />
+            <UnmappedBadge isOrphan={asset.isOrphan} />
             <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
             <RowCountChip rowCount={asset.rowCount} />
             {asset.sensitivityTags && asset.sensitivityTags.length > 0 && (
@@ -1256,12 +1297,13 @@ export default function DataAssetsPage() {
           <>
             <SavedViewsMenu
               pageKey="data-assets"
-              currentFilters={{ filterCategory, filterTier, filterSystemId, filterOrigin, searchQuery }}
+              currentFilters={{ filterCategory, filterTier, filterSystemId, filterOrigin, filterMapping, searchQuery }}
               onApply={(f) => {
                 setFilterCategory((f.filterCategory as string) || '');
                 setFilterTier((f.filterTier as string) || '');
                 setFilterSystemId((f.filterSystemId as string) || '');
                 setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
+                setFilterMapping((f.filterMapping as '' | 'mapped' | 'unmapped') || '');
                 setSearchQuery((f.searchQuery as string) || '');
               }}
             />
@@ -1437,11 +1479,22 @@ export default function DataAssetsPage() {
             {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
+        <select
+          aria-label="Filter by mapping status"
+          title="Whether the asset is mapped to any process step"
+          style={{ ...selectStyle, width: 'auto', minWidth: 150 }}
+          value={filterMapping}
+          onChange={(e) => setFilterMapping(e.target.value as typeof filterMapping)}
+        >
+          <option value="">All Mapping</option>
+          <option value="unmapped">Unmapped ({assets.filter((a) => a.isOrphan).length})</option>
+          <option value="mapped">Mapped ({assets.filter((a) => !a.isOrphan).length})</option>
+        </select>
         {hasActiveFilters && (
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOrigin(''); setSearchQuery(''); }}
+            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOrigin(''); setFilterMapping(''); setSearchQuery(''); }}
           >
             Clear Filters
           </Button>

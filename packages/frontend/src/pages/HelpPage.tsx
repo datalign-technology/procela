@@ -283,7 +283,7 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Orphan Assets</h3>
         <ul style={listStyle}>
-          <li>A focused list of data assets that no process step references &mdash; candidates to either map to a step that uses them or retire. Sidebar: <strong>Data &rarr; Orphan Assets</strong> (<code>/data-assets/orphans</code>); the same orphans also surface in Gap Detection.</li>
+          <li>Data assets that no process step references &mdash; candidates to either map to a step that uses them or retire. They carry an <strong>Unmapped</strong> badge on the catalog and are isolated by the <strong>Mapping &rarr; Unmapped</strong> filter on <strong>Data &rarr; Data Assets</strong> (<code>/data-assets?mapping=unmapped</code>); the same orphans also surface in Gap Detection.</li>
         </ul>
       </Card>
 

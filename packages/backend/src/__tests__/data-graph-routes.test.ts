@@ -201,4 +201,15 @@ describe('Phase 3 graph + orphan-asset routes', () => {
       if (idx >= 0) mappings.splice(idx, 1);
     });
   });
+
+  describe('GET /data-assets (isOrphan flag)', () => {
+    it('flags the unmapped asset isOrphan:true and mapped assets false', async () => {
+      const res = await request(port, 'GET', `/data-assets?orgId=${orgId}`);
+      assert.strictEqual(res.status, 200);
+      const byId = Object.fromEntries(res.body.data.map((a: any) => [a.id, a]));
+      assert.strictEqual(byId[assetOrphan].isOrphan, true, 'unmapped asset should be flagged orphan');
+      assert.strictEqual(byId[assetMapped1].isOrphan, false, 'mapped asset should not be flagged');
+      assert.strictEqual(byId[assetMapped2].isOrphan, false, 'mapped asset should not be flagged');
+    });
+  });
 });
