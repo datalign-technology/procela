@@ -480,7 +480,7 @@ const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMatur
 // These span all columns *in place* via `column-span: all`, so the reorder /
 // hide system still controls order — the layout just stops wasting the right
 // half of the page on narrow cards.
-const FULL_WIDTH_SECTIONS = new Set<SectionKey>(['overview', 'myDashboard', 'quickActions']);
+const FULL_WIDTH_SECTIONS = new Set<SectionKey>(['overview', 'myDashboard', 'whatsNext', 'quickActions']);
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
@@ -1052,14 +1052,33 @@ export default function DashboardPage() {
               cards flow two-up, roughly halving the scroll. Drops to a single
               column below ~780px. */}
           <div style={{ columns: '2 380px', columnGap: 16 }}>
-            {layout.order.filter((key) => !layout.hidden.has(key)).map((key) => (
-              <div
-                key={key}
-                style={{ breakInside: 'avoid', ...(FULL_WIDTH_SECTIONS.has(key) ? { columnSpan: 'all' } : null) }}
-              >
-                {sectionMap[key]}
-              </div>
-            ))}
+            {(() => {
+              const visible = layout.order.filter((key) => !layout.hidden.has(key));
+              return visible.map((key, i) => {
+                const isBand = FULL_WIDTH_SECTIONS.has(key);
+                const prevKey = visible[i - 1];
+                const prevIsBand = prevKey ? FULL_WIDTH_SECTIONS.has(prevKey) : true;
+                // A full-width band that follows two-up column content needs an
+                // explicit top gap: at a column-span boundary the trailing
+                // column items' margin-bottom gets trimmed, so the band would
+                // otherwise butt right up against the cards above it. Band→band
+                // and band→column transitions are handled by the child's own
+                // marginBottom and don't need this.
+                const needsTopGap = isBand && !prevIsBand;
+                return (
+                  <div
+                    key={key}
+                    style={{
+                      breakInside: 'avoid',
+                      ...(isBand ? { columnSpan: 'all' } : null),
+                      ...(needsTopGap ? { marginTop: 24 } : null),
+                    }}
+                  >
+                    {sectionMap[key]}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </>
       )}
