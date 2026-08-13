@@ -13,6 +13,7 @@ import { healthColorVar } from '../components/HealthBar';
 import SectionHeading from '../components/SectionHeading';
 import StatTile from '../components/StatTile';
 import Meter from '../components/Meter';
+import ProgressRing from '../components/ProgressRing';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
@@ -767,27 +768,18 @@ function ProgramMaturity() {
   if (!status) return null;
 
   const phaseNames = ['', 'Foundation Definition', 'Structural Design', 'People & Processes', 'Operationalization'];
-  const phaseColors = ['', '#3b82f6', '#8b5cf6', '#22c55e', '#f97316'];
 
   return (
     <div style={{ marginBottom: 24 }}>
       <SectionHeading title="Program Maturity" />
       <Card padding="16px 20px">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: '50%',
-            background: phaseColors[status.currentPhase],
-            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, fontWeight: 700,
-          }}>
-            {status.currentPhase}
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+          <ProgressRing percent={status.overallProgress} size={54} stroke={5} showLabel />
           <div>
             <div style={{ fontSize: 14, fontWeight: 600 }}>Phase {status.currentPhase}: {phaseNames[status.currentPhase]}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{status.overallProgress}% overall progress</div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Overall program progress</div>
           </div>
         </div>
-        <Meter value={status.overallProgress} color={phaseColors[status.currentPhase]} style={{ marginBottom: 12 }} />
         {recommendations.length > 0 && (
           <div>
             <SectionLabel marginBottom={6}>Next steps to advance</SectionLabel>
