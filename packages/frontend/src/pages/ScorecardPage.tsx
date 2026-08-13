@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
@@ -54,6 +55,17 @@ const DIMENSION_COLORS: Record<string, string> = {
   'Domain Coverage': '#8b5cf6',
   'Governance Structure': '#f59e0b',
   'People Coverage': '#10b981',
+};
+
+// Each dimension tile deep-links to the catalog page where you'd act on it,
+// so the scorecard doubles as a jumping-off point. Keyed by dimension name;
+// a dimension with no entry renders as a plain (non-linked) tile.
+const DIMENSION_ROUTES: Record<string, string> = {
+  'Process Documentation': '/processes',
+  'Data Governance': '/data-assets',
+  'Domain Coverage': '/data-domains',
+  'Governance Structure': '/governance-groups',
+  'People Coverage': '/people',
 };
 
 // ---------------------------------------------------------------------------
@@ -535,18 +547,34 @@ export default function ScorecardPage() {
       <div style={{ marginBottom: 16 }}>
         <SectionHeading title="Dimensions" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-          {data.dimensions.map((dim) => (
-            <Card key={dim.name} padding="14px 16px">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{dim.name}</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: dim.color, fontVariantNumeric: 'tabular-nums' }}>{dim.score}%</span>
-              </div>
-              <Meter value={dim.score} color={dim.color} height={8} style={{ margin: '8px 0' }} />
-              <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {dim.description}
-              </div>
-            </Card>
-          ))}
+          {data.dimensions.map((dim) => {
+            const route = DIMENSION_ROUTES[dim.name];
+            const tile = (
+              <Card padding="14px 16px" style={{ height: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{dim.name}</span>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: dim.color, fontVariantNumeric: 'tabular-nums' }}>{dim.score}%</span>
+                </div>
+                <Meter value={dim.score} color={dim.color} height={8} style={{ margin: '8px 0' }} />
+                <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {dim.description}
+                </div>
+              </Card>
+            );
+            if (!route) return <div key={dim.name}>{tile}</div>;
+            return (
+              <Link
+                key={dim.name}
+                to={route}
+                aria-label={`${dim.name} — ${dim.score}%. Open the related page.`}
+                style={{ textDecoration: 'none', color: 'inherit', display: 'block', borderRadius: 'var(--radius-md)', transition: 'transform 0.12s ease, box-shadow 0.12s ease' }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+              >
+                {tile}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
