@@ -542,6 +542,35 @@ export default function ScorecardPage() {
         </Card>
       </div>
 
+      {/* Recommendations — surfaced above the Dimensions grid so the
+          "what to fix" lands before the full breakdown. */}
+      {lowDimensions.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <SectionHeading title="Recommendations" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
+            {lowDimensions.map((dim) => (
+              <div
+                key={dim.name}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px',
+                  background: '#fef3c7', borderLeft: `4px solid ${dim.color}`, borderRadius: 'var(--radius-md)',
+                }}
+              >
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{'⚠'}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                    {dim.name} ({dim.score}%)
+                  </div>
+                  <div style={{ fontSize: 13, color: '#78350f' }}>
+                    {RECOMMENDATIONS[dim.name] || 'Improve this dimension to strengthen your governance maturity.'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Dimensions — one tile per dimension in a grid instead of a tall
           vertical list, so the whole scorecard reads at a glance. */}
       <div style={{ marginBottom: 16 }}>
@@ -577,34 +606,6 @@ export default function ScorecardPage() {
           })}
         </div>
       </div>
-
-      {/* Recommendations */}
-      {lowDimensions.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <SectionHeading title="Recommendations" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
-            {lowDimensions.map((dim) => (
-              <div
-                key={dim.name}
-                style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px',
-                  background: '#fef3c7', borderLeft: `4px solid ${dim.color}`, borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{'⚠'}</span>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
-                    {dim.name} ({dim.score}%)
-                  </div>
-                  <div style={{ fontSize: 13, color: '#78350f' }}>
-                    {RECOMMENDATIONS[dim.name] || 'Improve this dimension to strengthen your governance maturity.'}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Dimension trend sparklines (once there is history) */}
       {snapshots.length >= 2 && (
