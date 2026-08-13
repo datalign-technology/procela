@@ -92,10 +92,20 @@ interface ChartProps {
 function MaturityChart({ snapshots }: ChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
+  const height = 150;
+
   if (snapshots.length < 2) {
     return (
+      // Match the rendered chart's height so the hero row (and the sibling
+      // Overall Maturity card, which stretches to the grid row height) stays
+      // the same height whether or not a trend is available — otherwise the
+      // card visibly resizes as the org scope changes the snapshot count.
       <div style={{
-        padding: 24,
+        minHeight: height,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '12px 24px',
         textAlign: 'center',
         color: 'var(--color-text-muted)',
         fontSize: 13,
@@ -106,7 +116,6 @@ function MaturityChart({ snapshots }: ChartProps) {
   }
 
   const width = 700;
-  const height = 150;
   const paddingLeft = 45;
   const paddingRight = 20;
   const paddingTop = 16;
