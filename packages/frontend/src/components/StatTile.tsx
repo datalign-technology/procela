@@ -33,26 +33,28 @@ interface StatTileProps {
   zero?: boolean;
   /** Tooltip override (else derived from the label when it's a string). */
   title?: string;
+  /** Tighter padding + number — for dense grids like the printable report. */
+  dense?: boolean;
 }
 
-export default function StatTile({ label, value, to, valueColor, accent, sub, zero, title }: StatTileProps) {
+export default function StatTile({ label, value, to, valueColor, accent, sub, zero, title, dense }: StatTileProps) {
   const isZero = zero ?? (typeof value === 'number' && value === 0);
   const base: React.CSSProperties = {
     background: 'var(--color-surface)',
     border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
     boxShadow: 'var(--shadow-sm)',
-    padding: '14px 16px',
+    padding: dense ? '8px 12px' : '14px 16px',
     textAlign: 'center',
     ...(accent ? { borderLeft: `4px solid ${accent}` } : null),
   };
 
   const body = (
     <>
-      <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.1, color: isZero ? 'var(--color-text-muted)' : (valueColor || 'var(--color-text)'), fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ fontSize: dense ? 20 : 24, fontWeight: 700, lineHeight: 1.1, color: isZero ? 'var(--color-text-muted)' : (valueColor || 'var(--color-text)'), fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </div>
-      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: dense ? 10.5 : 11, color: 'var(--color-text-muted)', marginTop: dense ? 2 : 4 }}>{label}</div>
       {sub && <div style={{ fontSize: 10, color: sub.color || 'var(--color-text-muted)', marginTop: 2 }}>{sub.text}</div>}
     </>
   );
