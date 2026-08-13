@@ -13,6 +13,7 @@ import { badgeColor } from '../lib/badgeColors';
 import HelpPopover from '../components/HelpPopover';
 import EnterpriseDiagram from '../components/EnterpriseDiagram';
 import { renderNavIcon } from '../components/navIcons';
+import { exportEnterpriseDrawio } from '../lib/enterpriseDiagramExport';
 
 // ── Types ──
 
@@ -311,6 +312,21 @@ export default function EnterpriseViewPage() {
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-muted)' }}>
           {filteredNodes.length} entities &middot; {filteredEdges.length} relationships
         </span>
+        {filteredNodes.length > 0 && (
+          <button
+            type="button"
+            onClick={() => exportEnterpriseDrawio(filteredNodes, filteredEdges, TYPE_CONFIG, visibleTypes, 'enterprise-view')}
+            title="Download this view as an editable .drawio file — opens in diagrams.net (free) for viewing and authoring, and exports to Visio (.vsdx) from there."
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              border: '1px solid var(--color-border)', borderRadius: 999,
+              background: 'var(--color-surface)', color: 'var(--color-text-secondary)',
+            }}
+          >
+            Export diagram
+          </button>
+        )}
         <div role="tablist" aria-label="Display mode" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
           {(['cards', 'diagram'] as const).map((mode) => (
             <button
