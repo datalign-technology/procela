@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import StatTile from '../components/StatTile';
 import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import TruncatedText from '../components/TruncatedText';
@@ -606,29 +607,16 @@ export default function DataQualityPage() {
         </HelpPopover>
       </PageHeader>
 
-      {/* Stats */}
+      {/* Stats — shared StatTile (dense) so the KPI row matches the
+          Dashboard's height and styling instead of the old taller
+          hand-rolled cards (whose number div had no line-height). */}
       {rules.length > 0 && (
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <Card padding="12px 16px" style={{ flex: 1 }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{totalRules}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Rules</div>
-          </Card>
-          <Card padding="12px 16px" style={{ flex: 1 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#059669' }}>{passingCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Passing</div>
-          </Card>
-          <Card padding="12px 16px" style={{ flex: 1 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning)' }}>{warningCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Warning</div>
-          </Card>
-          <Card padding="12px 16px" style={{ flex: 1 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-error)' }}>{failingCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Failing</div>
-          </Card>
-          <Card padding="12px 16px" style={{ flex: 1 }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{avgScore}%</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Avg Score</div>
-          </Card>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
+          <StatTile dense label="Total Rules" value={totalRules} />
+          <StatTile dense label="Passing" value={passingCount} valueColor="var(--color-success)" />
+          <StatTile dense label="Warning" value={warningCount} valueColor="var(--color-warning)" />
+          <StatTile dense label="Failing" value={failingCount} valueColor="var(--color-error)" />
+          <StatTile dense label="Avg Score" value={`${avgScore}%`} />
         </div>
       )}
 
