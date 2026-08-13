@@ -10,6 +10,8 @@ const agentsRouter = require('../routes/agents').default;
 const { agents } = require('../routes/agents');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { organizations } = require('../routes/organizations');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { saveStore } = require('../lib/persistence');
 
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -56,10 +58,17 @@ describe('agents routes', () => {
   after(async () => {
     const oi = organizations.findIndex((o: any) => o.id === orgId);
     if (oi !== -1) organizations.splice(oi, 1);
-    // Drop any agent created under the test org so we don't pollute persistence.
+    // Drop any agent created under the test org so we don't pollute
+    // persistence. The route handlers saveStore('agents', …) synchronously
+    // on every create/import, so those rows are already on disk by now —
+    // splicing the in-memory array is not enough. Re-save the cleaned array
+    // to flush the removal, otherwise each run reloads the prior run's test
+    // agents and the store grows unbounded (this is what left hundreds of
+    // duplicate "Chat Helper" / "Nightly Sync" rows in .procela-data).
     for (let i = agents.length - 1; i >= 0; i--) {
       if (agents[i].orgIds.includes(orgId)) agents.splice(i, 1);
     }
+    saveStore('agents', agents);
     await new Promise<void>((r) => server.close(() => r()));
   });
 
