@@ -867,7 +867,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
   const sevColors = { critical: 'var(--color-error)', warning: 'var(--color-warning)', info: 'var(--color-info)' };
 
   return (
-    <div>
+    <div style={{ marginBottom: 24 }}>
       <SectionHeading title="Governance Gaps" />
       {total === 0 ? (
         <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--color-success)', fontSize: 13, fontWeight: 500 }}>
