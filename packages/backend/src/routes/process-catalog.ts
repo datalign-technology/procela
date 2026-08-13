@@ -22,6 +22,7 @@ import { auditService } from '../services/audit.service';
 // has resolved and the exports are populated.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 import { people } from './people';
+import { dataDomains } from './data-domains';
 import { createNotification } from './notifications';
 
 const VALUE_STREAM_ORG_LEVELS = ['company', 'division'];
@@ -1323,6 +1324,15 @@ router.get('/data-graph', async (req: Request, res: Response) => {
     }));
   const activityIdSet = new Set(activities.map((a) => a.id));
 
+  // Which data domain each asset rolls up to (a domain lists its member
+  // asset ids). First domain wins if an asset is somehow in more than one.
+  const domainByAssetId = new Map<string, { id: string; name: string }>();
+  for (const d of dataDomains) {
+    for (const aid of (d.dataAssetIds || [])) {
+      if (!domainByAssetId.has(aid)) domainByAssetId.set(aid, { id: d.id, name: d.name });
+    }
+  }
+
   const orgAssetIds = new Set<string>();
   const assetsOut = dataAssets
     .filter((a: any) => !scope || scope.has(a.orgId))
@@ -1331,12 +1341,18 @@ router.get('/data-graph', async (req: Request, res: Response) => {
       const sysName = a.systemId
         ? systems.find((s: any) => s.id === a.systemId)?.name || null
         : null;
+      const dom = domainByAssetId.get(a.id) || null;
       return {
         id: a.id,
         name: a.name,
         systemId: a.systemId,
         systemName: sysName,
         governanceTier: a.governanceTier,
+        // Data domain the asset belongs to (null when ungrouped) so the
+        // map can roll assets up under domain headers like activities roll
+        // up under processes.
+        domainId: dom?.id || null,
+        domainName: dom?.name || null,
       };
     });
 

@@ -77,6 +77,29 @@ interface Asset {
   systemId: string;
   systemName: string | null;
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
+  /** Data domain the asset rolls up to (null when ungrouped). */
+  domainId?: string | null;
+  domainName?: string | null;
+}
+
+// One row in the right column: a data-domain header or an asset. Assets
+// roll up under their domain the way activities roll up under processes.
+type RightRow =
+  | { kind: 'domain'; name: string; rowKey: string }
+  | { kind: 'asset'; asset: Asset };
+
+function buildRightRows(assets: Asset[]): RightRow[] {
+  const rows: RightRow[] = [];
+  let lastDomain: string | null | undefined;
+  for (const a of assets) {
+    const dom = a.domainName || null;
+    if (dom !== lastDomain) {
+      rows.push({ kind: 'domain', name: dom || 'No domain', rowKey: `d-${dom ?? 'none'}-${rows.length}` });
+      lastDomain = dom;
+    }
+    rows.push({ kind: 'asset', asset: a });
+  }
+  return rows;
 }
 interface Edge {
   mappingId: string;
@@ -180,10 +203,12 @@ export default function ProcessDataMapPage() {
       if (pa !== pb) return pa.localeCompare(pb);
       return a.name.localeCompare(b.name);
     });
+    // Group by data domain (null domains sort last), then by name, so the
+    // right column reads as domain headers with their assets beneath.
     filteredAssets = [...filteredAssets].sort((a, b) => {
-      const sa = a.systemName || '';
-      const sb = b.systemName || '';
-      if (sa !== sb) return sa.localeCompare(sb);
+      const da = a.domainName || '￿';
+      const db = b.domainName || '￿';
+      if (da !== db) return da.localeCompare(db);
       return a.name.localeCompare(b.name);
     });
     return {
@@ -203,13 +228,17 @@ export default function ProcessDataMapPage() {
     });
     return m;
   }, [leftRows]);
+  // Right column laid out as data-domain headers + asset rows.
+  const rightRows = useMemo(() => buildRightRows(assets), [assets]);
   const assetY = useMemo(() => {
     const m = new Map<string, number>();
-    assets.forEach((a, i) => m.set(a.id, PADDING_Y + i * ROW_HEIGHT));
+    rightRows.forEach((row, i) => {
+      if (row.kind === 'asset') m.set(row.asset.id, PADDING_Y + i * ROW_HEIGHT);
+    });
     return m;
-  }, [assets]);
+  }, [rightRows]);
 
-  const svgHeight = Math.max(leftRows.length, assets.length) * ROW_HEIGHT + PADDING_Y * 2;
+  const svgHeight = Math.max(leftRows.length, rightRows.length) * ROW_HEIGHT + PADDING_Y * 2;
   const svgWidth = COL_WIDTH * 2 + GUTTER;
 
   // Edges connected to the focused node — separate Set so we can
@@ -240,7 +269,7 @@ export default function ProcessDataMapPage() {
       <PageHeader
         title="Process ↔ Data map"
         subtitle={viewMode === 'visual'
-          ? 'Visual bridge between the business hierarchy and the catalog — activities grouped under their value stream, process and sub-process. Click an activity or asset to focus its connections.'
+          ? 'Visual bridge between the business hierarchy and the catalog — activities grouped under their value stream, process and sub-process; data assets grouped under their data domain. Click an activity or asset to focus its connections.'
           : 'Flat, editable list of every activity ↔ data-asset mapping — bulk add / delete, a batch wizard, and orphan cleanup.'}
         actions={
           <div role="tablist" aria-label="View" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
@@ -349,14 +378,14 @@ export default function ProcessDataMapPage() {
               if (focus && !isFocused) {
                 return (
                   <EdgePath key={e.mappingId} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                    x2={COL_WIDTH + GUTTER} y2={yB + ROW_HEIGHT / 2}
+                    x2={COL_WIDTH + GUTTER + 18} y2={yB + ROW_HEIGHT / 2}
                     color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={0.08} />
                 );
               }
               if (focus && isFocused) return null;
               return (
                 <EdgePath key={e.mappingId} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                  x2={COL_WIDTH + GUTTER} y2={yB + ROW_HEIGHT / 2}
+                  x2={COL_WIDTH + GUTTER + 18} y2={yB + ROW_HEIGHT / 2}
                   color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={focus ? 0.15 : 0.45} />
               );
             })}
@@ -366,7 +395,7 @@ export default function ProcessDataMapPage() {
               if (yA == null || yB == null) return null;
               return (
                 <EdgePath key={`f-${e.mappingId}`} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                  x2={COL_WIDTH + GUTTER} y2={yB + ROW_HEIGHT / 2}
+                  x2={COL_WIDTH + GUTTER + 18} y2={yB + ROW_HEIGHT / 2}
                   color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={0.9} strokeWidth={2} />
               );
             })}
@@ -413,26 +442,44 @@ export default function ProcessDataMapPage() {
               );
             })}
 
-            {/* Asset rows */}
-            {assets.map((a) => {
-              const y = assetY.get(a.id)!;
+            {/* Right column: data-domain headers with their assets nested
+                beneath (assets roll up to domains like activities roll up
+                to processes). */}
+            {rightRows.map((row, i) => {
+              const y = PADDING_Y + i * ROW_HEIGHT;
+              const colX = COL_WIDTH + GUTTER;
+              if (row.kind === 'domain') {
+                return (
+                  <g key={row.rowKey}>
+                    <rect x={colX + 8} y={y + 3} width={2} height={ROW_HEIGHT - 10} fill="#dc2626" rx={1} />
+                    <text x={colX + 16} y={y + 13} fontSize={8} fontWeight={600} fill="#94a3b8" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Data Domain
+                    </text>
+                    <text x={colX + 16} y={y + 25} fontSize={11} fontWeight={700} fill="#b91c1c">
+                      {truncate(row.name, 38)}
+                    </text>
+                  </g>
+                );
+              }
+              const a = row.asset;
+              const indent = 18;
+              const x = colX + indent;
               const dim = focus && !focusedNodeIds.has(a.id);
-              const x = COL_WIDTH + GUTTER;
               return (
                 <g key={a.id}
                   onClick={() => setFocus((f) => f?.kind === 'asset' && f.id === a.id ? null : { kind: 'asset', id: a.id })}
                   style={{ cursor: 'pointer', opacity: dim ? 0.35 : 1 }}
                 >
-                  <rect x={x} y={y} width={COL_WIDTH} height={ROW_HEIGHT - 4}
+                  <rect x={x} y={y} width={COL_WIDTH - indent} height={ROW_HEIGHT - 4}
                     fill={focus?.kind === 'asset' && focus.id === a.id ? '#d1fae5' : '#f8fafc'}
                     stroke="#cbd5e1" rx={3} />
                   <text x={x + 10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
-                    {truncate(a.name, 30)}
+                    {truncate(a.name, 28)}
                   </text>
                   <text x={x + 10} y={y + 26} fontSize={9} fill="#64748b">
                     {a.systemName || 'no system'}
                   </text>
-                  <text x={x + COL_WIDTH - 38} y={y + 22} fontSize={9} fontWeight={700}
+                  <text x={x + (COL_WIDTH - indent) - 38} y={y + 22} fontSize={9} fontWeight={700}
                     fill={TIER_COLOR[a.governanceTier]} textAnchor="start">
                     {a.governanceTier}
                   </text>
