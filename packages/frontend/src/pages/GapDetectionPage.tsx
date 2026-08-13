@@ -3,8 +3,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
+import { Check } from 'lucide-react';
 import { renderNavIcon } from '../components/navIcons';
-import { clickable } from '../lib/a11y';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import { badgeColor } from '../lib/badgeColors';
@@ -196,7 +197,7 @@ export default function GapDetectionPage() {
   const [data, setData] = useState<GapData | null>(null);
   const [summary, setSummary] = useState<GapSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [selectedKey, setSelectedKey] = useState<keyof GapData | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -204,6 +205,8 @@ export default function GapDetectionPage() {
       const res = await apiClient.get<{ success: boolean; data: GapData; summary: GapSummary }>(`/gap-detection${query}`);
       setData(res.data || null);
       setSummary(res.summary || null);
+      const firstNonEmpty = GAP_SECTIONS.find((sec) => (((res.data?.[sec.key] as any[]) || []).length > 0));
+      setSelectedKey(firstNonEmpty ? firstNonEmpty.key : null);
       // All sections start collapsed by default; the user expands the
       // ones they want. (The severity summary cards up top still call
       // out where the gaps are, and clicking one scrolls to that
@@ -214,12 +217,17 @@ export default function GapDetectionPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleSection = (key: string) => {
-    setExpandedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
+  // Select the first non-empty gap of a given severity (or any), for the
+  // severity summary tiles at the top.
+  const selectFirstGap = (severity: 'critical' | 'warning' | 'info' | null) => {
+    if (!data) return;
+    const c = GAP_SECTIONS.find((sec) => {
+      const items = data[sec.key] as any[];
+      if (!items.length) return false;
+      if (severity && sec.severity !== severity) return false;
+      return true;
     });
+    if (c) setSelectedKey(c.key);
   };
 
   if (loading) {
@@ -246,6 +254,8 @@ export default function GapDetectionPage() {
   const warningCount = summary.ungovernedAssets + summary.lowHealthAssets + summary.unownedDomains;
   const infoCount = summary.orphanedAssets + summary.unlinkedAssets + summary.unassignedPeople;
 
+  const selectedSection = GAP_SECTIONS.find((sec) => sec.key === selectedKey);
+
   return (
     <div>
       <PageHeader
@@ -253,92 +263,91 @@ export default function GapDetectionPage() {
         subtitle="Identifies gaps in process coverage, data governance, ownership, and data quality across the organization."
       />
 
-      {/* Summary cards — clickable. Scroll to the first non-zero
-          section of the matching severity so the user lands on the
-          actionable thing instead of just seeing a count. Total Gaps
-          scrolls to whatever the first non-zero section is. */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-        <SummaryCard label="Total Gaps" count={summary.totalGaps} color="#64748b" onClick={() => scrollToFirstGap(data, null)} />
-        <SummaryCard label="Critical" count={criticalCount} color="var(--color-error)" onClick={() => scrollToFirstGap(data, 'critical')} />
-        <SummaryCard label="Warning" count={warningCount} color="var(--color-warning)" onClick={() => scrollToFirstGap(data, 'warning')} />
-        <SummaryCard label="Informational" count={infoCount} color="#2563eb" onClick={() => scrollToFirstGap(data, 'info')} />
+      {/* Severity summary — click to jump to the first gap of that kind. */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <SummaryCard label="Total Gaps" count={summary.totalGaps} color="var(--color-text-muted)" onClick={() => selectFirstGap(null)} />
+        <SummaryCard label="Critical" count={criticalCount} color="var(--color-error)" onClick={() => selectFirstGap('critical')} />
+        <SummaryCard label="Warning" count={warningCount} color="var(--color-warning)" onClick={() => selectFirstGap('warning')} />
+        <SummaryCard label="Informational" count={infoCount} color="var(--color-info)" onClick={() => selectFirstGap('info')} />
       </div>
 
-      {summary.totalGaps === 0 && criticalCount === 0 && warningCount === 0 && infoCount === 0 ? (
+      {summary.totalGaps === 0 ? (
         <div style={{
           background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)',
           padding: '2rem', textAlign: 'center',
         }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>{'\u2713'}</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: '#166534' }}><Check size={28} strokeWidth={2.4} /></div>
           <div style={{ fontSize: 15, fontWeight: 600, color: '#166534' }}>No gaps detected</div>
           <div style={{ fontSize: 13, color: '#15803d', marginTop: 4 }}>
             All processes are mapped, assets are governed, and ownership is assigned.
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {GAP_SECTIONS.map((section) => {
-            const items = data[section.key] as any[];
-            const count = items.length;
-            const sev = SEVERITY_CONFIG[section.severity];
-            const isOpen = expandedSections.has(section.key);
-            return (
-              <div
-                key={section.key}
-                id={sectionAnchorId(section.key)}
-                style={{
-                  background: 'var(--color-surface)', border: `1px solid ${count > 0 ? sev.border : 'var(--color-border)'}`,
-                  borderRadius: 'var(--radius-md)', overflow: 'hidden',
-                  borderLeft: `4px solid ${count > 0 ? sev.badge : '#e2e8f0'}`,
-                  scrollMarginTop: 80,
-                }}
-              >
-                {/* Section header */}
-                <div
-                  {...clickable(() => toggleSection(section.key), { label: `Toggle ${section.title}`, disabled: count === 0 })}
-                  aria-expanded={count > 0 ? isOpen : undefined}
+        <>
+          {/* Every gap type as a tile — the whole picture at a glance. Click a
+              non-empty tile to see its affected items in the panel below. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10, marginBottom: 16 }}>
+            {GAP_SECTIONS.map((section) => {
+              const items = data[section.key] as any[];
+              const count = items.length;
+              const sev = SEVERITY_CONFIG[section.severity];
+              const isSelected = selectedKey === section.key;
+              const canOpen = count > 0;
+              return (
+                <button
+                  key={section.key}
+                  type="button"
+                  onClick={canOpen ? () => setSelectedKey(section.key) : undefined}
+                  disabled={!canOpen}
+                  aria-pressed={isSelected}
+                  title={canOpen ? `Show ${count} ${section.title.toLowerCase()}` : `${section.title}: clear`}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
-                    cursor: count > 0 ? 'pointer' : 'default',
+                    font: 'inherit', textAlign: 'left', cursor: canOpen ? 'pointer' : 'default',
+                    background: 'var(--color-surface)',
+                    border: `1px solid ${isSelected ? 'var(--color-primary)' : (count > 0 ? sev.border : 'var(--color-border)')}`,
+                    borderLeft: `4px solid ${count > 0 ? sev.badge : 'var(--color-border)'}`,
+                    borderRadius: 'var(--radius-md)', padding: '11px 14px',
+                    boxShadow: isSelected ? 'var(--shadow-md)' : 'var(--shadow-sm)',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    transition: 'border-color 0.15s, box-shadow 0.15s',
                   }}
                 >
-                  {count > 0 && (
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{isOpen ? '\u25BC' : '\u25B6'}</span>
+                  <span style={{ display: 'inline-flex', color: count > 0 ? sev.color : 'var(--color-text-muted)', flexShrink: 0 }}>{section.icon}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.title}</span>
+                    <span style={{ display: 'block', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: count > 0 ? sev.color : 'var(--color-text-muted)', marginTop: 1 }}>{count > 0 ? sev.label : 'Clear'}</span>
+                  </span>
+                  {count > 0 ? (
+                    <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.badge, color: '#fff', flexShrink: 0 }}>{count}</span>
+                  ) : (
+                    <span style={{ display: 'inline-flex', color: 'var(--color-success)', flexShrink: 0 }}><Check size={16} strokeWidth={2.6} /></span>
                   )}
-                  <span style={{ display: 'inline-flex', color: sev.color }}>{section.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{section.title}</div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{section.description}</div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {count > 0 ? (
-                      <span style={{
-                        padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700,
-                        background: sev.badge, color: '#fff',
-                      }}>
-                        {count}
-                      </span>
-                    ) : (
-                      <span style={{
-                        padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                        background: '#d1fae5', color: '#065f46',
-                      }}>
-                        {'\u2713'} Clear
-                      </span>
-                    )}
-                  </div>
-                </div>
+                </button>
+              );
+            })}
+          </div>
 
-                {/* Expanded items */}
-                {isOpen && count > 0 && (
-                  <div style={{ borderTop: `1px solid ${sev.border}`, padding: '8px 16px 12px' }}>
-                    {renderItems(section.key, items)}
+          {/* Detail — the affected items for the selected gap. */}
+          {selectedSection && (() => {
+            const sev = SEVERITY_CONFIG[selectedSection.severity];
+            const items = data[selectedSection.key] as any[];
+            return (
+              <Card padding={0} style={{ overflow: 'hidden', borderLeft: `4px solid ${sev.badge}` }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
+                  <span style={{ display: 'inline-flex', color: sev.color, marginTop: 1 }}>{selectedSection.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700 }}>{selectedSection.title}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 2, lineHeight: 1.4 }}>{selectedSection.description}</div>
                   </div>
-                )}
-              </div>
+                  <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.badge, color: '#fff', flexShrink: 0 }}>{items.length}</span>
+                </div>
+                <div style={{ padding: '8px 16px 12px' }}>
+                  {renderItems(selectedSection.key, items)}
+                </div>
+              </Card>
             );
-          })}
-        </div>
+          })()}
+        </>
       )}
     </div>
   );
@@ -384,26 +393,7 @@ function SummaryCard({ label, count, color, onClick }: {
   );
 }
 
-// Stable DOM id per gap section so SummaryCard clicks can scrollIntoView.
-function sectionAnchorId(key: keyof GapData): string {
-  return `gap-section-${String(key)}`;
-}
 
-// Scroll the page to the first non-zero gap section, optionally filtered
-// to a severity. Falls back silently if nothing matches (the summary
-// cards disable themselves when their count is zero, so this is a
-// belt-and-braces no-op).
-function scrollToFirstGap(data: GapData, severity: 'critical' | 'warning' | 'info' | null) {
-  const candidate = GAP_SECTIONS.find((s) => {
-    const items = data[s.key] as any[];
-    if (items.length === 0) return false;
-    if (severity && s.severity !== severity) return false;
-    return true;
-  });
-  if (!candidate) return;
-  const el = document.getElementById(sectionAnchorId(candidate.key));
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
 
 // ── Render items for each gap type ──
 
