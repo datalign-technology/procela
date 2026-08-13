@@ -158,7 +158,7 @@ function shortId(id: string): string {
 
 // ── Component ──
 
-export default function MappingsPage() {
+export default function MappingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
@@ -467,48 +467,58 @@ export default function MappingsPage() {
     },
   ];
 
+  // Shared toolbar actions — rendered inside the PageHeader on the
+  // standalone page, or as a right-aligned strip when embedded in the
+  // combined Process ↔ Data map (which supplies its own header).
+  const headerActions = (
+    <>
+      {canWrite && (
+        <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
+      )}
+      {mappings.length > 0 && (
+        <ExportMenu build={() => ({
+          filenameBase: 'mappings',
+          sheetName: 'Mappings',
+          headers: ['Process Activity', 'Target Kind', 'Target', 'Link Type', 'AI Suggested', 'Notes'],
+          rows: mappings.map((m) => {
+            const t = resolveTarget(m);
+            const activityLabel = m.stepInfo
+              ? formatStepPath(m.stepInfo)
+              : `(deleted activity ${shortId(m.processStepId)})`;
+            return [
+              activityLabel,
+              t.kind,
+              t.label,
+              m.linkType,
+              m.aiSuggested ? 'Yes' : 'No',
+              m.notes,
+            ];
+          }),
+        })} />
+      )}
+      {canWrite && (
+        <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
+      )}
+    </>
+  );
+
   return (
     <div>
-      {/* Header */}
-      <PageHeader
-        title="Data Mapping"
-        subtitle={
-          <>Flat audit view of every activity ↔ data-asset mapping, with bulk add / delete and a batch wizard. The day-to-day place to <em>create</em> these links is inline on each activity in the Process Catalog — this page is for cross-process review and bulk edits.</>
-        }
-        actions={
-          <>
-            {canWrite && (
-              <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
-            )}
-            {mappings.length > 0 && (
-              <ExportMenu build={() => ({
-                filenameBase: 'mappings',
-                sheetName: 'Mappings',
-                headers: ['Process Activity', 'Target Kind', 'Target', 'Link Type', 'AI Suggested', 'Notes'],
-                rows: mappings.map((m) => {
-                  const t = resolveTarget(m);
-                  const activityLabel = m.stepInfo
-                    ? formatStepPath(m.stepInfo)
-                    : `(deleted activity ${shortId(m.processStepId)})`;
-                  return [
-                    activityLabel,
-                    t.kind,
-                    t.label,
-                    m.linkType,
-                    m.aiSuggested ? 'Yes' : 'No',
-                    m.notes,
-                  ];
-                }),
-              })} />
-            )}
-            {canWrite && (
-              <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
-            )}
-          </>
-        }
-      >
-        <InfoTip term="Mapping" />
-      </PageHeader>
+      {embedded ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          {headerActions}
+        </div>
+      ) : (
+        <PageHeader
+          title="Data Mapping"
+          subtitle={
+            <>Flat audit view of every activity ↔ data-asset mapping, with bulk add / delete and a batch wizard. The day-to-day place to <em>create</em> these links is inline on each activity in the Process Catalog — this page is for cross-process review and bulk edits.</>
+          }
+          actions={headerActions}
+        >
+          <InfoTip term="Mapping" />
+        </PageHeader>
+      )}
 
       {/* Coverage gaps */}
       {!loading && (unmappedCount > 0 || unlinkedCount > 0) && (

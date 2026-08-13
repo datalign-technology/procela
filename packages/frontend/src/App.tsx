@@ -23,7 +23,6 @@ const SystemsAndDataPage         = lazy(() => import('@/pages/SystemsAndDataPage
 const AnalyzePage                = lazy(() => import('@/pages/AnalyzePage'));
 const DataAssetsPage             = lazy(() => import('@/pages/DataAssetsPage'));
 const SystemsPage                = lazy(() => import('@/pages/SystemsPage'));
-const MappingsPage               = lazy(() => import('@/pages/MappingsPage'));
 const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
 const OrganizationsPage          = lazy(() => import('@/pages/OrganizationsPage'));
 const OrgVisualizationPage       = lazy(() => import('@/pages/OrgVisualizationPage'));
@@ -90,7 +89,9 @@ export default function App() {
               filter. Redirect preserves old links (digest, AI, bookmarks). */}
           <Route path="/data-assets/orphans" element={<Navigate to="/data-assets?mapping=unmapped" replace />} />
           <Route path="/systems" element={<SystemsPage />} />
-          <Route path="/mappings" element={<MappingsPage />} />
+          {/* Data Mapping folded into the Process ↔ Data map as its Table
+              view. Redirect preserves old links (dashboard, deep links). */}
+          <Route path="/mappings" element={<Navigate to="/processes/data-map?view=table" replace />} />
           <Route path="/gap-detection" element={<GapDetectionPage />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/organizations/visualization" element={<OrgVisualizationPage />} />

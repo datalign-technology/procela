@@ -152,6 +152,18 @@ describe('Phase 3 graph + orphan-asset routes', () => {
       assert.strictEqual(asset.governanceTier, 'SILVER');
     });
 
+    it('includes each activity ancestor path (root-first: value stream → process)', async () => {
+      const res = await request(port, 'GET', `/process-catalog/data-graph?orgId=${orgId}`);
+      const act = res.body.data.activities.find((a: any) => a.id === actOp1);
+      assert.deepStrictEqual(
+        act.path,
+        [
+          { id: vsId, name: 'Billing VS', level: 'VALUE_STREAM' },
+          { id: procId, name: 'Generate invoice', level: 'PROCESS' },
+        ],
+      );
+    });
+
     it('excludes governance-domain activities by default', async () => {
       const res = await request(port, 'GET', `/process-catalog/data-graph?orgId=${orgId}`);
       const ids = res.body.data.activities.map((a: any) => a.id);
