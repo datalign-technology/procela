@@ -1291,7 +1291,22 @@ router.get('/data-graph', async (req: Request, res: Response) => {
 
   const allNodes = nodeSource();
   const parentNameById = new Map<string, string>();
-  for (const n of allNodes) parentNameById.set(n.id, n.name);
+  const nodeById = new Map<string, typeof allNodes[number]>();
+  for (const n of allNodes) { parentNameById.set(n.id, n.name); nodeById.set(n.id, n); }
+
+  // Walk the parent chain to the root, returning the ancestors root-first
+  // (Value Stream → Process → Sub-process) so the Process ↔ Data map can
+  // group activities under the levels above them. Guarded against cycles.
+  const ancestorPath = (n: typeof allNodes[number]): Array<{ id: string; name: string; level: string }> => {
+    const path: Array<{ id: string; name: string; level: string }> = [];
+    let cur = n.parentId ? nodeById.get(n.parentId) : undefined;
+    let guard = 0;
+    while (cur && guard++ < 20) {
+      path.unshift({ id: cur.id, name: cur.name, level: cur.level });
+      cur = cur.parentId ? nodeById.get(cur.parentId) : undefined;
+    }
+    return path;
+  };
 
   const activities = allNodes
     .filter((n) => n.level === 'ACTIVITY' && inScope(n))
@@ -1301,6 +1316,9 @@ router.get('/data-graph', async (req: Request, res: Response) => {
       name: n.name,
       parentProcessId: n.parentId,
       parentProcessName: n.parentId ? parentNameById.get(n.parentId) || null : null,
+      // Full ancestor chain (root-first) so the map can nest activities
+      // under Value Stream → Process → Sub-process headers.
+      path: ancestorPath(n),
       systemIds: n.systemIds || [],
     }));
   const activityIdSet = new Set(activities.map((a) => a.id));

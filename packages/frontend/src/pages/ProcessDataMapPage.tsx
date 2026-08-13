@@ -17,8 +17,9 @@
 // matches the dashboard's "unmapped activities" metric).
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
+import MappingsPage from './MappingsPage';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -26,12 +27,49 @@ import EmptyState from '../components/EmptyState';
 import Spinner from '../components/Spinner';
 import { renderNavIcon } from '../components/navIcons';
 
+interface Ancestor { id: string; name: string; level: string }
 interface Activity {
   id: string;
   name: string;
   parentProcessId: string | null;
   parentProcessName: string | null;
+  /** Root-first ancestor chain: Value Stream → Process → Sub-process. */
+  path?: Ancestor[];
   systemIds: string[];
+}
+
+// One row in the left column: either a hierarchy header (a value stream /
+// process / sub-process the activities below it roll up to) or an activity.
+type LeftRow =
+  | { kind: 'header'; id: string; name: string; level: string; depth: number; rowKey: string }
+  | { kind: 'activity'; activity: Activity };
+
+// Human labels + styling per hierarchy level, so the headers read as a
+// nested Value Stream → Process → Sub-process tree above each activity.
+const LEVEL_STYLE: Record<string, { label: string; size: number; weight: number; color: string; upper?: boolean }> = {
+  VALUE_STREAM: { label: 'Value Stream', size: 11, weight: 700, color: '#475569', upper: true },
+  PROCESS:      { label: 'Process',      size: 10.5, weight: 600, color: '#334155' },
+  SUB_PROCESS:  { label: 'Sub-process',  size: 10, weight: 600, color: '#64748b' },
+};
+
+// Turn the sorted activity list into left-column rows, inserting a header
+// row each time an ancestor at a given depth changes. Deeper headers reset
+// when a shallower one changes so a new value stream re-emits its processes.
+function buildLeftRows(activities: Activity[]): LeftRow[] {
+  const rows: LeftRow[] = [];
+  const lastAtDepth: string[] = [];
+  for (const a of activities) {
+    const path = a.path || [];
+    path.forEach((anc, depth) => {
+      if (lastAtDepth[depth] !== anc.id) {
+        rows.push({ kind: 'header', id: anc.id, name: anc.name, level: anc.level, depth, rowKey: `h-${anc.id}-${rows.length}` });
+        lastAtDepth[depth] = anc.id;
+        lastAtDepth.length = depth + 1; // forget deeper levels
+      }
+    });
+    rows.push({ kind: 'activity', activity: a });
+  }
+  return rows;
 }
 interface Asset {
   id: string;
@@ -81,6 +119,16 @@ const PADDING_Y = 60;
 
 export default function ProcessDataMapPage() {
   const { activeOrgId, refreshKey } = useOrgContext();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Visual (the bridge) vs Table (the editable Data Mapping list). Default
+  // to visual; persisted in ?view= so it's shareable and the retired
+  // /mappings route can deep-link straight to the table.
+  const viewMode: 'visual' | 'table' = searchParams.get('view') === 'table' ? 'table' : 'visual';
+  const setViewMode = (m: 'visual' | 'table') => {
+    const next = new URLSearchParams(searchParams);
+    if (m === 'table') next.set('view', 'table'); else next.delete('view');
+    setSearchParams(next, { replace: true });
+  };
   const [data, setData] = useState<GraphResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ kind: 'activity' | 'asset'; id: string } | null>(null);
@@ -123,9 +171,12 @@ export default function ProcessDataMapPage() {
       const activityIds = new Set(filteredEdges.map((e) => e.activityId));
       filteredActivities = data.activities.filter((a) => activityIds.has(a.id));
     }
+    // Sort by the full ancestor path (Value Stream → Process → Sub-process)
+    // then name, so activities under the same branch stay contiguous and
+    // the header rows read as a clean tree.
     filteredActivities = [...filteredActivities].sort((a, b) => {
-      const pa = a.parentProcessName || '';
-      const pb = b.parentProcessName || '';
+      const pa = (a.path || []).map((p) => p.name).join(' / ');
+      const pb = (b.path || []).map((p) => p.name).join(' / ');
       if (pa !== pb) return pa.localeCompare(pb);
       return a.name.localeCompare(b.name);
     });
@@ -143,18 +194,22 @@ export default function ProcessDataMapPage() {
     };
   }, [data, systemFilter]);
 
+  // Left column laid out as hierarchy headers + activity rows.
+  const leftRows = useMemo(() => buildLeftRows(activities), [activities]);
   const activityY = useMemo(() => {
     const m = new Map<string, number>();
-    activities.forEach((a, i) => m.set(a.id, PADDING_Y + i * ROW_HEIGHT));
+    leftRows.forEach((row, i) => {
+      if (row.kind === 'activity') m.set(row.activity.id, PADDING_Y + i * ROW_HEIGHT);
+    });
     return m;
-  }, [activities]);
+  }, [leftRows]);
   const assetY = useMemo(() => {
     const m = new Map<string, number>();
     assets.forEach((a, i) => m.set(a.id, PADDING_Y + i * ROW_HEIGHT));
     return m;
   }, [assets]);
 
-  const svgHeight = Math.max(activities.length, assets.length) * ROW_HEIGHT + PADDING_Y * 2;
+  const svgHeight = Math.max(leftRows.length, assets.length) * ROW_HEIGHT + PADDING_Y * 2;
   const svgWidth = COL_WIDTH * 2 + GUTTER;
 
   // Edges connected to the focused node — separate Set so we can
@@ -184,9 +239,35 @@ export default function ProcessDataMapPage() {
     <div>
       <PageHeader
         title="Process ↔ Data map"
-        subtitle="Visual bridge between the business hierarchy and the catalog. Click an activity or asset to focus its connections."
+        subtitle={viewMode === 'visual'
+          ? 'Visual bridge between the business hierarchy and the catalog — activities grouped under their value stream, process and sub-process. Click an activity or asset to focus its connections.'
+          : 'Flat, editable list of every activity ↔ data-asset mapping — bulk add / delete, a batch wizard, and orphan cleanup.'}
+        actions={
+          <div role="tablist" aria-label="View" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
+            {(['visual', 'table'] as const).map((m) => (
+              <button
+                key={m}
+                role="tab"
+                aria-selected={viewMode === m}
+                onClick={() => setViewMode(m)}
+                style={{
+                  padding: '4px 14px', fontSize: 12, fontWeight: viewMode === m ? 600 : 400,
+                  border: 'none', cursor: 'pointer',
+                  background: viewMode === m ? 'var(--color-primary)' : 'transparent',
+                  color: viewMode === m ? '#fff' : 'var(--color-text)',
+                }}
+              >
+                {m === 'visual' ? 'Visual' : 'Table'}
+              </button>
+            ))}
+          </div>
+        }
       />
 
+      {viewMode === 'table' && <MappingsPage embedded />}
+
+      {viewMode === 'visual' && (
+      <>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '12px 0', flexWrap: 'wrap' }}>
         <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
           System filter:&nbsp;
@@ -290,23 +371,43 @@ export default function ProcessDataMapPage() {
               );
             })}
 
-            {/* Activity rows */}
-            {activities.map((a) => {
-              const y = activityY.get(a.id)!;
+            {/* Left column: hierarchy headers (Value Stream → Process →
+                Sub-process) interleaved with the activity rows nested under
+                them. Activities indent by their depth so the tree reads
+                top-to-bottom; edges still leave the column's right edge. */}
+            {leftRows.map((row, i) => {
+              const y = PADDING_Y + i * ROW_HEIGHT;
+              if (row.kind === 'header') {
+                const st = LEVEL_STYLE[row.level] || { label: row.level, size: 10, weight: 600, color: '#64748b' };
+                const x = 8 + row.depth * 16;
+                return (
+                  <g key={row.rowKey}>
+                    <rect x={x} y={y + 3} width={2} height={ROW_HEIGHT - 10} fill={st.color} rx={1} />
+                    <text x={x + 8} y={y + 13} fontSize={8} fontWeight={600} fill="#94a3b8" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {st.label}
+                    </text>
+                    <text x={x + 8} y={y + 25} fontSize={st.size} fontWeight={st.weight} fill={st.color} style={st.upper ? { textTransform: 'uppercase', letterSpacing: '0.03em' } : undefined}>
+                      {truncate(row.name, 40 - row.depth * 3)}
+                    </text>
+                  </g>
+                );
+              }
+              const a = row.activity;
+              const indent = 8 + (a.path?.length || 0) * 16;
               const dim = focus && !focusedNodeIds.has(a.id);
               return (
                 <g key={a.id}
                   onClick={() => setFocus((f) => f?.kind === 'activity' && f.id === a.id ? null : { kind: 'activity', id: a.id })}
                   style={{ cursor: 'pointer', opacity: dim ? 0.35 : 1 }}
                 >
-                  <rect x={0} y={y} width={COL_WIDTH} height={ROW_HEIGHT - 4}
+                  <rect x={indent} y={y} width={COL_WIDTH - indent} height={ROW_HEIGHT - 4}
                     fill={focus?.kind === 'activity' && focus.id === a.id ? '#d1fae5' : '#f8fafc'}
                     stroke="#cbd5e1" rx={3} />
-                  <text x={10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
-                    {truncate(a.name, 34)}
+                  <text x={indent + 10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
+                    {truncate(a.name, 32 - (a.path?.length || 0) * 2)}
                   </text>
-                  <text x={10} y={y + 26} fontSize={9} fill="#64748b">
-                    {a.parentProcessName ? truncate(a.parentProcessName, 40) : 'no parent'}
+                  <text x={indent + 10} y={y + 26} fontSize={9} fill="#64748b">
+                    Activity
                   </text>
                 </g>
               );
@@ -349,6 +450,8 @@ export default function ProcessDataMapPage() {
           mapped data assets yet.{' '}
           <Link to="/gap-detection">Open Gap Detection →</Link>
         </div>
+      )}
+      </>
       )}
     </div>
   );
