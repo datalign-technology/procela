@@ -109,7 +109,6 @@ export const navSections: NavSection[] = [
       { to: '/business-glossary', label: 'Glossary' },
       { to: '/data-lineage', label: 'Lineage' },
       { to: '/data-quality', label: 'Data Quality' },
-      { to: '/data-assets/orphans', label: 'Orphan Assets' },
     ],
   },
   {

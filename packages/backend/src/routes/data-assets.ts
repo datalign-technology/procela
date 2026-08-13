@@ -547,6 +547,14 @@ router.get('/', async (req: Request, res: Response) => {
   const filtered = filterByOrgScope(await dataAssetsRepo.list(), orgId as string | undefined);
   const filteredSystems = filterByOrgScope(systems, orgId as string | undefined);
 
+  // Orphan signal: an asset with zero mapping rows pointing at it is
+  // "unmapped" — nobody's process uses it. Computed here (same set the
+  // dedicated /orphans view builds) so the main list can render an
+  // Unmapped badge + drive the mapping-status filter without a second
+  // round-trip. The standalone Orphan Assets page folded into this flag.
+  const mappedAssetIds = new Set<string>();
+  for (const m of mappings) if (m.dataAssetId) mappedAssetIds.add(m.dataAssetId);
+
   // Enrich each asset with domain, owner, steward and health info so the
   // table can display them without a per-row 360 fetch.
   const enriched = filtered.map((asset) => {
@@ -625,6 +633,7 @@ router.get('/', async (req: Request, res: Response) => {
       ownerName, ownerSource, domainOwnerId, domainOwnerName,
       stewardName, stewardSource, domainStewardIds, domainStewardNames,
       systemName, suggestedTier,
+      isOrphan: !mappedAssetIds.has(asset.id),
     };
   });
 

@@ -167,8 +167,8 @@ const RULES: DigestRule[] = [
       return {
         type: 'WARNING',
         title: `${delta} new orphan data assets this week`,
-        message: `${delta} more assets aren't referenced by any process step (now ${curr.orphanAssets} total). Review them on the Orphan Assets page.`,
-        link: '/data-assets/orphans',
+        message: `${delta} more assets aren't referenced by any process step (now ${curr.orphanAssets} total). Review them via the Unmapped filter on Data Assets.`,
+        link: '/data-assets?mapping=unmapped',
       };
     },
   },

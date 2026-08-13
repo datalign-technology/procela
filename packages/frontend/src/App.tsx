@@ -22,7 +22,6 @@ const ComparisonPage             = lazy(() => import('@/pages/ComparisonPage'));
 const SystemsAndDataPage         = lazy(() => import('@/pages/SystemsAndDataPage'));
 const AnalyzePage                = lazy(() => import('@/pages/AnalyzePage'));
 const DataAssetsPage             = lazy(() => import('@/pages/DataAssetsPage'));
-const OrphanAssetsPage           = lazy(() => import('@/pages/OrphanAssetsPage'));
 const SystemsPage                = lazy(() => import('@/pages/SystemsPage'));
 const MappingsPage               = lazy(() => import('@/pages/MappingsPage'));
 const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
@@ -87,7 +86,9 @@ export default function App() {
           <Route path="/analyze" element={<AnalyzePage />} />
           {/* Legacy routes — kept for backward compatibility and deep links */}
           <Route path="/data-assets" element={<DataAssetsPage />} />
-          <Route path="/data-assets/orphans" element={<OrphanAssetsPage />} />
+          {/* Orphan Assets folded into Data Assets as the "Unmapped" mapping
+              filter. Redirect preserves old links (digest, AI, bookmarks). */}
+          <Route path="/data-assets/orphans" element={<Navigate to="/data-assets?mapping=unmapped" replace />} />
           <Route path="/systems" element={<SystemsPage />} />
           <Route path="/mappings" element={<MappingsPage />} />
           <Route path="/gap-detection" element={<GapDetectionPage />} />
