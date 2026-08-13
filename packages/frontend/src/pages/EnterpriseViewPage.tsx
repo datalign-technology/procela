@@ -130,6 +130,15 @@ export default function EnterpriseViewPage() {
   const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
   const [activeView, setActiveView] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('cards');
+  // Per-type visibility — lets the user hide/show whole lanes (Processes,
+  // Systems, Domains, …) in both the cards and diagram views, on top of
+  // the preset filter.
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
+  const toggleType = (type: string) => setHiddenTypes((prev) => {
+    const next = new Set(prev);
+    if (next.has(type)) next.delete(type); else next.add(type);
+    return next;
+  });
 
   const fetchData = useCallback(async () => {
     try {
@@ -157,8 +166,13 @@ export default function EnterpriseViewPage() {
     setExpandedCols(new Set(COLUMN_ORDER.filter((t) => preset.entityTypes.has(t))));
   }, [activeView]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Filter nodes and edges by active preset
-  const filteredNodes = nodes.filter((n) => preset.entityTypes.has(n.type));
+  // Filter by active preset, then by the user's per-type visibility.
+  // countByType is taken pre-hidden so the toggle chips keep showing each
+  // type's real count even while it's hidden.
+  const presetNodes = nodes.filter((n) => preset.entityTypes.has(n.type));
+  const countByType: Record<string, number> = {};
+  for (const n of presetNodes) countByType[n.type] = (countByType[n.type] || 0) + 1;
+  const filteredNodes = presetNodes.filter((n) => !hiddenTypes.has(n.type));
   const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
   const filteredEdges = edges.filter((e) =>
     preset.edgeTypes.has(e.type) && filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target),
@@ -254,6 +268,9 @@ export default function EnterpriseViewPage() {
 
 
   const presetTypes = COLUMN_ORDER.filter((t) => preset.entityTypes.has(t));
+  // Types actually rendered as lanes/columns — preset types minus any the
+  // user has toggled off.
+  const visibleTypes = presetTypes.filter((t) => !hiddenTypes.has(t));
 
   return (
     <div>
@@ -314,6 +331,41 @@ export default function EnterpriseViewPage() {
         </div>
       </div>
 
+      {/* Entity-type visibility — hide/show a whole lane (Processes,
+          Systems, Domains, …) in both views. Chips reflect the active
+          preset; clicking one toggles that type off/on. */}
+      {presetTypes.length > 1 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginRight: 2 }}>Show:</span>
+          {presetTypes.map((type) => {
+            const cfg = TYPE_CONFIG[type];
+            if (!cfg) return null;
+            const on = !hiddenTypes.has(type);
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => toggleType(type)}
+                aria-pressed={on}
+                title={`${on ? 'Hide' : 'Show'} ${cfg.plural}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                  border: `1px solid ${on ? cfg.color : 'var(--color-border)'}`,
+                  background: on ? cfg.bg : 'var(--color-surface)',
+                  color: on ? cfg.color : 'var(--color-text-muted)',
+                  textDecoration: on ? 'none' : 'line-through',
+                }}
+              >
+                <span style={{ display: 'inline-flex', opacity: on ? 1 : 0.5 }}>{cfg.icon(13)}</span>
+                {cfg.plural}
+                <span style={{ fontWeight: 400, opacity: 0.8 }}>({countByType[type] || 0})</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Catalog + impact split. The page scrolls normally; the impact
           panel sticks so it stays visible while scrolling the catalog,
           and it only takes up space when a node is actually selected. */}
@@ -333,7 +385,7 @@ export default function EnterpriseViewPage() {
               impactSet={impactSet}
               onSelect={(n) => selectNode(n as GraphNode)}
               typeConfig={TYPE_CONFIG}
-              columnOrder={presetTypes}
+              columnOrder={visibleTypes}
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -346,7 +398,7 @@ export default function EnterpriseViewPage() {
                   header, and expanding reveals the items inline. This merges
                   the old summary-card row and section bars into a single
                   control per category. */}
-              {presetTypes.map((type) => {
+              {visibleTypes.map((type) => {
                 const cfg = TYPE_CONFIG[type];
                 const items = byType[type] || [];
                 const isOpen = expandedCols.has(type);
