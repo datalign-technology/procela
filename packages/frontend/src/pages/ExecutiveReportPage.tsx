@@ -10,6 +10,8 @@ import { healthColorVar } from '../components/HealthBar';
 import SectionHeading from '../components/SectionHeading';
 import StatTile from '../components/StatTile';
 import Meter from '../components/Meter';
+import TierBar from '../components/TierBar';
+import EmptyState from '../components/EmptyState';
 
 interface DashboardStats {
   valueStreams: number;
@@ -166,7 +168,17 @@ export default function ExecutiveReportPage() {
     );
   }
 
-  if (!stats || !scorecard) return null;
+  if (!stats || !scorecard) {
+    return (
+      <div>
+        <PageHeader title="Executive Report" />
+        <EmptyState
+          title="No report data yet"
+          description="Once your organization has processes, data assets and governance defined, the executive report will summarize coverage, health and gaps here."
+        />
+      </div>
+    );
+  }
 
   const unmappedActivities = stats.gaps.unmappedActivities ?? stats.gaps.unmappedSteps ?? 0;
   const domainsWithOwners = dataDomains.filter((d) => d.ownerId).length;
@@ -256,10 +268,13 @@ export default function ExecutiveReportPage() {
         {/* Section 3: Data Governance */}
         <div className="page-break" style={sectionStyle}>
           <SectionHeading title="3. Data Governance" underline />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
-            <StatTile label="Certified" value={stats.governance.gold} accent="var(--color-tier-gold)" valueColor="var(--color-tier-gold)" />
-            <StatTile label="Managed" value={stats.governance.silver} accent="var(--color-tier-silver)" valueColor="var(--color-tier-silver)" />
-            <StatTile label="Uncertified" value={stats.governance.bronze} accent="var(--color-tier-bronze)" valueColor="var(--color-tier-bronze)" />
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 16, alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                Certification tiers
+              </div>
+              <TierBar gold={stats.governance.gold} silver={stats.governance.silver} bronze={stats.governance.bronze} />
+            </div>
             <StatTile label="Avg Health" value={`${stats.averageHealth}%`} valueColor={healthColorVar(stats.averageHealth)} />
           </div>
           <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>

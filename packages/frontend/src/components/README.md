@@ -447,6 +447,17 @@ encodes health. For the labelled inline gauge with a trailing "NN%", use
 <Meter value={healthPct} color={healthColorVar(healthPct)} />
 ```
 
+### `<TierBar>`
+
+The governance-tier distribution (Certified / Managed / Uncertified) as one
+stacked bar + legend, instead of three separate count tiles. Uses the
+reserved `--color-tier-*` palette with a 2px surface gap between segments;
+identity lives in the legend labels, never colour alone.
+
+```tsx
+<TierBar gold={9} silver={4} bronze={2} />
+```
+
 ### `<TierBadge>`
 
 The coloured pill for a governance tier (Bronze / Silver / Gold). Label
