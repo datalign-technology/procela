@@ -55,12 +55,14 @@ describe('SkillGapsWidget', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
-  it('renders nothing when the API returns no rows', async () => {
+  it('renders an empty state (not nothing) when the API returns no rows', async () => {
     mockGet.mockResolvedValueOnce({ success: true, data: [] });
-    const { container } = renderWidget();
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 0));
-    expect(container.querySelector('h2')).toBeNull();
+    renderWidget();
+    // The section still shows — an enabled dashboard widget should not
+    // silently disappear — with an empty-state message and a link to skills.
+    expect(await screen.findByText('Skill Gaps')).toBeTruthy();
+    expect(screen.getByText(/No skill gaps to show yet/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Manage skills/ })).toBeTruthy();
   });
 
   it('hides rows where requiredByActivities is zero (held-but-unrequired)', async () => {
