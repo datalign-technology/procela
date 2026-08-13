@@ -153,7 +153,16 @@ export default function AgentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [agentRoles, setAgentRoles] = useState<DamaRoleAssignment[]>([]);
   const [agentExecutions, setAgentExecutions] = useState<AgentExecution[]>([]);
-  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
+  // Multi-expand: agents open independently so their roles / execution
+  // history can be compared side-by-side, and the Expand All / Collapse
+  // All controls flip the whole (filtered) list at once — matching the
+  // convention on Process Catalog, Organizations, Governance Groups, etc.
+  const [expandedAgentIds, setExpandedAgentIds] = useState<Set<string>>(new Set());
+  const toggleAgentExpanded = (id: string) => setExpandedAgentIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const confirmDeleteRef = useRef<HTMLDivElement>(null);
   useFocusTrap(confirmDeleteRef, !!confirmDelete);
   useEffect(() => {
@@ -420,7 +429,7 @@ export default function AgentsPage() {
         const execs = agentExecutions.filter((e) => e.agentId === a.id);
         return (
           <>
-            <span onClick={() => setExpandedAgentId((prev) => prev === a.id ? null : a.id)} style={{ cursor: 'pointer' }}>
+            <span onClick={() => toggleAgentExpanded(a.id)} style={{ cursor: 'pointer' }}>
               {a.name}
             </span>
             {a.description && (
@@ -602,6 +611,26 @@ export default function AgentsPage() {
             </span>
           </>
         )}
+        {filtered.length > 0 && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={filtered.every((a) => expandedAgentIds.has(a.id))}
+              onClick={() => setExpandedAgentIds(new Set(filtered.map((a) => a.id)))}
+            >
+              Expand All
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={expandedAgentIds.size === 0}
+              onClick={() => setExpandedAgentIds(new Set())}
+            >
+              Collapse All
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Add / Edit form */}
@@ -761,8 +790,8 @@ export default function AgentsPage() {
             selectAllLabel="Select all agents"
             emptyMessage="No agents match the current filters."
             expansion={{
-              expandedIds: expandedAgentId ? new Set([expandedAgentId]) : new Set(),
-              onToggleExpanded: (id) => setExpandedAgentId((prev) => prev === id ? null : id),
+              expandedIds: expandedAgentIds,
+              onToggleExpanded: toggleAgentExpanded,
               renderExpandedRow: (a) => {
                 const roles = agentRoles.filter((r) => r.agentId === a.id);
                 const execs = agentExecutions.filter((e) => e.agentId === a.id);
