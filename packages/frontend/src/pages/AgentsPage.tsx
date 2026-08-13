@@ -93,6 +93,15 @@ const inputStyle: React.CSSProperties = {
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 
+// Borderless primary-text toolbar button — matches the Expand All /
+// Collapse All controls on Process Catalog, Organizations and Governance
+// Groups (the shared `btnIcon` look), rather than a grey secondary pill.
+const expandAllBtn: React.CSSProperties = {
+  background: 'none', border: 'none', borderRadius: 4,
+  padding: '2px 6px', fontSize: 12, fontWeight: 500,
+  color: 'var(--color-primary)', cursor: 'pointer',
+};
+
 interface DamaRoleAssignment {
   id: string;
   agentId: string | null;
@@ -613,22 +622,20 @@ export default function AgentsPage() {
         )}
         {filtered.length > 0 && (
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={filtered.every((a) => expandedAgentIds.has(a.id))}
+            <button
+              type="button"
+              style={expandAllBtn}
               onClick={() => setExpandedAgentIds(new Set(filtered.map((a) => a.id)))}
             >
               Expand All
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={expandedAgentIds.size === 0}
+            </button>
+            <button
+              type="button"
+              style={expandAllBtn}
               onClick={() => setExpandedAgentIds(new Set())}
             >
               Collapse All
-            </Button>
+            </button>
           </div>
         )}
       </div>
