@@ -159,11 +159,11 @@ export default function EnterpriseViewPage() {
 
   const preset = VIEW_PRESETS[activeView] || VIEW_PRESETS.all;
 
-  // Open the active preset's entity sections by default (on first load and
-  // whenever the preset changes) so the catalog shows content immediately
-  // instead of a wall of collapsed sections.
+  // Collapse every entity section by default (on first load and whenever
+  // the preset changes) so the catalog opens on a compact overview of the
+  // type headers + counts; the user expands the rows they care about.
   useEffect(() => {
-    setExpandedCols(new Set(COLUMN_ORDER.filter((t) => preset.entityTypes.has(t))));
+    setExpandedCols(new Set());
   }, [activeView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter by active preset, then by the user's per-type visibility.
