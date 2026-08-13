@@ -36,8 +36,6 @@ export default function SkillGapsWidget() {
 
   if (!loaded) return null;
   const top = rows.filter((r) => r.requiredByActivities > 0).slice(0, 5);
-  if (top.length === 0) return null;
-
   const maxRequired = Math.max(...top.map((r) => r.requiredByActivities), 1);
 
   return (
@@ -47,6 +45,19 @@ export default function SkillGapsWidget() {
         <Link to="/people" style={{ fontSize: 12, color: 'var(--color-primary)' }}>Find people by skill →</Link>
       </div>
       <Card padding="12px 16px">
+        {top.length === 0 ? (
+          // Empty state instead of hiding the whole section — an enabled
+          // dashboard widget should still show something (and explain how to
+          // populate it) rather than silently disappearing.
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            No skill gaps to show yet. Attach required skills to your activities and assign
+            skills to people, and the most under-staffed skills will surface here.
+            <div style={{ marginTop: 8 }}>
+              <Link to="/skills" style={{ fontSize: 12, color: 'var(--color-primary)' }}>Manage skills →</Link>
+            </div>
+          </div>
+        ) : (
+          <>
         <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10 }}>
           Skills most under-staffed across this org — required by activities vs held by people.
         </div>
@@ -72,6 +83,8 @@ export default function SkillGapsWidget() {
             </div>
           );
         })}
+          </>
+        )}
       </Card>
     </div>
   );
