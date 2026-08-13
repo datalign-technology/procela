@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { X, ArrowLeftRight, ListTree, Database, CheckCircle2, Users, TrendingUp } from 'lucide-react';
+import { X, ArrowLeftRight, ListTree, Database, CheckCircle2, Users, TrendingUp, Check, ChevronUp, ChevronDown } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -9,6 +9,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
+import { healthColorVar } from '../components/HealthBar';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
@@ -163,7 +164,7 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
               fontSize: 13, fontWeight: 600,
               border: s.done ? '1px solid #86efac' : '1px solid var(--color-border)',
             }}>
-              {s.done ? '✓' : i + 1}
+              {s.done ? <Check size={15} strokeWidth={3} /> : i + 1}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -303,8 +304,8 @@ function MyDashboard() {
       {/* Two-column: Attention + Schedule */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         {/* Needs Attention */}
-        <Card padding="14px 16px" style={{ borderLeft: '4px solid #f59e0b' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-warning)' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-warning)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Needs My Attention
           </div>
           {(data.myTasks || []).filter((t) => t.isOverdue).length === 0 &&
@@ -327,7 +328,7 @@ function MyDashboard() {
               ))}
               {(data.pendingReviews || []).slice(0, 3).map((r) => (
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: r.isOverdue ? '#dc2626' : '#92400e' }}>{r.isOverdue ? 'Overdue review' : 'Review due'}: {r.name}</span>
+                  <span style={{ fontSize: 12, color: r.isOverdue ? 'var(--color-error)' : 'var(--color-warning)' }}>{r.isOverdue ? 'Overdue review' : 'Review due'}: {r.name}</span>
                   <Link to="/governance-policies" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
@@ -336,8 +337,8 @@ function MyDashboard() {
         </Card>
 
         {/* My Schedule */}
-        <Card padding="14px 16px" style={{ borderLeft: '4px solid #3b82f6' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#1e40af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-info)' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-info)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             My Schedule
           </div>
           {(data.upcomingEvents || []).length === 0 ? (
@@ -372,8 +373,8 @@ function MyDashboard() {
                     <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
-                  <div style={{ height: 4, background: '#e5e7eb', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${healthPct}%`, background: healthPct >= 80 ? 'var(--color-success)' : healthPct >= 50 ? 'var(--color-warning)' : 'var(--color-error)', borderRadius: 2 }} />
+                  <div style={{ height: 4, background: 'var(--color-border)', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${healthPct}%`, background: healthColorVar(healthPct), borderRadius: 2 }} />
                   </div>
                 </Link>
               );
@@ -487,10 +488,10 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
     { label: 'Systems',       value: stats.systems,                     color: '#5b21b6',
       to: '/systems', zero: stats.systems === 0 },
     { label: 'Coverage',      value: `${stats.coverage.percentage}%`,
-      color: stats.coverage.percentage >= 80 ? 'var(--color-success)' : stats.coverage.percentage >= 50 ? 'var(--color-warning)' : 'var(--color-error)',
+      color: healthColorVar(stats.coverage.percentage),
       to: '/mappings', zero: stats.coverage.percentage === 0 },
     { label: 'Avg Health',    value: `${stats.averageHealth}%`,
-      color: stats.averageHealth >= 80 ? 'var(--color-success)' : stats.averageHealth >= 50 ? 'var(--color-warning)' : 'var(--color-error)',
+      color: healthColorVar(stats.averageHealth),
       to: '/data-assets?sort=healthScore&dir=asc', zero: stats.averageHealth === 0 },
   ];
   return (
@@ -860,7 +861,7 @@ function ProgramMaturity() {
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{status.overallProgress}% overall progress</div>
           </div>
         </div>
-        <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
+        <div style={{ height: 6, background: 'var(--color-border)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
           <div style={{ height: '100%', width: `${status.overallProgress}%`, background: phaseColors[status.currentPhase], borderRadius: 3, transition: 'width 0.3s' }} />
         </div>
         {recommendations.length > 0 && (
@@ -868,7 +869,7 @@ function ProgramMaturity() {
             <SectionLabel marginBottom={6}>Next steps to advance</SectionLabel>
             {recommendations.slice(0, 3).map((r, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 12 }}>
-                <span style={{ color: r.priority === 'HIGH' ? 'var(--color-error)' : 'var(--color-warning)', fontSize: 8 }}>●</span>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: r.priority === 'HIGH' ? 'var(--color-error)' : 'var(--color-warning)', flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>{r.action}</span>
                 <Link to={r.link} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: 11, flexShrink: 0 }}>Go</Link>
               </div>
@@ -914,8 +915,8 @@ function StewardOnboarding() {
           <span style={{ fontSize: 13, fontWeight: 600 }}>{rate}% complete</span>
           <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{data.completed} of {data.total} tasks</span>
         </div>
-        <div style={{ height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${rate}%`, background: rate === 100 ? '#22c55e' : 'var(--color-primary)', borderRadius: 4, transition: 'width 0.3s' }} />
+        <div style={{ height: 8, background: 'var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${rate}%`, background: rate === 100 ? 'var(--color-success)' : 'var(--color-primary)', borderRadius: 4, transition: 'width 0.3s' }} />
         </div>
         {data.overdue > 0 && (
           <div style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 6 }}>
@@ -941,7 +942,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
     { label: 'Orphan data assets (no process uses them)', count: gaps.orphanAssets || 0, severity: 'warning' as const, link: '/data-assets/orphans' },
   ];
   const total = items.reduce((s, i) => s + i.count, 0);
-  const sevColors = { critical: 'var(--color-error)', warning: 'var(--color-warning)', info: '#2563eb' };
+  const sevColors = { critical: 'var(--color-error)', warning: 'var(--color-warning)', info: 'var(--color-info)' };
 
   return (
     <div>
@@ -1091,14 +1092,14 @@ export default function DashboardPage() {
                     aria-label={`Move ${SECTION_LABELS[key]} up`}
                     title={`Move ${SECTION_LABELS[key]} up`}
                     style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 11, color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', width: 24, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}
-                  >{'▲'}</button>
+                  ><ChevronUp size={12} strokeWidth={2.5} /></button>
                   <button
                     onClick={() => layout.moveDown(key)}
                     disabled={idx === layout.order.length - 1}
                     aria-label={`Move ${SECTION_LABELS[key]} down`}
                     title={`Move ${SECTION_LABELS[key]} down`}
                     style={{ background: 'none', border: 'none', cursor: idx === layout.order.length - 1 ? 'default' : 'pointer', fontSize: 11, color: idx === layout.order.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', width: 24, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}
-                  >{'▼'}</button>
+                  ><ChevronDown size={12} strokeWidth={2.5} /></button>
                 </div>
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{SECTION_LABELS[key]}</span>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
@@ -1170,7 +1171,7 @@ function SetupCompleteBanner({ stats, orgId }: { stats: DashboardStats; orgId: s
         borderRadius: 'var(--radius-md)', fontSize: 13, color: '#166534',
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 16 }}>✓</span>
+      <Check size={16} strokeWidth={2.6} aria-hidden="true" style={{ flexShrink: 0 }} />
       <span>
         <strong>Setup complete.</strong> Processes, systems, data assets and people are all in place — use <strong>Customize</strong> above to arrange this dashboard around what you watch most.
       </span>
