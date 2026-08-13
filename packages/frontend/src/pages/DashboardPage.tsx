@@ -490,15 +490,20 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity' | 'skillGaps';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'skillGaps', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
+// Order groups the four narrow analytical widgets contiguously
+// (programMaturity, gaps, skillGaps, stewardOnboarding) so they pair
+// two-up cleanly — Program Maturity + Governance Gaps on one row, Skill
+// Gaps + Steward Onboarding on the next — instead of Skill Gaps stranding
+// itself in a masonry column.
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'skillGaps', 'stewardOnboarding', 'whatsNext', 'quickActions', 'recentActivity'];
 
 // Sections that read best full-bleed (the wide KPI strip, the personal
-// summary's two-column body, the quick-action tiles). Everything else packs
-// into a responsive 2-column masonry to cut the dashboard's vertical length.
-// These span all columns *in place* via `column-span: all`, so the reorder /
-// hide system still controls order — the layout just stops wasting the right
-// half of the page on narrow cards.
-const FULL_WIDTH_SECTIONS = new Set<SectionKey>(['overview', 'myDashboard', 'whatsNext', 'quickActions']);
+// summary's two-column body, What's Next, the quick-action tiles, and the
+// Recent Activity feed). Everything else is a narrow analytical widget that
+// pairs two-up. Bands take a full-width row *in place*, so the reorder /
+// hide system still controls order — the layout just stops wasting the
+// right half of the page on narrow cards.
+const FULL_WIDTH_SECTIONS = new Set<SectionKey>(['overview', 'myDashboard', 'whatsNext', 'quickActions', 'recentActivity']);
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
@@ -1096,34 +1101,44 @@ export default function DashboardPage() {
       ) : (
         <>
           <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
-          {/* Multi-column masonry: wide bands (Overview / My Dashboard /
-              Quick Actions) span both columns in place; the narrow analytical
-              cards flow two-up, roughly halving the scroll. Drops to a single
-              column below ~780px. */}
-          <div style={{ columns: '2 380px', columnGap: 16 }}>
+          {/* Bands (Overview / My Dashboard / What's Next / Quick Actions /
+              Recent Activity) take a full-width row; the narrow analytical
+              widgets pair up two-up (like Program Maturity + Governance Gaps)
+              in explicit rows. Deterministic pairing — instead of a masonry
+              column flow — keeps a card like Skill Gaps from stranding itself
+              in the right column, and re-chunking on hide means a hidden
+              section never leaves an empty half-row (a lone leftover widget
+              spans the full width). Pairs drop to one column below ~620px.
+              Vertical rhythm still comes from each widget's own marginBottom. */}
+          <div>
             {(() => {
               const visible = layout.order.filter((key) => !layout.hidden.has(key));
-              return visible.map((key, i) => {
-                const isBand = FULL_WIDTH_SECTIONS.has(key);
-                const prevKey = visible[i - 1];
-                const prevIsBand = prevKey ? FULL_WIDTH_SECTIONS.has(prevKey) : true;
-                // A full-width band that follows two-up column content needs an
-                // explicit top gap: at a column-span boundary the trailing
-                // column items' margin-bottom gets trimmed, so the band would
-                // otherwise butt right up against the cards above it. Band→band
-                // and band→column transitions are handled by the child's own
-                // marginBottom and don't need this.
-                const needsTopGap = isBand && !prevIsBand;
+              // Split the visible sections into rows: each band is its own
+              // full-width row; runs of consecutive narrow widgets chunk into
+              // pairs.
+              const rows: Array<{ band?: SectionKey; pair?: SectionKey[] }> = [];
+              let run: SectionKey[] = [];
+              const flushRun = () => {
+                for (let i = 0; i < run.length; i += 2) rows.push({ pair: run.slice(i, i + 2) });
+                run = [];
+              };
+              for (const key of visible) {
+                if (FULL_WIDTH_SECTIONS.has(key)) { flushRun(); rows.push({ band: key }); }
+                else run.push(key);
+              }
+              flushRun();
+
+              return rows.map((row) => {
+                if (row.band) return <div key={`band-${row.band}`}>{sectionMap[row.band]}</div>;
+                const keys = row.pair!;
+                // Lone leftover narrow widget fills the row — no dangling half.
+                if (keys.length === 1) return <div key={`solo-${keys[0]}`}>{sectionMap[keys[0]]}</div>;
                 return (
                   <div
-                    key={key}
-                    style={{
-                      breakInside: 'avoid',
-                      ...(isBand ? { columnSpan: 'all' } : null),
-                      ...(needsTopGap ? { marginTop: 24 } : null),
-                    }}
+                    key={`pair-${keys.join('-')}`}
+                    style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', columnGap: 16, alignItems: 'start' }}
                   >
-                    {sectionMap[key]}
+                    {keys.map((k) => <div key={k}>{sectionMap[k]}</div>)}
                   </div>
                 );
               });
