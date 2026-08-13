@@ -106,11 +106,11 @@ function MaturityChart({ snapshots }: ChartProps) {
   }
 
   const width = 700;
-  const height = 220;
+  const height = 150;
   const paddingLeft = 45;
   const paddingRight = 20;
-  const paddingTop = 20;
-  const paddingBottom = 35;
+  const paddingTop = 16;
+  const paddingBottom = 28;
 
   const chartWidth = width - paddingLeft - paddingRight;
   const chartHeight = height - paddingTop - paddingBottom;
