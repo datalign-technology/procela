@@ -474,6 +474,14 @@ type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'wha
 
 const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'skillGaps', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
 
+// Sections that read best full-bleed (the wide KPI strip, the personal
+// summary's two-column body, the quick-action tiles). Everything else packs
+// into a responsive 2-column masonry to cut the dashboard's vertical length.
+// These span all columns *in place* via `column-span: all`, so the reorder /
+// hide system still controls order — the layout just stops wasting the right
+// half of the page on narrow cards.
+const FULL_WIDTH_SECTIONS = new Set<SectionKey>(['overview', 'myDashboard', 'quickActions']);
+
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
   overview: 'Overview',
@@ -1039,11 +1047,20 @@ export default function DashboardPage() {
       ) : (
         <>
           <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
-          {layout.order.filter((key) => !layout.hidden.has(key)).map((key) => (
-            <React.Fragment key={key}>
-              {sectionMap[key]}
-            </React.Fragment>
-          ))}
+          {/* Multi-column masonry: wide bands (Overview / My Dashboard /
+              Quick Actions) span both columns in place; the narrow analytical
+              cards flow two-up, roughly halving the scroll. Drops to a single
+              column below ~780px. */}
+          <div style={{ columns: '2 380px', columnGap: 16 }}>
+            {layout.order.filter((key) => !layout.hidden.has(key)).map((key) => (
+              <div
+                key={key}
+                style={{ breakInside: 'avoid', ...(FULL_WIDTH_SECTIONS.has(key) ? { columnSpan: 'all' } : null) }}
+              >
+                {sectionMap[key]}
+              </div>
+            ))}
+          </div>
         </>
       )}
     </div>
