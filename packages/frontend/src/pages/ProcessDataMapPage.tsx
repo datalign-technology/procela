@@ -42,32 +42,45 @@ interface Activity {
 // process / sub-process the activities below it roll up to) or an activity.
 type LeftRow =
   | { kind: 'header'; id: string; name: string; level: string; depth: number; rowKey: string }
-  | { kind: 'activity'; activity: Activity };
+  | { kind: 'activity'; activity: Activity; depth: number };
 
 // Human labels + styling per hierarchy level, so the headers read as a
 // nested Value Stream → Process → Sub-process tree above each activity.
 const LEVEL_STYLE: Record<string, { label: string; size: number; weight: number; color: string; upper?: boolean }> = {
   VALUE_STREAM: { label: 'Value Stream', size: 11, weight: 700, color: '#475569', upper: true },
   PROCESS:      { label: 'Process',      size: 10.5, weight: 600, color: '#334155' },
-  SUB_PROCESS:  { label: 'Sub-process',  size: 10, weight: 600, color: '#64748b' },
+  SUBPROCESS:   { label: 'Sub-process',  size: 10, weight: 600, color: '#64748b' },
 };
+
+// Grouping levels the user can show/hide via chips. VALUE_STREAM / PROCESS /
+// SUBPROCESS group the left (activities) column; DOMAIN groups the right
+// (data assets) column. Keys match the ProcessNode level enum exactly.
+const LEVEL_TOGGLES: Array<{ key: string; label: string; color: string }> = [
+  { key: 'VALUE_STREAM', label: 'Value Streams', color: '#475569' },
+  { key: 'PROCESS',      label: 'Processes',     color: '#334155' },
+  { key: 'SUBPROCESS',   label: 'Sub-processes', color: '#64748b' },
+  { key: 'DOMAIN',       label: 'Data Domains',  color: '#dc2626' },
+];
 
 // Turn the sorted activity list into left-column rows, inserting a header
 // row each time an ancestor at a given depth changes. Deeper headers reset
 // when a shallower one changes so a new value stream re-emits its processes.
-function buildLeftRows(activities: Activity[]): LeftRow[] {
+// `hiddenLevels` drops whole grouping levels (e.g. Sub-process): the header
+// and its indentation contribution disappear, so activities roll up only to
+// the levels the user chose to display.
+function buildLeftRows(activities: Activity[], hiddenLevels: Set<string>): LeftRow[] {
   const rows: LeftRow[] = [];
   const lastAtDepth: string[] = [];
   for (const a of activities) {
-    const path = a.path || [];
-    path.forEach((anc, depth) => {
+    const visiblePath = (a.path || []).filter((anc) => !hiddenLevels.has(anc.level));
+    visiblePath.forEach((anc, depth) => {
       if (lastAtDepth[depth] !== anc.id) {
         rows.push({ kind: 'header', id: anc.id, name: anc.name, level: anc.level, depth, rowKey: `h-${anc.id}-${rows.length}` });
         lastAtDepth[depth] = anc.id;
         lastAtDepth.length = depth + 1; // forget deeper levels
       }
     });
-    rows.push({ kind: 'activity', activity: a });
+    rows.push({ kind: 'activity', activity: a, depth: visiblePath.length });
   }
   return rows;
 }
@@ -88,7 +101,10 @@ type RightRow =
   | { kind: 'domain'; name: string; rowKey: string }
   | { kind: 'asset'; asset: Asset };
 
-function buildRightRows(assets: Asset[]): RightRow[] {
+// `showDomains` false drops the domain header rows entirely — the assets
+// just list flat (no domain grouping).
+function buildRightRows(assets: Asset[], showDomains: boolean): RightRow[] {
+  if (!showDomains) return assets.map((a) => ({ kind: 'asset' as const, asset: a }));
   const rows: RightRow[] = [];
   let lastDomain: string | null | undefined;
   for (const a of assets) {
@@ -157,6 +173,15 @@ export default function ProcessDataMapPage() {
   const [focus, setFocus] = useState<{ kind: 'activity' | 'asset'; id: string } | null>(null);
   const [systemFilter, setSystemFilter] = useState<string>('');
   const [includeGov, setIncludeGov] = useState(false);
+  // Which grouping levels to display (Value Streams / Processes /
+  // Sub-processes on the left, Data Domains on the right). A hidden level
+  // drops its headers (and, for the hierarchy, its indentation).
+  const [hiddenLevels, setHiddenLevels] = useState<Set<string>>(new Set());
+  const toggleLevel = (lvl: string) => setHiddenLevels((prev) => {
+    const next = new Set(prev);
+    if (next.has(lvl)) next.delete(lvl); else next.add(lvl);
+    return next;
+  });
 
   const load = useCallback(async () => {
     setError(null);
@@ -226,7 +251,18 @@ export default function ProcessDataMapPage() {
   }, [data, systemFilter]);
 
   // Left column laid out as hierarchy headers + activity rows.
-  const leftRows = useMemo(() => buildLeftRows(activities), [activities]);
+  const leftRows = useMemo(() => buildLeftRows(activities, hiddenLevels), [activities, hiddenLevels]);
+  // Assets sit flush when domains are hidden; otherwise they indent under
+  // their domain header. Used for the asset rects and the edge endpoints.
+  const assetIndent = hiddenLevels.has('DOMAIN') ? 0 : 18;
+  // Which grouping levels actually exist in the data, so we only offer
+  // chips that would do something.
+  const presentLevels = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of activities) for (const p of (a.path || [])) s.add(p.level);
+    if (assets.some((a) => a.domainName)) s.add('DOMAIN');
+    return s;
+  }, [activities, assets]);
   const activityY = useMemo(() => {
     const m = new Map<string, number>();
     leftRows.forEach((row, i) => {
@@ -235,7 +271,7 @@ export default function ProcessDataMapPage() {
     return m;
   }, [leftRows]);
   // Right column laid out as data-domain headers + asset rows.
-  const rightRows = useMemo(() => buildRightRows(assets), [assets]);
+  const rightRows = useMemo(() => buildRightRows(assets, !hiddenLevels.has('DOMAIN')), [assets, hiddenLevels]);
   const assetY = useMemo(() => {
     const m = new Map<string, number>();
     rightRows.forEach((row, i) => {
@@ -344,6 +380,36 @@ export default function ProcessDataMapPage() {
         </div>
       </div>
 
+      {/* Grouping toggles — pick which levels roll up the two columns.
+          Only levels present in the data get a chip. */}
+      {LEVEL_TOGGLES.some((l) => presentLevels.has(l.key)) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginRight: 2 }}>Group by:</span>
+          {LEVEL_TOGGLES.filter((l) => presentLevels.has(l.key)).map((l) => {
+            const on = !hiddenLevels.has(l.key);
+            return (
+              <button
+                key={l.key}
+                type="button"
+                onClick={() => toggleLevel(l.key)}
+                aria-pressed={on}
+                title={`${on ? 'Hide' : 'Show'} ${l.label}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                  border: `1px solid ${on ? l.color : 'var(--color-border)'}`,
+                  background: on ? l.color : 'var(--color-surface)',
+                  color: on ? '#fff' : 'var(--color-text-muted)',
+                  textDecoration: on ? 'none' : 'line-through',
+                }}
+              >
+                {l.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {error && (
         <div style={{ padding: 12, background: '#fee2e2', color: '#7f1d1d', borderRadius: 4 }}>
           {error}
@@ -384,14 +450,14 @@ export default function ProcessDataMapPage() {
               if (focus && !isFocused) {
                 return (
                   <EdgePath key={e.mappingId} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                    x2={COL_WIDTH + GUTTER + 18} y2={yB + ROW_HEIGHT / 2}
+                    x2={COL_WIDTH + GUTTER + assetIndent} y2={yB + ROW_HEIGHT / 2}
                     color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={0.08} />
                 );
               }
               if (focus && isFocused) return null;
               return (
                 <EdgePath key={e.mappingId} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                  x2={COL_WIDTH + GUTTER + 18} y2={yB + ROW_HEIGHT / 2}
+                  x2={COL_WIDTH + GUTTER + assetIndent} y2={yB + ROW_HEIGHT / 2}
                   color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={focus ? 0.15 : 0.45} />
               );
             })}
@@ -401,7 +467,7 @@ export default function ProcessDataMapPage() {
               if (yA == null || yB == null) return null;
               return (
                 <EdgePath key={`f-${e.mappingId}`} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                  x2={COL_WIDTH + GUTTER + 18} y2={yB + ROW_HEIGHT / 2}
+                  x2={COL_WIDTH + GUTTER + assetIndent} y2={yB + ROW_HEIGHT / 2}
                   color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={0.9} strokeWidth={2} />
               );
             })}
@@ -428,7 +494,7 @@ export default function ProcessDataMapPage() {
                 );
               }
               const a = row.activity;
-              const indent = 8 + (a.path?.length || 0) * 16;
+              const indent = 8 + row.depth * 16;
               const dim = focus && !focusedNodeIds.has(a.id);
               return (
                 <g key={a.id}
@@ -439,7 +505,7 @@ export default function ProcessDataMapPage() {
                     fill={focus?.kind === 'activity' && focus.id === a.id ? '#d1fae5' : '#f8fafc'}
                     stroke="#cbd5e1" rx={3} />
                   <text x={indent + 10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
-                    {truncate(a.name, 32 - (a.path?.length || 0) * 2)}
+                    {truncate(a.name, 32 - row.depth * 2)}
                   </text>
                   <text x={indent + 10} y={y + 26} fontSize={9} fill="#64748b">
                     Activity
@@ -468,7 +534,7 @@ export default function ProcessDataMapPage() {
                 );
               }
               const a = row.asset;
-              const indent = 18;
+              const indent = assetIndent;
               const x = colX + indent;
               const dim = focus && !focusedNodeIds.has(a.id);
               return (
