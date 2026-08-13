@@ -7,6 +7,9 @@ import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
 import IconButton from '../components/IconButton';
 import { healthColorVar } from '../components/HealthBar';
+import SectionHeading from '../components/SectionHeading';
+import StatTile from '../components/StatTile';
+import Meter from '../components/Meter';
 
 interface DashboardStats {
   valueStreams: number;
@@ -66,15 +69,6 @@ const sectionStyle: React.CSSProperties = {
   pageBreakInside: 'avoid',
 };
 
-const sectionTitleStyle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 700,
-  borderBottom: '2px solid var(--color-primary)',
-  paddingBottom: 6,
-  marginBottom: 16,
-  color: 'var(--color-primary)',
-};
-
 const tableStyle: React.CSSProperties = {
   width: '100%',
   borderCollapse: 'collapse',
@@ -95,14 +89,6 @@ const thStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: '8px 12px',
   borderBottom: '1px solid var(--color-border)',
-};
-
-const metricBoxStyle: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 8,
-  padding: 16,
-  textAlign: 'center',
 };
 
 export default function ExecutiveReportPage() {
@@ -243,53 +229,25 @@ export default function ExecutiveReportPage() {
 
         {/* Section 1: Organization Overview */}
         <div style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>1. Organization Overview</h2>
+          <SectionHeading title="1. Organization Overview" underline />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{stats.organizations}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Organizations</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{stats.people}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>People</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{stats.systems}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Systems</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: scorecard.dimensions[0]?.color || '#333' }}>{scorecard.overall}%</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Maturity Score</div>
-            </div>
+            <StatTile label="Organizations" value={stats.organizations} />
+            <StatTile label="People" value={stats.people} />
+            <StatTile label="Systems" value={stats.systems} />
+            <StatTile label="Maturity Score" value={`${scorecard.overall}%`} valueColor={scorecard.dimensions[0]?.color || 'var(--color-text)'} />
           </div>
         </div>
 
         {/* Section 2: Process Coverage */}
         <div style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>2. Process Coverage</h2>
+          <SectionHeading title="2. Process Coverage" underline />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{stats.valueStreams}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Value Streams</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{stats.processes}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Processes</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{stats.activities}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Activities</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: healthColorVar(stats.coverage.percentage) }}>
-                {stats.coverage.percentage}%
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Coverage</div>
-            </div>
+            <StatTile label="Value Streams" value={stats.valueStreams} />
+            <StatTile label="Processes" value={stats.processes} />
+            <StatTile label="Activities" value={stats.activities} />
+            <StatTile label="Coverage" value={`${stats.coverage.percentage}%`} valueColor={healthColorVar(stats.coverage.percentage)} />
           </div>
-          <div style={{ height: 8, background: 'var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${stats.coverage.percentage}%`, background: 'var(--color-primary)', borderRadius: 4 }} />
-          </div>
+          <Meter value={stats.coverage.percentage} height={8} />
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             {stats.coverage.mapped} of {stats.coverage.mapped + stats.coverage.unmapped} activities mapped to data assets
           </div>
@@ -297,26 +255,12 @@ export default function ExecutiveReportPage() {
 
         {/* Section 3: Data Governance */}
         <div className="page-break" style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>3. Data Governance</h2>
+          <SectionHeading title="3. Data Governance" underline />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
-            <div style={{ ...metricBoxStyle, borderLeft: '4px solid var(--color-tier-gold)' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-tier-gold)' }}>{stats.governance.gold}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Certified</div>
-            </div>
-            <div style={{ ...metricBoxStyle, borderLeft: '4px solid var(--color-tier-silver)' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-tier-silver)' }}>{stats.governance.silver}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Managed</div>
-            </div>
-            <div style={{ ...metricBoxStyle, borderLeft: '4px solid var(--color-tier-bronze)' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-tier-bronze)' }}>{stats.governance.bronze}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Uncertified</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: healthColorVar(stats.averageHealth) }}>
-                {stats.averageHealth}%
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Avg Health</div>
-            </div>
+            <StatTile label="Certified" value={stats.governance.gold} accent="var(--color-tier-gold)" valueColor="var(--color-tier-gold)" />
+            <StatTile label="Managed" value={stats.governance.silver} accent="var(--color-tier-silver)" valueColor="var(--color-tier-silver)" />
+            <StatTile label="Uncertified" value={stats.governance.bronze} accent="var(--color-tier-bronze)" valueColor="var(--color-tier-bronze)" />
+            <StatTile label="Avg Health" value={`${stats.averageHealth}%`} valueColor={healthColorVar(stats.averageHealth)} />
           </div>
           <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
             {domainsWithOwners} of {dataDomains.length} data domains have assigned owners.
@@ -325,7 +269,7 @@ export default function ExecutiveReportPage() {
 
         {/* Section 4: Gap Analysis */}
         <div style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>4. Gap Analysis</h2>
+          <SectionHeading title="4. Gap Analysis" underline />
           <div style={{ overflowX: 'auto' }}>
           <table style={tableStyle}>
             <thead>
@@ -391,20 +335,11 @@ export default function ExecutiveReportPage() {
 
         {/* Section 5: Governance Structure */}
         <div className="page-break" style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>5. Governance Structure</h2>
+          <SectionHeading title="5. Governance Structure" underline />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{govGroups.length}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Governance Groups</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{dataDomains.length}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Data Domains</div>
-            </div>
-            <div style={metricBoxStyle}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{domainsWithOwners}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Domains with Owners</div>
-            </div>
+            <StatTile label="Governance Groups" value={govGroups.length} />
+            <StatTile label="Data Domains" value={dataDomains.length} />
+            <StatTile label="Domains with Owners" value={domainsWithOwners} />
           </div>
           {govGroups.length > 0 && (
             <div style={{ overflowX: 'auto' }}>

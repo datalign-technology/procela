@@ -10,6 +10,9 @@ import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import { healthColorVar } from '../components/HealthBar';
+import SectionHeading from '../components/SectionHeading';
+import StatTile from '../components/StatTile';
+import Meter from '../components/Meter';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
@@ -141,12 +144,7 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
           )}
         </p>
       </div>
-      <div style={{ height: 4, background: 'var(--color-bg)', borderRadius: 2, marginBottom: 20, overflow: 'hidden' }}>
-        <div style={{
-          width: `${percent}%`, height: '100%',
-          background: 'var(--color-primary)', transition: 'width 0.3s',
-        }} />
-      </div>
+      <Meter value={percent} height={4} style={{ marginBottom: 20 }} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {steps.map((s, i) => (
           <div key={s.title} style={{
@@ -249,7 +247,7 @@ function MyDashboard() {
 
   if (loading) return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>My Dashboard</h2>
+      <SectionHeading title="My Dashboard" />
       <Card padding={20}><SkeletonRows rows={4} columnWidths={[180, null, 90]} /></Card>
     </div>
   );
@@ -265,7 +263,7 @@ function MyDashboard() {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>My Dashboard</h2>
+      <SectionHeading title="My Dashboard" marginBottom={4} />
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
         Welcome back, {data.person.name}. Here’s what needs your attention.
       </p>
@@ -275,26 +273,26 @@ function MyDashboard() {
           below (hover lift, muted-but-still-linked at zero, tooltip
           announces the destination for keyboard / screen-reader). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
-        <MyDashboardTile
+        <StatTile
           to="/governance-work?tab=tasks"
           label="Open Tasks"
           value={s.openTasks || 0}
           valueColor={(s.overdueTasks || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}
           sub={(s.overdueTasks || 0) > 0 ? { text: `${s.overdueTasks} overdue`, color: 'var(--color-error)' } : null}
         />
-        <MyDashboardTile
+        <StatTile
           to="/governance-work?tab=issues"
           label="Open Issues"
           value={s.openIssues || 0}
           valueColor={(s.criticalIssues || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}
           sub={(s.criticalIssues || 0) > 0 ? { text: `${s.criticalIssues} critical`, color: 'var(--color-error)' } : null}
         />
-        <MyDashboardTile
+        <StatTile
           to="/data-domains"
           label="My Domains"
           value={(s.domainsOwned || 0) + (s.domainsSteward || 0)}
         />
-        <MyDashboardTile
+        <StatTile
           to="/governance-calendar"
           label="Upcoming Events"
           value={s.upcomingEventsCount || 0}
@@ -373,9 +371,7 @@ function MyDashboard() {
                     <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
-                  <div style={{ height: 4, background: 'var(--color-border)', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${healthPct}%`, background: healthColorVar(healthPct), borderRadius: 2 }} />
-                  </div>
+                  <Meter value={healthPct} height={4} color={healthColorVar(healthPct)} />
                 </Link>
               );
             })}
@@ -426,45 +422,6 @@ function MyDashboard() {
   );
 }
 
-/** Single tile in the My Dashboard summary strip. Mirrors the
- *  affordance of StatsOverview's KPI tiles — a Link with hover-lift,
- *  zero-count muted text, and a tooltip carrying the destination. */
-function MyDashboardTile({ to, label, value, valueColor, sub }: {
-  to: string;
-  label: string;
-  value: number;
-  valueColor?: string;
-  sub?: { text: string; color: string } | null;
-}) {
-  const zero = value === 0;
-  return (
-    <Link
-      to={to}
-      title={zero ? `No ${label.toLowerCase()} — open ${label}` : `Open ${label}`}
-      style={{
-        ...cardStyle, padding: '12px 16px', textAlign: 'center',
-        textDecoration: 'none', display: 'block',
-        transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
-        cursor: 'pointer',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'var(--color-primary)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-        e.currentTarget.style.transform = 'translateY(-1px)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'var(--color-border)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-        e.currentTarget.style.transform = '';
-      }}
-    >
-      <div style={{ fontSize: 22, fontWeight: 700, color: zero ? 'var(--color-text-muted)' : (valueColor || 'var(--color-text)') }}>{value}</div>
-      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{label}</div>
-      {sub && <div style={{ fontSize: 10, color: sub.color, marginTop: 2 }}>{sub.text}</div>}
-    </Link>
-  );
-}
-
 
 // ── Stats Overview — compact KPI strip ──
 
@@ -478,15 +435,13 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
   // Zero counts still link through, but render with a muted cursor so
   // users land on the empty-state CTA on the destination page rather
   // than dead-clicking from a 0 tile.
-  const kpis: Array<{ label: string; value: string | number; color: string; to: string; zero: boolean }> = [
-    { label: 'Value Streams', value: stats.valueStreams,                color: '#0f4f46',
-      to: '/processes', zero: stats.valueStreams === 0 },
-    { label: 'Processes',     value: stats.processes,                   color: '#92400e',
-      to: '/processes', zero: stats.processes === 0 },
-    { label: 'Data Assets',   value: stats.dataAssets,                  color: '#1e40af',
-      to: '/data-assets', zero: stats.dataAssets === 0 },
-    { label: 'Systems',       value: stats.systems,                     color: '#5b21b6',
-      to: '/systems', zero: stats.systems === 0 },
+  // Counts wear plain ink — the label carries identity; colour is spent only
+  // where the number is a *state* (coverage / health), via healthColorVar.
+  const kpis: Array<{ label: string; value: string | number; color?: string; to: string; zero: boolean }> = [
+    { label: 'Value Streams', value: stats.valueStreams, to: '/processes', zero: stats.valueStreams === 0 },
+    { label: 'Processes',     value: stats.processes,    to: '/processes', zero: stats.processes === 0 },
+    { label: 'Data Assets',   value: stats.dataAssets,   to: '/data-assets', zero: stats.dataAssets === 0 },
+    { label: 'Systems',       value: stats.systems,      to: '/systems', zero: stats.systems === 0 },
     { label: 'Coverage',      value: `${stats.coverage.percentage}%`,
       color: healthColorVar(stats.coverage.percentage),
       to: '/mappings', zero: stats.coverage.percentage === 0 },
@@ -501,37 +456,11 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
           leaving the dashboard. Value Streams / Processes / Coverage
           numbers refetch with `?domain=…`; Data Assets / Systems / Avg
           Health stay constant — they are not domain-tagged. */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600 }}>Overview</h2>
-        <DomainLensToggle pageKey="dashboard" />
-      </div>
+      <SectionHeading title="Overview" right={<DomainLensToggle pageKey="dashboard" />} />
       <DomainLensActiveBanner pageKey="dashboard" entityLabel="process counts" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
         {kpis.map((k) => (
-          <Link
-            key={k.label}
-            to={k.to}
-            title={k.zero ? `No ${k.label.toLowerCase()} yet — open ${k.label} to add one` : `Open ${k.label}`}
-            style={{
-              ...cardStyle, padding: '14px 16px', textAlign: 'center',
-              textDecoration: 'none', display: 'block',
-              transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-primary)';
-              e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-              e.currentTarget.style.transform = 'translateY(-1px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-border)';
-              e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-              e.currentTarget.style.transform = '';
-            }}
-          >
-            <div style={{ fontSize: 22, fontWeight: 700, color: k.zero ? 'var(--color-text-muted)' : k.color }}>{k.value}</div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{k.label}</div>
-          </Link>
+          <StatTile key={k.label} label={k.label} value={k.value} to={k.to} valueColor={k.color} zero={k.zero} />
         ))}
       </div>
     </div>
@@ -646,7 +575,7 @@ const quickActions = [
 function QuickActions() {
   return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Quick Actions</h2>
+      <SectionHeading title="Quick Actions" />
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
@@ -770,7 +699,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{"What's Next"}</h2>
+      <SectionHeading title="What's Next" />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {shown.map((s) => (
           <Link key={s.link} to={s.link} style={{
@@ -804,10 +733,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
 function RecentActivity() {
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600 }}>Recent Activity</h2>
-        <Link to="/audit-log" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View full audit log →</Link>
-      </div>
+      <SectionHeading title="Recent Activity" right={<Link to="/audit-log" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View full audit log →</Link>} />
       <ActivityFeed inline />
     </div>
   );
@@ -845,7 +771,7 @@ function ProgramMaturity() {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Program Maturity</h2>
+      <SectionHeading title="Program Maturity" />
       <Card padding="16px 20px">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <div style={{
@@ -861,9 +787,7 @@ function ProgramMaturity() {
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{status.overallProgress}% overall progress</div>
           </div>
         </div>
-        <div style={{ height: 6, background: 'var(--color-border)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
-          <div style={{ height: '100%', width: `${status.overallProgress}%`, background: phaseColors[status.currentPhase], borderRadius: 3, transition: 'width 0.3s' }} />
-        </div>
+        <Meter value={status.overallProgress} color={phaseColors[status.currentPhase]} style={{ marginBottom: 12 }} />
         {recommendations.length > 0 && (
           <div>
             <SectionLabel marginBottom={6}>Next steps to advance</SectionLabel>
@@ -909,15 +833,13 @@ function StewardOnboarding() {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Steward Onboarding</h2>
+      <SectionHeading title="Steward Onboarding" />
       <Card padding="16px 20px">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>{rate}% complete</span>
           <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{data.completed} of {data.total} tasks</span>
         </div>
-        <div style={{ height: 8, background: 'var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${rate}%`, background: rate === 100 ? 'var(--color-success)' : 'var(--color-primary)', borderRadius: 4, transition: 'width 0.3s' }} />
-        </div>
+        <Meter value={rate} height={8} color={rate === 100 ? 'var(--color-success)' : 'var(--color-primary)'} />
         {data.overdue > 0 && (
           <div style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 6 }}>
             {data.overdue} overdue task{data.overdue !== 1 ? 's' : ''}
@@ -946,7 +868,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
 
   return (
     <div>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Governance Gaps</h2>
+      <SectionHeading title="Governance Gaps" />
       {total === 0 ? (
         <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--color-success)', fontSize: 13, fontWeight: 500 }}>
           No gaps detected — all processes are mapped and ownership is assigned.
