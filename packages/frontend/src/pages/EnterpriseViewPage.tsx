@@ -312,7 +312,7 @@ export default function EnterpriseViewPage() {
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-muted)' }}>
           {filteredNodes.length} entities &middot; {filteredEdges.length} relationships
         </span>
-        {filteredNodes.length > 0 && (
+        {viewMode === 'diagram' && filteredNodes.length > 0 && (
           <button
             type="button"
             onClick={() => exportEnterpriseDrawio(filteredNodes, filteredEdges, TYPE_CONFIG, visibleTypes, 'enterprise-view')}
