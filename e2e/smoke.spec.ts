@@ -260,11 +260,13 @@ test.describe('Procela smoke', () => {
     expect(errors, errors.join('\n')).toEqual([]);
   });
 
-  test('Orphan Assets page lists an unmapped asset', async ({ page }) => {
-    // Phase 3 reverse view. Seed an asset with no mapping rows
-    // pointing at it and verify it shows up on the orphan-assets
-    // page. Regression catch for the /data-assets/orphans endpoint +
-    // its frontend table.
+  test('Data Assets Unmapped filter lists an unmapped asset (orphans redirect)', async ({ page }) => {
+    // Phase 3 reverse view, now folded into the Data Assets catalog.
+    // Seed an asset with no mapping rows pointing at it, then hit the
+    // retired /data-assets/orphans URL and verify it redirects to the
+    // Data Assets page pre-filtered to Unmapped, with the seeded asset
+    // showing its Unmapped badge. Regression catch for the isOrphan
+    // flag + the mapping filter + the back-compat redirect.
     const errors = attachConsoleWatcher(page);
     const token = await loginAsEleanor(page);
     const orgId = await createOrg(token, uniqueName('Orphan Smoke'));
@@ -288,8 +290,13 @@ test.describe('Procela smoke', () => {
     expect(assetRes.status).toBeLessThan(300);
 
     await gotoWithOrg(page, '/data-assets/orphans', orgId, 'Orphan Smoke');
-    await expect(page.getByRole('heading', { name: /Orphan data assets/i })).toBeVisible({ timeout: 10_000 });
+    // The old orphans route redirects to the filtered Data Assets page.
+    await expect(page).toHaveURL(/mapping=unmapped/, { timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /^Data Assets$/i })).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('body')).toContainText(orphanName, { timeout: 10_000 });
+    // The seeded asset carries the Unmapped badge (exact text, so it
+    // doesn't match the "Unmapped (N)" filter option).
+    await expect(page.getByText('Unmapped', { exact: true }).first()).toBeVisible({ timeout: 10_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 });
