@@ -1,8 +1,10 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronDown, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
+import SecondaryButton from '../components/SecondaryButton';
 import { useTierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
@@ -122,7 +124,6 @@ export default function EnterpriseViewPage() {
   const tierLabel = useTierLabel();
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
@@ -138,7 +139,6 @@ export default function EnterpriseViewPage() {
         setNodes(res.data.nodes || []);
         setEdges(res.data.edges || []);
       }
-      setSummary(res.summary || null);
       setLoadError(null);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load enterprise view');
@@ -149,6 +149,13 @@ export default function EnterpriseViewPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const preset = VIEW_PRESETS[activeView] || VIEW_PRESETS.all;
+
+  // Open the active preset's entity sections by default (on first load and
+  // whenever the preset changes) so the catalog shows content immediately
+  // instead of a wall of collapsed sections.
+  useEffect(() => {
+    setExpandedCols(new Set(COLUMN_ORDER.filter((t) => preset.entityTypes.has(t))));
+  }, [activeView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter nodes and edges by active preset
   const filteredNodes = nodes.filter((n) => preset.entityTypes.has(n.type));
@@ -245,282 +252,226 @@ export default function EnterpriseViewPage() {
     );
   }
 
-  const cardStyle = (type: string, count: number): React.CSSProperties => {
-    const cfg = TYPE_CONFIG[type];
-    return {
-      flex: 1, minWidth: 140, padding: '14px 16px', borderRadius: 'var(--radius-md)',
-      background: 'var(--color-surface)', border: `1px solid var(--color-border)`,
-      borderLeft: `4px solid ${cfg.color}`,
-      cursor: count > 0 ? 'pointer' : 'default',
-    };
-  };
+
+  const presetTypes = COLUMN_ORDER.filter((t) => preset.entityTypes.has(t));
 
   return (
     <div>
-      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 180px)' }}>
-      <div style={{ display: 'flex', gap: 0, flex: 1, minHeight: 0 }}>
-      {/* Main content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px 20px 0' }}>
-        {/* Header */}
-        <PageHeader
-          title="Enterprise View"
-          subtitle="See how processes, systems, data assets, domains, and people connect across the enterprise."
-        >
-          <HelpPopover id="enterprise-view-intro" title="Enterprise View" showInitially>
-            See all processes, systems, assets, domains, and people in one place.
-            Click any card to expand, then click an item to run impact analysis — the sidebar
-            shows every entity connected to your selection.
-          </HelpPopover>
-        </PageHeader>
+      {/* Toolbar — spans full width above the catalog / impact split */}
+      <PageHeader
+        title="Enterprise View"
+        subtitle="See how processes, systems, data assets, domains, and people connect across the enterprise."
+      >
+        <HelpPopover id="enterprise-view-intro" title="Enterprise View" showInitially>
+          See all processes, systems, assets, domains, and people in one place.
+          Click a category to expand it, then click an item to run impact analysis — a panel
+          shows every entity connected to your selection.
+        </HelpPopover>
+      </PageHeader>
 
-        {/* View selector */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-          {Object.entries(VIEW_PRESETS).map(([key, v]) => (
-            <button key={key}
-              onClick={() => {
-                setActiveView(key);
-                setSelected(null);
-                // Auto-expand entity types in this preset
-                setExpandedCols(new Set(
-                  COLUMN_ORDER.filter((t) => VIEW_PRESETS[key].entityTypes.has(t)),
-                ));
-              }}
+      {/* View selector */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {Object.entries(VIEW_PRESETS).map(([key, v]) => (
+          <button key={key}
+            onClick={() => { setActiveView(key); setSelected(null); }}
+            style={{
+              padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: activeView === key ? 600 : 400,
+              cursor: 'pointer', border: `1px solid ${activeView === key ? 'var(--color-primary)' : 'var(--color-border)'}`,
+              background: activeView === key ? 'var(--color-primary)' : 'var(--color-surface)',
+              color: activeView === key ? '#fff' : 'var(--color-text)',
+            }}
+            title={v.description}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Active view meta + display-mode toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', fontSize: 13, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{preset.label}</span>
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>{preset.description}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-muted)' }}>
+          {filteredNodes.length} entities &middot; {filteredEdges.length} relationships
+        </span>
+        <div role="tablist" aria-label="Display mode" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
+          {(['cards', 'diagram'] as const).map((mode) => (
+            <button
+              key={mode}
+              role="tab"
+              aria-selected={viewMode === mode}
+              onClick={() => setViewMode(mode)}
               style={{
-                padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: activeView === key ? 600 : 400,
-                cursor: 'pointer', border: `1px solid ${activeView === key ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                background: activeView === key ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: activeView === key ? '#fff' : 'var(--color-text)',
+                padding: '4px 14px', fontSize: 12, fontWeight: viewMode === mode ? 600 : 400,
+                border: 'none', cursor: 'pointer',
+                background: viewMode === mode ? 'var(--color-primary)' : 'transparent',
+                color: viewMode === mode ? '#fff' : 'var(--color-text)',
               }}
-              title={v.description}
             >
-              {v.label}
+              {mode === 'cards' ? 'Cards' : 'Diagram'}
             </button>
           ))}
         </div>
-
-        {/* Active view description + display-mode toggle */}
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16, padding: '6px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontWeight: 600 }}>{preset.label}:</span>
-          <span>{preset.description}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 11 }}>
-            {filteredNodes.length} entities &middot; {filteredEdges.length} relationships
-          </span>
-          <div role="tablist" aria-label="Display mode" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
-            {(['cards', 'diagram'] as const).map((mode) => (
-              <button
-                key={mode}
-                role="tab"
-                aria-selected={viewMode === mode}
-                onClick={() => setViewMode(mode)}
-                style={{
-                  padding: '4px 12px', fontSize: 11, fontWeight: viewMode === mode ? 600 : 400,
-                  border: 'none', cursor: 'pointer',
-                  background: viewMode === mode ? 'var(--color-primary)' : 'transparent',
-                  color: viewMode === mode ? '#fff' : 'var(--color-text)',
-                }}
-              >
-                {mode === 'cards' ? 'Cards' : 'Diagram'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Summary cards */}
-        {summary && (
-          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-            {COLUMN_ORDER.filter((t) => preset.entityTypes.has(t)).map((type) => {
-              const cfg = TYPE_CONFIG[type];
-              const count = byType[type]?.length || 0;
-              const isOpen = expandedCols.has(type);
-              return (
-                <div key={type} style={cardStyle(type, count)}
-                  {...clickable(() => toggleCol(type), { label: `Expand ${cfg.plural}`, disabled: count === 0 })}
-                  aria-expanded={count > 0 ? isOpen : undefined}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontSize: 24, fontWeight: 700, color: cfg.color }}>{count}</div>
-                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500 }}>{cfg.plural}</div>
-                    </div>
-                    <span style={{ opacity: 0.4, display: 'inline-flex' }}>{cfg.icon(20)}</span>
-                  </div>
-                  {count > 0 && (
-                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 6 }}>
-                      {isOpen ? '\u25BC Collapse' : '\u25B6 Expand to view'}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {/* Relationships card */}
-            <div style={{ flex: 1, minWidth: 140, padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderLeft: '4px solid #64748b' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: '#64748b' }}>{filteredEdges.length}</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500 }}>Relationships</div>
-                </div>
-                <span style={{ fontSize: 20, opacity: 0.4 }}>{'\u2194'}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Diagram view */}
-        {viewMode === 'diagram' && (
-          <EnterpriseDiagram
-            nodes={filteredNodes}
-            edges={filteredEdges}
-            selected={selected}
-            impactSet={impactSet}
-            onSelect={(n) => selectNode(n as GraphNode)}
-            typeConfig={TYPE_CONFIG}
-            columnOrder={COLUMN_ORDER.filter((t) => preset.entityTypes.has(t))}
-          />
-        )}
-
-        {/* Cards view — grouped columns, each entity type as an expandable section */}
-        {viewMode === 'cards' && COLUMN_ORDER.filter((t) => preset.entityTypes.has(t)).map((type) => {
-          const cfg = TYPE_CONFIG[type];
-          const items = byType[type] || [];
-          const isOpen = expandedCols.has(type);
-          if (items.length === 0) return null;
-          return (
-            <div key={type} style={{ marginBottom: 16 }}>
-              {/* Section header */}
-              <div
-                {...clickable(() => toggleCol(type), { label: `Toggle ${cfg.plural} section` })}
-                aria-expanded={isOpen}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
-                  background: cfg.bg, borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer', userSelect: 'none',
-                  border: `1px solid ${cfg.color}22`,
-                }}
-              >
-                <span style={{ fontSize: 10, color: cfg.color }}>{isOpen ? '\u25BC' : '\u25B6'}</span>
-                <span style={{ display: 'inline-flex', color: cfg.color }}>{cfg.icon(16)}</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: cfg.color }}>{cfg.plural}</span>
-                <span style={{ fontSize: 12, color: cfg.color, opacity: 0.6, marginLeft: 4 }}>({items.length})</span>
-              </div>
-
-              {/* Items */}
-              {isOpen && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8, padding: '10px 0 0 0' }}>
-                  {items.map((n) => {
-                    const isSelected = selected?.id === n.id;
-                    const isImpacted = selected && impactSet.has(n.id) && !isSelected;
-                    const isDimmed = selected && !impactSet.has(n.id);
-                    const statusColor = n.status ? getStatusColor(n.status) : null;
-                    return (
-                      <div key={n.id}
-                        {...clickable(() => selectNode(n), { label: `Select ${n.label}` })}
-                        style={{
-                          display: 'flex', alignItems: 'flex-start', gap: 10,
-                          padding: '10px 12px', borderRadius: 'var(--radius-md)',
-                          background: isSelected ? cfg.bg : 'var(--color-surface)',
-                          border: `1px solid ${isSelected ? cfg.color : isImpacted ? cfg.color + '66' : 'var(--color-border)'}`,
-                          cursor: 'pointer', opacity: isDimmed ? 0.35 : 1,
-                          boxShadow: isSelected ? `0 0 0 2px ${cfg.color}33` : 'none',
-                          transition: 'opacity 0.15s, border-color 0.15s',
-                          animation: isImpacted ? 'nodeGlow 2s ease-in-out infinite' : 'none',
-                        }}
-                        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.borderColor = cfg.color + '88'; }}
-                        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.borderColor = isImpacted ? cfg.color + '66' : 'var(--color-border)'; }}
-                      >
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                          background: cfg.bg, color: cfg.color, fontSize: 14,
-                          border: `1.5px solid ${cfg.color}44`,
-                        }}>
-                          {cfg.icon(16)}
-                        </span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {n.label}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
-                            {n.meta.description || n.meta.level || n.meta.systemType || n.meta.email || '\u2014'}
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                            {statusColor && (
-                              <span style={{
-                                fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
-                                background: statusColor.bg, color: statusColor.color,
-                              }}>
-                                {(n.status || '').replace('_', ' ')}
-                              </span>
-                            )}
-                            {n.meta.governanceTier && (() => {
-                              const c = badgeColor('tier', n.meta.governanceTier);
-                              return (
-                                <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>
-                                  {tierLabel(n.meta.governanceTier)}
-                                </span>
-                              );
-                            })()}
-                            {n.meta.healthScore != null && (() => {
-                              const c = badgeColor('health', n.meta.healthScore);
-                              return (
-                                <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>
-                                  {n.meta.healthScore}% health
-                                </span>
-                              );
-                            })()}
-                            {n.meta.rulesCount > 0 && (
-                              <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
-                                {n.meta.rulesCount} rules
-                              </span>
-                            )}
-                            {n.meta.role && (
-                              <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
-                                {n.meta.role.replace('_', ' ')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {nodes.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
-              No entities found. Create processes, systems, and data assets to see the enterprise view.
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* Sidebar — impact analysis panel */}
-      <div style={{
-        width: 320, flexShrink: 0, background: 'var(--color-surface)',
-        borderLeft: '1px solid var(--color-border)', padding: 16, overflowY: 'auto',
-      }}>
-        {!selected ? (
-          <div>
-            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Impact Analysis</h3>
-            <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-              Select any item to see its full dependency chain across the organization.
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6, marginTop: 8 }}>
-              Use this to understand the impact of changes — for example, if a system is being
-              deprecated, you can see which processes, assets, and people are affected.
-            </p>
-            <div style={{ marginTop: 20, padding: 12, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', fontSize: 11, color: 'var(--color-text-muted)' }}>
-              <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 12 }}>How to use</div>
-              <div style={{ marginBottom: 4 }}>1. Expand a category by clicking a summary card</div>
-              <div style={{ marginBottom: 4 }}>2. Click any item to select it</div>
-              <div style={{ marginBottom: 4 }}>3. Connected items stay visible; unrelated items dim</div>
-              <div>4. Browse the impact list here to see all dependencies</div>
+      {/* Catalog + impact split. The page scrolls normally; the impact
+          panel sticks so it stays visible while scrolling the catalog,
+          and it only takes up space when a node is actually selected. */}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {nodes.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
+                No entities found. Create processes, systems, and data assets to see the enterprise view.
+              </p>
             </div>
-          </div>
-        ) : (
-          <div>
+          ) : viewMode === 'diagram' ? (
+            <EnterpriseDiagram
+              nodes={filteredNodes}
+              edges={filteredEdges}
+              selected={selected}
+              impactSet={impactSet}
+              onSelect={(n) => selectNode(n as GraphNode)}
+              typeConfig={TYPE_CONFIG}
+              columnOrder={presetTypes}
+            />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {!selected && (
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '2px' }}>
+                  Tip: click any item to trace its full dependency chain across the enterprise.
+                </div>
+              )}
+              {/* One expandable card per entity type — the count lives in the
+                  header, and expanding reveals the items inline. This merges
+                  the old summary-card row and section bars into a single
+                  control per category. */}
+              {presetTypes.map((type) => {
+                const cfg = TYPE_CONFIG[type];
+                const items = byType[type] || [];
+                const isOpen = expandedCols.has(type);
+                const disabled = items.length === 0;
+                return (
+                  <Card key={type} padding={0} style={{ overflow: 'hidden', borderLeft: `4px solid ${cfg.color}` }}>
+                    <div
+                      {...clickable(() => !disabled && toggleCol(type), { label: `Toggle ${cfg.plural}`, disabled })}
+                      aria-expanded={disabled ? undefined : isOpen}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+                        cursor: disabled ? 'default' : 'pointer', userSelect: 'none', opacity: disabled ? 0.55 : 1,
+                      }}
+                    >
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                        background: cfg.bg, color: cfg.color, border: `1.5px solid ${cfg.color}44`,
+                      }}>
+                        {cfg.icon(15)}
+                      </span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{cfg.plural}</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: cfg.color }}>{items.length}</span>
+                      {!disabled && (
+                        <ChevronDown
+                          size={18}
+                          style={{
+                            marginLeft: 'auto', color: 'var(--color-text-muted)',
+                            transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s',
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {isOpen && !disabled && (
+                      <div style={{ borderTop: '1px solid var(--color-border)', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+                        {items.map((n) => {
+                          const isSelected = selected?.id === n.id;
+                          const isImpacted = selected && impactSet.has(n.id) && !isSelected;
+                          const isDimmed = selected && !impactSet.has(n.id);
+                          const statusColor = n.status ? getStatusColor(n.status) : null;
+                          return (
+                            <div key={n.id}
+                              {...clickable(() => selectNode(n), { label: `Select ${n.label}` })}
+                              style={{
+                                display: 'flex', alignItems: 'flex-start', gap: 10,
+                                padding: '10px 12px', borderRadius: 'var(--radius-md)',
+                                background: isSelected ? cfg.bg : 'var(--color-surface)',
+                                border: `1px solid ${isSelected ? cfg.color : isImpacted ? cfg.color + '66' : 'var(--color-border)'}`,
+                                cursor: 'pointer', opacity: isDimmed ? 0.35 : 1,
+                                boxShadow: isSelected ? `0 0 0 2px ${cfg.color}33` : 'none',
+                                transition: 'opacity 0.15s, border-color 0.15s',
+                                animation: isImpacted ? 'nodeGlow 2s ease-in-out infinite' : 'none',
+                              }}
+                              onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.borderColor = cfg.color + '88'; }}
+                              onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.borderColor = isImpacted ? cfg.color + '66' : 'var(--color-border)'; }}
+                            >
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                                background: cfg.bg, color: cfg.color, fontSize: 14,
+                                border: `1.5px solid ${cfg.color}44`,
+                              }}>
+                                {cfg.icon(16)}
+                              </span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {n.label}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+                                  {n.meta.description || n.meta.level || n.meta.systemType || n.meta.email || '—'}
+                                </div>
+                                <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                                  {statusColor && (
+                                    <span style={{
+                                      fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+                                      background: statusColor.bg, color: statusColor.color,
+                                    }}>
+                                      {(n.status || '').replace('_', ' ')}
+                                    </span>
+                                  )}
+                                  {n.meta.governanceTier && (() => {
+                                    const c = badgeColor('tier', n.meta.governanceTier);
+                                    return (
+                                      <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>
+                                        {tierLabel(n.meta.governanceTier)}
+                                      </span>
+                                    );
+                                  })()}
+                                  {n.meta.healthScore != null && (() => {
+                                    const c = badgeColor('health', n.meta.healthScore);
+                                    return (
+                                      <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>
+                                        {n.meta.healthScore}% health
+                                      </span>
+                                    );
+                                  })()}
+                                  {n.meta.rulesCount > 0 && (
+                                    <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
+                                      {n.meta.rulesCount} rules
+                                    </span>
+                                  )}
+                                  {n.meta.role && (
+                                    <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
+                                      {n.meta.role.replace('_', ' ')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Impact analysis — only mounted when a node is selected, so the
+            catalog gets the full width otherwise. Sticks while scrolling. */}
+        {selected && (
+          <Card padding={16} style={{ width: 320, flexShrink: 0, position: 'sticky', top: 16, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}>
             {/* Selected node header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -540,10 +491,9 @@ export default function EnterpriseViewPage() {
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelected(null)}
-                style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--color-text-muted)' }}>
-                {'\u2715'}
-              </button>
+              <SecondaryButton onClick={() => setSelected(null)} aria-label="Close impact panel" style={{ padding: '4px 8px' }}>
+                <X size={14} />
+              </SecondaryButton>
             </div>
 
             {/* Status */}
@@ -591,7 +541,7 @@ export default function EnterpriseViewPage() {
                     const other = nodeMap.get(otherId);
                     if (!other) return null;
                     const cfg = TYPE_CONFIG[other.type] || TYPE_CONFIG.process;
-                    const direction = e.source === selected.id ? '\u2192' : '\u2190';
+                    const direction = e.source === selected.id ? '→' : '←';
                     return (
                       <div key={e.id}
                         {...clickable(() => setSelected(other), { label: `Select ${other.label}` })}
@@ -664,10 +614,8 @@ export default function EnterpriseViewPage() {
                 })}
               </div>
             )}
-          </div>
+          </Card>
         )}
-      </div>
-      </div>
       </div>
     </div>
   );
