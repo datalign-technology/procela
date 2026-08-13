@@ -3,6 +3,8 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import SectionHeading from '../components/SectionHeading';
+import Meter from '../components/Meter';
 import Spinner from '../components/Spinner';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -479,146 +481,80 @@ export default function ScorecardPage() {
     <div>
       <PageHeader title="Governance Maturity Scorecard" />
 
-      {/* Overall Score */}
-      <Card padding={32} marginBottom={24} style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
-          Overall Maturity Score
-        </div>
-        <div style={{
-          fontSize: 64,
-          fontWeight: 800,
-          color: overallColor(data.overall),
-          lineHeight: 1,
-          marginBottom: 8,
-        }}>
-          {data.overall}
-        </div>
-        <div style={{
-          display: 'inline-block',
-          padding: '4px 16px',
-          borderRadius: 12,
-          fontSize: 14,
-          fontWeight: 600,
-          background: overallColor(data.overall),
-          color: '#fff',
-        }}>
-          {overallLabel(data.overall)}
-        </div>
-      </Card>
-
-      {/* Dimension Bars */}
-      <Card padding={24} marginBottom={24}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>Dimensions</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {data.dimensions.map((dim) => (
-            <div key={dim.name}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{dim.name}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: dim.color }}>{dim.score}%</span>
-              </div>
-              <div style={{
-                height: 12,
-                background: 'var(--color-border)',
-                borderRadius: 6,
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  height: '100%',
-                  width: `${dim.score}%`,
-                  background: dim.color,
-                  borderRadius: 6,
-                  transition: 'width 0.5s ease',
-                  minWidth: dim.score > 0 ? 4 : 0,
-                }} />
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                {dim.description}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Maturity Over Time */}
-      <Card padding={24} marginBottom={24}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Maturity Over Time</h2>
-          <button
-            onClick={() => takeSnapshot(data)}
-            disabled={snapshotLoading}
-            style={{
-              padding: '6px 16px',
-              fontSize: 13,
-              fontWeight: 600,
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-              cursor: snapshotLoading ? 'not-allowed' : 'pointer',
-              opacity: snapshotLoading ? 0.6 : 1,
-              transition: 'background 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              if (!snapshotLoading) (e.target as HTMLButtonElement).style.background = 'var(--color-border)';
-            }}
-            onMouseLeave={(e) => {
-              (e.target as HTMLButtonElement).style.background = 'var(--color-surface)';
-            }}
-          >
-            {snapshotLoading ? 'Saving…' : 'Take Snapshot'}
-          </button>
-        </div>
-        <MaturityChart snapshots={snapshots} />
-      </Card>
-
-      {/* Dimension Sparklines */}
-      {snapshots.length >= 2 && (
-        <Card padding={24} marginBottom={24}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Dimension Trends</h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: 20,
-          }}>
-            {dimensionNames.map((name) => (
-              <div
-                key={name}
-                style={{
-                  padding: 12,
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <DimensionSparkline
-                  snapshots={snapshots}
-                  dimensionName={name}
-                  color={DIMENSION_COLORS[name] || '#6b7280'}
-                />
-              </div>
-            ))}
+      {/* Hero — overall score + trend side by side so the headline and the
+          trend read together at the top instead of stacking. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 300px) 1fr', gap: 16, marginBottom: 16 }}>
+        <Card padding={24} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 10 }}>
+            Overall Maturity
+          </div>
+          <div style={{ fontSize: 56, fontWeight: 800, color: overallColor(data.overall), lineHeight: 1 }}>
+            {data.overall}
+          </div>
+          <div style={{ display: 'inline-block', marginTop: 12, padding: '4px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, background: overallColor(data.overall), color: '#fff' }}>
+            {overallLabel(data.overall)}
           </div>
         </Card>
-      )}
+        <Card padding="16px 20px">
+          <SectionHeading
+            title="Maturity Over Time"
+            marginBottom={12}
+            right={
+              <button
+                onClick={() => takeSnapshot(data)}
+                disabled={snapshotLoading}
+                style={{
+                  padding: '6px 16px', fontSize: 13, fontWeight: 600,
+                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface)', color: 'var(--color-text)',
+                  cursor: snapshotLoading ? 'not-allowed' : 'pointer',
+                  opacity: snapshotLoading ? 0.6 : 1, transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={(e) => { if (!snapshotLoading) (e.target as HTMLButtonElement).style.background = 'var(--color-border)'; }}
+                onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.background = 'var(--color-surface)'; }}
+              >
+                {snapshotLoading ? 'Saving…' : 'Take Snapshot'}
+              </button>
+            }
+          />
+          <MaturityChart snapshots={snapshots} />
+        </Card>
+      </div>
+
+      {/* Dimensions — one tile per dimension in a grid instead of a tall
+          vertical list, so the whole scorecard reads at a glance. */}
+      <div style={{ marginBottom: 16 }}>
+        <SectionHeading title="Dimensions" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+          {data.dimensions.map((dim) => (
+            <Card key={dim.name} padding="14px 16px">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{dim.name}</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: dim.color, fontVariantNumeric: 'tabular-nums' }}>{dim.score}%</span>
+              </div>
+              <Meter value={dim.score} color={dim.color} height={8} style={{ margin: '8px 0' }} />
+              <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {dim.description}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
 
       {/* Recommendations */}
       {lowDimensions.length > 0 && (
-        <Card padding={24}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Recommendations</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ marginBottom: 16 }}>
+          <SectionHeading title="Recommendations" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
             {lowDimensions.map((dim) => (
               <div
                 key={dim.name}
                 style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  padding: '12px 16px',
-                  background: '#fef3c7',
-                  borderLeft: `4px solid ${dim.color}`,
-                  borderRadius: 'var(--radius-md)',
+                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px',
+                  background: '#fef3c7', borderLeft: `4px solid ${dim.color}`, borderRadius: 'var(--radius-md)',
                 }}
               >
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{'\u26A0'}</span>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{'⚠'}</span>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
                     {dim.name} ({dim.score}%)
@@ -630,7 +566,21 @@ export default function ScorecardPage() {
               </div>
             ))}
           </div>
-        </Card>
+        </div>
+      )}
+
+      {/* Dimension trend sparklines (once there is history) */}
+      {snapshots.length >= 2 && (
+        <div>
+          <SectionHeading title="Dimension Trends" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+            {dimensionNames.map((name) => (
+              <Card key={name} padding={12}>
+                <DimensionSparkline snapshots={snapshots} dimensionName={name} color={DIMENSION_COLORS[name] || '#6b7280'} />
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

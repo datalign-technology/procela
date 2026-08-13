@@ -53,9 +53,20 @@ for (const pair of pairs) {
   const name = pair.slice(0, i);
   const route = pair.slice(i + 1);
   await page.goto(FE + route, { waitUntil: 'networkidle' });
+  // Layout's accessible-orgs auto-select can clobber the pinned org on first
+  // render — re-assert it and reload if it didn't stick (else you screenshot
+  // an empty org showing onboarding / all-zeros).
+  await page.waitForTimeout(400);
+  const stuck = await page.evaluate((id) => {
+    try { return JSON.parse(localStorage.getItem('org-context')).state?.activeOrgId === id; } catch { return false; }
+  }, demo.id);
+  if (!stuck) {
+    await page.evaluate((o) => localStorage.setItem('org-context', JSON.stringify({ state: { activeOrgId: o.id, activeOrgName: o.name, activeOrgType: 'company' }, version: 0 })), demo);
+    await page.reload({ waitUntil: 'networkidle' });
+  }
   await page.waitForTimeout(2500); // let data fetch + skeleton→data settle
   await page.screenshot({ path: `${outDir}/${name}.png`, fullPage: true });
-  console.log('shot:', name, '→', route);
+  console.log('shot:', name, '→', route, stuck ? '' : '(re-pinned org)');
 }
 
 await browser.close();
