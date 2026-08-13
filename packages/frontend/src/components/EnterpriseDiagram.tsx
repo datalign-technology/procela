@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useLayoutEffect } from 'react';
 
 // Lightweight, hand-rolled SVG visualization for Enterprise View.
 // Lays nodes out as horizontal swimlanes — one row per entity type — and
@@ -45,6 +45,7 @@ interface Props {
 const NODE_W = 150;
 const NODE_H = 44;
 const NODE_GAP_X = 14;
+const ROW_GAP_Y = 12;   // gap between wrapped rows within a single lane
 const LANE_GAP_Y = 70;
 const LANE_LABEL_W = 110;
 const PADDING = 20;
@@ -57,36 +58,68 @@ function truncate(s: string, n: number) {
 export default function EnterpriseDiagram({
   nodes, edges, selected, impactSet, onSelect, typeConfig, columnOrder,
 }: Props) {
+  // Measure the available width so each lane wraps its nodes to fit instead
+  // of running off the right edge. Previously every lane was forced to the
+  // width of the single widest lane and laid out in one row, so a busy view
+  // (e.g. 15 activities) overflowed the card and the right half was clipped
+  // — only reachable by horizontal scroll. Now we wrap to as many columns
+  // as fit and grow the lane's height instead.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerW, setContainerW] = useState(0);
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) setContainerW(e.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const layout = useMemo(() => {
     const byType: Record<string, DiagramNode[]> = {};
     for (const t of columnOrder) byType[t] = [];
     for (const n of nodes) if (byType[n.type]) byType[n.type].push(n);
 
     const activeLanes = columnOrder.filter((t) => byType[t].length > 0);
-    const maxInLane = Math.max(1, ...activeLanes.map((t) => byType[t].length));
 
-    const innerW = maxInLane * NODE_W + (maxInLane - 1) * NODE_GAP_X;
-    const totalW = LANE_LABEL_W + innerW + PADDING * 2;
-    const totalH = Math.max(
-      120,
-      PADDING * 2 + activeLanes.length * NODE_H + Math.max(0, activeLanes.length - 1) * LANE_GAP_Y,
-    );
+    // Usable inner width for node columns (fall back to a sensible width
+    // before the ResizeObserver has measured). `cols` is how many nodes fit
+    // per row; lanes with more nodes wrap onto additional rows.
+    const availW = Math.max(360, containerW || 900);
+    const usableW = Math.max(NODE_W, availW - LANE_LABEL_W - PADDING * 2);
+    const cols = Math.max(1, Math.floor((usableW + NODE_GAP_X) / (NODE_W + NODE_GAP_X)));
 
     const positions = new Map<string, { x: number; y: number }>();
-    activeLanes.forEach((laneType, laneIdx) => {
+    const laneBands: Array<{ type: string; y: number; height: number }> = [];
+    let y = PADDING;
+    for (const laneType of activeLanes) {
       const laneNodes = byType[laneType];
-      const laneY = PADDING + laneIdx * (NODE_H + LANE_GAP_Y);
-      const laneW = laneNodes.length * NODE_W + (laneNodes.length - 1) * NODE_GAP_X;
-      const laneStartX = LANE_LABEL_W + PADDING + (innerW - laneW) / 2;
+      const rows = Math.max(1, Math.ceil(laneNodes.length / cols));
+      const laneHeight = rows * NODE_H + (rows - 1) * ROW_GAP_Y;
       laneNodes.forEach((n, i) => {
-        positions.set(n.id, { x: laneStartX + i * (NODE_W + NODE_GAP_X), y: laneY });
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const nodesInRow = Math.min(cols, laneNodes.length - row * cols);
+        const rowW = nodesInRow * NODE_W + (nodesInRow - 1) * NODE_GAP_X;
+        // Centre each row within the usable width so short rows sit under
+        // the middle of the lane rather than hugging the left.
+        const rowStartX = LANE_LABEL_W + PADDING + Math.max(0, (usableW - rowW) / 2);
+        positions.set(n.id, {
+          x: rowStartX + col * (NODE_W + NODE_GAP_X),
+          y: y + row * (NODE_H + ROW_GAP_Y),
+        });
       });
-    });
+      laneBands.push({ type: laneType, y, height: laneHeight });
+      y += laneHeight + LANE_GAP_Y;
+    }
 
-    return { byType, activeLanes, totalW, totalH, positions };
-  }, [nodes, columnOrder]);
+    const totalW = availW;
+    const totalH = Math.max(120, y - LANE_GAP_Y + PADDING);
+    return { totalW, totalH, positions, laneBands };
+  }, [nodes, columnOrder, containerW]);
 
-  const { activeLanes, totalW, totalH, positions } = layout;
+  const { totalW, totalH, positions, laneBands } = layout;
 
   if (nodes.length === 0) {
     return (
@@ -99,8 +132,13 @@ export default function EnterpriseDiagram({
   const hasSelection = !!selected;
 
   return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 12, overflow: 'auto' }}>
-      <svg width={totalW} height={totalH} style={{ display: 'block' }}>
+    <div ref={containerRef} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 12, overflow: 'hidden' }}>
+      <svg
+        viewBox={`0 0 ${totalW} ${totalH}`}
+        width={totalW}
+        height={totalH}
+        style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
+      >
         <defs>
           <marker id="ev-arrow" viewBox="0 0 10 10" refX="9" refY="5"
             markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -117,23 +155,22 @@ export default function EnterpriseDiagram({
         </defs>
 
         {/* Lane bands and labels */}
-        {activeLanes.map((laneType, idx) => {
-          const cfg = typeConfig[laneType];
-          const laneY = PADDING + idx * (NODE_H + LANE_GAP_Y);
+        {laneBands.map((band) => {
+          const cfg = typeConfig[band.type];
           return (
-            <g key={`lane-${laneType}`}>
+            <g key={`lane-${band.type}`}>
               <rect
                 x={PADDING}
-                y={laneY - 10}
+                y={band.y - 10}
                 width={totalW - PADDING * 2}
-                height={NODE_H + 20}
+                height={band.height + 20}
                 rx={6}
                 fill={cfg.bg}
                 opacity={0.22}
               />
               <text
                 x={PADDING + 10}
-                y={laneY + NODE_H / 2 + 4}
+                y={band.y + band.height / 2 + 4}
                 fontSize={11}
                 fontWeight={700}
                 style={{ fill: cfg.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}
