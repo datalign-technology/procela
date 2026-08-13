@@ -152,6 +152,12 @@ export default function ProcessDataMapPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // The visual always opens with focus mode off. `focus` starts null on
+  // mount, but it would otherwise persist across a Visual → Table → Visual
+  // round-trip (same component), so clearing it whenever the view changes
+  // guarantees the visual lands unfocused every time.
+  useEffect(() => { setFocus(null); }, [viewMode]);
+
   // Apply the system filter and compute layout. We keep activities
   // ordered by parent process for visual grouping; assets by system.
   const { activities, assets, edges, systemOptions } = useMemo(() => {
