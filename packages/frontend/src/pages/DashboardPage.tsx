@@ -274,26 +274,26 @@ function MyDashboard() {
           below (hover lift, muted-but-still-linked at zero, tooltip
           announces the destination for keyboard / screen-reader). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
-        <StatTile
+        <StatTile dense
           to="/governance-work?tab=tasks"
           label="Open Tasks"
           value={s.openTasks || 0}
           valueColor={(s.overdueTasks || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}
           sub={(s.overdueTasks || 0) > 0 ? { text: `${s.overdueTasks} overdue`, color: 'var(--color-error)' } : null}
         />
-        <StatTile
+        <StatTile dense
           to="/governance-work?tab=issues"
           label="Open Issues"
           value={s.openIssues || 0}
           valueColor={(s.criticalIssues || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}
           sub={(s.criticalIssues || 0) > 0 ? { text: `${s.criticalIssues} critical`, color: 'var(--color-error)' } : null}
         />
-        <StatTile
+        <StatTile dense
           to="/data-domains"
           label="My Domains"
           value={(s.domainsOwned || 0) + (s.domainsSteward || 0)}
         />
-        <StatTile
+        <StatTile dense
           to="/governance-calendar"
           label="Upcoming Events"
           value={s.upcomingEventsCount || 0}
@@ -461,7 +461,7 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
       <DomainLensActiveBanner pageKey="dashboard" entityLabel="process counts" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
         {kpis.map((k) => (
-          <StatTile key={k.label} label={k.label} value={k.value} to={k.to} valueColor={k.color} zero={k.zero} />
+          <StatTile dense key={k.label} label={k.label} value={k.value} to={k.to} valueColor={k.color} zero={k.zero} />
         ))}
       </div>
     </div>

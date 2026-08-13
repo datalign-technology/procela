@@ -67,7 +67,7 @@ interface DataDomainSummary {
 }
 
 const sectionStyle: React.CSSProperties = {
-  marginBottom: 32,
+  marginBottom: 22,
   pageBreakInside: 'avoid',
 };
 
@@ -242,22 +242,22 @@ export default function ExecutiveReportPage() {
         {/* Section 1: Organization Overview */}
         <div style={sectionStyle}>
           <SectionHeading title="1. Organization Overview" underline />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-            <StatTile label="Organizations" value={stats.organizations} />
-            <StatTile label="People" value={stats.people} />
-            <StatTile label="Systems" value={stats.systems} />
-            <StatTile label="Maturity Score" value={`${scorecard.overall}%`} valueColor={scorecard.dimensions[0]?.color || 'var(--color-text)'} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            <StatTile dense label="Organizations" value={stats.organizations} />
+            <StatTile dense label="People" value={stats.people} />
+            <StatTile dense label="Systems" value={stats.systems} />
+            <StatTile dense label="Maturity Score" value={`${scorecard.overall}%`} valueColor={scorecard.dimensions[0]?.color || 'var(--color-text)'} />
           </div>
         </div>
 
         {/* Section 2: Process Coverage */}
         <div style={sectionStyle}>
           <SectionHeading title="2. Process Coverage" underline />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
-            <StatTile label="Value Streams" value={stats.valueStreams} />
-            <StatTile label="Processes" value={stats.processes} />
-            <StatTile label="Activities" value={stats.activities} />
-            <StatTile label="Coverage" value={`${stats.coverage.percentage}%`} valueColor={healthColorVar(stats.coverage.percentage)} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+            <StatTile dense label="Value Streams" value={stats.valueStreams} />
+            <StatTile dense label="Processes" value={stats.processes} />
+            <StatTile dense label="Activities" value={stats.activities} />
+            <StatTile dense label="Coverage" value={`${stats.coverage.percentage}%`} valueColor={healthColorVar(stats.coverage.percentage)} />
           </div>
           <Meter value={stats.coverage.percentage} height={8} />
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
@@ -275,7 +275,7 @@ export default function ExecutiveReportPage() {
               </div>
               <TierBar gold={stats.governance.gold} silver={stats.governance.silver} bronze={stats.governance.bronze} />
             </div>
-            <StatTile label="Avg Health" value={`${stats.averageHealth}%`} valueColor={healthColorVar(stats.averageHealth)} />
+            <StatTile dense label="Avg Health" value={`${stats.averageHealth}%`} valueColor={healthColorVar(stats.averageHealth)} />
           </div>
           <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
             {domainsWithOwners} of {dataDomains.length} data domains have assigned owners.
@@ -351,10 +351,10 @@ export default function ExecutiveReportPage() {
         {/* Section 5: Governance Structure */}
         <div className="page-break" style={sectionStyle}>
           <SectionHeading title="5. Governance Structure" underline />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
-            <StatTile label="Governance Groups" value={govGroups.length} />
-            <StatTile label="Data Domains" value={dataDomains.length} />
-            <StatTile label="Domains with Owners" value={domainsWithOwners} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
+            <StatTile dense label="Governance Groups" value={govGroups.length} />
+            <StatTile dense label="Data Domains" value={dataDomains.length} />
+            <StatTile dense label="Domains with Owners" value={domainsWithOwners} />
           </div>
           {govGroups.length > 0 && (
             <div style={{ overflowX: 'auto' }}>

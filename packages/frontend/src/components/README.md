@@ -425,7 +425,8 @@ Replaces the Dashboard's two tile systems and the Executive Report's metric
 boxes. **Counts wear plain ink** — the label carries identity; spend colour
 only where the number is a *state*, via `valueColor={healthColorVar(x)}`.
 With `to` it's a hover-lift deep link with a zero-aware tooltip; without, a
-static box (the print report). `accent` adds a left border (governance tiers).
+static box (the print report). `accent` adds a left border (governance tiers);
+`dense` tightens padding + number for compact grids like the printable report.
 
 ```tsx
 <StatTile label="Processes" value={48} to="/processes" />
