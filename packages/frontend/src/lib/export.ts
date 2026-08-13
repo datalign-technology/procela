@@ -59,7 +59,7 @@ function cellToString(c: Cell): string {
   return String(c);
 }
 
-function download(filename: string, blob: Blob): void {
+export function download(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
