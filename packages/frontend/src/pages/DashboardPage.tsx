@@ -253,7 +253,25 @@ function MyDashboard() {
     </div>
   );
 
-  if (!data?.person) return null;
+  if (!data?.person) {
+    // Empty state instead of hiding — e.g. when the signed-in account isn't
+    // linked to a person record in this org (admins, SSO users not yet
+    // imported). The section still shows so an enabled widget doesn't vanish.
+    return (
+      <div style={{ marginBottom: 24 }}>
+        <SectionHeading title="My Dashboard" />
+        <Card padding="16px 20px">
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            My Dashboard shows the tasks and issues assigned to you. Your account isn&rsquo;t linked
+            to a person in this organization yet, so there&rsquo;s nothing to show here.
+            <div style={{ marginTop: 8 }}>
+              <Link to="/people" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View people &rarr;</Link>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const s = data.summary || {};
   const priorityColor = (p: string) => p === 'CRITICAL' ? '#dc2626' : p === 'HIGH' ? '#f59e0b' : p === 'MEDIUM' ? '#3b82f6' : '#64748b';
@@ -704,7 +722,21 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Limit to 3 suggestions
   const shown = suggestions.slice(0, 3);
 
-  if (shown.length === 0) return null;
+  if (shown.length === 0) {
+    // Empty state instead of hiding — no recommendations means the org is in
+    // good shape, which is worth saying rather than showing nothing.
+    return (
+      <div style={{ marginBottom: 24 }}>
+        <SectionHeading title="What's Next" />
+        <Card padding="16px 20px">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            <CheckCircle2 size={18} strokeWidth={1.8} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+            You&rsquo;re all caught up — no recommended next steps right now.
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -827,7 +859,24 @@ function StewardOnboarding() {
     })();
   }, [activeOrgId]);
 
-  if (!data || data.total === 0) return null;
+  if (!data) return null; // still loading / failed — stay quiet to avoid a flash
+  if (data.total === 0) {
+    // Empty state instead of hiding once we know there are no onboarding tasks.
+    return (
+      <div style={{ marginBottom: 24 }}>
+        <SectionHeading title="Steward Onboarding" />
+        <Card padding="16px 20px">
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            No stewardship onboarding tasks yet. Assign data stewards to domains and assets, and
+            their onboarding progress will appear here.
+            <div style={{ marginTop: 8 }}>
+              <Link to="/governance-work?tab=tasks" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View stewardship tasks &rarr;</Link>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const rate = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
 
