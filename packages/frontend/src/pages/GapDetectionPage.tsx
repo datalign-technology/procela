@@ -205,12 +205,10 @@ export default function GapDetectionPage() {
       const res = await apiClient.get<{ success: boolean; data: GapData; summary: GapSummary }>(`/gap-detection${query}`);
       setData(res.data || null);
       setSummary(res.summary || null);
-      const firstNonEmpty = GAP_SECTIONS.find((sec) => (((res.data?.[sec.key] as any[]) || []).length > 0));
-      setSelectedKey(firstNonEmpty ? firstNonEmpty.key : null);
-      // All sections start collapsed by default; the user expands the
-      // ones they want. (The severity summary cards up top still call
-      // out where the gaps are, and clicking one scrolls to that
-      // section.)
+      // Nothing is expanded by default — the user picks a gap tile to drill
+      // into. (The severity summary cards up top still call out where the
+      // gaps are, and clicking one selects the first matching section.)
+      setSelectedKey(null);
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -304,8 +302,16 @@ export default function GapDetectionPage() {
                   style={{
                     font: 'inherit', textAlign: 'left', cursor: canOpen ? 'pointer' : 'default',
                     background: 'var(--color-surface)',
-                    border: `1px solid ${isSelected ? 'var(--color-primary)' : (count > 0 ? sev.border : 'var(--color-border)')}`,
-                    borderLeft: `4px solid ${count > 0 ? sev.badge : 'var(--color-border)'}`,
+                    // Fully per-side longhand borders. The outline colour changes
+                    // on selection, so it must never be set via a shorthand
+                    // (`border`/`borderColor`) alongside the `borderLeft*`
+                    // longhands — React warns about that conflict on re-render.
+                    borderStyle: 'solid',
+                    borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderLeftWidth: 4,
+                    borderTopColor: isSelected ? 'var(--color-primary)' : (count > 0 ? sev.border : 'var(--color-border)'),
+                    borderRightColor: isSelected ? 'var(--color-primary)' : (count > 0 ? sev.border : 'var(--color-border)'),
+                    borderBottomColor: isSelected ? 'var(--color-primary)' : (count > 0 ? sev.border : 'var(--color-border)'),
+                    borderLeftColor: count > 0 ? sev.badge : 'var(--color-border)',
                     borderRadius: 'var(--radius-md)', padding: '11px 14px',
                     boxShadow: isSelected ? 'var(--shadow-md)' : 'var(--shadow-sm)',
                     display: 'flex', alignItems: 'center', gap: 10,
@@ -326,6 +332,13 @@ export default function GapDetectionPage() {
               );
             })}
           </div>
+
+          {/* Prompt to drill in — shown until the user picks a gap tile. */}
+          {!selectedSection && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '2px' }}>
+              Select a gap above to see the affected items.
+            </div>
+          )}
 
           {/* Detail — the affected items for the selected gap. */}
           {selectedSection && (() => {
