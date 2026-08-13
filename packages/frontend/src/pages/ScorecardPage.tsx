@@ -611,7 +611,10 @@ export default function ScorecardPage() {
       {snapshots.length >= 2 && (
         <div>
           <SectionHeading title="Dimension Trends" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+          {/* Same track template as the Dimensions grid above so the two rows
+              wrap into identical column counts and each trend card lines up
+              under its matching dimension tile. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
             {dimensionNames.map((name) => (
               <Card key={name} padding={12}>
                 <DimensionSparkline snapshots={snapshots} dimensionName={name} color={DIMENSION_COLORS[name] || '#6b7280'} />
