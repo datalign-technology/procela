@@ -70,6 +70,26 @@ point smaller than every other page. Both now use PageHeader.
 
 ---
 
+### `<SectionHeading>`
+
+The one section title used across dashboards and reports — **18/700 ink**,
+with the accent moved to an optional `underline` rule and an optional
+`eyebrow`, so teal never competes with the title text. Replaces the two
+drifting systems (the Dashboard's `16/600` plain `<h2>` and the Executive
+Report's `18/700` teal-underlined one). A `right` slot holds a trailing
+control (a toggle, a "View all" link) on the title's baseline.
+
+```tsx
+<SectionHeading title="Governance Gaps" />
+<SectionHeading title="Overview" right={<LensToggle />} />
+<SectionHeading eyebrow="Section 01" title="Organization Overview" underline />
+```
+
+Distinct from `<SectionLabel>` (the tiny uppercase label *inside* a card).
+Do NOT hand-roll a section `<h2>`.
+
+---
+
 ### `<FieldStack>`
 
 The vertical-rhythm primitive. A flex column that owns the spacing
@@ -397,6 +417,35 @@ import HealthBar from '@/components/HealthBar';
 Do NOT print a bare `{score}%` in a list cell — use `HealthBar` so health
 reads consistently wherever it appears. `healthColorVar(score)` is exported
 for callers that need just the token (e.g. a number coloured to match).
+
+### `<StatTile>`
+
+The one KPI / metric tile — a number (**24/700**) over a label, in a card.
+Replaces the Dashboard's two tile systems and the Executive Report's metric
+boxes. **Counts wear plain ink** — the label carries identity; spend colour
+only where the number is a *state*, via `valueColor={healthColorVar(x)}`.
+With `to` it's a hover-lift deep link with a zero-aware tooltip; without, a
+static box (the print report). `accent` adds a left border (governance tiers).
+
+```tsx
+<StatTile label="Processes" value={48} to="/processes" />
+<StatTile label="Coverage" value="72%" to="/mappings" valueColor={healthColorVar(72)} />
+<StatTile label="Certified" value={9} accent="var(--color-tier-gold)" valueColor="var(--color-tier-gold)" />
+```
+
+### `<Meter>`
+
+The one horizontal progress / proportion bar — one tokenised track, one
+height, one fill convention. Replaces the five hand-rolled bars (heights
+4/6/8, tracks split between raw `#e5e7eb` and tokens). Brand teal for
+"progress toward a goal"; pass `color={healthColorVar(x)}` when the bar
+encodes health. For the labelled inline gauge with a trailing "NN%", use
+`<HealthBar>` instead.
+
+```tsx
+<Meter value={pct} />
+<Meter value={healthPct} color={healthColorVar(healthPct)} />
+```
 
 ### `<TierBadge>`
 
