@@ -188,7 +188,15 @@ const DQ_COLUMN_DEFS: Array<{ id: DqColId; label: string; defaultVisible: boolea
   { id: 'lastMeasured',  label: 'Last Measured',  defaultVisible: true  },
 ];
 
-export default function DataQualityPage() {
+export default function DataQualityPage({
+  embedded = false,
+  tab: tabProp,
+  onTabChange,
+}: {
+  embedded?: boolean;
+  tab?: 'assets' | 'rules';
+  onTabChange?: (tab: 'assets' | 'rules') => void;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
@@ -205,7 +213,11 @@ export default function DataQualityPage() {
   const [filterAssetId, setFilterAssetId] = useState('');
   const [filterDimension, setFilterDimension] = useState('');
   // New: per-asset view with Manage Rules modal lives under the Assets tab.
-  const [tab, setTab] = useState<'assets' | 'rules'>('assets');
+  // When embedded in the Data Assets hub the parent owns the active tab
+  // (Quality / Rules) and passes it in; standalone we keep it internal.
+  const [internalTab, setInternalTab] = useState<'assets' | 'rules'>('assets');
+  const tab = tabProp ?? internalTab;
+  const setTab = (t: 'assets' | 'rules') => { setInternalTab(t); onTabChange?.(t); };
   const [fullAssets, setFullAssets] = useState<DataAssetFull[]>([]);
   const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
   const [rulesModalAsset, setRulesModalAsset] = useState<RulesModalAsset | null>(null);
@@ -531,21 +543,26 @@ export default function DataQualityPage() {
 
   return (
     <div>
-      {/* Header */}
-      <PageHeader
-        title="Data Quality"
-        subtitle="Monitor and improve the quality and reliability of your data assets."
-      >
-        <HelpPopover id="dq-overview" title="Data Quality">
-          Define quality rules per data asset, compute health scores, and track
-          data quality across your organization. Rules can run on demand or on a schedule.
-        </HelpPopover>
-      </PageHeader>
+      {/* Header + tab bar. Suppressed when embedded in the Data Assets hub —
+          the parent owns the page title and the Quality / Rules tabs. */}
+      {!embedded && (
+        <>
+          <PageHeader
+            title="Data Quality"
+            subtitle="Monitor and improve the quality and reliability of your data assets."
+          >
+            <HelpPopover id="dq-overview" title="Data Quality">
+              Define quality rules per data asset, compute health scores, and track
+              data quality across your organization. Rules can run on demand or on a schedule.
+            </HelpPopover>
+          </PageHeader>
 
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
-        <button style={tabStyle(tab === 'assets')} onClick={() => setTab('assets')}>Assets</button>
-        <button style={tabStyle(tab === 'rules')} onClick={() => setTab('rules')}>Rules</button>
-      </div>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
+            <button style={tabStyle(tab === 'assets')} onClick={() => setTab('assets')}>Assets</button>
+            <button style={tabStyle(tab === 'rules')} onClick={() => setTab('rules')}>Rules</button>
+          </div>
+        </>
+      )}
 
       {tab === 'assets' && (
         <AssetsTab
@@ -569,11 +586,10 @@ export default function DataQualityPage() {
       )}
 
       {tab === 'rules' && (<>
-      {/* Header */}
-      <PageHeader
-        title="Data Quality Rules"
-        subtitle="Define quality rules per data asset and compute health scores."
-        actions={
+      {/* Header. Embedded (in the Data Assets hub) renders just the action
+          strip — the parent owns the page title. */}
+      {(() => {
+        const rulesActions = (
           <>
             {rules.length > 0 && (
               <ExportMenu build={() => ({
@@ -598,14 +614,25 @@ export default function DataQualityPage() {
               <IconButton icon="plus" label="Add rule" variant="primary" onClick={openAdd} />
             )}
           </>
-        }
-      >
-        <HelpPopover id="dq-rules-overview" title="Quality rules">
-          A rule validates one column of one asset against a check (uniqueness,
-          not-null, regex, range, custom). Procela runs rules on demand or on
-          a schedule and rolls each asset's results into a health score.
-        </HelpPopover>
-      </PageHeader>
+        );
+        return embedded ? (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            {rulesActions}
+          </div>
+        ) : (
+          <PageHeader
+            title="Data Quality Rules"
+            subtitle="Define quality rules per data asset and compute health scores."
+            actions={rulesActions}
+          >
+            <HelpPopover id="dq-rules-overview" title="Quality rules">
+              A rule validates one column of one asset against a check (uniqueness,
+              not-null, regex, range, custom). Procela runs rules on demand or on
+              a schedule and rolls each asset's results into a health score.
+            </HelpPopover>
+          </PageHeader>
+        );
+      })()}
 
       {/* Stats — shared StatTile (dense) so the KPI row matches the
           Dashboard's height and styling instead of the old taller
