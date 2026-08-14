@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import HelpPopover from '../components/HelpPopover';
@@ -30,6 +30,14 @@ function isHubTab(v: string | null): v is HubTab {
 
 export default function DataAssetsHubPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // The embedded pages own their own toolbars (Views / Export / Columns /
+  // Add), but each tab's toolbar should sit up on the tab-bar row —
+  // right-aligned, level with the tabs — the way Business Glossary and the
+  // Process ↔ Data Map hub keep their actions on the header row, rather than
+  // dropping onto a second line below the tabs. We expose a slot in the tab
+  // row and let the active embedded page portal its toolbar into it.
+  const [actionsSlot, setActionsSlot] = useState<HTMLDivElement | null>(null);
 
   const tabParam = searchParams.get('tab');
   const tab: HubTab = isHubTab(tabParam) ? tabParam : 'registry';
@@ -66,22 +74,39 @@ export default function DataAssetsHubPage() {
         </HelpPopover>
       </PageHeader>
 
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
-        {TABS.map((t) => (
-          <button key={t.key} style={tabStyle(tab === t.key)} onClick={() => setTab(t.key)}>
-            {t.label}
-          </button>
-        ))}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: '1px solid var(--color-border)',
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ display: 'flex' }}>
+          {TABS.map((t) => (
+            <button key={t.key} style={tabStyle(tab === t.key)} onClick={() => setTab(t.key)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {/* Right-aligned toolbar slot — the active tab's page portals its
+            action strip here so it sits level with the tabs. */}
+        <div
+          ref={setActionsSlot}
+          style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}
+        />
       </div>
 
       {/* Registry mounts the asset table; Quality/Rules mount the data-quality
           page once and switch its inner view via the tab prop, so flipping
           between Quality and Rules doesn't refetch. */}
       {tab === 'registry' ? (
-        <DataAssetsPage embedded />
+        <DataAssetsPage embedded actionsPortal={actionsSlot} />
       ) : (
         <DataQualityPage
           embedded
+          actionsPortal={actionsSlot}
           tab={tab === 'rules' ? 'rules' : 'assets'}
           onTabChange={(t) => setTab(t === 'rules' ? 'rules' : 'quality')}
         />

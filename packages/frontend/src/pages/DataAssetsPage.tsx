@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import FieldStack from '../components/FieldStack';
@@ -382,7 +383,15 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
   );
 }
 
-export default function DataAssetsPage({ embedded = false }: { embedded?: boolean } = {}) {
+export default function DataAssetsPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  /** When embedded in the Data Assets hub, the toolbar renders into this
+   *  slot (the tab-bar row) instead of a strip below the tabs. */
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
@@ -1330,9 +1339,17 @@ export default function DataAssetsPage({ embedded = false }: { embedded?: boolea
           page title, so we render just the action strip (mirroring the
           MappingsPage embedded pattern) instead of a second PageHeader. */}
       {embedded ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          {headerActions}
-        </div>
+        // Hub always passes actionsPortal (a node once mounted, null on the
+        // first render before the slot ref attaches) — portal the toolbar up
+        // onto the tab row. The inline strip is only a fallback for an
+        // embedded use with no slot supplied.
+        actionsPortal !== undefined ? (
+          actionsPortal ? createPortal(headerActions, actionsPortal) : null
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            {headerActions}
+          </div>
+        )
       ) : (
       <PageHeader
         title="Data Assets"

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import PageHeader from '../components/PageHeader';
+import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -138,7 +138,13 @@ const ISSUE_COLUMN_DEFS: Array<{ id: IssueColId; label: string; defaultVisible: 
 
 // ── Component ──
 
-export default function GovernanceIssuesPage() {
+export default function GovernanceIssuesPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
@@ -341,7 +347,9 @@ export default function GovernanceIssuesPage() {
   return (
     <div>
       {/* Header */}
-      <PageHeader
+      <EmbeddablePageHeader
+        embedded={embedded}
+        actionsPortal={actionsPortal}
         title="Governance Issues"
         subtitle="Track and resolve data governance issues across your organization."
         actions={

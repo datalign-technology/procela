@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import PageHeader from '../components/PageHeader';
+import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -121,7 +121,13 @@ const SOP_COLUMN_DEFS: Array<{ id: SopColId; label: string; defaultVisible: bool
   { id: 'owner',    label: 'Owner',    defaultVisible: true  },
 ];
 
-export default function SopsPage() {
+export default function SopsPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const sopCols = useColumnPicker<SopColId>('procela.sops.visibleCols.v1', SOP_COLUMN_DEFS);
@@ -413,7 +419,9 @@ export default function SopsPage() {
 
   return (
     <div>
-      <PageHeader
+      <EmbeddablePageHeader
+        embedded={embedded}
+        actionsPortal={actionsPortal}
         title="Standard Operating Procedures"
         subtitle="Step-by-step procedures for common governance activities."
         actions={

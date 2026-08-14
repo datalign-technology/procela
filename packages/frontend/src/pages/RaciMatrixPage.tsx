@@ -1,7 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import PageHeader from '../components/PageHeader';
+import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -77,7 +77,13 @@ const tdStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
-export default function RaciMatrixPage() {
+export default function RaciMatrixPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
   const deps = useDependencyChecks();
@@ -267,12 +273,14 @@ export default function RaciMatrixPage() {
         { label: 'Establish governance groups', met: deps.hasGroups, link: '/governance' },
         { label: 'Assign governance roles', met: deps.hasRoles, link: '/people' },
       ]} />
-      <PageHeader
+      <EmbeddablePageHeader
+        embedded={embedded}
+        actionsPortal={actionsPortal}
         title="RACI Matrix"
         subtitle="Who's Responsible, Accountable, Consulted, and Informed for every activity — auto-generated from process ownership and governance role assignments."
       >
         <InfoTip term="RACI" />
-      </PageHeader>
+      </EmbeddablePageHeader>
 
       {/* Legend */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
