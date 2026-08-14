@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   startRegistration as startWebauthnRegistration,
 } from '@simplewebauthn/browser';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import Page from '../components/Page';
@@ -94,7 +94,21 @@ export default function SettingsPage() {
       </Page>
     );
   }
-  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  // Which settings group is visible. Grouping the dozen-odd sections into
+  // four tabs (General / Sign-in & Security / Integrations / Data) turns a
+  // long single-column scroll into roughly one screen per tab. The active
+  // tab lives in the URL (?tab=) so it's shareable and survives reload; the
+  // groups stay mounted (display-toggled, not remounted), so an in-progress
+  // form edit (sign-in branding, SSO config, MFA enrolment) survives a switch.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const settingsTab: 'general' | 'security' | 'integrations' | 'data' =
+    tabParam === 'security' || tabParam === 'integrations' || tabParam === 'data' ? tabParam : 'general';
+  const setSettingsTab = (t: 'general' | 'security' | 'integrations' | 'data') => {
+    const p = new URLSearchParams(searchParams);
+    if (t === 'general') p.delete('tab'); else p.set('tab', t);
+    setSearchParams(p, { replace: true });
+  };
   // Org-level lifecycle mode (Simple = 3 statuses, Advanced = 6).
   // The toggle used to live on the Organizations page but it
   // governs how non-org entities (processes, assets, policies)
@@ -182,16 +196,6 @@ export default function SettingsPage() {
   const [authSaving, setAuthSaving] = useState(false);
   const [authSuccess, setAuthSuccess] = useState(false);
   const [authError, setAuthError] = useState('');
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await apiClient.get<{ aiConfigured: boolean }>('/health/config');
-        setAiConfigured(res.aiConfigured);
-      } catch { /* */ }
-    }
-    load();
-  }, []);
 
   useEffect(() => {
     async function loadAuthConfig() {
@@ -367,6 +371,35 @@ export default function SettingsPage() {
         }
       />
 
+      {/* Settings are grouped into four tabs so each stays roughly one
+          screen instead of a single long scroll. */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
+        {([
+          { key: 'general', label: 'General' },
+          { key: 'security', label: 'Sign-in & Security' },
+          { key: 'integrations', label: 'Integrations' },
+          { key: 'data', label: 'Data' },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setSettingsTab(t.key)}
+            style={{
+              padding: '10px 18px', fontSize: 13,
+              fontWeight: settingsTab === t.key ? 600 : 500,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: settingsTab === t.key ? 'var(--color-primary)' : 'var(--color-text-muted)',
+              borderBottom: `2px solid ${settingsTab === t.key ? 'var(--color-primary)' : 'transparent'}`,
+              marginBottom: -1,
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ══ General ══ */}
+      <div style={{ display: settingsTab === 'general' ? 'block' : 'none' }}>
+
       {/* Branding — quick link to the dedicated theming page */}
       <Card padding="1.5rem">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -494,6 +527,11 @@ export default function SettingsPage() {
         onConfirm={async () => { if (confirmLifecycle) await applyLifecycle(confirmLifecycle); }}
         onCancel={() => setConfirmLifecycle(null)}
       />
+
+      </div>{/* ══ /General ══ */}
+
+      {/* ══ Sign-in & Security ══ */}
+      <div style={{ display: settingsTab === 'security' ? 'block' : 'none' }}>
 
       {/* Sign-in branding (per tenant). Only meaningful on the
           company-level org — divisions inherit the parent's brand at
@@ -777,55 +815,51 @@ export default function SettingsPage() {
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
 
-      {/* Two-step verification (MFA / TOTP) */}
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Two-step verification</h2>
-        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
-          Use an authenticator app (Google Authenticator, 1Password, Authy)
-          to generate a one-time code at sign-in. When enabled, your
-          password alone won't be enough to sign in.
-        </p>
-        <MfaPanel />
-      </Card>
+      {/* Two-step verification and Active sessions are both short account-
+          security controls — pair them side-by-side to save vertical space. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+        {/* Two-step verification (MFA / TOTP) */}
+        <Card padding="1.5rem">
+          <h2 style={sectionTitleStyle}>Two-step verification</h2>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+            Use an authenticator app (Google Authenticator, 1Password, Authy)
+            to generate a one-time code at sign-in. When enabled, your
+            password alone won't be enough to sign in.
+          </p>
+          <MfaPanel />
+        </Card>
+
+        {/* Active sessions */}
+        <Card padding="1.5rem">
+          <h2 style={sectionTitleStyle}>Active sessions</h2>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+            Every device or browser you're signed in from has its own refresh
+            token. Revoke one if you've finished with a public computer, lost a
+            device, or want to force a fresh login from somewhere.
+          </p>
+          <ActiveSessionsPanel />
+        </Card>
+      </div>
+
+      </div>{/* ══ /Sign-in & Security ══ */}
+
+      {/* ══ Integrations ══ */}
+      <div style={{ display: settingsTab === 'integrations' ? 'block' : 'none' }}>
+
+      {/* AI (Claude) — model + Anthropic-key config. Subsumes the old
+          standalone "API Configuration" card, which only restated the same
+          key status this panel already surfaces. */}
+      <AiSettingsPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
 
-      {/* Active sessions */}
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Active sessions</h2>
-        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
-          Every device or browser you're signed in from has its own refresh
-          token. Revoke one if you've finished with a public computer, lost a
-          device, or want to force a fresh login from somewhere.
-        </p>
-        <ActiveSessionsPanel />
-      </Card>
+      <ConnectorsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
 
-      {/* Spacer */}
-      <div style={{ height: '1.5rem' }} />
+      </div>{/* ══ /Integrations ══ */}
 
-      {/* API Configuration */}
-      {/* API Configuration */}
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>API Configuration</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>Anthropic API Key:</span>
-          {aiConfigured === null ? (
-            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>Checking...</span>
-          ) : aiConfigured ? (
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: 'var(--radius-sm)', backgroundColor: '#f0fdf4', color: 'var(--color-success)' }}>Configured</span>
-          ) : (
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: 'var(--radius-sm)', backgroundColor: '#fef2f2', color: 'var(--color-error)' }}>Not configured</span>
-          )}
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 8 }}>
-          Set ANTHROPIC_API_KEY in your .env file to enable AI features (template generation, suggestions, chat).
-        </p>
-      </Card>
-
-      {/* Spacer */}
-      <div style={{ height: '1.5rem' }} />
+      {/* ══ Data ══ */}
+      <div style={{ display: settingsTab === 'data' ? 'block' : 'none' }}>
 
       {/* Backup & Restore */}
       <Card padding="1.5rem">
@@ -939,12 +973,12 @@ export default function SettingsPage() {
         onCancel={() => setImportConfirmOpen(false)}
       />
 
-      <AiSettingsPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
-
-      <ConnectorsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
-
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
+
+      {/* Load demo data and Reset — two data-lifecycle actions paired
+          side-by-side to shorten the Data tab. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
 
       {/* Load demo data — one-click seed of the Tidewater Utilities
           fixture. Idempotent; a second call wipes the prior seed and
@@ -959,6 +993,10 @@ export default function SettingsPage() {
           the Export button, and so the recommended Export-first
           workflow is one click away. */}
       <ResetAllDataPanel onExportFirst={handleExportBackup} />
+
+      </div>{/* end demo + reset grid */}
+
+      </div>{/* ══ /Data ══ */}
 
     </div>
   );

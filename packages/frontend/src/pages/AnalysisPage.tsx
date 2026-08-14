@@ -12,6 +12,7 @@ import EmptyState from '../components/EmptyState';
 import ExportMenu from '../components/ExportMenu';
 import Button from '../components/Button';
 import IconButton from '../components/IconButton';
+import { renderNavIcon } from '../components/navIcons';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DetailDrawer from '../components/DetailDrawer';
 import { useFocusTrap } from '../hooks/useFocusTrap';
@@ -30,9 +31,27 @@ import { useRef } from 'react';
 
 type Dim = 'systems' | 'dataAssets' | 'domains' | 'processes' | 'roles' | 'people' | 'connections';
 
+// Each dimension maps to the sidebar route whose icon represents that
+// entity, so the palette tiles and axis chips render the same SVG icons
+// as the rest of the app (via renderNavIcon) instead of the ad-hoc glyphs
+// the API happens to ship. Keeps the Analysis page consistent with the
+// sidebar and every other page that references these entities.
+const DIM_ROUTE: Record<Dim, string> = {
+  systems: '/systems',
+  dataAssets: '/data-assets',
+  domains: '/data-domains',
+  processes: '/processes',
+  roles: '/dama-roles',
+  people: '/people',
+  connections: '/connections',
+};
+const dimIcon = (dim: Dim, size: number) => renderNavIcon(DIM_ROUTE[dim], { size });
+
 interface DimensionDef {
   id: Dim;
   label: string;
+  // The API still ships a glyph here for back-compat; the UI ignores it
+  // and renders the sidebar icon via DIM_ROUTE instead.
   icon: string;
   description: string;
 }
@@ -314,7 +333,6 @@ export default function AnalysisPage() {
 
   // ── Helpers ──
   const dimensionLabel = (id: Dim): string => dimensions.find((d) => d.id === id)?.label || id;
-  const dimensionIcon = (id: Dim): string => dimensions.find((d) => d.id === id)?.icon || '·';
 
   const exportPayload = useMemo(() => () => {
     if (!cube) return null;
@@ -362,7 +380,7 @@ export default function AnalysisPage() {
         marginBottom: 6, cursor: 'grab', userSelect: 'none',
       }}
     >
-      <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{d.icon}</span>
+      <span style={{ display: 'inline-flex', width: 20, justifyContent: 'center', color: 'var(--color-text-secondary)', flexShrink: 0 }}>{dimIcon(d.id, 16)}</span>
       <span style={{ fontSize: 13, fontWeight: 500 }}>{d.label}</span>
     </div>
   );
@@ -413,7 +431,7 @@ export default function AnalysisPage() {
                 }}
                 title={i === 0 ? 'Primary dimension' : 'Sub-group nested under the primary'}
               >
-                <span style={{ fontSize: 14 }}>{dimensionIcon(dim)}</span>
+                <span style={{ display: 'inline-flex', color: 'var(--color-text-secondary)' }}>{dimIcon(dim, 14)}</span>
                 <span>{dimensionLabel(dim)}</span>
                 {i > 0 && (
                   <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--color-bg)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
@@ -594,7 +612,7 @@ export default function AnalysisPage() {
           {rowDims.length === 0 || colDims.length === 0 ? (
             <div>
               <EmptyState
-                icon={'⊞'}
+                icon={renderNavIcon('/analysis', { size: 28 })}
                 title="Pick dimensions to pivot"
                 description="Drag at least one dimension into Rows and one into Columns. Drag a second into either zone to create a sub-group — or start from an example below."
               />
@@ -621,7 +639,7 @@ export default function AnalysisPage() {
             </div>
           ) : cube && cube.totalFacts === 0 ? (
             <EmptyState
-              icon={'⊟'}
+              icon={renderNavIcon('/analysis', { size: 28 })}
               title="No data for this pivot"
               description={`No ${rowDims.map(dimensionLabel).join(' / ')} link to ${colDims.map(dimensionLabel).join(' / ')} under the current filters.`}
             />
