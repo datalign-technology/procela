@@ -1,5 +1,6 @@
 import { SkeletonRows } from '../components/Skeleton';
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -190,10 +191,14 @@ const DQ_COLUMN_DEFS: Array<{ id: DqColId; label: string; defaultVisible: boolea
 
 export default function DataQualityPage({
   embedded = false,
+  actionsPortal,
   tab: tabProp,
   onTabChange,
 }: {
   embedded?: boolean;
+  /** When embedded in the Data Assets hub, the Rules toolbar renders into
+   *  this slot (the tab-bar row) instead of a strip below the tabs. */
+  actionsPortal?: HTMLElement | null;
   tab?: 'assets' | 'rules';
   onTabChange?: (tab: 'assets' | 'rules') => void;
 } = {}) {
@@ -616,9 +621,16 @@ export default function DataQualityPage({
           </>
         );
         return embedded ? (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            {rulesActions}
-          </div>
+          // Portal the Rules toolbar up onto the hub's tab row (see the hub's
+          // actions slot); fall back to an inline strip only when embedded
+          // without a slot supplied.
+          actionsPortal !== undefined ? (
+            actionsPortal ? createPortal(rulesActions, actionsPortal) : null
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              {rulesActions}
+            </div>
+          )
         ) : (
           <PageHeader
             title="Data Quality Rules"

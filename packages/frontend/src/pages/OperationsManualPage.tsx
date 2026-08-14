@@ -9,7 +9,7 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
-import PageHeader from '../components/PageHeader';
+import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import { SkeletonRows } from '../components/Skeleton';
@@ -37,7 +37,13 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)', width: '100%',
 };
-export default function OperationsManualPage() {
+export default function OperationsManualPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
   const { canWrite } = usePermissions();
@@ -161,7 +167,9 @@ export default function OperationsManualPage() {
 
   return (
     <div>
-      <PageHeader
+      <EmbeddablePageHeader
+        embedded={embedded}
+        actionsPortal={actionsPortal}
         title="Operations Manual"
         subtitle="Role-specific guidance for running your governance program."
         actions={<>

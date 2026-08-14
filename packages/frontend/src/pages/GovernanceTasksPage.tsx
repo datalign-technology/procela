@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import PageHeader from '../components/PageHeader';
+import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
@@ -136,7 +136,13 @@ const TASK_COLUMN_DEFS: Array<{ id: TaskColId; label: string; defaultVisible: bo
 
 // ── Component ──
 
-export default function GovernanceTasksPage() {
+export default function GovernanceTasksPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
@@ -378,7 +384,9 @@ export default function GovernanceTasksPage() {
   return (
     <div>
       {/* Header */}
-      <PageHeader
+      <EmbeddablePageHeader
+        embedded={embedded}
+        actionsPortal={actionsPortal}
         title="Governance Tasks"
         subtitle="Track and manage governance tasks, reviews, and approvals."
         actions={

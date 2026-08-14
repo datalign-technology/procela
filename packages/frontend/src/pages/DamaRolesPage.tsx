@@ -10,7 +10,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
-import PageHeader from '../components/PageHeader';
+import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import SectionCard from '../components/SectionCard';
@@ -218,7 +218,13 @@ interface AgentOption { id: string; name: string; status: string; orgIds: string
 
 const emptyForm: FormData = { assigneeType: 'person', personId: '', agentId: '', roleType: 'CDO', scopeType: 'ORG', scopeId: '' };
 
-export default function DamaRolesPage() {
+export default function DamaRolesPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
@@ -451,7 +457,9 @@ export default function DamaRolesPage() {
 
   return (
     <div>
-      <PageHeader
+      <EmbeddablePageHeader
+        embedded={embedded}
+        actionsPortal={actionsPortal}
         title="Governance Roles"
         subtitle="Assign data management governance roles to people across organizations and data domains."
         actions={<>
@@ -480,7 +488,7 @@ export default function DamaRolesPage() {
           <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />
         </>}
       >
-      </PageHeader>
+      </EmbeddablePageHeader>
 
       {!loading && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>

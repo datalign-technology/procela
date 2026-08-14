@@ -733,6 +733,45 @@ export default function PeoplePage() {
     </Card>
   );
 
+  // Toolbar — lives in the page header (right-aligned, level with the title)
+  // like Business Glossary and the other list pages, rather than dropping
+  // onto the list's count row below the header.
+  const peopleToolbar = (
+    <>
+      <SavedViewsMenu
+        pageKey="people"
+        currentFilters={{ selectedOrgId, filterAppRole, filterGovRole, searchQuery }}
+        onApply={(f) => {
+          setSelectedOrgId((f.selectedOrgId as string) || '');
+          setFilterAppRole((f.filterAppRole as string) || '');
+          setFilterGovRole((f.filterGovRole as string) || '');
+          setSearchQuery((f.searchQuery as string) || '');
+        }}
+      />
+      {filteredPeople.length > 0 && (
+        <ExportMenu build={() => ({
+          filenameBase: 'people',
+          sheetName: 'People',
+          // The Org column carries the full path (Parent > Child >
+          // Grandchild) so a single-file enterprise-wide export can
+          // round-trip without losing which org each person belongs to.
+          // The import endpoint resolves it per row and falls back to the
+          // dialog's org if the column is missing or the path doesn't match.
+          headers: ['Name', 'Email', 'Role', 'Title', 'Org'],
+          rows: filteredPeople.map((p) => [
+            p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
+            buildOrgPath(p.orgIds[0] || '', flatOrgs),
+          ]),
+        })} />
+      )}
+      <IconButton icon="upload" label="Import people"
+        onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />
+      <IconButton icon="link" label="Connect to source" onClick={() => setShowPeopleSync(true)} />
+      <IconButton icon="plus" label="Add person" variant="primary"
+        onClick={openAddPerson} />
+    </>
+  );
+
   return (
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
@@ -740,6 +779,7 @@ export default function PeoplePage() {
       <PageHeader
         title="People"
         subtitle={`${people.length} people across ${flatOrgs.length} organizations. Filter by organization to narrow the list.`}
+        actions={peopleToolbar}
       >
         <HelpPopover id="people-overview" title="People">
           Everyone in your directory, grouped by the organization they
@@ -780,53 +820,18 @@ export default function PeoplePage() {
         {/* People list */}
         <div>
           <>
-              {/* Active filter / counts header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 600 }}>
-                      {selectedOrgId ? selectedOrg?.name : 'All people'}
-                    </h2>
-                    {selectedOrgId && selectedOrg && <span style={typeBadge(selectedOrg.type || '')}>{selectedOrg.type}</span>}
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{filteredPeople.length} {filteredPeople.length === 1 ? 'person' : 'people'}</span>
-                  </div>
-                  {selectedOrgId && selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
+              {/* Active filter / counts header. The toolbar moved up into the
+                  page header (see peopleToolbar); this row is just the
+                  scope label + count for the current org filter. */}
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 600 }}>
+                    {selectedOrgId ? selectedOrg?.name : 'All people'}
+                  </h2>
+                  {selectedOrgId && selectedOrg && <span style={typeBadge(selectedOrg.type || '')}>{selectedOrg.type}</span>}
+                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{filteredPeople.length} {filteredPeople.length === 1 ? 'person' : 'people'}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <SavedViewsMenu
-                    pageKey="people"
-                    currentFilters={{ selectedOrgId, filterAppRole, filterGovRole, searchQuery }}
-                    onApply={(f) => {
-                      setSelectedOrgId((f.selectedOrgId as string) || '');
-                      setFilterAppRole((f.filterAppRole as string) || '');
-                      setFilterGovRole((f.filterGovRole as string) || '');
-                      setSearchQuery((f.searchQuery as string) || '');
-                    }}
-                  />
-                  {filteredPeople.length > 0 && (
-                    <ExportMenu build={() => ({
-                      filenameBase: 'people',
-                      sheetName: 'People',
-                      // The Org column carries the full path (Parent >
-                      // Child > Grandchild) so a single-file
-                      // enterprise-wide export can round-trip without
-                      // losing which org each person belongs to. The
-                      // import endpoint resolves it per row and falls
-                      // back to the dialog's org if the column is
-                      // missing or the path doesn't match.
-                      headers: ['Name', 'Email', 'Role', 'Title', 'Org'],
-                      rows: filteredPeople.map((p) => [
-                        p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
-                        buildOrgPath(p.orgIds[0] || '', flatOrgs),
-                      ]),
-                    })} />
-                  )}
-                  <IconButton icon="upload" label="Import people"
-                    onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />
-                  <IconButton icon="link" label="Connect to source" onClick={() => setShowPeopleSync(true)} />
-                  <IconButton icon="plus" label="Add person" variant="primary"
-                    onClick={openAddPerson} />
-                </div>
+                {selectedOrgId && selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
               </div>
 
               {/* Filters (left-aligned, mirrors Data Assets) */}

@@ -1,4 +1,4 @@
-import { useSearchParams } from 'react-router-dom';
+import Tabs from '../components/Tabs';
 import PageHeader from '../components/PageHeader';
 import GovernanceTasksPage from './GovernanceTasksPage';
 import GovernanceIssuesPage from './GovernanceIssuesPage';
@@ -8,71 +8,34 @@ import DependencyBanner, { useDependencyChecks } from '../components/DependencyB
 // GovernanceWorkPage — tabbed hub for governance tasks and issues.
 // Tab state lives in the URL (?tab=tasks|issues) so links and reloads
 // preserve the view.
+//
+// The hub owns one page title; the tab strip sits beneath it and each
+// tab's page renders embedded (its own header suppressed, its toolbar
+// portaled onto the tab-strip row) so there's a single header, not two.
 // ──────────────────────────────────────────────────────────────────────────
-
-type WorkTab = 'tasks' | 'issues';
-
-const TABS: { id: WorkTab; label: string }[] = [
-  { id: 'tasks',  label: 'Tasks' },
-  { id: 'issues', label: 'Issues' },
-];
 
 export default function GovernanceWorkPage() {
   const deps = useDependencyChecks();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab') as WorkTab | null;
-  const active: WorkTab = TABS.some((t) => t.id === tabParam) ? (tabParam as WorkTab) : 'tasks';
-
-  const setActive = (id: WorkTab) => setSearchParams({ tab: id }, { replace: true });
 
   return (
-    <div>
-      <DependencyBanner phase="Governance work flows from established policies and structure." checks={[
-        { label: 'Create governance policies', met: deps.hasPolicies, link: '/governance-policies' },
-        { label: 'Assign data stewards', met: deps.hasStewards, link: '/people' },
-      ]} />
-      {/* Header */}
-      <PageHeader
-        title="Governance Work"
-        subtitle="Your inbox of open governance work — tasks waiting for a steward, issues to triage, and approvals you need to sign off."
-      />
-
-      <div
-        role="tablist"
-        aria-label="Governance work views"
-        style={{
-          display: 'flex', gap: 2, marginBottom: 16,
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        {TABS.map((t) => {
-          const isActive = t.id === active;
-          return (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setActive(t.id)}
-              style={{
-                padding: '10px 18px',
-                fontSize: 13,
-                fontWeight: isActive ? 600 : 500,
-                background: 'transparent',
-                border: 'none',
-                borderBottom: isActive ? '2px solid var(--color-primary)' : '2px solid transparent',
-                color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                marginBottom: -1,
-                cursor: 'pointer',
-              }}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {active === 'tasks' && <GovernanceTasksPage />}
-      {active === 'issues' && <GovernanceIssuesPage />}
-    </div>
+    <Tabs
+      defaultTab="tasks"
+      header={
+        <>
+          <DependencyBanner phase="Governance work flows from established policies and structure." checks={[
+            { label: 'Create governance policies', met: deps.hasPolicies, link: '/governance-policies' },
+            { label: 'Assign data stewards', met: deps.hasStewards, link: '/people' },
+          ]} />
+          <PageHeader
+            title="Governance Work"
+            subtitle="Your inbox of open governance work — tasks waiting for a steward, issues to triage, and approvals you need to sign off."
+          />
+        </>
+      }
+      tabs={[
+        { id: 'tasks',  label: 'Tasks',  render: ({ actionsSlot }) => <GovernanceTasksPage embedded actionsPortal={actionsSlot} /> },
+        { id: 'issues', label: 'Issues', render: ({ actionsSlot }) => <GovernanceIssuesPage embedded actionsPortal={actionsSlot} /> },
+      ]}
+    />
   );
 }
