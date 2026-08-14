@@ -14,6 +14,7 @@ import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
@@ -174,6 +175,16 @@ function ScoreBar({ score, threshold }: { score: number; threshold: number }) {
     </div>
   );
 }
+
+// Toggleable columns for the Assets (Quality) tab table. The Asset name and
+// the Actions column are always shown, so they're not listed here.
+type AssetColId = 'system' | 'owner' | 'health' | 'rules';
+const ASSET_COLUMN_DEFS: Array<{ id: AssetColId; label: string; defaultVisible: boolean }> = [
+  { id: 'system', label: 'System', defaultVisible: true },
+  { id: 'owner',  label: 'Owner',  defaultVisible: true },
+  { id: 'health', label: 'Health', defaultVisible: true },
+  { id: 'rules',  label: 'Rules',  defaultVisible: true },
+];
 
 type DqColId = 'asset' | 'column' | 'name' | 'dimension' | 'threshold' | 'currentScore' | 'weight' | 'status' | 'schedule' | 'lastMeasured';
 const DQ_COLUMN_DEFS: Array<{ id: DqColId; label: string; defaultVisible: boolean }> = [
@@ -577,6 +588,7 @@ export default function DataQualityPage({
           activeOrgId={activeOrgId}
           onRefreshAll={fetchData}
           onManageRules={(a, colName) => setRulesModalAsset({ id: a.id, name: a.name, sourceAsset: a.sourceAsset, sourceColumn: colName || a.sourceColumn })}
+          actionsPortal={actionsPortal}
         />
       )}
 
@@ -596,6 +608,14 @@ export default function DataQualityPage({
       {(() => {
         const rulesActions = (
           <>
+            <SavedViewsMenu
+              pageKey="data-quality-rules"
+              currentFilters={{ filterAssetId, filterDimension }}
+              onApply={(f) => {
+                setFilterAssetId((f.filterAssetId as string) || '');
+                setFilterDimension((f.filterDimension as string) || '');
+              }}
+            />
             {rules.length > 0 && (
               <ExportMenu build={() => ({
                 filenameBase: 'data-quality-rules',
@@ -874,15 +894,20 @@ interface ColumnWithHealth {
   healthScore?: number | null;
 }
 
-function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefreshAll, onManageRules }: {
+function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefreshAll, onManageRules, actionsPortal }: {
   assets: DataAssetFull[];
   rulesByAsset: Map<string, QualityRule[]>;
   systemNameById: Record<string, string>;
   activeOrgId: string;
   onRefreshAll: () => void | Promise<void>;
   onManageRules: (asset: DataAssetFull, columnName?: string) => void;
+  // Tab-strip slot (from the Data Assets hub) to portal this tab's toolbar
+  // into, so the Quality tab carries the same Export + Columns controls the
+  // Registry and Rules tabs do.
+  actionsPortal?: HTMLElement | null;
 }) {
   const { addToast } = useToastStore();
+  const assetCols = useColumnPicker<AssetColId>('procela.dataQuality.assetsCols.v1', ASSET_COLUMN_DEFS);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [columnsMap, setColumnsMap] = useState<Record<string, ColumnWithHealth[]>>({});
   const [loadingCols, setLoadingCols] = useState<string | null>(null);
@@ -994,10 +1019,10 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     return { rs, measured, passing, failing, warn, score, healthColor, totalWeight, healthTooltip };
   };
 
-  const assetColumns: DataTableColumn<DataAssetFull>[] = [
+  const assetColumns = [
     {
       key: 'asset', header: 'Asset', cellStyle: { fontWeight: 500 },
-      render: (a) => (
+      render: (a: DataAssetFull) => (
         <>
           {a.name}
           {a.description && (
@@ -1009,17 +1034,17 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
         </>
       ),
     },
-    {
+    assetCols.isVisible('system') && {
       key: 'system', header: 'System',
-      render: (a) => systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>,
+      render: (a: DataAssetFull) => systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>,
     },
-    {
+    assetCols.isVisible('owner') && {
       key: 'owner', header: 'Owner',
-      render: (a) => a.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>,
+      render: (a: DataAssetFull) => a.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>,
     },
-    {
+    assetCols.isVisible('health') && {
       key: 'health', header: 'Health',
-      render: (a) => {
+      render: (a: DataAssetFull) => {
         const { score, healthColor, healthTooltip } = assetStats(a);
         return (
           <div title={healthTooltip} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'help' }}>
@@ -1031,9 +1056,9 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
         );
       },
     },
-    {
+    assetCols.isVisible('rules') && {
       key: 'rules', header: 'Rules', cellStyle: { fontSize: 12 },
-      render: (a) => {
+      render: (a: DataAssetFull) => {
         const { rs, passing, warn, failing } = assetStats(a);
         return rs.length === 0 ? (
           <span style={{ color: 'var(--color-text-muted)' }}>No rules</span>
@@ -1048,8 +1073,8 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
       },
     },
     {
-      key: 'actions', header: 'Actions', align: 'center',
-      render: (a) => {
+      key: 'actions', header: 'Actions', align: 'center' as const,
+      render: (a: DataAssetFull) => {
         const { rs } = assetStats(a);
         // runAllRules calls e.stopPropagation() itself, so clicking Run all
         // does not also toggle the row in trigger:'row-click' mode.
@@ -1064,7 +1089,28 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
         ) : null;
       },
     },
-  ];
+  ].filter(Boolean) as DataTableColumn<DataAssetFull>[];
+
+  // Toolbar for the Quality tab — Export the asset-health view and a Columns
+  // picker, portaled onto the hub's tab row so this tab matches the Registry
+  // and Rules tabs. (The per-tab "add" differs: Quality has no add — you add
+  // rules on the Rules tab and assets on the Registry tab.)
+  const qualityActions = (
+    <>
+      {filteredAssets.length > 0 && (
+        <ExportMenu build={() => ({
+          filenameBase: 'data-asset-health',
+          sheetName: 'Asset Health',
+          headers: ['Asset', 'System', 'Owner', 'Health %', 'Rules', 'Passing', 'Warning', 'Failing'],
+          rows: filteredAssets.map((a) => {
+            const { rs, passing, warn, failing, score } = assetStats(a);
+            return [a.name, systemNameById[a.systemId] || '', a.ownerName || '', score, rs.length, passing, warn, failing];
+          }),
+        })} />
+      )}
+      <ColumnPicker state={assetCols} />
+    </>
+  );
 
   // Expanded region is page-owned: DataTable never fetches. Columns are
   // lazy-loaded into columnsMap by toggleExpand.
@@ -1138,6 +1184,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
 
   return (
     <div>
+      {actionsPortal && createPortal(qualityActions, actionsPortal)}
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
