@@ -507,16 +507,8 @@ export default function AgentsPage() {
         subtitle="Non-human actors — AI, service accounts, pipelines, bots — assigned to organizations like people."
         actions={
           <>
-            <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Organization:</label>
-            <select
-              aria-label="Organization"
-              style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any, fontSize: 13 }}
-              value={selectedOrgId}
-              onChange={(e) => applyOrgFilter(e.target.value)}
-            >
-              <option value="">All organizations</option>
-              {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
+            {/* Org filtering lives in the filter row below (next to Search),
+                matching the other list pages — no duplicate picker here. */}
             {filtered.length > 0 && (
               <ExportMenu build={() => ({
                 filenameBase: 'agents',
