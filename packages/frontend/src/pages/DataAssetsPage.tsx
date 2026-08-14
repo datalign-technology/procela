@@ -382,7 +382,7 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
   );
 }
 
-export default function DataAssetsPage() {
+export default function DataAssetsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
@@ -1284,51 +1284,62 @@ export default function DataAssetsPage() {
     );
   };
 
+  // Toolbar actions — rendered inside the PageHeader on the standalone page,
+  // or as a right-aligned strip when embedded in the Data Assets hub.
+  const headerActions = (
+    <>
+      <SavedViewsMenu
+        pageKey="data-assets"
+        currentFilters={{ filterCategory, filterTier, filterSystemId, filterOrigin, filterMapping, searchQuery }}
+        onApply={(f) => {
+          setFilterCategory((f.filterCategory as string) || '');
+          setFilterTier((f.filterTier as string) || '');
+          setFilterSystemId((f.filterSystemId as string) || '');
+          setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
+          setFilterMapping((f.filterMapping as '' | 'mapped' | 'unmapped') || '');
+          setSearchQuery((f.searchQuery as string) || '');
+        }}
+      />
+      {assets.length > 0 && (
+        <ExportMenu build={() => ({
+          filenameBase: 'data-assets',
+          sheetName: 'Data Assets',
+          headers: ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'],
+          rows: assets.map((a) => [
+            a.name,
+            a.description,
+            systemName(a.systemId),
+            a.sourceAsset ? `${a.sourceAsset}${a.sourceColumn ? '.' + a.sourceColumn : ''}` : '',
+            a.domainName || '',
+            a.ownerName || '',
+            a.stewardName || '',
+          ]),
+        })} />
+      )}
+      <ColumnPicker state={colPicker} />
+      {canWrite && canOwnHere && (
+        <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
+      )}
+    </>
+  );
+
   return (
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
-      {/* Header */}
+      {/* Header. When embedded in the Data Assets hub the parent owns the
+          page title, so we render just the action strip (mirroring the
+          MappingsPage embedded pattern) instead of a second PageHeader. */}
+      {embedded ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          {headerActions}
+        </div>
+      ) : (
       <PageHeader
         title="Data Assets"
         subtitle={
           <>Business-level concepts &mdash; <em>&ldquo;Customer Accounts&rdquo;</em>, <em>&ldquo;Billing Records&rdquo;</em>, <em>&ldquo;Inventory Levels&rdquo;</em>. Not files or columns: the physical tables, files, and columns that back each asset are configured via Bindings on the row.</>
         }
-        actions={
-          <>
-            <SavedViewsMenu
-              pageKey="data-assets"
-              currentFilters={{ filterCategory, filterTier, filterSystemId, filterOrigin, filterMapping, searchQuery }}
-              onApply={(f) => {
-                setFilterCategory((f.filterCategory as string) || '');
-                setFilterTier((f.filterTier as string) || '');
-                setFilterSystemId((f.filterSystemId as string) || '');
-                setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
-                setFilterMapping((f.filterMapping as '' | 'mapped' | 'unmapped') || '');
-                setSearchQuery((f.searchQuery as string) || '');
-              }}
-            />
-            {assets.length > 0 && (
-              <ExportMenu build={() => ({
-                filenameBase: 'data-assets',
-                sheetName: 'Data Assets',
-                headers: ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'],
-                rows: assets.map((a) => [
-                  a.name,
-                  a.description,
-                  systemName(a.systemId),
-                  a.sourceAsset ? `${a.sourceAsset}${a.sourceColumn ? '.' + a.sourceColumn : ''}` : '',
-                  a.domainName || '',
-                  a.ownerName || '',
-                  a.stewardName || '',
-                ]),
-              })} />
-            )}
-            <ColumnPicker state={colPicker} />
-            {canWrite && canOwnHere && (
-              <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
-            )}
-          </>
-        }
+        actions={headerActions}
       >
         <HelpPopover id="data-assets-overview" title="Data assets">
           Define your data in business terms first ("Customer accounts",
@@ -1337,6 +1348,7 @@ export default function DataAssetsPage() {
           the storage location changes.
         </HelpPopover>
       </PageHeader>
+      )}
 
       {/* Wrong-level banner. Data assets can only be owned by
           companies or divisions; if the active scope is a

@@ -108,7 +108,6 @@ export const navSections: NavSection[] = [
       { to: '/data-domains', label: 'Domains' },
       { to: '/business-glossary', label: 'Glossary' },
       { to: '/data-lineage', label: 'Lineage' },
-      { to: '/data-quality', label: 'Data Quality' },
     ],
   },
   {
@@ -187,7 +186,7 @@ export const MOBILE_PRIMARY: NavItem[] = [
 export const ROUTE_GROUPS: Record<string, string[]> = {
   '/setup': ['/setup'],
   '/processes': ['/processes'],
-  '/data-assets': ['/data-assets'],
+  '/data-assets': ['/data-assets', '/data-quality'],
   '/systems': ['/systems'],
   '/business-glossary': ['/business-glossary'],
   '/processes/data-map': ['/processes/data-map', '/mappings'],
@@ -195,7 +194,6 @@ export const ROUTE_GROUPS: Record<string, string[]> = {
   '/governance-program': ['/governance-program'],
   '/governance-groups': ['/governance-groups'],
   '/data-domains': ['/data-domains'],
-  '/data-quality': ['/data-quality'],
   '/dama-roles': ['/dama-roles', '/roles', '/raci'],
   '/decision-rights': ['/decision-rights'],
   '/governance-policies': ['/governance-policies'],

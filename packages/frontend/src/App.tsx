@@ -21,7 +21,7 @@ const ProcessDataMapPage         = lazy(() => import('@/pages/ProcessDataMapPage
 const ComparisonPage             = lazy(() => import('@/pages/ComparisonPage'));
 const SystemsAndDataPage         = lazy(() => import('@/pages/SystemsAndDataPage'));
 const AnalyzePage                = lazy(() => import('@/pages/AnalyzePage'));
-const DataAssetsPage             = lazy(() => import('@/pages/DataAssetsPage'));
+const DataAssetsHubPage          = lazy(() => import('@/pages/DataAssetsHubPage'));
 const SystemsPage                = lazy(() => import('@/pages/SystemsPage'));
 const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
 const OrganizationsPage          = lazy(() => import('@/pages/OrganizationsPage'));
@@ -37,7 +37,6 @@ const DataDomainsPage            = lazy(() => import('@/pages/DataDomainsPage'))
 const DocumentationPage          = lazy(() => import('@/pages/DocumentationPage'));
 const RolesPage                  = lazy(() => import('@/pages/RolesPage'));
 const DataLineagePage            = lazy(() => import('@/pages/DataLineagePage'));
-const DataQualityPage            = lazy(() => import('@/pages/DataQualityPage'));
 const ConnectionsPage            = lazy(() => import('@/pages/ConnectionsPage'));
 const GovernanceWorkPage         = lazy(() => import('@/pages/GovernanceWorkPage'));
 const GovernancePoliciesPage     = lazy(() => import('@/pages/GovernancePoliciesPage'));
@@ -84,7 +83,7 @@ export default function App() {
           <Route path="/governance" element={<Navigate to="/governance-groups" replace />} />
           <Route path="/analyze" element={<AnalyzePage />} />
           {/* Legacy routes — kept for backward compatibility and deep links */}
-          <Route path="/data-assets" element={<DataAssetsPage />} />
+          <Route path="/data-assets" element={<DataAssetsHubPage />} />
           {/* Orphan Assets folded into Data Assets as the "Unmapped" mapping
               filter. Redirect preserves old links (digest, AI, bookmarks). */}
           <Route path="/data-assets/orphans" element={<Navigate to="/data-assets?mapping=unmapped" replace />} />
@@ -114,7 +113,9 @@ export default function App() {
           <Route path="/scorecard" element={<Navigate to="/reports?tab=scorecard" replace />} />
           <Route path="/report" element={<Navigate to="/reports?tab=executive" replace />} />
           <Route path="/data-lineage" element={<DataLineagePage />} />
-          <Route path="/data-quality" element={<DataQualityPage />} />
+          {/* Data Quality folded into the Data Assets hub as the Quality /
+              Rules tabs. Redirect preserves old links (digest, AI, bookmarks). */}
+          <Route path="/data-quality" element={<Navigate to="/data-assets?tab=quality" replace />} />
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/governance-work" element={<GovernanceWorkPage />} />
           <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
