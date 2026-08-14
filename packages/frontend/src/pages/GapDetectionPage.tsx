@@ -100,11 +100,13 @@ interface GapSummary {
 
 // ── Gap section config ──
 
+type Severity = 'critical' | 'warning' | 'info';
+
 interface GapSection {
   key: keyof GapData;
   title: string;
   description: string;
-  severity: 'critical' | 'warning' | 'info';
+  severity: Severity;
   // Icon is the sidebar SVG for the route this gap targets — so
   // an Ownership Gaps row shows the People rail icon, a Low-Health
   // Assets row shows the Data Assets rail icon, and so on. Rendered
@@ -198,6 +200,7 @@ export default function GapDetectionPage() {
   const [summary, setSummary] = useState<GapSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedKey, setSelectedKey] = useState<keyof GapData | null>(null);
+  const [severityFilter, setSeverityFilter] = useState<Severity | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -214,19 +217,6 @@ export default function GapDetectionPage() {
   }, [activeOrgId]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Select the first non-empty gap of a given severity (or any), for the
-  // severity summary tiles at the top.
-  const selectFirstGap = (severity: 'critical' | 'warning' | 'info' | null) => {
-    if (!data) return;
-    const c = GAP_SECTIONS.find((sec) => {
-      const items = data[sec.key] as any[];
-      if (!items.length) return false;
-      if (severity && sec.severity !== severity) return false;
-      return true;
-    });
-    if (c) setSelectedKey(c.key);
-  };
 
   if (loading) {
     return (
@@ -248,11 +238,30 @@ export default function GapDetectionPage() {
     );
   }
 
-  const criticalCount = summary.unmappedSteps + summary.ownerlessProcesses;
-  const warningCount = summary.ungovernedAssets + summary.lowHealthAssets + summary.unownedDomains;
-  const infoCount = summary.orphanedAssets + summary.unlinkedAssets + summary.unassignedPeople;
+  // Derive the total and per-severity counts from the same gap sections the
+  // page actually renders as tiles, so the summary bar always reconciles with
+  // them (total === critical + warning + info, each band === its tiles). The
+  // backend's summary.totalGaps counts a different membership — it folds in
+  // system/connection gaps the page doesn't tile and omits people/low-health —
+  // so relying on it made the "All gaps" figure smaller than a subtotal.
+  const sectionCount = (sec: GapSection) => (data[sec.key] as any[]).length;
+  const countBySeverity = (sev: Severity) =>
+    GAP_SECTIONS.filter((s) => s.severity === sev).reduce((n, s) => n + sectionCount(s), 0);
+  const criticalCount = countBySeverity('critical');
+  const warningCount = countBySeverity('warning');
+  const infoCount = countBySeverity('info');
+  const totalCount = criticalCount + warningCount + infoCount;
 
   const selectedSection = GAP_SECTIONS.find((sec) => sec.key === selectedKey);
+
+  // The severity legend doubles as a filter over the tile grid. When a
+  // severity is active, only its tiles show, and a selected tile's detail
+  // panel is hidden if it falls outside the filter (kept in state so
+  // clearing the filter restores it).
+  const visibleSections = severityFilter
+    ? GAP_SECTIONS.filter((sec) => sec.severity === severityFilter)
+    : GAP_SECTIONS;
+  const showDetail = !!selectedSection && (!severityFilter || selectedSection.severity === severityFilter);
 
   return (
     <div>
@@ -261,15 +270,21 @@ export default function GapDetectionPage() {
         subtitle="Identifies gaps in process coverage, data governance, ownership, and data quality across the organization."
       />
 
-      {/* Severity summary — click to jump to the first gap of that kind. */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <SummaryCard label="Total Gaps" count={summary.totalGaps} color="var(--color-text-muted)" onClick={() => selectFirstGap(null)} />
-        <SummaryCard label="Critical" count={criticalCount} color="var(--color-error)" onClick={() => selectFirstGap('critical')} />
-        <SummaryCard label="Warning" count={warningCount} color="var(--color-warning)" onClick={() => selectFirstGap('warning')} />
-        <SummaryCard label="Informational" count={infoCount} color="var(--color-info)" onClick={() => selectFirstGap('info')} />
-      </div>
+      {/* Severity summary — a slim proportion bar + legend that doubles as a
+          severity filter over the gap tiles below. Replaces the old KPI card
+          row, whose counts just restated the tiles. */}
+      {totalCount > 0 && (
+        <SeverityBar
+          total={totalCount}
+          critical={criticalCount}
+          warning={warningCount}
+          info={infoCount}
+          active={severityFilter}
+          onSelect={setSeverityFilter}
+        />
+      )}
 
-      {summary.totalGaps === 0 ? (
+      {totalCount === 0 ? (
         <div style={{
           background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)',
           padding: '2rem', textAlign: 'center',
@@ -285,7 +300,7 @@ export default function GapDetectionPage() {
           {/* Every gap type as a tile — the whole picture at a glance. Click a
               non-empty tile to see its affected items in the panel below. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10, marginBottom: 16 }}>
-            {GAP_SECTIONS.map((section) => {
+            {visibleSections.map((section) => {
               const items = data[section.key] as any[];
               const count = items.length;
               const sev = SEVERITY_CONFIG[section.severity];
@@ -334,14 +349,14 @@ export default function GapDetectionPage() {
           </div>
 
           {/* Prompt to drill in — shown until the user picks a gap tile. */}
-          {!selectedSection && (
+          {!showDetail && (
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '2px' }}>
               Select a gap above to see the affected items.
             </div>
           )}
 
           {/* Detail — the affected items for the selected gap. */}
-          {selectedSection && (() => {
+          {showDetail && selectedSection && (() => {
             const sev = SEVERITY_CONFIG[selectedSection.severity];
             const items = data[selectedSection.key] as any[];
             return (
@@ -366,42 +381,76 @@ export default function GapDetectionPage() {
   );
 }
 
-// ── Summary card ──
+// ── Severity summary bar ──
 
-function SummaryCard({ label, count, color, onClick }: {
-  label: string; count: number; color: string;
-  onClick?: () => void;
+// A slim stacked proportion bar plus a legend that doubles as a severity
+// filter. Replaces the old KPI card row (whose Total / Critical / Warning /
+// Info counts simply restated the tiles below).
+function SeverityBar({ total, critical, warning, info, active, onSelect }: {
+  total: number;
+  critical: number;
+  warning: number;
+  info: number;
+  active: Severity | null;
+  onSelect: (s: Severity | null) => void;
 }) {
-  const interactive = !!onClick && count > 0;
+  const segs: { key: Severity; label: string; count: number; color: string }[] = [
+    { key: 'critical', label: 'Critical',      count: critical, color: 'var(--color-error)' },
+    { key: 'warning',  label: 'Warning',       count: warning,  color: 'var(--color-warning)' },
+    { key: 'info',     label: 'Informational', count: info,     color: 'var(--color-info)' },
+  ];
+  const toggle = (s: Severity) => onSelect(active === s ? null : s);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {/* Stacked proportion bar — each segment sized by its share of the
+          total, dimmed when another severity is filtered. */}
+      <div style={{ display: 'flex', height: 8, borderRadius: 999, overflow: 'hidden', background: 'var(--color-border)', marginBottom: 8 }}>
+        {segs.filter((s) => s.count > 0).map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            aria-label={`${s.count} ${s.label.toLowerCase()}`}
+            title={`${s.count} ${s.label.toLowerCase()} — click to filter`}
+            onClick={() => toggle(s.key)}
+            style={{
+              flex: s.count, minWidth: 4, padding: 0, border: 'none', cursor: 'pointer',
+              background: s.color, opacity: active && active !== s.key ? 0.3 : 1,
+              transition: 'opacity 0.15s',
+            }}
+          />
+        ))}
+      </div>
+      {/* Legend / filter chips. */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <SeverityChip label="All gaps" count={total} active={active === null} onClick={() => onSelect(null)} />
+        {segs.map((s) => (
+          <SeverityChip key={s.key} label={s.label} count={s.count} dotColor={s.color} active={active === s.key} onClick={() => toggle(s.key)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SeverityChip({ label, count, dotColor, active, onClick }: {
+  label: string; count: number; dotColor?: string; active: boolean; onClick: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={!interactive}
-      title={interactive ? `Jump to first ${label.toLowerCase()} section` : undefined}
+      aria-pressed={active}
       style={{
-        flex: 1, minWidth: 120, padding: '12px 16px', borderRadius: 'var(--radius-md)',
-        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-        borderLeft: `4px solid ${color}`,
-        textAlign: 'left', font: 'inherit',
-        cursor: interactive ? 'pointer' : 'default',
-        transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
-      }}
-      onMouseEnter={(e) => {
-        if (!interactive) return;
-        e.currentTarget.style.borderColor = 'var(--color-primary)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-        e.currentTarget.style.transform = 'translateY(-1px)';
-      }}
-      onMouseLeave={(e) => {
-        if (!interactive) return;
-        e.currentTarget.style.borderColor = 'var(--color-border)';
-        e.currentTarget.style.boxShadow = '';
-        e.currentTarget.style.transform = '';
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '4px 10px', borderRadius: 999, font: 'inherit', fontSize: 12, fontWeight: 600,
+        cursor: 'pointer', color: 'var(--color-text)',
+        background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+        transition: 'background 0.15s, border-color 0.15s',
       }}
     >
-      <div style={{ fontSize: 22, fontWeight: 700, color: count > 0 ? color : 'var(--color-success)' }}>{count}</div>
-      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>{label}</div>
+      {dotColor && <span style={{ width: 8, height: 8, borderRadius: 999, background: dotColor, flexShrink: 0 }} />}
+      <span>{label}</span>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 700 }}>{count}</span>
     </button>
   );
 }
