@@ -170,6 +170,10 @@ export default function ProcessDataMapPage() {
   };
   const [data, setData] = useState<GraphResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Toolbar slot on the Visual/Table toggle row — the embedded Table view
+  // (MappingsPage) portals its toolbar here so it sits level with the toggle,
+  // matching the other tabbed hubs instead of dropping onto a second row.
+  const [actionsSlot, setActionsSlot] = useState<HTMLDivElement | null>(null);
   const [focus, setFocus] = useState<{ kind: 'activity' | 'asset'; id: string } | null>(null);
   const [systemFilter, setSystemFilter] = useState<string>('');
   const [includeGov, setIncludeGov] = useState(false);
@@ -314,6 +318,10 @@ export default function ProcessDataMapPage() {
           ? 'Visual bridge between the business hierarchy and the catalog — activities grouped under their value stream, process and sub-process; data assets grouped under their data domain. Click an activity or asset to focus its connections.'
           : 'Flat, editable list of every activity ↔ data-asset mapping — bulk add / delete, a batch wizard, and orphan cleanup.'}
         actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Table view portals its toolbar (wizard / export / add) here so
+                it rides on the same row as the Visual/Table toggle. */}
+            <div ref={setActionsSlot} style={{ display: 'flex', gap: 8, alignItems: 'center' }} />
           <div role="tablist" aria-label="View" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
             {(['visual', 'table'] as const).map((m) => (
               <button
@@ -332,10 +340,11 @@ export default function ProcessDataMapPage() {
               </button>
             ))}
           </div>
+          </div>
         }
       />
 
-      {viewMode === 'table' && <MappingsPage embedded />}
+      {viewMode === 'table' && <MappingsPage embedded actionsPortal={actionsSlot} />}
 
       {viewMode === 'visual' && (
       <>
