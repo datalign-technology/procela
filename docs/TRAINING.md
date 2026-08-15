@@ -226,11 +226,16 @@ work through checklist items with per-item Open links. The
 progress ring in the header aggregates the three phases so you
 can see how close you are to fully set up.
 
-The sidebar entry auto-hides once you reach 100%, so the "you're
-done" state stays clean. Nothing else on the platform is gated by
-finishing the phases — you can drive straight to the Process
-Catalog from a fresh org — but the hub makes it obvious what's
-still missing.
+By default (the **Auto** setting) the sidebar entry auto-hides once
+you reach 100%, so the "you're done" state stays clean. You can
+change this under **Settings → Get Started guide** with an
+**Auto / Always / Hidden** control — *Always* keeps the entry
+pinned even after you finish, *Hidden* removes it entirely. That
+choice is a global, per-user preference: it follows you across
+every organization rather than being set per org. Nothing else on
+the platform is gated by finishing the phases — you can drive
+straight to the Process Catalog from a fresh org — but the hub
+makes it obvious what's still missing.
 
 ### 2.6 Where's Help?
 

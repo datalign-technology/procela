@@ -2,7 +2,7 @@ import { Marked } from 'marked';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// The horizontal Procela.ai wordmark lives next to HELP.md so both
+// The horizontal Procela wordmark lives next to HELP.md so both
 // the PDF renderer (services/markdown-pdf.ts) and this HTML
 // renderer read from the same file. Base64-encode once at module
 // load so every subsequent render is a string copy — the guide
