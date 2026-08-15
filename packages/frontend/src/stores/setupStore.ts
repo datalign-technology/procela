@@ -17,13 +17,16 @@ import { persist } from 'zustand/middleware';
 //     never truly "finished", so we let the user affirm completion rather
 //     than nagging forever). Objective steps (ownership gaps, coverage)
 //     derive done-ness from data and ignore this.
-//   • visibilityByOrg — the user's explicit control over whether the
+//   • visibility — the user's explicit control over whether the
 //     "Get Started" entry shows in the sidebar (set from the Hub's Hide
 //     button and the Settings segmented control). 'auto' (default) keeps
 //     the old behaviour: show while incomplete, hide at 100%. 'shown' pins
-//     it regardless of progress; 'hidden' removes it regardless. Persisted
-//     alongside progress. Client-side (per browser), like the rest of this
-//     store.
+//     it regardless of progress; 'hidden' removes it regardless. This is a
+//     single global (per-user) preference — it is NOT keyed by org, so
+//     hiding "Get Started" once hides it everywhere. Progress and
+//     affirmations remain per-org since each org sets up independently, but
+//     the show/hide choice follows the user. Persisted, client-side (per
+//     browser), like the rest of this store.
 // ──────────────────────────────────────────────────────────────────────────
 
 export type GetStartedVisibility = 'auto' | 'shown' | 'hidden';
@@ -44,12 +47,13 @@ export function shouldShowGetStarted(
 interface SetupState {
   progressByOrg: Record<string, number>;
   affirmedByOrg: Record<string, string[]>;
-  visibilityByOrg: Record<string, GetStartedVisibility>;
+  /** Single global (per-user) show/hide preference — not keyed by org. */
+  visibility: GetStartedVisibility;
   setProgress: (orgId: string, percent: number) => void;
   toggleAffirm: (orgId: string, taskKey: string) => void;
   isAffirmed: (orgId: string, taskKey: string) => boolean;
-  setVisibility: (orgId: string, visibility: GetStartedVisibility) => void;
-  getVisibility: (orgId: string | null | undefined) => GetStartedVisibility;
+  setVisibility: (visibility: GetStartedVisibility) => void;
+  getVisibility: () => GetStartedVisibility;
 }
 
 export const useSetupStore = create<SetupState>()(
@@ -57,7 +61,7 @@ export const useSetupStore = create<SetupState>()(
     (set, get) => ({
       progressByOrg: {},
       affirmedByOrg: {},
-      visibilityByOrg: {},
+      visibility: 'auto',
       setProgress: (orgId, percent) =>
         set((s) => {
           if (!orgId) return s;
@@ -72,14 +76,25 @@ export const useSetupStore = create<SetupState>()(
           return { affirmedByOrg: { ...s.affirmedByOrg, [orgId]: Array.from(cur) } };
         }),
       isAffirmed: (orgId, taskKey) => (get().affirmedByOrg[orgId] || []).includes(taskKey),
-      setVisibility: (orgId, visibility) =>
-        set((s) => {
-          if (!orgId) return s;
-          if (s.visibilityByOrg[orgId] === visibility) return s;
-          return { visibilityByOrg: { ...s.visibilityByOrg, [orgId]: visibility } };
-        }),
-      getVisibility: (orgId) => (orgId ? get().visibilityByOrg[orgId] || 'auto' : 'auto'),
+      setVisibility: (visibility) =>
+        set((s) => (s.visibility === visibility ? s : { visibility })),
+      getVisibility: () => get().visibility,
     }),
-    { name: 'procela:setup' },
+    {
+      name: 'procela:setup',
+      version: 1,
+      // v0 stored visibility per-org (visibilityByOrg). Collapse to the single
+      // global preference: honour any explicit non-'auto' choice the user made
+      // for any org so a prior "hide" isn't silently forgotten on upgrade.
+      migrate: (persisted: any, version) => {
+        if (persisted && version < 1 && persisted.visibilityByOrg) {
+          const prior = Object.values(persisted.visibilityByOrg) as GetStartedVisibility[];
+          const explicit = prior.find((v) => v === 'hidden') ?? prior.find((v) => v === 'shown');
+          persisted.visibility = explicit ?? 'auto';
+          delete persisted.visibilityByOrg;
+        }
+        return persisted;
+      },
+    },
   ),
 );

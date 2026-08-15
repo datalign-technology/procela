@@ -119,9 +119,10 @@ export default function SettingsPage() {
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [confirmLifecycle, setConfirmLifecycle] = useState<'simple' | 'review' | 'advanced' | null>(null);
   const [lifecycleMigrationMsg, setLifecycleMigrationMsg] = useState<string | null>(null);
-  // "Get Started" guide visibility — a per-org, client-side preference read
-  // and set straight from setupStore (no API; it's a UI nudge, not org data).
-  const getStartedVisibility = useSetupStore((s) => (activeOrgId ? (s.visibilityByOrg[activeOrgId] || 'auto') : 'auto'));
+  // "Get Started" guide visibility — a single global (per-user), client-side
+  // preference read and set straight from setupStore (no API; it's a UI nudge,
+  // not org data). Not keyed by org: the show/hide choice follows the user.
+  const getStartedVisibility = useSetupStore((s) => s.visibility);
   const setGetStartedVisibility = useSetupStore((s) => s.setVisibility);
   const GET_STARTED_OPTIONS: Array<{ key: GetStartedVisibility; label: string }> = [
     { key: 'auto', label: 'Auto' },
@@ -472,17 +473,18 @@ export default function SettingsPage() {
       {/* Get Started guide — user control over the "Get Started with
           Procela" onboarding entry in the sidebar. Auto (default) keeps the
           old behaviour (show while setup is incomplete, step aside at 100%);
-          Always pins it; Hidden removes it. Stored per-org in setupStore
-          (client-side), so it applies to this browser. */}
+          Always pins it; Hidden removes it. Stored as a single global
+          preference in setupStore (client-side), so it applies to this
+          browser across every org. */}
       <Card padding="1.5rem">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={sectionTitleStyle}>Get Started guide</h2>
             <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-              Controls the <strong>Get Started with Procela</strong> onboarding entry in the sidebar for <strong>{activeOrgName || 'this org'}</strong>.
+              Controls the <strong>Get Started with Procela</strong> onboarding entry in the sidebar. This preference is global — it applies across all of your organizations.
             </p>
             <ul style={{ fontSize: 12, color: 'var(--color-text-secondary)', paddingLeft: 18, listStyle: 'disc', marginBottom: 0 }}>
-              <li><strong>Auto</strong> — show it while setup is incomplete, then hide it once this org is fully set up. The default.</li>
+              <li><strong>Auto</strong> — show it while setup is incomplete, then hide it once the active org is fully set up. The default.</li>
               <li><strong>Always</strong> — keep it pinned in the sidebar even after setup is complete, so you can revisit the steps.</li>
               <li><strong>Hidden</strong> — remove it from the sidebar entirely.</li>
             </ul>
@@ -493,15 +495,14 @@ export default function SettingsPage() {
               {GET_STARTED_OPTIONS.map((opt, i) => (
                 <button
                   key={opt.key}
-                  onClick={() => activeOrgId && opt.key !== getStartedVisibility && setGetStartedVisibility(activeOrgId, opt.key)}
-                  disabled={!activeOrgId}
+                  onClick={() => opt.key !== getStartedVisibility && setGetStartedVisibility(opt.key)}
                   style={{
                     padding: '6px 14px', fontSize: 13, fontWeight: 500,
                     background: opt.key === getStartedVisibility ? 'var(--color-primary)' : 'var(--color-surface)',
                     color: opt.key === getStartedVisibility ? '#fff' : 'var(--color-text)',
                     border: 'none',
                     borderLeft: i > 0 ? '1px solid var(--color-border)' : undefined,
-                    cursor: !activeOrgId ? 'not-allowed' : opt.key === getStartedVisibility ? 'default' : 'pointer',
+                    cursor: opt.key === getStartedVisibility ? 'default' : 'pointer',
                   }}
                 >
                   {opt.label}
