@@ -202,7 +202,9 @@ body {
   [class*="breadcrumb"], [class*="Breadcrumb"],
   [class*="sidebarToggle"],
   [class*="shortcutsHint"],
-  [class*="densityToggle"] {
+  [class*="densityToggle"],
+  .no-print,
+  .skip-to-content {
     display: none !important;
   }
 

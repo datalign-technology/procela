@@ -140,6 +140,7 @@ export default function ReportsPage() {
 
   return (
     <div>
+      <div className="no-print">
       <PageHeader title="Reports" subtitle={activeTab.description} />
 
       <div
@@ -173,6 +174,7 @@ export default function ReportsPage() {
             </button>
           );
         })}
+      </div>
       </div>
 
       <Suspense fallback={
