@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
-import PageHeader from '../components/PageHeader';
+import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
@@ -190,7 +190,13 @@ const CONN_COLUMN_DEFS: Array<{ id: ConnColId; label: string; defaultVisible: bo
   { id: 'lastTested', label: 'Last Tested',    defaultVisible: true  },
 ];
 
-export default function ConnectionsPage() {
+export default function ConnectionsPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -834,7 +840,9 @@ export default function ConnectionsPage() {
   return (
     <div>
       {/* Header */}
-      <PageHeader
+      <EmbeddablePageHeader
+        embedded={embedded}
+        actionsPortal={actionsPortal}
         title="Data Connections"
         subtitle={filterSystem
           ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>

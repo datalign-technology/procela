@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
-import PageHeader from '../components/PageHeader';
+import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import TruncatedText from '../components/TruncatedText';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
@@ -459,7 +459,13 @@ const SYSTEM_COLUMN_DEFS: Array<{ id: SystemColId; label: string; defaultVisible
   { id: 'connections', label: 'Connections', defaultVisible: true  },
 ];
 
-export default function SystemsPage() {
+export default function SystemsPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
@@ -904,7 +910,9 @@ export default function SystemsPage() {
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
-      <PageHeader
+      <EmbeddablePageHeader
+        embedded={embedded}
+        actionsPortal={actionsPortal}
         title="Systems"
         subtitle="Applications and platforms where your organization's data lives."
         actions={
@@ -951,7 +959,7 @@ export default function SystemsPage() {
           Register the applications and platforms your organization uses. Include business
           criticality, vendor, and integration points so you can assess the impact of changes.
         </HelpPopover>
-      </PageHeader>
+      </EmbeddablePageHeader>
 
       {/* Wrong-level banner. Systems can only be owned by companies
           or divisions; if the active scope is a department or team

@@ -111,10 +111,13 @@ export const navSections: NavSection[] = [
     ],
   },
   {
-    label: 'Systems',
+    // Systems + Connections are one tabbed page (SystemsHubPage): a
+    // connection feeds a system, so they read as one destination. Single
+    // item, so it's an unlabelled row rather than a "Systems › Systems"
+    // accordion.
+    label: null,
     items: [
       { to: '/systems', label: 'Systems' },
-      { to: '/connections', label: 'Connections' },
     ],
   },
   {
@@ -187,7 +190,7 @@ export const ROUTE_GROUPS: Record<string, string[]> = {
   '/setup': ['/setup'],
   '/processes': ['/processes'],
   '/data-assets': ['/data-assets', '/data-quality'],
-  '/systems': ['/systems'],
+  '/systems': ['/systems', '/connections'],
   '/business-glossary': ['/business-glossary'],
   '/processes/data-map': ['/processes/data-map', '/mappings'],
   '/data-lineage': ['/data-lineage'],
@@ -205,7 +208,6 @@ export const ROUTE_GROUPS: Record<string, string[]> = {
   '/analysis': ['/analysis'],
   '/organizations': ['/organizations'],
   '/people': ['/people'],
-  '/connections': ['/connections'],
   '/agents': ['/agents'],
   '/settings': ['/settings'],
 };
