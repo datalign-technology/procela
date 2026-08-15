@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
@@ -158,7 +160,15 @@ function shortId(id: string): string {
 
 // ── Component ──
 
-export default function MappingsPage({ embedded = false }: { embedded?: boolean } = {}) {
+export default function MappingsPage({
+  embedded = false,
+  actionsPortal,
+}: {
+  embedded?: boolean;
+  /** When embedded in the Process ↔ Data map hub, the toolbar portals into
+   *  this slot (on the Visual/Table toggle row) instead of a strip below. */
+  actionsPortal?: HTMLElement | null;
+} = {}) {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
@@ -505,9 +515,16 @@ export default function MappingsPage({ embedded = false }: { embedded?: boolean 
   return (
     <div>
       {embedded ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          {headerActions}
-        </div>
+        // Hub supplies actionsPortal (the toggle row) — portal the toolbar
+        // onto it so it sits level with the Visual/Table switch, matching the
+        // other hubs. Inline strip is only a fallback if no slot is supplied.
+        actionsPortal !== undefined ? (
+          actionsPortal ? createPortal(headerActions, actionsPortal) : null
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            {headerActions}
+          </div>
+        )
       ) : (
         <PageHeader
           title="Data Mapping"
@@ -526,16 +543,38 @@ export default function MappingsPage({ embedded = false }: { embedded?: boolean 
           display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap',
         }}>
           {unmappedCount > 0 && (
-            <div style={{ flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-error)' }}>{unmappedCount}</span>
-              <span style={{ fontSize: 12, color: '#991b1b' }}>activities have no data asset linked</span>
-            </div>
+            <Link
+              to="/gap-detection"
+              title="Review unmapped activities on Gap Detection"
+              style={{ flex: 1, minWidth: 200, textDecoration: 'none' }}
+            >
+              <div
+                style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'box-shadow 0.15s, border-color 0.15s' }}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; e.currentTarget.style.borderColor = 'var(--color-error)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+              >
+                <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-error)' }}>{unmappedCount}</span>
+                <span style={{ fontSize: 12, color: '#991b1b' }}>activities have no data asset linked</span>
+                <span aria-hidden="true" style={{ marginLeft: 'auto', color: 'var(--color-error)', fontWeight: 700 }}>&rarr;</span>
+              </div>
+            </Link>
           )}
           {unlinkedCount > 0 && (
-            <div style={{ flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: '#fffbeb', border: '1px solid #fcd34d', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-warning)' }}>{unlinkedCount}</span>
-              <span style={{ fontSize: 12, color: '#92400e' }}>data assets are not mapped to any process</span>
-            </div>
+            <Link
+              to="/data-assets?mapping=unmapped"
+              title="View data assets not mapped to any process"
+              style={{ flex: 1, minWidth: 200, textDecoration: 'none' }}
+            >
+              <div
+                style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: '#fffbeb', border: '1px solid #fcd34d', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'box-shadow 0.15s, border-color 0.15s' }}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; e.currentTarget.style.borderColor = 'var(--color-warning)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#fcd34d'; }}
+              >
+                <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-warning)' }}>{unlinkedCount}</span>
+                <span style={{ fontSize: 12, color: '#92400e' }}>data assets are not mapped to any process</span>
+                <span aria-hidden="true" style={{ marginLeft: 'auto', color: 'var(--color-warning)', fontWeight: 700 }}>&rarr;</span>
+              </div>
+            </Link>
           )}
         </div>
       )}
