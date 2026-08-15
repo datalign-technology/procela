@@ -320,7 +320,10 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
   { id: 'system',      label: 'System',      defaultVisible: true  },
   { id: 'source',      label: 'Source',      defaultVisible: false },
   { id: 'tier',        label: 'Tier',        defaultVisible: true  },
-  { id: 'health',      label: 'Health',      defaultVisible: true  },
+  // Health is off by default here — it's the Quality tab's focus (with the
+  // rule breakdown). Registry leads with catalog/governance attributes
+  // (Tier, Domain, Owner); health stays one click away in the column picker.
+  { id: 'health',      label: 'Health',      defaultVisible: false },
   { id: 'domain',      label: 'Domain',      defaultVisible: true  },
   { id: 'owner',       label: 'Owner',       defaultVisible: true  },
   { id: 'steward',     label: 'Steward',     defaultVisible: false },
