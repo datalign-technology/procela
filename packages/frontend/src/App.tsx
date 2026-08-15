@@ -22,7 +22,7 @@ const ComparisonPage             = lazy(() => import('@/pages/ComparisonPage'));
 const SystemsAndDataPage         = lazy(() => import('@/pages/SystemsAndDataPage'));
 const AnalyzePage                = lazy(() => import('@/pages/AnalyzePage'));
 const DataAssetsHubPage          = lazy(() => import('@/pages/DataAssetsHubPage'));
-const SystemsPage                = lazy(() => import('@/pages/SystemsPage'));
+const SystemsHubPage             = lazy(() => import('@/pages/SystemsHubPage'));
 const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
 const OrganizationsPage          = lazy(() => import('@/pages/OrganizationsPage'));
 const OrgVisualizationPage       = lazy(() => import('@/pages/OrgVisualizationPage'));
@@ -37,7 +37,6 @@ const DataDomainsPage            = lazy(() => import('@/pages/DataDomainsPage'))
 const DocumentationPage          = lazy(() => import('@/pages/DocumentationPage'));
 const RolesPage                  = lazy(() => import('@/pages/RolesPage'));
 const DataLineagePage            = lazy(() => import('@/pages/DataLineagePage'));
-const ConnectionsPage            = lazy(() => import('@/pages/ConnectionsPage'));
 const GovernanceWorkPage         = lazy(() => import('@/pages/GovernanceWorkPage'));
 const GovernancePoliciesPage     = lazy(() => import('@/pages/GovernancePoliciesPage'));
 const GovernanceCalendarPage     = lazy(() => import('@/pages/GovernanceCalendarPage'));
@@ -87,7 +86,7 @@ export default function App() {
           {/* Orphan Assets folded into Data Assets as the "Unmapped" mapping
               filter. Redirect preserves old links (digest, AI, bookmarks). */}
           <Route path="/data-assets/orphans" element={<Navigate to="/data-assets?mapping=unmapped" replace />} />
-          <Route path="/systems" element={<SystemsPage />} />
+          <Route path="/systems" element={<SystemsHubPage />} />
           {/* Data Mapping folded into the Process ↔ Data map as its Table
               view. Redirect preserves old links (dashboard, deep links). */}
           <Route path="/mappings" element={<Navigate to="/processes/data-map?view=table" replace />} />
@@ -116,7 +115,9 @@ export default function App() {
           {/* Data Quality folded into the Data Assets hub as the Quality /
               Rules tabs. Redirect preserves old links (digest, AI, bookmarks). */}
           <Route path="/data-quality" element={<Navigate to="/data-assets?tab=quality" replace />} />
-          <Route path="/connections" element={<ConnectionsPage />} />
+          {/* Connections folded into the Systems hub as its second tab.
+              Redirect preserves old links (Settings connector panel, bookmarks). */}
+          <Route path="/connections" element={<Navigate to="/systems?tab=connections" replace />} />
           <Route path="/governance-work" element={<GovernanceWorkPage />} />
           <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
           {/* Canonical alias — the page now covers Charter / Framework /
