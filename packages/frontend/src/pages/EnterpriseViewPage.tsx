@@ -1,6 +1,6 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
-import { AlertTriangle, ChevronDown, X } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -128,9 +128,12 @@ export default function EnterpriseViewPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
-  const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
   const [activeView, setActiveView] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('cards');
+  // Cards-mode master-detail: a search box filters items by name, and a
+  // summary-tile grid focuses one entity type (null = show all visible types).
+  const [search, setSearch] = useState('');
+  const [focusType, setFocusType] = useState<string | null>(null);
   // Per-type visibility — lets the user hide/show whole lanes (Processes,
   // Systems, Domains, …) in both the cards and diagram views, on top of
   // the preset filter.
@@ -160,11 +163,11 @@ export default function EnterpriseViewPage() {
 
   const preset = VIEW_PRESETS[activeView] || VIEW_PRESETS.all;
 
-  // Collapse every entity section by default (on first load and whenever
-  // the preset changes) so the catalog opens on a compact overview of the
-  // type headers + counts; the user expands the rows they care about.
+  // Reset the Cards-mode focus and search whenever the preset changes, so a
+  // type focused under one lens doesn't linger (possibly empty) under another.
   useEffect(() => {
-    setExpandedCols(new Set());
+    setFocusType(null);
+    setSearch('');
   }, [activeView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter by active preset, then by the user's per-type visibility.
@@ -223,14 +226,6 @@ export default function EnterpriseViewPage() {
     ? filteredEdges.filter((e) => e.source === selected.id || e.target === selected.id)
     : [];
 
-  const toggleCol = (type: string) => {
-    setExpandedCols((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type); else next.add(type);
-      return next;
-    });
-  };
-
   const selectNode = (n: GraphNode) => {
     setSelected((prev) => prev?.id === n.id ? null : n);
   };
@@ -272,6 +267,81 @@ export default function EnterpriseViewPage() {
   // Types actually rendered as lanes/columns — preset types minus any the
   // user has toggled off.
   const visibleTypes = presetTypes.filter((t) => !hiddenTypes.has(t));
+
+  // Cards-mode master-detail helpers. `effectiveFocus` guards against a
+  // focused type that the current preset no longer includes; the search box
+  // filters items by label.
+  const effectiveFocus = focusType && visibleTypes.includes(focusType) ? focusType : null;
+  const searchLc = search.trim().toLowerCase();
+  const matchesSearch = (n: GraphNode) => !searchLc || n.label.toLowerCase().includes(searchLc);
+  // Which types' items list in the left column: the focused one, or all
+  // visible types when nothing is focused. A search always widens to all
+  // visible types so matches aren't hidden behind the focus.
+  const listTypes = effectiveFocus && !searchLc ? [effectiveFocus] : visibleTypes;
+
+  // One entity row/card, reused for the focused list and the all-types list.
+  const renderNode = (n: GraphNode) => {
+    const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.process;
+    const isSelected = selected?.id === n.id;
+    const isImpacted = selected && impactSet.has(n.id) && !isSelected;
+    const isDimmed = selected && !impactSet.has(n.id);
+    const statusColor = n.status ? getStatusColor(n.status) : null;
+    return (
+      <div key={n.id}
+        {...clickable(() => selectNode(n), { label: `Select ${n.label}` })}
+        style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '10px 12px', borderRadius: 'var(--radius-md)',
+          background: isSelected ? cfg.bg : 'var(--color-surface)',
+          border: `1px solid ${isSelected ? cfg.color : isImpacted ? cfg.color + '66' : 'var(--color-border)'}`,
+          cursor: 'pointer', opacity: isDimmed ? 0.35 : 1,
+          boxShadow: isSelected ? `0 0 0 2px ${cfg.color}33` : 'none',
+          transition: 'opacity 0.15s, border-color 0.15s',
+          animation: isImpacted ? 'nodeGlow 2s ease-in-out infinite' : 'none',
+        }}
+        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.borderColor = cfg.color + '88'; }}
+        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.borderColor = isImpacted ? cfg.color + '66' : 'var(--color-border)'; }}
+      >
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+          background: cfg.bg, color: cfg.color, fontSize: 14,
+          border: `1.5px solid ${cfg.color}44`,
+        }}>
+          {cfg.icon(16)}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {n.label}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+            {n.meta.description || n.meta.level || n.meta.systemType || n.meta.email || '—'}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+            {statusColor && (
+              <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: statusColor.bg, color: statusColor.color }}>
+                {(n.status || '').replace('_', ' ')}
+              </span>
+            )}
+            {n.meta.governanceTier && (() => {
+              const c = badgeColor('tier', n.meta.governanceTier);
+              return <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>{tierLabel(n.meta.governanceTier)}</span>;
+            })()}
+            {n.meta.healthScore != null && (() => {
+              const c = badgeColor('health', n.meta.healthScore);
+              return <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>{n.meta.healthScore}% health</span>;
+            })()}
+            {n.meta.rulesCount > 0 && (
+              <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>{n.meta.rulesCount} rules</span>
+            )}
+            {n.meta.role && (
+              <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>{n.meta.role.replace('_', ' ')}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -347,10 +417,10 @@ export default function EnterpriseViewPage() {
         </div>
       </div>
 
-      {/* Entity-type visibility — hide/show a whole lane (Processes,
-          Systems, Domains, …) in both views. Chips reflect the active
-          preset; clicking one toggles that type off/on. */}
-      {presetTypes.length > 1 && (
+      {/* Entity-type visibility — hide/show a whole lane in the diagram.
+          Cards mode uses the summary tiles below for the same job, so this
+          chip row is diagram-only. */}
+      {viewMode === 'diagram' && presetTypes.length > 1 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16, alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginRight: 2 }}>Show:</span>
           {presetTypes.map((type) => {
@@ -404,142 +474,95 @@ export default function EnterpriseViewPage() {
               columnOrder={visibleTypes}
             />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {!selected && (
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '2px' }}>
-                  Tip: click any item to trace its full dependency chain across the enterprise.
-                </div>
-              )}
-              {/* One expandable card per entity type — the count lives in the
-                  header, and expanding reveals the items inline. This merges
-                  the old summary-card row and section bars into a single
-                  control per category. */}
-              {visibleTypes.map((type) => {
-                const cfg = TYPE_CONFIG[type];
-                const items = byType[type] || [];
-                const isOpen = expandedCols.has(type);
-                const disabled = items.length === 0;
-                return (
-                  <Card key={type} padding={0} style={{ overflow: 'hidden', borderLeft: `4px solid ${cfg.color}` }}>
-                    <div
-                      {...clickable(() => !disabled && toggleCol(type), { label: `Toggle ${cfg.plural}`, disabled })}
-                      aria-expanded={disabled ? undefined : isOpen}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Search across every visible entity by name. */}
+              <input
+                type="text"
+                aria-label="Search entities"
+                placeholder="Search entities…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ width: '100%', maxWidth: 360, border: '1px solid var(--color-border)', borderRadius: 6, padding: '7px 12px', fontSize: 13, background: 'var(--color-surface)' }}
+              />
+
+              {/* Summary tiles — count per type; click to focus that type's
+                  list (click again to show all). Replaces the old Show-chips
+                  row and the stacked accordion headers. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+                {visibleTypes.map((type) => {
+                  const cfg = TYPE_CONFIG[type];
+                  const count = (byType[type] || []).length;
+                  const active = effectiveFocus === type;
+                  return (
+                    <button key={type} type="button"
+                      onClick={() => setFocusType(active ? null : type)}
+                      aria-pressed={active}
+                      title={active ? `Show all types` : `Show only ${cfg.plural}`}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
-                        cursor: disabled ? 'default' : 'pointer', userSelect: 'none', opacity: disabled ? 0.55 : 1,
+                        font: 'inherit', textAlign: 'left', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        background: 'var(--color-surface)',
+                        borderTop: `1px solid ${active ? cfg.color : 'var(--color-border)'}`,
+                        borderRight: `1px solid ${active ? cfg.color : 'var(--color-border)'}`,
+                        borderBottom: `1px solid ${active ? cfg.color : 'var(--color-border)'}`,
+                        borderLeft: `4px solid ${cfg.color}`,
+                        borderRadius: 'var(--radius-md)', padding: '10px 12px',
+                        boxShadow: active ? `0 0 0 2px ${cfg.color}33` : 'var(--shadow-sm)',
+                        transition: 'border-color 0.15s, box-shadow 0.15s',
                       }}
                     >
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                        background: cfg.bg, color: cfg.color, border: `1.5px solid ${cfg.color}44`,
-                      }}>
-                        {cfg.icon(15)}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', flexShrink: 0, background: cfg.bg, color: cfg.color, border: `1.5px solid ${cfg.color}44` }}>
+                        {cfg.icon(16)}
                       </span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{cfg.plural}</span>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: cfg.color }}>{items.length}</span>
-                      {!disabled && (
-                        <ChevronDown
-                          size={18}
-                          style={{
-                            marginLeft: 'auto', color: 'var(--color-text-muted)',
-                            transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s',
-                          }}
-                        />
-                      )}
-                    </div>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cfg.plural}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: cfg.color }}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-                    {isOpen && !disabled && (
-                      <div style={{ borderTop: '1px solid var(--color-border)', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
-                        {items.map((n) => {
-                          const isSelected = selected?.id === n.id;
-                          const isImpacted = selected && impactSet.has(n.id) && !isSelected;
-                          const isDimmed = selected && !impactSet.has(n.id);
-                          const statusColor = n.status ? getStatusColor(n.status) : null;
-                          return (
-                            <div key={n.id}
-                              {...clickable(() => selectNode(n), { label: `Select ${n.label}` })}
-                              style={{
-                                display: 'flex', alignItems: 'flex-start', gap: 10,
-                                padding: '10px 12px', borderRadius: 'var(--radius-md)',
-                                background: isSelected ? cfg.bg : 'var(--color-surface)',
-                                border: `1px solid ${isSelected ? cfg.color : isImpacted ? cfg.color + '66' : 'var(--color-border)'}`,
-                                cursor: 'pointer', opacity: isDimmed ? 0.35 : 1,
-                                boxShadow: isSelected ? `0 0 0 2px ${cfg.color}33` : 'none',
-                                transition: 'opacity 0.15s, border-color 0.15s',
-                                animation: isImpacted ? 'nodeGlow 2s ease-in-out infinite' : 'none',
-                              }}
-                              onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.borderColor = cfg.color + '88'; }}
-                              onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.borderColor = isImpacted ? cfg.color + '66' : 'var(--color-border)'; }}
-                            >
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                                background: cfg.bg, color: cfg.color, fontSize: 14,
-                                border: `1.5px solid ${cfg.color}44`,
-                              }}>
-                                {cfg.icon(16)}
-                              </span>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {n.label}
-                                </div>
-                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
-                                  {n.meta.description || n.meta.level || n.meta.systemType || n.meta.email || '—'}
-                                </div>
-                                <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                                  {statusColor && (
-                                    <span style={{
-                                      fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
-                                      background: statusColor.bg, color: statusColor.color,
-                                    }}>
-                                      {(n.status || '').replace('_', ' ')}
-                                    </span>
-                                  )}
-                                  {n.meta.governanceTier && (() => {
-                                    const c = badgeColor('tier', n.meta.governanceTier);
-                                    return (
-                                      <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>
-                                        {tierLabel(n.meta.governanceTier)}
-                                      </span>
-                                    );
-                                  })()}
-                                  {n.meta.healthScore != null && (() => {
-                                    const c = badgeColor('health', n.meta.healthScore);
-                                    return (
-                                      <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>
-                                        {n.meta.healthScore}% health
-                                      </span>
-                                    );
-                                  })()}
-                                  {n.meta.rulesCount > 0 && (
-                                    <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
-                                      {n.meta.rulesCount} rules
-                                    </span>
-                                  )}
-                                  {n.meta.role && (
-                                    <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
-                                      {n.meta.role.replace('_', ' ')}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Card>
-                );
-              })}
+              {/* Item list — the focused type, or all visible types grouped,
+                  filtered by the search box. Click an item to trace its
+                  dependencies in the panel on the right. */}
+              {(() => {
+                const groups = listTypes
+                  .map((type) => ({ type, cfg: TYPE_CONFIG[type], items: (byType[type] || []).filter(matchesSearch) }))
+                  .filter((g) => g.items.length > 0);
+                if (groups.length === 0) {
+                  return (
+                    <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '12px 2px' }}>
+                      {searchLc ? `No entities match “${search}”.` : 'No entities in this view.'}
+                    </div>
+                  );
+                }
+                return groups.map((g) => (
+                  <div key={g.type}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 2px 6px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: g.cfg.color }}>
+                      <span style={{ display: 'inline-flex' }}>{g.cfg.icon(13)}</span>
+                      {g.cfg.plural}
+                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>{g.items.length}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+                      {g.items.map(renderNode)}
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           )}
         </div>
 
-        {/* Impact analysis — only mounted when a node is selected, so the
-            catalog gets the full width otherwise. Sticks while scrolling. */}
-        {selected && (
+        {/* Impact analysis — a persistent right rail in Cards mode (with a
+            prompt when nothing is selected); in Diagram mode it only mounts
+            once a node is selected so the diagram keeps full width. Sticks
+            while scrolling. */}
+        {(viewMode === 'cards' || selected) && (
           <Card padding={16} style={{ width: 320, flexShrink: 0, position: 'sticky', top: 16, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}>
+            {!selected ? (
+              <div style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.6, padding: '4px 2px' }}>
+                Select an entity on the left to trace its dependencies across the enterprise — its direct connections and full impact chain appear here.
+              </div>
+            ) : (<>
             {/* Selected node header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -682,6 +705,7 @@ export default function EnterpriseViewPage() {
                 })}
               </div>
             )}
+            </>)}
           </Card>
         )}
       </div>
