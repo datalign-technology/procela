@@ -197,13 +197,17 @@ export default function ExecutiveReportPage() {
             border: none !important;
             padding: 0 !important;
           }
-          /* Fit the whole report on a single page. Scale the content down and
-             keep sections from splitting across pages. */
+          /* Fit the whole report on a single page. Scale the content down,
+             tighten the vertical rhythm, and keep sections from splitting
+             across pages. */
           .report-content { font-size: 11px; }
-          .report-content h1 { font-size: 22px !important; }
-          .report-content > div { page-break-inside: avoid; }
+          .report-content h1 { font-size: 20px !important; }
+          /* Report header (centred block) — trim its generous screen spacing. */
+          .report-content > div:first-child { margin-bottom: 14px !important; padding-bottom: 12px !important; }
+          /* Each numbered section — avoid page splits and tighten the gap. */
+          .report-content > div { page-break-inside: avoid; margin-bottom: 12px !important; }
           .page-break { page-break-before: auto !important; }
-          @page { size: portrait; margin: 12mm; }
+          @page { size: portrait; margin: 10mm; }
         }
       `}</style>
 
