@@ -104,7 +104,7 @@ interface ChartProps {
 function MaturityChart({ snapshots }: ChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const height = 150;
+  const height = 108;
 
   if (snapshots.length < 2) {
     return (
@@ -130,8 +130,8 @@ function MaturityChart({ snapshots }: ChartProps) {
   const width = 700;
   const paddingLeft = 45;
   const paddingRight = 20;
-  const paddingTop = 16;
-  const paddingBottom = 28;
+  const paddingTop = 12;
+  const paddingBottom = 24;
 
   const chartWidth = width - paddingLeft - paddingRight;
   const chartHeight = height - paddingTop - paddingBottom;
@@ -505,21 +505,21 @@ export default function ScorecardPage() {
       {/* Hero — overall score + trend side by side so the headline and the
           trend read together at the top instead of stacking. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 300px) 1fr', gap: 16, marginBottom: 16 }}>
-        <Card padding={24} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 10 }}>
+        <Card padding={18} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 6 }}>
             Overall Maturity
           </div>
-          <div style={{ fontSize: 56, fontWeight: 800, color: overallColor(data.overall), lineHeight: 1 }}>
+          <div style={{ fontSize: 52, fontWeight: 800, color: overallColor(data.overall), lineHeight: 1 }}>
             {data.overall}
           </div>
-          <div style={{ display: 'inline-block', marginTop: 12, padding: '4px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, background: overallColor(data.overall), color: '#fff' }}>
+          <div style={{ display: 'inline-block', marginTop: 8, padding: '4px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, background: overallColor(data.overall), color: '#fff' }}>
             {overallLabel(data.overall)}
           </div>
         </Card>
-        <Card padding="16px 20px">
+        <Card padding="12px 20px">
           <SectionHeading
             title="Maturity Over Time"
-            marginBottom={12}
+            marginBottom={8}
             right={
               <button
                 onClick={() => takeSnapshot(data)}
