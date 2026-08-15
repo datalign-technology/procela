@@ -359,6 +359,24 @@ function DimensionSparkline({ snapshots, dimensionName, color }: SparklineProps)
   );
 }
 
+// A drill-down wrapper: turns any card into a hyperlink to the page where the
+// underlying data lives, with a subtle hover-lift so the whole surface reads
+// as actionable. Shared by the Dimension tiles, the Recommendations, and the
+// Dimension Trends so all three "drill down to the source" the same way.
+function LiftLink({ to, ariaLabel, children }: { to: string; ariaLabel: string; children: React.ReactNode }) {
+  return (
+    <Link
+      to={to}
+      aria-label={ariaLabel}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block', borderRadius: 'var(--radius-md)', transition: 'transform 0.12s ease, box-shadow 0.12s ease' }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+    >
+      {children}
+    </Link>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main Page Component
 // ---------------------------------------------------------------------------
@@ -548,25 +566,38 @@ export default function ScorecardPage() {
         <div style={{ marginBottom: 16 }}>
           <SectionHeading title="Recommendations" />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
-            {lowDimensions.map((dim) => (
-              <div
-                key={dim.name}
-                style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px',
-                  background: '#fef3c7', borderLeft: `4px solid ${dim.color}`, borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{'⚠'}</span>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
-                    {dim.name} ({dim.score}%)
-                  </div>
-                  <div style={{ fontSize: 13, color: '#78350f' }}>
-                    {RECOMMENDATIONS[dim.name] || 'Improve this dimension to strengthen your governance maturity.'}
+            {lowDimensions.map((dim) => {
+              const route = DIMENSION_ROUTES[dim.name];
+              const card = (
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px', height: '100%',
+                    background: '#fef3c7', borderLeft: `4px solid ${dim.color}`, borderRadius: 'var(--radius-md)',
+                  }}
+                >
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>{'⚠'}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                      {dim.name} ({dim.score}%)
+                    </div>
+                    <div style={{ fontSize: 13, color: '#78350f' }}>
+                      {RECOMMENDATIONS[dim.name] || 'Improve this dimension to strengthen your governance maturity.'}
+                    </div>
+                    {route && (
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginTop: 8 }}>
+                        Fix&nbsp;→
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+              if (!route) return <div key={dim.name}>{card}</div>;
+              return (
+                <LiftLink key={dim.name} to={route} ariaLabel={`${dim.name} at ${dim.score}% — open ${route} to fix it.`}>
+                  {card}
+                </LiftLink>
+              );
+            })}
           </div>
         </div>
       )}
@@ -592,16 +623,9 @@ export default function ScorecardPage() {
             );
             if (!route) return <div key={dim.name}>{tile}</div>;
             return (
-              <Link
-                key={dim.name}
-                to={route}
-                aria-label={`${dim.name} — ${dim.score}%. Open the related page.`}
-                style={{ textDecoration: 'none', color: 'inherit', display: 'block', borderRadius: 'var(--radius-md)', transition: 'transform 0.12s ease, box-shadow 0.12s ease' }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-              >
+              <LiftLink key={dim.name} to={route} ariaLabel={`${dim.name} — ${dim.score}%. Open the related page.`}>
                 {tile}
-              </Link>
+              </LiftLink>
             );
           })}
         </div>
@@ -615,11 +639,20 @@ export default function ScorecardPage() {
               wrap into identical column counts and each trend card lines up
               under its matching dimension tile. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-            {dimensionNames.map((name) => (
-              <Card key={name} padding={12}>
-                <DimensionSparkline snapshots={snapshots} dimensionName={name} color={DIMENSION_COLORS[name] || '#6b7280'} />
-              </Card>
-            ))}
+            {dimensionNames.map((name) => {
+              const route = DIMENSION_ROUTES[name];
+              const card = (
+                <Card padding={12} style={{ height: '100%' }}>
+                  <DimensionSparkline snapshots={snapshots} dimensionName={name} color={DIMENSION_COLORS[name] || '#6b7280'} />
+                </Card>
+              );
+              if (!route) return <div key={name}>{card}</div>;
+              return (
+                <LiftLink key={name} to={route} ariaLabel={`${name} trend — open ${route} to analyze what's driving it.`}>
+                  {card}
+                </LiftLink>
+              );
+            })}
           </div>
         </div>
       )}
