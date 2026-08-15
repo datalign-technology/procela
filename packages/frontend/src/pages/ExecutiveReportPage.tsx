@@ -188,14 +188,26 @@ export default function ExecutiveReportPage() {
     <div className="executive-report">
       <style>{`
         @media print {
-          nav, header, aside, button, .no-print { display: none !important; }
+          nav, header, aside, button, .no-print, .skip-to-content { display: none !important; }
           body { background: white !important; }
           main { padding: 0 !important; margin: 0 !important; }
           .executive-report { padding: 0; }
-          .report-content { box-shadow: none !important; border: none !important; }
-        }
-        @media print {
-          .page-break { page-break-before: always; }
+          .report-content {
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+          }
+          /* Fit the whole report on a single page. Scale the content down,
+             tighten the vertical rhythm, and keep sections from splitting
+             across pages. */
+          .report-content { font-size: 11px; }
+          .report-content h1 { font-size: 20px !important; }
+          /* Report header (centred block) — trim its generous screen spacing. */
+          .report-content > div:first-child { margin-bottom: 14px !important; padding-bottom: 12px !important; }
+          /* Each numbered section — avoid page splits and tighten the gap. */
+          .report-content > div { page-break-inside: avoid; margin-bottom: 12px !important; }
+          .page-break { page-break-before: auto !important; }
+          @page { size: portrait; margin: 10mm; }
         }
       `}</style>
 

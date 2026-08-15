@@ -70,7 +70,7 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
   // Settings control) overrides: 'hidden' removes it, 'shown' pins it, 'auto'
   // (default) hides it once the org hits 100%.
   const setupProgress = useSetupStore((s) => (activeOrgId ? s.progressByOrg[activeOrgId] : undefined));
-  const setupVisibility = useSetupStore((s) => (activeOrgId ? (s.visibilityByOrg[activeOrgId] || 'auto') : 'auto'));
+  const setupVisibility = useSetupStore((s) => s.visibility);
   const showSetup = !!activeOrgId && shouldShowGetStarted(setupVisibility, setupProgress);
 
   const baseSections = showSetup

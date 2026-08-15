@@ -129,7 +129,10 @@ export default function EnterpriseViewPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [activeView, setActiveView] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('diagram');
+  // Hide nodes with no relationships in the current view — lets users focus
+  // on the connected core and drop dangling entities.
+  const [hideUnconnected, setHideUnconnected] = useState(false);
   // Cards-mode master-detail: a search box filters items by name, and a
   // summary-tile grid focuses one entity type (null = show all visible types).
   const [search, setSearch] = useState('');
@@ -176,11 +179,18 @@ export default function EnterpriseViewPage() {
   const presetNodes = nodes.filter((n) => preset.entityTypes.has(n.type));
   const countByType: Record<string, number> = {};
   for (const n of presetNodes) countByType[n.type] = (countByType[n.type] || 0) + 1;
-  const filteredNodes = presetNodes.filter((n) => !hiddenTypes.has(n.type));
-  const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
+  const typeVisibleNodes = presetNodes.filter((n) => !hiddenTypes.has(n.type));
+  const typeVisibleIds = new Set(typeVisibleNodes.map((n) => n.id));
   const filteredEdges = edges.filter((e) =>
-    preset.edgeTypes.has(e.type) && filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target),
+    preset.edgeTypes.has(e.type) && typeVisibleIds.has(e.source) && typeVisibleIds.has(e.target),
   );
+  // "Hide unconnected" drops nodes that have no edge in the current view. Edges
+  // only ever connect two visible nodes, so the edge list is unaffected.
+  const connectedIds = new Set<string>();
+  for (const e of filteredEdges) { connectedIds.add(e.source); connectedIds.add(e.target); }
+  const filteredNodes = hideUnconnected
+    ? typeVisibleNodes.filter((n) => connectedIds.has(n.id))
+    : typeVisibleNodes;
 
   // Group visible nodes by type
   const byType: Record<string, GraphNode[]> = {};
@@ -449,6 +459,23 @@ export default function EnterpriseViewPage() {
               </button>
             );
           })}
+          {/* Hide nodes that have no relationship in the current view. */}
+          <button
+            type="button"
+            onClick={() => setHideUnconnected((v) => !v)}
+            aria-pressed={hideUnconnected}
+            title={hideUnconnected ? 'Show entities with no connections' : 'Hide entities with no connections'}
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+              border: `1px solid ${hideUnconnected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+              background: hideUnconnected ? 'var(--color-primary-light)' : 'var(--color-surface)',
+              color: hideUnconnected ? 'var(--color-primary)' : 'var(--color-text-muted)',
+            }}
+          >
+            Hide unconnected
+          </button>
         </div>
       )}
 

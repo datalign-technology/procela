@@ -90,8 +90,7 @@ export default function SetupHubPage() {
   const { setProgress, toggleAffirm, isAffirmed, setVisibility } = useSetupStore();
   const addToast = useToastStore((s) => s.addToast);
   const hideGuide = () => {
-    if (!activeOrgId) return;
-    setVisibility(activeOrgId, 'hidden');
+    setVisibility('hidden');
     addToast('info', 'Get Started hidden from the sidebar. Turn it back on in Settings → Get Started guide.');
   };
   // Subscribe to the active org's affirmation list so toggling "mark

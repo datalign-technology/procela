@@ -39,6 +39,7 @@ export default function ShortcutsHint({ onOpenShortcuts }: ShortcutsHintProps) {
     <div
       role="complementary"
       aria-label="Keyboard shortcuts hint"
+      className="no-print"
       style={{
         position: 'fixed', bottom: 20, left: 20, zIndex: 850,
         display: 'flex', alignItems: 'center', gap: 10,
