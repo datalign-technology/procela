@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
+import type { CSSProperties } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
@@ -29,9 +30,23 @@ import { OrgPickerModal } from '../components/OrgPicker';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { useRowSelection } from '../hooks/useRowSelection';
+import { usePagination } from '../hooks/usePagination';
+import LoadMoreBar from '../components/LoadMoreBar';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 // Lazy: only renders when the user opens the connection picker.
 const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
+
+// Sticky header + quick-add row: the main content area scrolls, so pinning the
+// column headers (and the always-there quick-add row beneath them) to the top
+// keeps them in view while scrolling a long roster. QUICK_ADD_TOP ≈ the header
+// row's height so the quick-add row parks just under the headers.
+const stickyTh: CSSProperties = {
+  position: 'sticky', top: 0, zIndex: 3, background: 'var(--color-bg)',
+};
+const QUICK_ADD_TOP = 37;
+const stickyQuickAddTd: CSSProperties = {
+  position: 'sticky', top: QUICK_ADD_TOP, zIndex: 2, background: '#f0f9ff',
+};
 
 // ── Types ──
 
@@ -459,6 +474,11 @@ export default function PeoplePage() {
 
   // Row selection for bulk actions, over the currently filtered+sorted list.
   const sel = useRowSelection(sortedPeople, (p) => p.id);
+
+  // Cap how many rows render for a large roster; sort / filter / select-all
+  // above still operate over the whole filtered list.
+  const peoplePage = usePagination(sortedPeople, 50);
+  const pagedPeople = peoplePage.pageItems;
 
   const orgOptions = flattenTreeForSelect(tree);
   // Reserved for future visibility filtering
@@ -1088,8 +1108,11 @@ export default function PeoplePage() {
                 </Card>
               )}
 
-              {/* People Table */}
-              <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
+              {/* People Table. The Card clips; an inner scroll box bounds the
+                  list height so the sticky column header + quick-add row pin to
+                  the top of the list (not the page), and the Load-more footer
+                  stays visible below the scroll area. */}
+              <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
                 {filteredPeople.length === 0 && !selectedOrgId ? (
                   <EmptyState
                     icon={renderNavIcon('/organizations')}
@@ -1105,31 +1128,32 @@ export default function PeoplePage() {
                     secondaryAction={{ label: 'Import from CSV', onClick: () => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); } }}
                   />
                 ) : (
+                  <div style={{ maxHeight: 'calc(100vh - 240px)', overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ background: 'var(--color-bg)' }}>
-                        <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                      <tr>
+                        <th scope="col" style={{ ...thStyle, ...stickyTh, width: 32, textAlign: 'center' }}>
                           <input type="checkbox"
                             ref={(el) => { if (el) el.indeterminate = sel.someSelected; }}
                             checked={sel.allSelected}
                             onChange={sel.toggleAll} />
                         </th>
-                        <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                        <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
-                        <th scope="col" style={thStyle}>Governance</th>
-                        <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
+                        <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort} style={stickyTh}>Name</SortableTh>
+                        <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort} style={stickyTh}>App Role</SortableTh>
+                        <th scope="col" style={{ ...thStyle, ...stickyTh }}>Governance</th>
+                        <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort} style={stickyTh}>Title</SortableTh>
                         {selectedOrgId && (
-                          <th scope="col" style={{ ...thStyle, width: 110 }} title="Process activities this person is responsible for that require a skill they don't hold.">Skill gaps</th>
+                          <th scope="col" style={{ ...thStyle, ...stickyTh, width: 110 }} title="Process activities this person is responsible for that require a skill they don't hold.">Skill gaps</th>
                         )}
-                        <th scope="col" style={{ ...thStyle, width: 70, textAlign: 'center' }}>Actions</th>
+                        <th scope="col" style={{ ...thStyle, ...stickyTh, width: 70, textAlign: 'center' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {/* Quick-add row — always visible at the top when an org is selected */}
                       {selectedOrgId && (
-                        <tr style={{ background: '#f0f9ff' }}>
-                          <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}></td>
-                          <td style={tdStyle}>
+                        <tr>
+                          <td style={{ ...tdStyle, ...stickyQuickAddTd, textAlign: 'center', width: 32 }}></td>
+                          <td style={{ ...tdStyle, ...stickyQuickAddTd }}>
                             <input
                               aria-label="New person name"
                               value={quickName}
@@ -1139,9 +1163,9 @@ export default function PeoplePage() {
                               style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
                             />
                           </td>
-                          <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-muted)' }}>Viewer</td>
-                          <td style={tdStyle}></td>
-                          <td style={tdStyle}>
+                          <td style={{ ...tdStyle, ...stickyQuickAddTd, fontSize: 11, color: 'var(--color-text-muted)' }}>Viewer</td>
+                          <td style={{ ...tdStyle, ...stickyQuickAddTd }}></td>
+                          <td style={{ ...tdStyle, ...stickyQuickAddTd }}>
                             <input
                               aria-label="New person title"
                               value={quickTitle}
@@ -1151,7 +1175,8 @@ export default function PeoplePage() {
                               style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
                             />
                           </td>
-                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <td style={{ ...tdStyle, ...stickyQuickAddTd }}></td>{/* Skill gaps column */}
+                          <td style={{ ...tdStyle, ...stickyQuickAddTd, textAlign: 'center' }}>
                             <button
                               onClick={handleQuickAdd}
                               disabled={!quickName.trim() || quickSaving}
@@ -1166,7 +1191,7 @@ export default function PeoplePage() {
                           </td>
                         </tr>
                       )}
-                      {sortedPeople.map((person) => {
+                      {pagedPeople.map((person) => {
                         const gs = govSummary[person.id];
                         const govText = gs
                           ? [gs.groups > 0 && `${gs.groups} group${gs.groups > 1 ? 's' : ''}`, gs.roles > 0 && `${gs.roles} role${gs.roles > 1 ? 's' : ''}`, gs.domains > 0 && `${gs.domains} domain${gs.domains > 1 ? 's' : ''}`].filter(Boolean).join(', ')
@@ -1225,7 +1250,9 @@ export default function PeoplePage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 )}
+                <LoadMoreBar pagination={peoplePage} noun={['person', 'people']} />
               </Card>
           </>
         </div>

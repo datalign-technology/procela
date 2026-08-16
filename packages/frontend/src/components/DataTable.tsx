@@ -4,6 +4,8 @@ import SortableTh from './SortableTh';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import type { RowSelection } from '../hooks/useRowSelection';
 import type { SortDir } from '../hooks/useSortedList';
+import { usePagination } from '../hooks/usePagination';
+import LoadMoreBar from './LoadMoreBar';
 
 // ──────────────────────────────────────────────────────────────────────────
 // DataTable — the shared list table.
@@ -92,6 +94,14 @@ interface DataTableProps<T> {
   selectAllLabel?: string;
   /** Enable expandable detail rows with a leading caret column. */
   expansion?: DataTableExpansion<T>;
+  /** Rows rendered before a "Load more" footer appears. Long lists cap the
+   *  DOM at this many rows and reveal the rest on demand; small lists (≤ this)
+   *  render in full with no footer. Default 50; pass `false` to never
+   *  paginate (render every row). Sort / search / select-all still operate
+   *  over the whole list — only how many rows mount at once is capped. */
+  pageSize?: number | false;
+  /** Singular/plural noun for the footer count, e.g. ['asset','assets']. */
+  countNoun?: [string, string];
 }
 
 export default function DataTable<T>({
@@ -105,10 +115,19 @@ export default function DataTable<T>({
   emptyMessage,
   selectAllLabel = 'Select all rows',
   expansion,
+  pageSize = 50,
+  countNoun,
 }: DataTableProps<T>) {
   const colCount = columns.length + (selection ? 1 : 0) + (expansion ? 1 : 0);
 
+  // Cap how many rows mount at once; the page's sort / filter / select-all
+  // still operate over the full `rows` array (this only slices what renders).
+  const effectivePageSize = pageSize === false ? Number.MAX_SAFE_INTEGER : pageSize;
+  const pagination = usePagination(rows, effectivePageSize);
+  const visibleRows = pagination.pageItems;
+
   return (
+    <>
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr style={{ background: 'var(--color-bg)' }}>
@@ -157,7 +176,7 @@ export default function DataTable<T>({
             </td>
           </tr>
         ) : (
-          rows.map((row) => {
+          visibleRows.map((row) => {
             const id = rowKey(row);
             const isSelected = selection?.isSelected(id) ?? false;
             const canExpand = expansion ? (expansion.getRowExpandable?.(row) ?? true) : false;
@@ -222,5 +241,7 @@ export default function DataTable<T>({
         )}
       </tbody>
     </table>
+    <LoadMoreBar pagination={pagination} noun={countNoun} />
+    </>
   );
 }
