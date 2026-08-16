@@ -251,6 +251,23 @@ export function countByLevel(node: ProcessNode, level: NodeLevel): number {
   return count;
 }
 
+/** Return a display copy of the tree with the given levels hidden. A hidden
+ *  node isn't just dropped — its (recursively filtered) children are promoted
+ *  up into its place, so hiding an intermediate level (e.g. Sub-Process) lets
+ *  its Activities show directly under the Process rather than disappearing
+ *  with their parent. Node ids are preserved, so expand/edit/select still work
+ *  against the underlying catalog. */
+export function pruneHiddenLevels(nodes: ProcessNode[], hidden: Set<NodeLevel>): ProcessNode[] {
+  if (hidden.size === 0) return nodes;
+  const out: ProcessNode[] = [];
+  for (const n of nodes) {
+    const kids = pruneHiddenLevels(n.children || [], hidden);
+    if (hidden.has(n.level)) out.push(...kids);
+    else out.push({ ...n, children: kids });
+  }
+  return out;
+}
+
 export function hasRequiredPath(node: ProcessNode): { complete: boolean; missing: string[]; hasProcess: boolean; hasActivity: boolean } {
   if (node.level !== 'VALUE_STREAM') return { complete: true, missing: [], hasProcess: true, hasActivity: true };
   const missing: string[] = [];
@@ -1035,6 +1052,21 @@ export default function ProcessCatalogPage() {
     [tree, domainLens],
   );
 
+  // Per-user level visibility. Users can hide whole hierarchy levels (e.g.
+  // collapse the catalog to just Value Streams → Activities by hiding
+  // Sub-Process) from the Legend chips; hidden levels have their children
+  // promoted up so nothing is orphaned. View-only — never touches the data.
+  const [hiddenLevels, setHiddenLevels] = useState<Set<NodeLevel>>(new Set());
+  const toggleLevel = (level: NodeLevel) => setHiddenLevels((prev) => {
+    const next = new Set(prev);
+    next.has(level) ? next.delete(level) : next.add(level);
+    return next;
+  });
+  const visibleTree = useMemo(
+    () => pruneHiddenLevels(lensedTree, hiddenLevels),
+    [lensedTree, hiddenLevels],
+  );
+
   // Build the role-eligibility maps. Activity.responsibleRole is stored
   // as a label string (e.g. "Business Data Steward"); dama-roles uses
   // the roleType code ("BUSINESS_DATA_STEWARD"). Walk GOVERNANCE_ROLES
@@ -1263,19 +1295,38 @@ export default function ProcessCatalogPage() {
           {Object.entries(LEVEL_CONFIG).map(([level, config]) => {
             const count = byLevel[level] || 0;
             if (count === 0 && !config.required) return null;
+            const hidden = hiddenLevels.has(level as NodeLevel);
+            // Chips with rows in the tree double as show/hide toggles for that
+            // level; empty (count 0) required chips stay non-interactive.
+            const interactive = count > 0;
             return (
-              <div key={level} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                background: count > 0 ? config.bg : '#f8fafc', color: count > 0 ? config.color : '#94a3b8',
-                borderRadius: 4, padding: '3px 8px', fontSize: 11, fontWeight: 500,
-                border: config.required ? `1px solid ${count > 0 ? config.color : '#94a3b8'}33` : '1px solid transparent',
-              }} title={config.hint}>
+              <button
+                key={level}
+                type="button"
+                onClick={interactive ? () => toggleLevel(level as NodeLevel) : undefined}
+                disabled={!interactive}
+                aria-pressed={interactive ? !hidden : undefined}
+                title={interactive
+                  ? `${config.hint}\n\nClick to ${hidden ? 'show' : 'hide'} ${config.plural} in the tree.`
+                  : config.hint}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  background: hidden ? '#f8fafc' : (count > 0 ? config.bg : '#f8fafc'),
+                  color: hidden ? '#94a3b8' : (count > 0 ? config.color : '#94a3b8'),
+                  borderRadius: 4, padding: '3px 8px', fontSize: 11, fontWeight: 500,
+                  border: config.required ? `1px solid ${(hidden ? '#94a3b8' : (count > 0 ? config.color : '#94a3b8'))}33` : '1px solid transparent',
+                  cursor: interactive ? 'pointer' : 'default',
+                  textDecoration: hidden ? 'line-through' : 'none',
+                  opacity: hidden ? 0.7 : 1,
+                  fontFamily: 'inherit',
+                }}
+              >
                 {config.icon} {count} {count === 1 ? config.label : config.plural}
                 {config.required && <span style={{ fontSize: 8 }}>*</span>}
-              </div>
+              </button>
             );
           })}
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 4 }}>* = required</span>
+          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 4 }}>* = required · click a level to show / hide it</span>
           <button
             onClick={() => setShowLevelGuide(!showLevelGuide)}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--color-primary)', marginLeft: 'auto', padding: 0 }}
@@ -1531,8 +1582,12 @@ export default function ProcessCatalogPage() {
             No {domainLens === 'GOVERNANCE' ? 'governance' : 'operational'} value streams.
             {' '}Switch the lens above to see {domainLens === 'GOVERNANCE' ? 'operational' : 'governance'} processes.
           </div>
+        ) : visibleTree.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem 2rem', color: 'var(--color-text-secondary)', fontSize: 13 }}>
+            Every level is hidden. Re-enable a level in the Legend above to see the catalog.
+          </div>
         ) : (
-          lensedTree.map((node, idx) => (
+          visibleTree.map((node, idx) => (
             <TreeNode key={node.id} node={node} depth={0}
               onUpdate={updateNode} onDelete={deleteNode} onClone={cloneNode}
               onAddChild={(parentId) => setAddingTo(parentId)}
@@ -1542,7 +1597,7 @@ export default function ProcessCatalogPage() {
               activitiesFlat={activitiesFlat}
               valueStreamName={node.level === 'VALUE_STREAM' ? node.name : ''}
               controlsList={controlsList}
-              siblingIndex={idx} siblingCount={lensedTree.length} onReorder={reorderNode}
+              siblingIndex={idx} siblingCount={visibleTree.length} onReorder={reorderNode}
               onShowHistory={showHistory}
               allTags={allTags}
               onAddTag={addTag}

@@ -2,8 +2,13 @@ import { useMemo, useRef, useState, useLayoutEffect } from 'react';
 
 // Lightweight, hand-rolled SVG visualization for Enterprise View.
 // Lays nodes out as horizontal swimlanes — one row per entity type — and
-// draws edges between them. Same data shape as the cards view; the parent
-// passes already-filtered nodes/edges plus the active selection / impact set.
+// draws curved, colour-coded edges between them, in the same visual language
+// as the Process ↔ Data Map. The process lane sub-groups its nodes under their
+// value stream, and the data-asset lane sub-groups under the system (or domain)
+// that holds each asset, so related nodes cluster together. Selection dims
+// everything outside the impact set so a click reads as a focus.
+// Same data shape as the cards view; the parent passes already-filtered
+// nodes/edges plus the active selection / impact set.
 
 export interface DiagramNode {
   id: string;
@@ -45,7 +50,9 @@ interface Props {
 const NODE_W = 150;
 const NODE_H = 44;
 const NODE_GAP_X = 14;
-const ROW_GAP_Y = 12;   // gap between wrapped rows within a single lane
+const ROW_GAP_Y = 12;   // gap between wrapped rows within a group
+const GROUP_HEADER_H = 22; // sub-group label band inside a lane
+const GROUP_GAP_Y = 14;  // gap between sub-groups within a lane
 const LANE_GAP_Y = 70;
 const LANE_LABEL_W = 110;
 const PADDING = 20;
@@ -55,15 +62,35 @@ function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
+// Edge palette. Mapping edges carry the mapping's linkType in `label`
+// (produces / consumes / transforms / references / uses) and are coloured the
+// same as the Process ↔ Data Map so the two surfaces read alike; the other
+// relationship types (structural, ownership, lineage, …) each get a distinct
+// colour. Returns the stroke colour plus a legend label so the diagram can
+// build a legend of only the relationships actually present.
+function edgeStyle(e: DiagramEdge): { color: string; legend: string } {
+  if (e.type === 'mapping') {
+    const k = (e.label || '').toLowerCase();
+    if (k.includes('produce')) return { color: '#059669', legend: 'produces' };
+    if (k.includes('consume')) return { color: '#2563eb', legend: 'consumes' };
+    if (k.includes('transform')) return { color: '#7c3aed', legend: 'transforms' };
+    return { color: '#64748b', legend: 'references / uses' };
+  }
+  switch (e.type) {
+    case 'hosted-by': return { color: '#0ea5e9', legend: 'hosted by' };
+    case 'governs':   return { color: '#dc2626', legend: 'governs' };
+    case 'owned-by':  return { color: '#d97706', legend: 'owned by' };
+    case 'lineage':   return { color: '#14b8a6', legend: 'lineage' };
+    case 'hierarchy': return { color: '#cbd5e1', legend: 'contains' };
+    default:          return { color: '#94a3b8', legend: e.type };
+  }
+}
+
 export default function EnterpriseDiagram({
   nodes, edges, selected, impactSet, onSelect, typeConfig, columnOrder,
 }: Props) {
   // Measure the available width so each lane wraps its nodes to fit instead
-  // of running off the right edge. Previously every lane was forced to the
-  // width of the single widest lane and laid out in one row, so a busy view
-  // (e.g. 15 activities) overflowed the card and the right half was clipped
-  // — only reachable by horizontal scroll. Now we wrap to as many columns
-  // as fit and grow the lane's height instead.
+  // of running off the right edge.
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerW, setContainerW] = useState(0);
   useLayoutEffect(() => {
@@ -83,43 +110,128 @@ export default function EnterpriseDiagram({
 
     const activeLanes = columnOrder.filter((t) => byType[t].length > 0);
 
-    // Usable inner width for node columns (fall back to a sensible width
-    // before the ResizeObserver has measured). `cols` is how many nodes fit
-    // per row; lanes with more nodes wrap onto additional rows.
+    // ── Sub-group derivation ──────────────────────────────────────────────
+    // Use the structural edges that are in view to cluster each lane:
+    //   • process nodes group under their top value-stream ancestor (hierarchy)
+    //   • data-asset nodes group under the system that hosts them (hosted-by),
+    //     falling back to their governing domain (governs).
+    // Grouping only kicks in when those edges are present in the current view,
+    // so a preset that hides the relationship simply renders a flat lane.
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const parentOf = new Map<string, string>();   // child → parent (hierarchy)
+    const systemOf = new Map<string, string>();    // asset → system (hosted-by)
+    const domainOf = new Map<string, string>();    // asset → domain (governs)
+    for (const e of edges) {
+      if (e.type === 'hierarchy') parentOf.set(e.target, e.source);
+      else if (e.type === 'hosted-by') systemOf.set(e.source, e.target);
+      else if (e.type === 'governs') domainOf.set(e.target, e.source);
+    }
+    const rootOf = (id: string): string => {
+      let cur = id;
+      const seen = new Set<string>([cur]);
+      while (parentOf.has(cur)) {
+        const p = parentOf.get(cur)!;
+        if (seen.has(p)) break; // cycle guard
+        cur = p; seen.add(cur);
+      }
+      return cur;
+    };
+    const groupOf = (n: DiagramNode): { key: string; label: string } => {
+      if (n.type === 'process') {
+        const root = rootOf(n.id);
+        return { key: root, label: nodeById.get(root)?.label || 'Ungrouped' };
+      }
+      if (n.type === 'data-asset') {
+        const sys = systemOf.get(n.id);
+        if (sys) return { key: `sys:${sys}`, label: nodeById.get(sys)?.label || 'System' };
+        const dom = domainOf.get(n.id);
+        if (dom) return { key: `dom:${dom}`, label: nodeById.get(dom)?.label || 'Domain' };
+        return { key: '__ungrouped__', label: 'Unassigned' };
+      }
+      return { key: '__all__', label: '' };
+    };
+
     const availW = Math.max(360, containerW || 900);
     const usableW = Math.max(NODE_W, availW - LANE_LABEL_W - PADDING * 2);
     const cols = Math.max(1, Math.floor((usableW + NODE_GAP_X) / (NODE_W + NODE_GAP_X)));
+    const laneLeft = LANE_LABEL_W + PADDING;
 
     const positions = new Map<string, { x: number; y: number }>();
     const laneBands: Array<{ type: string; y: number; height: number }> = [];
-    let y = PADDING;
-    for (const laneType of activeLanes) {
-      const laneNodes = byType[laneType];
-      const rows = Math.max(1, Math.ceil(laneNodes.length / cols));
-      const laneHeight = rows * NODE_H + (rows - 1) * ROW_GAP_Y;
+    const groupHeaders: Array<{ laneType: string; label: string; x: number; y: number; color: string }> = [];
+
+    // Place a set of nodes as wrapped, left-aligned rows starting at `startY`.
+    // Returns the height consumed.
+    const placeRows = (laneNodes: DiagramNode[], startY: number): number => {
       laneNodes.forEach((n, i) => {
         const row = Math.floor(i / cols);
         const col = i % cols;
-        const nodesInRow = Math.min(cols, laneNodes.length - row * cols);
-        const rowW = nodesInRow * NODE_W + (nodesInRow - 1) * NODE_GAP_X;
-        // Centre each row within the usable width so short rows sit under
-        // the middle of the lane rather than hugging the left.
-        const rowStartX = LANE_LABEL_W + PADDING + Math.max(0, (usableW - rowW) / 2);
         positions.set(n.id, {
-          x: rowStartX + col * (NODE_W + NODE_GAP_X),
-          y: y + row * (NODE_H + ROW_GAP_Y),
+          x: laneLeft + col * (NODE_W + NODE_GAP_X),
+          y: startY + row * (NODE_H + ROW_GAP_Y),
         });
       });
-      laneBands.push({ type: laneType, y, height: laneHeight });
-      y += laneHeight + LANE_GAP_Y;
+      const rows = Math.max(1, Math.ceil(laneNodes.length / cols));
+      return rows * NODE_H + (rows - 1) * ROW_GAP_Y;
+    };
+
+    let y = PADDING;
+    for (const laneType of activeLanes) {
+      const laneNodes = byType[laneType];
+      const laneStartY = y;
+      const groupable = laneType === 'process' || laneType === 'data-asset';
+
+      // Build ordered groups (preserve first-appearance order; push the
+      // "Unassigned" bucket to the end so real clusters lead).
+      let groups: Array<{ key: string; label: string; nodes: DiagramNode[] }> = [];
+      if (groupable) {
+        const map = new Map<string, { key: string; label: string; nodes: DiagramNode[] }>();
+        for (const n of laneNodes) {
+          const g = groupOf(n);
+          if (!map.has(g.key)) map.set(g.key, { key: g.key, label: g.label, nodes: [] });
+          map.get(g.key)!.nodes.push(n);
+        }
+        groups = Array.from(map.values());
+        groups.sort((a, b) => {
+          const au = a.key === '__ungrouped__' ? 1 : 0;
+          const bu = b.key === '__ungrouped__' ? 1 : 0;
+          if (au !== bu) return au - bu;
+          return a.label.localeCompare(b.label);
+        });
+      }
+
+      const cfg = typeConfig[laneType];
+      if (groupable && groups.length > 1) {
+        groups.forEach((g, gi) => {
+          if (gi > 0) y += GROUP_GAP_Y;
+          groupHeaders.push({ laneType, label: g.label, x: laneLeft, y: y + 10, color: cfg?.color || '#64748b' });
+          y += GROUP_HEADER_H;
+          y += placeRows(g.nodes, y);
+        });
+      } else {
+        y += placeRows(laneNodes, y);
+      }
+
+      laneBands.push({ type: laneType, y: laneStartY, height: y - laneStartY });
+      y += LANE_GAP_Y;
     }
 
     const totalW = availW;
     const totalH = Math.max(120, y - LANE_GAP_Y + PADDING);
-    return { totalW, totalH, positions, laneBands };
-  }, [nodes, columnOrder, containerW]);
+    return { totalW, totalH, positions, laneBands, groupHeaders };
+  }, [nodes, edges, columnOrder, containerW, typeConfig]);
 
-  const { totalW, totalH, positions, laneBands } = layout;
+  const { totalW, totalH, positions, laneBands, groupHeaders } = layout;
+
+  // Legend — the distinct relationship colours actually present in this view.
+  const legend = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const e of edges) {
+      const s = edgeStyle(e);
+      if (!seen.has(s.legend)) seen.set(s.legend, s.color);
+    }
+    return Array.from(seen.entries()).map(([label, color]) => ({ label, color }));
+  }, [edges]);
 
   if (nodes.length === 0) {
     return (
@@ -131,6 +243,27 @@ export default function EnterpriseDiagram({
 
   const hasSelection = !!selected;
 
+  // Build a curved path between two node boxes. Vertical cubic bezier for the
+  // common cross-lane case (source lane above/below the target); a downward
+  // bow for the rarer same-row case so the two ends stay distinguishable.
+  const edgePath = (a: { x: number; y: number }, b: { x: number; y: number }): string => {
+    const x1 = a.x + NODE_W / 2;
+    const x2 = b.x + NODE_W / 2;
+    if (b.y > a.y + NODE_H / 2) {
+      const y1 = a.y + NODE_H, y2 = b.y;
+      const dy = Math.min(70, Math.max(24, (y2 - y1) * 0.5));
+      return `M ${x1} ${y1} C ${x1} ${y1 + dy} ${x2} ${y2 - dy} ${x2} ${y2}`;
+    }
+    if (b.y < a.y - NODE_H / 2) {
+      const y1 = a.y, y2 = b.y + NODE_H;
+      const dy = Math.min(70, Math.max(24, (y1 - y2) * 0.5));
+      return `M ${x1} ${y1} C ${x1} ${y1 - dy} ${x2} ${y2 + dy} ${x2} ${y2}`;
+    }
+    // Same lane / same row band — bow downward under both nodes.
+    const y1 = a.y + NODE_H / 2, y2 = b.y + NODE_H / 2;
+    return `M ${x1} ${y1} C ${x1} ${y1 + 36} ${x2} ${y2 + 36} ${x2} ${y2}`;
+  };
+
   return (
     <div ref={containerRef} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 12, overflow: 'hidden' }}>
       <svg
@@ -140,17 +273,9 @@ export default function EnterpriseDiagram({
         style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
       >
         <defs>
-          <marker id="ev-arrow" viewBox="0 0 10 10" refX="9" refY="5"
-            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0,0 L10,5 L0,10 z" fill="#64748b" />
-          </marker>
           <marker id="ev-arrow-dim" viewBox="0 0 10 10" refX="9" refY="5"
-            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="#cbd5e1" />
-          </marker>
-          <marker id="ev-arrow-active" viewBox="0 0 10 10" refX="9" refY="5"
-            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0,0 L10,5 L0,10 z" fill="#1e293b" />
           </marker>
         </defs>
 
@@ -181,46 +306,47 @@ export default function EnterpriseDiagram({
           );
         })}
 
-        {/* Edges (behind nodes) */}
+        {/* Sub-group labels within a lane (process → value stream, data →
+            system/domain). Rendered only when a lane actually sub-groups. */}
+        {groupHeaders.map((g, i) => (
+          <text
+            key={`gh-${i}`}
+            x={g.x}
+            y={g.y}
+            fontSize={9.5}
+            fontWeight={700}
+            style={{ fill: g.color, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.75 }}
+          >
+            {truncate(g.label, 40)}
+          </text>
+        ))}
+
+        {/* Edges (behind nodes) — curved and colour-coded by relationship. */}
         {edges.map((e) => {
           const a = positions.get(e.source);
           const b = positions.get(e.target);
           if (!a || !b) return null;
           const isActive = hasSelection && impactSet.has(e.source) && impactSet.has(e.target);
           const isDimmed = hasSelection && !isActive;
+          const style = edgeStyle(e);
 
-          const targetBelow = b.y > a.y;
-          const targetAbove = b.y < a.y;
-          const x1 = a.x + NODE_W / 2;
-          const x2 = b.x + NODE_W / 2;
-          let y1: number, y2: number;
-          if (targetBelow) {
-            y1 = a.y + NODE_H;
-            y2 = b.y;
-          } else if (targetAbove) {
-            y1 = a.y;
-            y2 = b.y + NODE_H;
-          } else {
-            y1 = a.y + NODE_H / 2;
-            y2 = b.y + NODE_H / 2;
-          }
-
-          const stroke = isActive ? '#1e293b' : isDimmed ? '#e2e8f0' : '#94a3b8';
-          const marker = isActive ? 'url(#ev-arrow-active)' : isDimmed ? 'url(#ev-arrow-dim)' : 'url(#ev-arrow)';
-          const opacity = isDimmed ? 0.5 : 1;
-          const strokeWidth = isActive ? 1.8 : 1;
+          const stroke = isDimmed ? '#e2e8f0' : style.color;
+          const strokeWidth = isActive ? 2.4 : isDimmed ? 1 : 1.5;
+          const opacity = isDimmed ? 0.5 : isActive ? 1 : 0.8;
 
           return (
-            <line
+            <path
               key={e.id}
-              x1={x1} y1={y1} x2={x2} y2={y2}
+              d={edgePath(a, b)}
+              fill="none"
               stroke={stroke}
               strokeWidth={strokeWidth}
               opacity={opacity}
-              markerEnd={marker}
+              strokeLinecap="round"
+              markerEnd={isDimmed ? 'url(#ev-arrow-dim)' : undefined}
             >
               <title>{e.label}</title>
-            </line>
+            </path>
           );
         })}
 
@@ -255,12 +381,8 @@ export default function EnterpriseDiagram({
                 strokeWidth={strokeWidth}
                 opacity={opacity}
               />
-              {/* Small filled circle in the type colour signals the
-                  node's type at a glance. Replaces a Unicode text
-                  glyph that couldn't be swapped for the sidebar's
-                  SVG icon set (SVG icons don't render inside SVG
-                  <text>) — the lane it's docked to still labels
-                  the type explicitly. */}
+              {/* Small filled circle in the type colour signals the node's
+                  type at a glance; the lane it docks to labels it explicitly. */}
               <circle
                 cx={16}
                 cy={NODE_H / 2}
@@ -296,6 +418,19 @@ export default function EnterpriseDiagram({
           );
         })}
       </svg>
+
+      {/* Relationship legend — the edge colours present in this view. */}
+      {legend.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', padding: '10px 6px 2px', borderTop: '1px solid var(--color-border)', marginTop: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Relationships</span>
+          {legend.map((l) => (
+            <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-text-secondary)' }}>
+              <svg width={20} height={8} style={{ flexShrink: 0 }}><line x1={0} y1={4} x2={20} y2={4} stroke={l.color} strokeWidth={2.4} strokeLinecap="round" /></svg>
+              {l.label}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
