@@ -475,6 +475,10 @@ A handful of components show up on every detail page so the patterns stay the sa
 
 Description and long-name columns on every list surface (Systems, Data Assets, Skills, Data Lineage, Business Glossary, Data Dictionary, Agents, Data Quality, Connections) clip to a single line with an ellipsis. Hover the cell to see the full text in a native browser tooltip. The pattern keeps rows a uniform height so downstream columns don't shift when one row's description is a paragraph — the whole content is still available, it's just gated behind a hover.
 
+### Large lists — Load more
+
+List pages cap how many rows render at once so a large org's roster or catalog stays fast and the scrollbar stays short. Once a list runs past the page size, a footer appears: "Showing N of M", a Load more button that reveals the next page, a Show all, and a Rows-per-page selector (25 / 50 / 100 / 200). Sorting, searching, filtering, and select-all still operate over the whole result set — only how many rows mount at a time is capped, and the count snaps back to the first page whenever a filter changes the result size. On the People page the column header and the quick-add row stay pinned to the top of the list while you scroll, so you never lose the columns or the add-row on a long roster.
+
 ### Saved views
 
 - Capture the current sidebar / search / group-by state on a list page under a name, then recall it later. The Views button sits in the page header next to Export.
