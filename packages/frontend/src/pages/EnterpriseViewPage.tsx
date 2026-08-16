@@ -12,6 +12,7 @@ import { clickable } from '../lib/a11y';
 import { badgeColor } from '../lib/badgeColors';
 import HelpPopover from '../components/HelpPopover';
 import EnterpriseDiagram from '../components/EnterpriseDiagram';
+import EntityTypeFilter from '../components/EntityTypeFilter';
 import { renderNavIcon } from '../components/navIcons';
 import { exportEnterpriseDrawio } from '../lib/enterpriseDiagramExport';
 
@@ -128,24 +129,28 @@ export default function EnterpriseViewPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
-  const [activeView, setActiveView] = useState<string>('all');
+  // The preset selector was removed; the view always shows everything, and
+  // scope is dialed in with the Show-layer toggles + Include-governance.
+  const [activeView] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('diagram');
   // Hide nodes with no relationships in the current view — lets users focus
   // on the connected core and drop dangling entities.
   const [hideUnconnected, setHideUnconnected] = useState(false);
+  // Governance value streams (Data Governance Management, etc.) are excluded by
+  // default so the view opens on the operational picture; flip this to fold
+  // them back in. Same domain classifier the Process ↔ Data Map filters on.
+  const [includeGovernance, setIncludeGovernance] = useState(false);
   // Cards-mode master-detail: a search box filters items by name, and a
   // summary-tile grid focuses one entity type (null = show all visible types).
   const [search, setSearch] = useState('');
   const [focusType, setFocusType] = useState<string | null>(null);
-  // Per-type visibility — lets the user hide/show whole lanes (Processes,
-  // Systems, Domains, …) in both the cards and diagram views, on top of
-  // the preset filter.
-  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
-  const toggleType = (type: string) => setHiddenTypes((prev) => {
-    const next = new Set(prev);
-    if (next.has(type)) next.delete(type); else next.add(type);
-    return next;
-  });
+  // Per-type entity filter. For each entity type, `null` means "show all"
+  // (the default, so a fresh view needn't enumerate every id); a Set means
+  // "show only these ids"; an empty Set hides the type entirely. Drives the
+  // EntityTypeFilter dropdowns in both cards and diagram views.
+  const [selectedByType, setSelectedByType] = useState<Record<string, Set<string> | null>>({});
+  const setTypeSelection = (type: string, sel: Set<string> | null) =>
+    setSelectedByType((prev) => ({ ...prev, [type]: sel }));
 
   const fetchData = useCallback(async () => {
     try {
@@ -173,13 +178,28 @@ export default function EnterpriseViewPage() {
     setSearch('');
   }, [activeView]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Filter by active preset, then by the user's per-type visibility.
-  // countByType is taken pre-hidden so the toggle chips keep showing each
-  // type's real count even while it's hidden.
+  // Filter by active preset, then by governance toggle, then by the per-type
+  // entity filter (the dropdowns).
   const presetNodes = nodes.filter((n) => preset.entityTypes.has(n.type));
-  const countByType: Record<string, number> = {};
-  for (const n of presetNodes) countByType[n.type] = (countByType[n.type] || 0) + 1;
-  const typeVisibleNodes = presetNodes.filter((n) => !hiddenTypes.has(n.type));
+  // Whether this preset surfaces any governance value streams — gates the
+  // Include-governance toggle so it only appears when there's something to fold
+  // in. A governance process node (and its process descendants) carry
+  // meta.isGovernance from the backend.
+  const hasGovernance = presetNodes.some((n) => n.type === 'process' && n.meta?.isGovernance);
+  const govNodes = includeGovernance
+    ? presetNodes
+    : presetNodes.filter((n) => !(n.type === 'process' && n.meta?.isGovernance));
+  // Options for each type's filter dropdown — every available entity of that
+  // type (respecting the governance toggle), sorted by name.
+  const optionsByType: Record<string, { id: string; label: string }[]> = {};
+  for (const n of govNodes) (optionsByType[n.type] ||= []).push({ id: n.id, label: n.label });
+  for (const t of Object.keys(optionsByType)) optionsByType[t].sort((a, b) => a.label.localeCompare(b.label));
+  // Keep a node when its type is "all" (null) or its id is in the selected set.
+  const nodeSelected = (n: GraphNode) => {
+    const sel = selectedByType[n.type];
+    return sel == null || sel.has(n.id);
+  };
+  const typeVisibleNodes = govNodes.filter(nodeSelected);
   const typeVisibleIds = new Set(typeVisibleNodes.map((n) => n.id));
   const filteredEdges = edges.filter((e) =>
     preset.edgeTypes.has(e.type) && typeVisibleIds.has(e.source) && typeVisibleIds.has(e.target),
@@ -274,9 +294,10 @@ export default function EnterpriseViewPage() {
 
 
   const presetTypes = COLUMN_ORDER.filter((t) => preset.entityTypes.has(t));
-  // Types actually rendered as lanes/columns — preset types minus any the
-  // user has toggled off.
-  const visibleTypes = presetTypes.filter((t) => !hiddenTypes.has(t));
+  // Types actually rendered as lanes/columns — those with at least one entity
+  // still visible after the per-type filter.
+  const visibleTypeSet = new Set<string>(typeVisibleNodes.map((n) => n.type));
+  const visibleTypes = presetTypes.filter((t) => visibleTypeSet.has(t));
 
   // Cards-mode master-detail helpers. `effectiveFocus` guards against a
   // focused type that the current preset no longer includes; the search box
@@ -367,28 +388,68 @@ export default function EnterpriseViewPage() {
         </HelpPopover>
       </PageHeader>
 
-      {/* View selector */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-        {Object.entries(VIEW_PRESETS).map(([key, v]) => (
-          <button key={key}
-            onClick={() => { setActiveView(key); setSelected(null); }}
-            style={{
-              padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: activeView === key ? 600 : 400,
-              cursor: 'pointer', border: `1px solid ${activeView === key ? 'var(--color-primary)' : 'var(--color-border)'}`,
-              background: activeView === key ? 'var(--color-primary)' : 'var(--color-surface)',
-              color: activeView === key ? '#fff' : 'var(--color-text)',
-            }}
-            title={v.description}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
+      {/* Filter bar — one dropdown per entity type. Pick exactly which
+          processes / systems / assets / domains / people to show (search +
+          multi-select); Clear hides a whole type. Applies to both cards and
+          diagram. */}
+      {presetTypes.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginRight: 2 }}>Filter:</span>
+          {presetTypes.map((type) => {
+            const cfg = TYPE_CONFIG[type];
+            const opts = optionsByType[type] || [];
+            if (!cfg || opts.length === 0) return null;
+            return (
+              <EntityTypeFilter
+                key={type}
+                cfg={cfg}
+                options={opts}
+                selected={selectedByType[type] ?? null}
+                onChange={(sel) => setTypeSelection(type, sel)}
+              />
+            );
+          })}
+        </div>
+      )}
 
-      {/* Active view meta + display-mode toggle */}
+      {/* Controls: governance toggle · counts · export · display mode */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', fontSize: 13, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{preset.label}</span>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>{preset.description}</span>
+        {hasGovernance && (
+          <button
+            type="button"
+            onClick={() => setIncludeGovernance((v) => !v)}
+            aria-pressed={includeGovernance}
+            title={includeGovernance
+              ? 'Hide governance value streams (Data Governance Management, etc.)'
+              : 'Show governance value streams (Data Governance Management, etc.)'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+              border: `1px solid ${includeGovernance ? 'var(--color-primary)' : 'var(--color-border)'}`,
+              background: includeGovernance ? 'var(--color-primary-light)' : 'var(--color-surface)',
+              color: includeGovernance ? 'var(--color-primary)' : 'var(--color-text-muted)',
+            }}
+          >
+            {includeGovernance ? '✓ ' : ''}Include governance
+          </button>
+        )}
+        {viewMode === 'diagram' && (
+          <button
+            type="button"
+            onClick={() => setHideUnconnected((v) => !v)}
+            aria-pressed={hideUnconnected}
+            title={hideUnconnected ? 'Show entities with no connections' : 'Hide entities with no connections'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+              border: `1px solid ${hideUnconnected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+              background: hideUnconnected ? 'var(--color-primary-light)' : 'var(--color-surface)',
+              color: hideUnconnected ? 'var(--color-primary)' : 'var(--color-text-muted)',
+            }}
+          >
+            {hideUnconnected ? '✓ ' : ''}Hide unconnected
+          </button>
+        )}
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-muted)' }}>
           {filteredNodes.length} entities &middot; {filteredEdges.length} relationships
         </span>
@@ -426,58 +487,6 @@ export default function EnterpriseViewPage() {
           ))}
         </div>
       </div>
-
-      {/* Entity-type visibility — hide/show a whole lane in the diagram.
-          Cards mode uses the summary tiles below for the same job, so this
-          chip row is diagram-only. */}
-      {viewMode === 'diagram' && presetTypes.length > 1 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginRight: 2 }}>Show:</span>
-          {presetTypes.map((type) => {
-            const cfg = TYPE_CONFIG[type];
-            if (!cfg) return null;
-            const on = !hiddenTypes.has(type);
-            return (
-              <button
-                key={type}
-                type="button"
-                onClick={() => toggleType(type)}
-                aria-pressed={on}
-                title={`${on ? 'Hide' : 'Show'} ${cfg.plural}`}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                  border: `1px solid ${on ? cfg.color : 'var(--color-border)'}`,
-                  background: on ? cfg.bg : 'var(--color-surface)',
-                  color: on ? cfg.color : 'var(--color-text-muted)',
-                  textDecoration: on ? 'none' : 'line-through',
-                }}
-              >
-                <span style={{ display: 'inline-flex', opacity: on ? 1 : 0.5 }}>{cfg.icon(13)}</span>
-                {cfg.plural}
-                <span style={{ fontWeight: 400, opacity: 0.8 }}>({countByType[type] || 0})</span>
-              </button>
-            );
-          })}
-          {/* Hide nodes that have no relationship in the current view. */}
-          <button
-            type="button"
-            onClick={() => setHideUnconnected((v) => !v)}
-            aria-pressed={hideUnconnected}
-            title={hideUnconnected ? 'Show entities with no connections' : 'Hide entities with no connections'}
-            style={{
-              marginLeft: 'auto',
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-              border: `1px solid ${hideUnconnected ? 'var(--color-primary)' : 'var(--color-border)'}`,
-              background: hideUnconnected ? 'var(--color-primary-light)' : 'var(--color-surface)',
-              color: hideUnconnected ? 'var(--color-primary)' : 'var(--color-text-muted)',
-            }}
-          >
-            Hide unconnected
-          </button>
-        </div>
-      )}
 
       {/* Catalog + impact split. The page scrolls normally; the impact
           panel sticks so it stays visible while scrolling the catalog,

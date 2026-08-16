@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { processNodes } from './process-catalog';
+import { processNodes, isGovernanceNode } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { systems } from './systems';
 import { people } from './people';
@@ -90,7 +90,10 @@ router.get('/', async (req: Request, res: Response) => {
     addNode({
       id: p.id, type: 'process',
       label: p.name, status: p.status,
-      meta: { level: p.level, description: p.description, ownerId: p.ownerId },
+      // isGovernance lets the client exclude the governance value streams
+      // (Data Governance Management, etc.) by default, with a toggle to show
+      // them — same domain classifier the Process ↔ Data Map filters on.
+      meta: { level: p.level, description: p.description, ownerId: p.ownerId, isGovernance: isGovernanceNode(p) },
     });
     if (p.parentId && nodeIds.has(p.parentId)) {
       edges.push({ id: `ph-${p.id}`, source: p.parentId, target: p.id, type: 'hierarchy', label: 'contains' });
