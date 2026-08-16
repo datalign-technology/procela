@@ -334,12 +334,13 @@ Skills drive four cross-page workflows:
 
 ### Enterprise View
 
-- Single pane of glass across processes, systems, data assets, domains, and people. Filters by view preset (Process → System → Data, Governance, Ownership, Lineage, etc.) to focus on one relationship at a time.
+- Single pane of glass across processes, systems, data assets, domains, and people.
+- Per-type filter dropdowns. A filter bar at the top carries one dropdown per entity type — Processes, Systems, Data Assets, Domains, People. Each button shows how many of that type are shown ("Systems · 3 of 8", or "Hidden"); open it for a searchable checkbox list of every entity of that type. Check the ones you want (one, several, or all), or use Clear (hide) to drop the whole type and Select all to bring it back. So you can narrow the picture to, say, two systems and the processes and data around them, or hide People entirely. The filter applies to both the Cards and the Diagram view.
 - Diagram / Cards toggle — opens on the Diagram view by default. The diagram lays nodes out as horizontal swimlanes with curved, colour-coded edges between them — the same visual language as the Process ↔ Data Map. Within a lane, nodes cluster under sub-group headers: process nodes group under their value stream, and data assets group under the system (or domain) that holds them. Relationships are coloured by type — mapping links reuse the Process ↔ Data Map palette (green produces, blue consumes, purple transforms, grey references/uses), with distinct colours for hosted-by, governs, owned-by, lineage, and contains — and a legend beneath the canvas names the ones in view. Cards is the dense, searchable alternative (a summary-tile grid with a search box).
-- Layer toggles. On the diagram, a Show: chip row lets you turn individual node layers on and off — e.g. drop Systems to see just the process-and-data backbone, or drop People to hide the ownership layer — so you can dial the picture up or down to the relationships you care about.
-- Hide unconnected. A Hide unconnected toggle drops any node that has no visible edges under the current preset and layer selection, so the canvas focuses on what's actually wired together rather than a field of stranded nodes.
+- Governance value streams are excluded by default. The canvas opens on the operational picture; when the catalog has governance value streams (Data Governance Management, etc.), an Include governance toggle appears to fold them back in — the same domain classifier the Process ↔ Data Map filters on.
+- Hide unconnected. On the diagram, a Hide unconnected toggle drops any node that has no visible edges under the current filter, so the canvas focuses on what's actually wired together rather than a field of stranded nodes.
 - Click any node to run impact analysis — the sidebar impact rail lists every entity connected to your selection (direct and transitive), and unrelated nodes fade out. Use this to plan changes ("if we deprecate System X, which processes are affected?").
-- What happened to Control Tower? The operational dashboard view folded in here. Old /control-tower deep links redirect to Enterprise View. Future updates may add a dedicated "Health" preset that mirrors the old dashboard.
+- What happened to Control Tower? The operational dashboard view folded in here. Old /control-tower deep links redirect to Enterprise View.
 
 ### Analysis (cube)
 
@@ -475,9 +476,9 @@ A handful of components show up on every detail page so the patterns stay the sa
 
 Description and long-name columns on every list surface (Systems, Data Assets, Skills, Data Lineage, Business Glossary, Data Dictionary, Agents, Data Quality, Connections) clip to a single line with an ellipsis. Hover the cell to see the full text in a native browser tooltip. The pattern keeps rows a uniform height so downstream columns don't shift when one row's description is a paragraph — the whole content is still available, it's just gated behind a hover.
 
-### Large lists — Load more
+### Large lists — pagination
 
-List pages cap how many rows render at once so a large org's roster or catalog stays fast and the scrollbar stays short. Once a list runs past the page size, a footer appears: "Showing N of M", a Load more button that reveals the next page, a Show all, and a Rows-per-page selector (25 / 50 / 100 / 200). Sorting, searching, filtering, and select-all still operate over the whole result set — only how many rows mount at a time is capped, and the count snaps back to the first page whenever a filter changes the result size. On the People page the column header and the quick-add row stay pinned to the top of the list while you scroll, so you never lose the columns or the add-row on a long roster.
+List pages cap how many rows render at once so a large org's roster or catalog stays fast and the page stays a fixed height (one scrollbar). Once a list runs past the page size, a numbered pager appears at the bottom: an "N–M of T" count, First / Prev / page-number / Next / Last controls, and a Rows-per-page selector (25 / 50 / 100 / 200). Sorting, searching, filtering, and select-all still operate over the whole result set — only how many rows mount at a time is capped, and the pager snaps back to the first page whenever a filter changes the result size. Every shared list table (Data Assets, Systems, Business Glossary, Data Dictionary, Connections, Skills, …) gets this automatically; People and the Audit Log use the same pager. Small lists that fit on one page show no pager at all.
 
 ### Saved views
 

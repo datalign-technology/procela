@@ -6,6 +6,8 @@ import { useOrgContext } from '../stores/orgContext';
 import PageHeader from '../components/PageHeader';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
+import { usePagination } from '../hooks/usePagination';
+import Pager from '../components/Pager';
 
 // ──────────────────────────────────────────────────────────────────────────
 // AuditLogPage — full audit trail in one place.
@@ -89,6 +91,10 @@ export default function AuditLogPage() {
       return true;
     });
   }, [entries, actionFilter, search]);
+
+  // Page the loaded entries so a long history stays a fixed height. Export
+  // actions (below) still cover the whole filtered / server-side set.
+  const auditPage = usePagination(filtered, 50);
 
   const exportCsv = () => {
     const header = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity', 'Entity ID'];
@@ -242,7 +248,7 @@ export default function AuditLogPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((e) => (
+              {auditPage.pageItems.map((e) => (
                 <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                   <td style={td}>
                     <div>{relativeTime(e.timestamp)}</div>
@@ -267,6 +273,7 @@ export default function AuditLogPage() {
             </tbody>
           </table>
           </div>
+          <Pager pagination={auditPage} noun={['entry', 'entries']} />
         </div>
       )}
 

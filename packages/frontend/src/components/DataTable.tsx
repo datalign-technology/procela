@@ -5,7 +5,7 @@ import { thStyle, tdStyle } from '../lib/tableStyles';
 import type { RowSelection } from '../hooks/useRowSelection';
 import type { SortDir } from '../hooks/useSortedList';
 import { usePagination } from '../hooks/usePagination';
-import LoadMoreBar from './LoadMoreBar';
+import Pager from './Pager';
 
 // ──────────────────────────────────────────────────────────────────────────
 // DataTable — the shared list table.
@@ -241,7 +241,7 @@ export default function DataTable<T>({
         )}
       </tbody>
     </table>
-    <LoadMoreBar pagination={pagination} noun={countNoun} />
+    <Pager pagination={pagination} noun={countNoun} />
     </>
   );
 }
