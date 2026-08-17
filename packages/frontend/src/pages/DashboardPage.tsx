@@ -500,15 +500,33 @@ const TIER_CHART_COLOR: Record<'GOLD' | 'SILVER' | 'BRONZE', string> = {
   GOLD: '#b8860b', SILVER: '#64748b', BRONZE: '#b45309',
 };
 
-// ── Governance Posture — tier donut + coverage / health gauges ──
+// A gauge wrapped as a drill-down link, with a subtle hover highlight so it
+// reads as actionable.
+function GaugeLink({ to, children, title }: { to: string; title: string; children: React.ReactNode }) {
+  return (
+    <Link
+      to={to}
+      title={title}
+      style={{ textDecoration: 'none', borderRadius: 'var(--radius-md)', padding: '4px 8px', transition: 'background 0.15s' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+// ── Governance Posture — tier donut + coverage / health gauges, all
+//    hyperlinked for drill-down ──
 function GovernancePosture({ stats }: { stats: DashboardStats }) {
   const tierLabel = useTierLabel();
   const g = stats.governance;
   const tierTotal = g.gold + g.silver + g.bronze;
-  const segments = [
-    { label: tierLabel('GOLD'), value: g.gold, color: TIER_CHART_COLOR.GOLD },
-    { label: tierLabel('SILVER'), value: g.silver, color: TIER_CHART_COLOR.SILVER },
-    { label: tierLabel('BRONZE'), value: g.bronze, color: TIER_CHART_COLOR.BRONZE },
+  // key drives the ?tier= deep-link; label respects the terminology toggle.
+  const tiers = [
+    { key: 'GOLD', label: tierLabel('GOLD'), value: g.gold, color: TIER_CHART_COLOR.GOLD },
+    { key: 'SILVER', label: tierLabel('SILVER'), value: g.silver, color: TIER_CHART_COLOR.SILVER },
+    { key: 'BRONZE', label: tierLabel('BRONZE'), value: g.bronze, color: TIER_CHART_COLOR.BRONZE },
   ];
   return (
     <div style={{ marginBottom: 16 }}>
@@ -518,14 +536,41 @@ function GovernancePosture({ stats }: { stats: DashboardStats }) {
           <div>
             <SectionLabel>Governance tier mix</SectionLabel>
             {tierTotal > 0 ? (
-              <Donut segments={segments} centerLabel="Assets" size={116} thickness={16} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                {/* The ring links to the whole catalog; each legend row filters
+                    Data Assets to that tier. */}
+                <Link to="/data-assets" title="View all data assets" style={{ display: 'inline-flex', flexShrink: 0 }}>
+                  <Donut segments={tiers} centerLabel="Assets" size={116} thickness={16} legend={false} />
+                </Link>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                  {tiers.map((t) => (
+                    <Link
+                      key={t.key}
+                      to={`/data-assets?tier=${t.key}`}
+                      title={`View ${t.label} data assets`}
+                      style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, textDecoration: 'none', color: 'inherit', padding: '2px 4px', borderRadius: 4, transition: 'background 0.15s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
+                    >
+                      <span style={{ width: 10, height: 10, borderRadius: 2, background: t.color, flexShrink: 0 }} />
+                      <span style={{ color: 'var(--color-text-secondary)', flex: 1, whiteSpace: 'nowrap' }}>{t.label}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{t.value}</span>
+                      <span style={{ color: 'var(--color-text-muted)', minWidth: 34, textAlign: 'right' }}>{tierTotal > 0 ? Math.round((t.value / tierTotal) * 100) : 0}%</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ) : (
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No data assets yet.</div>
             )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-around', gap: 16, flexWrap: 'wrap' }}>
-            <Gauge value={stats.coverage.percentage} label="Coverage" />
-            <Gauge value={stats.averageHealth} label="Avg Health" />
+            <GaugeLink to="/mappings" title="Coverage — open the Data Mapping view to close unmapped activities">
+              <Gauge value={stats.coverage.percentage} label="Coverage" />
+            </GaugeLink>
+            <GaugeLink to="/data-assets?sort=healthScore&dir=asc" title="Avg Health — open Data Assets sorted by lowest health first">
+              <Gauge value={stats.averageHealth} label="Avg Health" />
+            </GaugeLink>
           </div>
         </div>
       </Card>

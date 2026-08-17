@@ -432,7 +432,11 @@ export default function DataAssetsPage({
       : null,
   });
   const [filterCategory, setFilterCategory] = useState('');
-  const [filterTier, setFilterTier] = useState('');
+  // Seeded from ?tier= so the Dashboard's Governance Posture donut can deep-link
+  // to a tier-filtered view (e.g. /data-assets?tier=BRONZE).
+  const [filterTier, setFilterTier] = useState<string>(
+    () => { const t = (searchParams.get('tier') || '').toUpperCase(); return TIER_VALUES.includes(t as never) ? t : ''; },
+  );
   const [filterSystemId, setFilterSystemId] = useState('');
   const [filterOrigin, setFilterOrigin] = useState<'' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED'>('');
   // Mapping-status filter — folds in the old Orphan Assets page. 'unmapped'
