@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
@@ -213,6 +213,41 @@ export default function MappingsPage({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Deep-link prefill: the Enterprise View "Connect data / system →" action
+  // links here with ?newFor=<activityId>. Resolve the activity's ancestor chain
+  // (value stream → process → sub-process → activity) to prime the cascading
+  // selects and open the add-mapping form, then strip the param so a re-render
+  // doesn't reopen it. Runs once, after the catalog nodes have loaded.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const prefillHandled = useRef(false);
+  useEffect(() => {
+    const newFor = searchParams.get('newFor');
+    if (!newFor || prefillHandled.current || allNodes.length === 0) return;
+    const byId = new Map(allNodes.map((n) => [n.id, n]));
+    const target = byId.get(newFor);
+    if (!target) return;
+    prefillHandled.current = true;
+    let vs = '', proc = '', sp = '', step = '';
+    let cur: FlatNode | undefined = target;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      if (cur.level === 'ACTIVITY' || cur.level === 'TASK' || cur.level === 'EXECUTION') { if (!step) step = cur.id; }
+      else if (cur.level === 'SUBPROCESS') sp = cur.id;
+      else if (cur.level === 'PROCESS') proc = cur.id;
+      else if (cur.level === 'VALUE_STREAM') vs = cur.id;
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    if (step) {
+      setSelectedVsId(vs); setSelectedProcId(proc); setSelectedSpId(sp); setSelectedStepId(step);
+      setSelectedAssetId(''); setLinkType('references'); setNotes('');
+      setShowForm(true);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('newFor');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, allNodes, setSearchParams]);
 
   // Cascading dropdowns based on flat node model with parentId relationships.
   // Each level filters by the parent's selection only — guarantees the
