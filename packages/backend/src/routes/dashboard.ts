@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { v4 as uuid } from 'uuid';
 import { processNodes, flowRelationshipsRepo, NODE_LEVELS, isGovernanceNode as isGovernanceProcess, type ProcessNode } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { mappings } from './mappings';
@@ -33,6 +34,7 @@ import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
 import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
 import { getCalendarEventsRepository } from '../db/calendar-events.repo';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getStatsSnapshotsRepository } from '../db/stats-snapshots.repo';
 
 const processNodesRepo = getProcessNodesRepository(processNodes);
 const dataAssetsRepo = getDataAssetsRepository(dataAssets);
@@ -59,6 +61,132 @@ const raciOverrides: RaciOverride[] = loadStore<RaciOverride>('raciOverrides');
 registerStore('raciOverrides', raciOverrides);
 // RACI overrides read/write through the repository (Postgres or JSON) — PR 7c.
 const raciRepo = getRaciOverridesRepository(raciOverrides);
+
+// ── Dashboard stats snapshots ──
+//
+// A weekly time-series of the same headline numbers /stats computes,
+// captured one row per org per calendar day. Feeds the Dashboard
+// sparkline widgets (coverage %, average health, gap count over time).
+// Persisted like every other JSON-backed store (loadStore +
+// registerStore + saveStore via the repository) so it survives in JSON
+// mode and reads Postgres when DATABASE_URL is set.
+export interface StatsSnapshot {
+  id: string;
+  orgId: string;
+  /** Calendar day of capture, 'YYYY-MM-DD' (ISO date). One row per org per day. */
+  capturedAt: string;
+  /** Mapping coverage %, 0–100 int — matches /stats coverage.percentage. */
+  coverage: number;
+  /** Average data-asset health, 0–100 int — matches /stats averageHealth. */
+  avgHealth: number;
+  /** Total open gaps (unmapped activities + ungoverned/orphan assets +
+   *  ownerless items + ungoverned domains) — sum of the /stats gap signals. */
+  gaps: number;
+  /** Data-asset count in scope. */
+  dataAssets: number;
+  /** Mapping-row count in scope. */
+  mappings: number;
+}
+
+export const statsSnapshots: StatsSnapshot[] = loadStore<StatsSnapshot>('statsSnapshots');
+registerStore('statsSnapshots', statsSnapshots);
+const statsSnapshotsRepo = getStatsSnapshotsRepository(statsSnapshots);
+
+/**
+ * Compute the current headline stats for one org, reusing the exact
+ * formulas from GET /stats so a captured snapshot matches the live
+ * tiles. Returns just the five numbers the sparklines draw.
+ */
+async function computeCoreStats(oid: string | undefined): Promise<Pick<StatsSnapshot, 'coverage' | 'avgHealth' | 'gaps' | 'dataAssets' | 'mappings'>> {
+  const [pn, da, mp, dd] = await Promise.all([
+    processNodesRepo.list(), dataAssetsRepo.list(), mappingsRepo.list(), dataDomainsRepo.list(),
+  ]);
+
+  const filteredNodes = filterByOrgScope(pn, oid);
+  const filteredAssets = filterByOrgScope(da, oid);
+  const filteredMappings = filterByOrgScope(mp, oid);
+  const filteredDomains = filterByOrgScope(dd, oid);
+
+  // Coverage: activities with at least one mapping.
+  const activityIds = filteredNodes.filter((n) => n.level === 'ACTIVITY').map((n) => n.id);
+  const mappedActivityIds = new Set(filteredMappings.map((m) => m.processStepId));
+  const mappedCount = activityIds.filter((id) => mappedActivityIds.has(id)).length;
+  const unmappedCount = activityIds.length - mappedCount;
+  const coverage = activityIds.length > 0 ? Math.round((mappedCount / activityIds.length) * 100) : 0;
+
+  // Average health across in-scope assets.
+  const avgHealth = filteredAssets.length > 0
+    ? Math.round(filteredAssets.reduce((sum, a) => sum + a.healthScore, 0) / filteredAssets.length)
+    : 0;
+
+  // Gap signals — same definitions as /stats.
+  const linkedAssetIds = new Set(filteredMappings.filter((m) => !!m.dataAssetId).map((m) => m.dataAssetId!));
+  const ungovernedAssets = filteredAssets.filter((a) => a.governanceTier === 'BRONZE' && linkedAssetIds.has(a.id)).length;
+  const ownerlessItems = filteredNodes.filter((n) => ['VALUE_STREAM', 'PROCESS'].includes(n.level) && !n.ownerId).length;
+  const orphanAssets = filteredAssets.filter((a) => !linkedAssetIds.has(a.id)).length;
+  const ungovernedDomains = filteredDomains.filter((d) => !d.ownerId).length;
+  const gaps = unmappedCount + ungovernedAssets + ownerlessItems + orphanAssets + ungovernedDomains;
+
+  return { coverage, avgHealth, gaps, dataAssets: filteredAssets.length, mappings: filteredMappings.length };
+}
+
+// Deterministic seed derived from a string — FNV-1a, stable across
+// runs (no Math.random / no wall-clock in the value path).
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  // Bound the loop by a constant — `s` is built from the caller-supplied
+  // orgId, and an org identifier is never long; capping avoids iterating an
+  // unbounded, user-influenced length.
+  const n = Math.min(s.length, 256);
+  for (let i = 0; i < n; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Stable integer jitter in [-range, +range] for (orgId, index, salt). */
+function seededJitter(orgId: string, index: number, salt: string, range: number): number {
+  return (hashSeed(`${orgId}:${index}:${salt}`) % (2 * range + 1)) - range;
+}
+
+/**
+ * Build a deterministic trailing weekly series (~10 points, oldest→newest)
+ * that ENDS at the org's current live stats and drifts gently upward
+ * toward them (governance improves over time: coverage + health rise,
+ * gaps fall). Used as a fallback so the sparklines always have something
+ * to draw when the org has fewer than 2 real snapshots. Values are seeded
+ * from orgId so the same org renders an identical series every call; only
+ * the date axis uses the wall clock (a trailing-week window).
+ */
+function synthesizeSeries(
+  orgId: string,
+  current: Pick<StatsSnapshot, 'coverage' | 'avgHealth' | 'gaps' | 'dataAssets' | 'mappings'>,
+): Array<Pick<StatsSnapshot, 'capturedAt' | 'coverage' | 'avgHealth' | 'gaps' | 'dataAssets' | 'mappings'>> {
+  const N = 10;
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const out: Array<Pick<StatsSnapshot, 'capturedAt' | 'coverage' | 'avgHealth' | 'gaps' | 'dataAssets' | 'mappings'>> = [];
+  for (let i = 0; i < N; i++) {
+    const progress = i / (N - 1); // 0 (oldest) → 1 (newest)
+    const d = new Date();
+    d.setDate(d.getDate() - (N - 1 - i) * 7);
+    const capturedAt = d.toISOString().slice(0, 10);
+    if (i === N - 1) {
+      // Newest point lands exactly on the live stats.
+      out.push({ capturedAt, ...current });
+      continue;
+    }
+    out.push({
+      capturedAt,
+      coverage: clamp(Math.round(current.coverage - (1 - progress) * 22 + seededJitter(orgId, i, 'cov', 2)), 0, 100),
+      avgHealth: clamp(Math.round(current.avgHealth - (1 - progress) * 16 + seededJitter(orgId, i, 'hea', 2)), 0, 100),
+      gaps: Math.max(0, Math.round(current.gaps + (1 - progress) * 7 + seededJitter(orgId, i, 'gap', 1))),
+      dataAssets: Math.max(0, Math.round(current.dataAssets - (1 - progress) * 3)),
+      mappings: Math.max(0, Math.round(current.mappings - (1 - progress) * 3)),
+    });
+  }
+  return out;
+}
 
 const router = Router();
 
@@ -1093,6 +1221,87 @@ router.get('/governance-status', async (req: Request, res: Response) => {
       isComplete: hasGovProcesses && hasGovGroups && hasDomains,
     },
   });
+});
+
+/**
+ * POST /api/v1/dashboard/snapshot?orgId=<id>
+ *
+ * Capture the CURRENT computed stats for an org into the snapshot store
+ * as one dated row. Idempotent per calendar day — if today's snapshot
+ * for the org already exists it is overwritten in place rather than
+ * duplicated. Returns the captured snapshot.
+ *
+ * This is the hook a scheduler / cron job would call (e.g. weekly) in
+ * production to build up real trend history without any user action.
+ */
+router.post('/snapshot', async (req: Request, res: Response) => {
+  const oid = req.query.orgId as string | undefined;
+  if (!oid) {
+    res.status(400).json({ success: false, error: 'orgId is required' });
+    return;
+  }
+
+  const stats = await computeCoreStats(oid);
+  const today = new Date().toISOString().slice(0, 10);
+  const existing = (await statsSnapshotsRepo.list()).find((s) => s.orgId === oid && s.capturedAt === today);
+
+  let snapshot: StatsSnapshot;
+  if (existing) {
+    // Same calendar day → overwrite rather than append a duplicate.
+    snapshot = (await statsSnapshotsRepo.update(existing.id, stats)) ?? { ...existing, ...stats };
+  } else {
+    snapshot = { id: uuid(), orgId: oid, capturedAt: today, ...stats };
+    await statsSnapshotsRepo.create(snapshot);
+  }
+
+  res.json({ success: true, data: snapshot });
+});
+
+/**
+ * GET /api/v1/dashboard/trends?orgId=<id>
+ *
+ * Time series for the Dashboard sparklines. Returns the org's snapshots
+ * oldest→newest, capped to the most recent ~12. When the org has fewer
+ * than 2 real snapshots we synthesize a deterministic trailing weekly
+ * series that ends at the org's current live stats, so the UI always has
+ * something to draw; those responses carry `synthesized: true`.
+ */
+router.get('/trends', async (req: Request, res: Response) => {
+  const oid = req.query.orgId as string | undefined;
+  if (!oid) {
+    res.status(400).json({ success: false, error: 'orgId is required' });
+    return;
+  }
+
+  const MAX_POINTS = 12;
+  const mine = (await statsSnapshotsRepo.list())
+    .filter((s) => s.orgId === oid)
+    .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
+
+  if (mine.length >= 2) {
+    const points = mine.slice(-MAX_POINTS).map((s) => ({
+      date: s.capturedAt,
+      coverage: s.coverage,
+      avgHealth: s.avgHealth,
+      gaps: s.gaps,
+      dataAssets: s.dataAssets,
+      mappings: s.mappings,
+    }));
+    res.json({ success: true, data: { points, synthesized: false } });
+    return;
+  }
+
+  // Fewer than 2 real snapshots — synthesize a deterministic series.
+  const current = await computeCoreStats(oid);
+  const points = synthesizeSeries(oid, current).map((p) => ({
+    date: p.capturedAt,
+    coverage: p.coverage,
+    avgHealth: p.avgHealth,
+    gaps: p.gaps,
+    dataAssets: p.dataAssets,
+    mappings: p.mappings,
+  }));
+  res.json({ success: true, data: { points, synthesized: true } });
 });
 
 export default router;
