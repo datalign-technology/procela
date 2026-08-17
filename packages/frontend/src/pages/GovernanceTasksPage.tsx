@@ -208,6 +208,7 @@ export default function GovernanceTasksPage({
       },
       assignee: (a, b) => (a.assigneeName || '').localeCompare(b.assigneeName || ''),
       dueDate:  (a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''),
+      mode:     (a, b) => a.automationMode.localeCompare(b.automationMode),
     },
     'title',
   );
@@ -352,7 +353,7 @@ export default function GovernanceTasksPage({
       ),
     },
     taskCols.isVisible('mode') && {
-      key: 'mode', header: 'Mode',
+      key: 'mode', header: 'Mode', sortable: true,
       render: (t: GovernanceTask) => <span style={badge(t.automationMode, MODE_COLORS[t.automationMode] || { bg: '#f3f4f6', color: '#6b7280' })}>{t.automationMode}</span>,
     },
     {

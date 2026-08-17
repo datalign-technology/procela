@@ -389,6 +389,8 @@ export default function MappingsPage({
         return ta.label.localeCompare(tb.label);
       },
       linkType: (a, b) => a.linkType.localeCompare(b.linkType),
+      ai: (a, b) => Number(b.aiSuggested) - Number(a.aiSuggested),
+      notes: (a, b) => (a.notes || '').localeCompare(b.notes || ''),
     },
     'stepPath',
   );
@@ -485,7 +487,7 @@ export default function MappingsPage({
       ),
     },
     {
-      key: 'ai', header: 'AI Suggested',
+      key: 'ai', header: 'AI Suggested', sortable: true,
       render: (m) => m.aiSuggested ? (
         <span
           style={{
@@ -501,7 +503,7 @@ export default function MappingsPage({
       ),
     },
     {
-      key: 'notes', header: 'Notes', cellStyle: { maxWidth: 200 },
+      key: 'notes', header: 'Notes', sortable: true, cellStyle: { maxWidth: 200 },
       render: (m) => (
         <TruncatedText text={m.notes} emptyPlaceholder="--" />
       ),

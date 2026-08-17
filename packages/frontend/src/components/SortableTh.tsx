@@ -18,6 +18,8 @@ interface SortableThProps {
   align?: 'left' | 'center' | 'right';
   width?: number | string;
   style?: CSSProperties;
+  /** Optional native tooltip on the header cell. */
+  title?: string;
 }
 
 const baseStyle: CSSProperties = {
@@ -32,13 +34,14 @@ const baseStyle: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-export default function SortableTh({ sortKey, active, dir, onClick, children, align = 'left', width, style }: SortableThProps) {
+export default function SortableTh({ sortKey, active, dir, onClick, children, align = 'left', width, style, title }: SortableThProps) {
   const isActive = active === sortKey;
   const arrow = !isActive ? '\u2195' : dir === 'asc' ? '\u25B2' : '\u25BC';
 
   return (
     <th
       onClick={() => onClick(sortKey)}
+      title={title}
       aria-sort={isActive ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
       style={{
         ...baseStyle,

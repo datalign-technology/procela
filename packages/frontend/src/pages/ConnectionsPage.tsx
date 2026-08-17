@@ -556,6 +556,9 @@ export default function ConnectionsPage({
   });
   const filterSystem = systemFilter ? systems.find((s) => s.id === systemFilter) : null;
 
+  const systemNameMap: Record<string, string> = {};
+  systems.forEach((s) => { systemNameMap[s.id] = s.name; });
+
   // Sort: comparators keyed by column name; URL persists ?sort=&dir=
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
     visibleConnections,
@@ -563,6 +566,30 @@ export default function ConnectionsPage({
       name: (a, b) => a.name.localeCompare(b.name),
       connectionType: (a, b) => a.connectionType.localeCompare(b.connectionType),
       status: (a, b) => a.status.localeCompare(b.status),
+      // Sort by the first served system name the cell shows; unassigned
+      // connections sort to the end regardless of direction.
+      system: (a, b) => {
+        const na = (a.systemIds ?? []).map((id) => systemNameMap[id]).filter(Boolean)[0] || '';
+        const nb = (b.systemIds ?? []).map((id) => systemNameMap[id]).filter(Boolean)[0] || '';
+        if (!na && !nb) return 0;
+        if (!na) return 1;
+        if (!nb) return -1;
+        return na.localeCompare(nb);
+      },
+      // Sort by the derived config summary string the Config cell renders.
+      config: (a, b) => configSummary(a).localeCompare(configSummary(b)),
+      // Sort by the actual last-tested timestamp (the cell shows it as a
+      // relative "N ago"); never-tested connections sort to the end.
+      lastTested: (a, b) => {
+        const ta = a.lastTestedAt ? Date.parse(a.lastTestedAt) : NaN;
+        const tb = b.lastTestedAt ? Date.parse(b.lastTestedAt) : NaN;
+        const aNan = Number.isNaN(ta);
+        const bNan = Number.isNaN(tb);
+        if (aNan && bNan) return 0;
+        if (aNan) return 1;
+        if (bNan) return -1;
+        return ta - tb;
+      },
     },
     'name',
     'asc',
@@ -735,12 +762,9 @@ export default function ConnectionsPage({
   // Render
   // -----------------------------------------------------------------------
 
-  const systemNameMap: Record<string, string> = {};
-  systems.forEach((s) => { systemNameMap[s.id] = s.name; });
-
   const connectionColumns = ([
     connCols.isVisible('system') && {
-      key: 'system', header: 'System', cellStyle: { fontWeight: 500, maxWidth: 240 },
+      key: 'system', header: 'System', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 240 },
       render: (conn: ConnectionProfile) => {
         const ids = conn.systemIds ?? [];
         if (ids.length === 0) {
@@ -795,7 +819,7 @@ export default function ConnectionsPage({
       },
     },
     connCols.isVisible('config') && {
-      key: 'config', header: 'Config',
+      key: 'config', header: 'Config', sortable: true,
       cellStyle: { color: 'var(--color-text-secondary)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontFamily: 'var(--font-mono)' },
       render: (conn: ConnectionProfile) => configSummary(conn),
     },
@@ -811,7 +835,7 @@ export default function ConnectionsPage({
       },
     },
     connCols.isVisible('lastTested') && {
-      key: 'lastTested', header: 'Last Tested',
+      key: 'lastTested', header: 'Last Tested', sortable: true,
       cellStyle: { color: 'var(--color-text-muted)', fontSize: 12 },
       render: (conn: ConnectionProfile) => timeAgo(conn.lastTestedAt),
     },

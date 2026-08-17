@@ -269,10 +269,14 @@ export default function DataQualityPage({
     filteredRules,
     {
       dataAssetName: (a, b) => (a.dataAssetName || '').localeCompare(b.dataAssetName || ''),
+      column: (a, b) => (a.columnName || '').localeCompare(b.columnName || ''),
       name: (a, b) => a.name.localeCompare(b.name),
       dimension: (a, b) => a.dimension.localeCompare(b.dimension),
+      threshold: (a, b) => a.threshold - b.threshold,
       status: (a, b) => a.status.localeCompare(b.status),
       currentScore: (a, b) => a.currentScore - b.currentScore,
+      weight: (a, b) => a.weight - b.weight,
+      lastMeasured: (a, b) => (a.lastMeasured || '').localeCompare(b.lastMeasured || ''),
     },
     'dataAssetName',
   );
@@ -460,7 +464,7 @@ export default function DataQualityPage({
       render: (rule: QualityRule) => rule.dataAssetName || rule.dataAssetId,
     },
     dqCols.isVisible('column') && {
-      key: 'column', header: 'Column',
+      key: 'column', header: 'Column', sortable: true,
       cellStyle: { fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' },
       render: (rule: QualityRule) => (rule as any).columnName || <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>,
     },
@@ -473,7 +477,7 @@ export default function DataQualityPage({
       render: (rule: QualityRule) => <Badge label={rule.dimension} colors={DIMENSION_BADGES[rule.dimension] || DIMENSION_BADGES.VALIDITY} />,
     },
     dqCols.isVisible('threshold') && {
-      key: 'threshold', header: 'Threshold',
+      key: 'threshold', header: 'Threshold', sortable: true,
       render: (rule: QualityRule) => `${rule.threshold}%`,
     },
     dqCols.isVisible('currentScore') && {
@@ -481,7 +485,7 @@ export default function DataQualityPage({
       render: (rule: QualityRule) => <ScoreBar score={rule.currentScore} threshold={rule.threshold} />,
     },
     dqCols.isVisible('weight') && {
-      key: 'weight', header: 'Weight',
+      key: 'weight', header: 'Weight', sortable: true,
       render: (rule: QualityRule) => rule.weight,
     },
     dqCols.isVisible('status') && {
@@ -533,7 +537,7 @@ export default function DataQualityPage({
       ),
     },
     dqCols.isVisible('lastMeasured') && {
-      key: 'lastMeasured', header: 'Last Measured',
+      key: 'lastMeasured', header: 'Last Measured', sortable: true,
       cellStyle: { fontSize: 12, color: 'var(--color-text-muted)' },
       render: (rule: QualityRule) => rule.lastMeasured ? new Date(rule.lastMeasured).toLocaleDateString() : '--',
     },
@@ -926,6 +930,28 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     return true;
   });
 
+  // Sort — comparators keyed by column key; URL persists ?sort=&dir=. The
+  // health and rules comparators sort by the same derived values the cells
+  // show (health score, rule count). Unassigned owners sort to the end.
+  const { sorted: sortedAssets, sortKey, sortDir, toggleSort } = useSortedList(
+    filteredAssets,
+    {
+      asset: (a, b) => a.name.localeCompare(b.name),
+      system: (a, b) => (systemNameById[a.systemId] || '').localeCompare(systemNameById[b.systemId] || ''),
+      owner: (a, b) => {
+        const an = a.ownerName || '';
+        const bn = b.ownerName || '';
+        if (!an && !bn) return 0;
+        if (!an) return 1;
+        if (!bn) return -1;
+        return an.localeCompare(bn);
+      },
+      health: (a, b) => (a.healthScore ?? 0) - (b.healthScore ?? 0),
+      rules: (a, b) => (rulesByAsset.get(a.id)?.length ?? 0) - (rulesByAsset.get(b.id)?.length ?? 0),
+    },
+    'asset',
+  );
+
   const thLocal: React.CSSProperties = {
     textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
     color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -1021,7 +1047,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
 
   const assetColumns = [
     {
-      key: 'asset', header: 'Asset', cellStyle: { fontWeight: 500 },
+      key: 'asset', header: 'Asset', sortable: true, cellStyle: { fontWeight: 500 },
       render: (a: DataAssetFull) => (
         <>
           {a.name}
@@ -1035,15 +1061,15 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
       ),
     },
     assetCols.isVisible('system') && {
-      key: 'system', header: 'System',
+      key: 'system', header: 'System', sortable: true,
       render: (a: DataAssetFull) => systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>,
     },
     assetCols.isVisible('owner') && {
-      key: 'owner', header: 'Owner',
+      key: 'owner', header: 'Owner', sortable: true,
       render: (a: DataAssetFull) => a.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>,
     },
     assetCols.isVisible('health') && {
-      key: 'health', header: 'Health',
+      key: 'health', header: 'Health', sortable: true,
       render: (a: DataAssetFull) => {
         const { score, healthColor, healthTooltip } = assetStats(a);
         return (
@@ -1057,7 +1083,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
       },
     },
     assetCols.isVisible('rules') && {
-      key: 'rules', header: 'Rules', cellStyle: { fontSize: 12 },
+      key: 'rules', header: 'Rules', sortable: true, cellStyle: { fontSize: 12 },
       render: (a: DataAssetFull) => {
         const { rs, passing, warn, failing } = assetStats(a);
         return rs.length === 0 ? (
@@ -1214,9 +1240,10 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
       </div>
       <Card padding={0} shadow="none">
         <DataTable
-          rows={filteredAssets}
+          rows={sortedAssets}
           columns={assetColumns}
           rowKey={(a) => a.id}
+          sort={{ sortKey, sortDir, onSort: toggleSort }}
           expansion={{
             expandedIds: expandedId ? new Set([expandedId]) : new Set<string>(),
             onToggleExpanded: toggleExpand,

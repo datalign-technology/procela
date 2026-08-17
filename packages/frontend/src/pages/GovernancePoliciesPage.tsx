@@ -21,6 +21,7 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -324,15 +325,37 @@ export default function GovernancePoliciesPage() {
   const filteredPolicies = policies
     .filter((p) => typeFilter === 'ALL' || p.documentType === typeFilter)
     .filter((p) => !showAgentPromotedOnly || !!promotionsByPolicy[p.id]);
-  const sel = useRowSelection(filteredPolicies, (p) => p.id);
+  // Sort — URL-persisted via ?sort=&dir=. Owner sorts by the resolved
+  // owner name (what the cell shows); unassigned rows sort last regardless
+  // of direction. Controls sorts by the joined control count.
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    filteredPolicies,
+    {
+      code: (a, b) => (a.code || '').localeCompare(b.code || ''),
+      name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+      category: (a, b) => (a.category || '').localeCompare(b.category || ''),
+      status: (a, b) => (a.status || '').localeCompare(b.status || ''),
+      owner: (a, b) => {
+        const an = a.ownerName || '';
+        const bn = b.ownerName || '';
+        if (!an && !bn) return 0;
+        if (!an) return 1;
+        if (!bn) return -1;
+        return an.localeCompare(bn);
+      },
+      controls: (a, b) => controlsForPolicy(a.id).length - controlsForPolicy(b.id).length,
+    },
+    'code',
+  );
+  const sel = useRowSelection(sorted, (p) => p.id);
 
   const policyColumns = ([
     policyCols.isVisible('code') && {
-      key: 'code', header: 'Code', cellStyle: { fontWeight: 500, fontFamily: 'monospace', fontSize: 12 },
+      key: 'code', header: 'Code', sortable: true, cellStyle: { fontWeight: 500, fontFamily: 'monospace', fontSize: 12 },
       render: (pol: Policy) => pol.code,
     },
     policyCols.isVisible('name') && {
-      key: 'name', header: 'Name', cellStyle: { fontWeight: 500, color: 'var(--color-primary)' },
+      key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500, color: 'var(--color-primary)' },
       render: (pol: Policy) => {
         const docType = pol.documentType || 'POLICY';
         const promo = promotionsByPolicy[pol.id];
@@ -357,19 +380,19 @@ export default function GovernancePoliciesPage() {
       },
     },
     policyCols.isVisible('category') && {
-      key: 'category', header: 'Category',
+      key: 'category', header: 'Category', sortable: true,
       render: (pol: Policy) => <span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span>,
     },
     policyCols.isVisible('status') && {
-      key: 'status', header: 'Status',
+      key: 'status', header: 'Status', sortable: true,
       render: (pol: Policy) => <span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span>,
     },
     policyCols.isVisible('owner') && {
-      key: 'owner', header: 'Owner',
+      key: 'owner', header: 'Owner', sortable: true,
       render: (pol: Policy) => pol.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>,
     },
     policyCols.isVisible('controls') && {
-      key: 'controls', header: 'Controls',
+      key: 'controls', header: 'Controls', sortable: true,
       render: (pol: Policy) => <span style={{ fontSize: 12, fontWeight: 600 }}>{controlsForPolicy(pol.id).length}</span>,
     },
     {
@@ -669,10 +692,11 @@ export default function GovernancePoliciesPage() {
             action={canWrite ? { label: '+ Add Document', onClick: openAdd } : undefined} />
         ) : (
           <DataTable
-            rows={filteredPolicies}
+            rows={sorted}
             columns={policyColumns}
             rowKey={(p) => p.id}
             selection={sel}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all documents"
             emptyMessage="No documents match the current filters."
             expansion={{
