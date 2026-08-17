@@ -330,8 +330,11 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
 ];
 const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v1';
 
-function InlineCellEdit({ value, onSave, type = 'text', options }: {
+function InlineCellEdit({ value, onSave, type = 'text', options, display }: {
   value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
+  /** Custom read-state content (e.g. a HealthBar) shown in place of the raw
+   *  value. Editing still swaps in the input/select on click. */
+  display?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -347,7 +350,7 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
         style={{ cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
         title="Click to edit"
       >
-        {value || '—'}
+        {display ?? (value || '—')}
       </span>
     );
   }
@@ -1144,6 +1147,7 @@ export default function DataAssetsPage({
             value={asset.healthScore != null ? String(asset.healthScore) : ''}
             onSave={(v) => inlineSaveField(asset.id, 'healthScore', v)}
             type="number"
+            display={<HealthBar score={asset.healthScore} />}
           />
         ) : (
           <HealthBar score={asset.healthScore} />
