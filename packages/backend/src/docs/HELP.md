@@ -660,8 +660,26 @@ Procela follows the DAMA (Data Management Association) framework for data govern
 
 ### Where is my data stored?
 
-In the current prototype, data is stored in JSON files on the server. In production, Procela is designed
- to use PostgreSQL with full multi-tenancy, encryption, and backup capabilities.
+Your data lives in a **PostgreSQL** database that Procela manages. Deployment is flexible: in the cloud it
+ runs on a managed PostgreSQL service (Amazon RDS), and for on-premise installs it runs on PostgreSQL inside
+ your own environment (self-hosted or a customer-managed, RDS-compatible database) — the same application,
+ pointed at your infrastructure.
+
+Key protections:
+
+- **Multi-tenancy.** Every record carries an organization identifier, and that scope is enforced on every
+ query, so one organization's catalog, data assets, and mappings are never visible to another.
+- **Encryption.** Data is encrypted in transit (TLS) and at rest. Database credentials and API keys are held
+ in a secrets manager, never hard-coded in the application.
+- **Backups & recovery.** The database is backed up automatically with point-in-time recovery, so data can be
+ restored after an incident.
+- **Auditability.** Every create, edit, and delete is written to an append-only audit log tied to the
+ authenticated user, and that log is queryable and exportable for compliance.
+
+Source-system data (the databases and warehouses you connect to) is **not** copied into Procela. Procela stores
+ your business definitions and the catalog metadata it discovers — table names, row counts, freshness — while the
+ underlying records stay in your systems. See **What's the difference between a Connection and an on-prem
+ connector?** below for how that metadata is gathered.
 
 ### What's the difference between a Connection and an on-prem connector?
 
