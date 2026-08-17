@@ -22,6 +22,7 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
+import { useSortedList } from '../hooks/useSortedList';
 
 interface LineageLink {
   id: string;
@@ -344,7 +345,31 @@ export default function DataLineagePage() {
   useEffect(() => { if (viewMode === 'visualization') fetchVisualization(); }, [viewMode, fetchVisualization]);
   usePolling(fetchData, 30000);
 
-  const sel = useRowSelection(links, (l) => l.id);
+  // Sort — comparators keyed by column key; URL persists ?sort=&dir=.
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    links,
+    {
+      // Sort by the displayed value (name, falling back to the id shown).
+      source: (a, b) => (a.sourceSystemName || a.sourceSystemId || '').localeCompare(b.sourceSystemName || b.sourceSystemId || ''),
+      target: (a, b) => (a.targetSystemName || a.targetSystemId || '').localeCompare(b.targetSystemName || b.targetSystemId || ''),
+      // Rows with no linked asset sort to the end regardless of direction.
+      asset: (a, b) => {
+        const an = a.dataAssetName || '';
+        const bn = b.dataAssetName || '';
+        if (!an && !bn) return 0;
+        if (!an) return 1;
+        if (!bn) return -1;
+        return an.localeCompare(bn);
+      },
+      flowType: (a, b) => a.flowType.localeCompare(b.flowType),
+      frequency: (a, b) => a.frequency.localeCompare(b.frequency),
+      status: (a, b) => a.status.localeCompare(b.status),
+      description: (a, b) => (a.description || '').localeCompare(b.description || ''),
+    },
+    'source',
+  );
+
+  const sel = useRowSelection(sorted, (l) => l.id);
 
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
@@ -431,15 +456,15 @@ export default function DataLineagePage() {
 
   const lineageColumns = ([
     lineageCols.isVisible('source') && {
-      key: 'source', header: 'Source System',
+      key: 'source', header: 'Source System', sortable: true,
       render: (link: LineageLink) => link.sourceSystemName || link.sourceSystemId,
     },
     lineageCols.isVisible('target') && {
-      key: 'target', header: 'Target System',
+      key: 'target', header: 'Target System', sortable: true,
       render: (link: LineageLink) => link.targetSystemName || link.targetSystemId,
     },
     lineageCols.isVisible('asset') && {
-      key: 'asset', header: 'Data Asset',
+      key: 'asset', header: 'Data Asset', sortable: true,
       render: (link: LineageLink) => (
         link.dataAssetName ? (
           <span style={{ color: 'var(--color-text-secondary)' }}>{link.dataAssetName}</span>
@@ -449,25 +474,25 @@ export default function DataLineagePage() {
       ),
     },
     lineageCols.isVisible('flowType') && {
-      key: 'flowType', header: 'Flow Type',
+      key: 'flowType', header: 'Flow Type', sortable: true,
       render: (link: LineageLink) => (
         <Badge label={link.flowType} colors={FLOW_TYPE_BADGES[link.flowType] || FLOW_TYPE_BADGES.MANUAL} />
       ),
     },
     lineageCols.isVisible('frequency') && {
-      key: 'frequency', header: 'Frequency',
+      key: 'frequency', header: 'Frequency', sortable: true,
       render: (link: LineageLink) => (
         <Badge label={link.frequency} colors={FREQUENCY_BADGES[link.frequency] || FREQUENCY_BADGES.ON_DEMAND} />
       ),
     },
     lineageCols.isVisible('status') && {
-      key: 'status', header: 'Status',
+      key: 'status', header: 'Status', sortable: true,
       render: (link: LineageLink) => (
         <Badge label={link.status} colors={STATUS_BADGES[link.status] || STATUS_BADGES.ACTIVE} />
       ),
     },
     lineageCols.isVisible('description') && {
-      key: 'description', header: 'Description', cellStyle: { maxWidth: 200 },
+      key: 'description', header: 'Description', sortable: true, cellStyle: { maxWidth: 200 },
       render: (link: LineageLink) => (
         <TruncatedText text={link.description} emptyPlaceholder="--" />
       ),
@@ -660,10 +685,11 @@ export default function DataLineagePage() {
           ) : (
             <Card padding={0} style={{ overflow: 'auto' }}>
               <DataTable
-                rows={links}
+                rows={sorted}
                 columns={lineageColumns}
                 rowKey={(l) => l.id}
                 selection={sel}
+                sort={{ sortKey, sortDir, onSort: toggleSort }}
                 selectAllLabel="Select all flows"
                 emptyMessage="No flows match the current filters."
               />

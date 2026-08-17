@@ -395,6 +395,16 @@ export default function AgentsPage() {
       type: (a, b) => a.agentType.localeCompare(b.agentType),
       provider: (a, b) => (a.provider || '').localeCompare(b.provider || ''),
       status: (a, b) => a.status.localeCompare(b.status),
+      // Sort by the resolved person name (what the cell shows); unassigned
+      // agents sort to the end regardless of direction.
+      responsible: (a, b) => {
+        const an = a.ownerPersonId ? (personNameById[a.ownerPersonId] || '') : '';
+        const bn = b.ownerPersonId ? (personNameById[b.ownerPersonId] || '') : '';
+        if (!an && !bn) return 0;
+        if (!an) return 1;
+        if (!bn) return -1;
+        return an.localeCompare(bn);
+      },
     },
     'name',
   );
@@ -481,11 +491,11 @@ export default function AgentsPage() {
       },
     },
     agentCols.isVisible('orgs') && {
-      key: 'orgs', header: 'Organizations',
+      key: 'orgs', header: 'Organizations', sortable: true,
       render: (a: Agent) => a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>,
     },
     agentCols.isVisible('responsible') && {
-      key: 'responsible', header: 'Responsible',
+      key: 'responsible', header: 'Responsible', sortable: true,
       render: (a: Agent) => a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>,
     },
     {

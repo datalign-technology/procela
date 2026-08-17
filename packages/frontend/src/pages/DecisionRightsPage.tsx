@@ -21,6 +21,7 @@ import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import { useSortedList } from '../hooks/useSortedList';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 
 // ── Types ──
@@ -426,7 +427,29 @@ export default function DecisionRightsPage() {
     return true;
   });
 
-  const sel = useRowSelection(filteredRows, (r) => r.id);
+  // Sort — URL-persisted via ?sort=&dir=. Category sorts by the resolved
+  // display label; "Decides" sorts by the resolved decider label (what the
+  // cell shows), with unassigned rows last regardless of direction. The
+  // RACI detail (Recommends / Approves / Informed / Escalation) lives in the
+  // row expansion, not as sortable columns.
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    filteredRows,
+    {
+      decision: (a, b) => (a.decision || '').localeCompare(b.decision || ''),
+      category: (a, b) => (CATEGORY_LABELS[a.category] || '').localeCompare(CATEGORY_LABELS[b.category] || ''),
+      decides: (a, b) => {
+        const al = a.deciderName || (a.decider ? labelFor(a.decider, people, groups) : '');
+        const bl = b.deciderName || (b.decider ? labelFor(b.decider, people, groups) : '');
+        if (!al && !bl) return 0;
+        if (!al) return 1;
+        if (!bl) return -1;
+        return al.localeCompare(bl);
+      },
+    },
+    'decision',
+  );
+
+  const sel = useRowSelection(sorted, (r) => r.id);
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -463,7 +486,7 @@ export default function DecisionRightsPage() {
 
   const decisionColumns = ([
     decisionCols.isVisible('decision') && {
-      key: 'decision', header: 'Decision', cellStyle: { fontWeight: 500, verticalAlign: 'top' },
+      key: 'decision', header: 'Decision', sortable: true, cellStyle: { fontWeight: 500, verticalAlign: 'top' },
       render: (r: DecisionRight) => (
         <>
           <button
@@ -480,7 +503,7 @@ export default function DecisionRightsPage() {
       ),
     },
     decisionCols.isVisible('category') && {
-      key: 'category', header: 'Category', cellStyle: { verticalAlign: 'top' },
+      key: 'category', header: 'Category', sortable: true, cellStyle: { verticalAlign: 'top' },
       render: (r: DecisionRight) => (
         <span style={badgeStyle(CATEGORY_COLORS[r.category] || CATEGORY_COLORS.OTHER)}>
           {CATEGORY_LABELS[r.category]}
@@ -488,7 +511,7 @@ export default function DecisionRightsPage() {
       ),
     },
     decisionCols.isVisible('decides') && {
-      key: 'decides', header: 'Decides', cellStyle: { verticalAlign: 'top' },
+      key: 'decides', header: 'Decides', sortable: true, cellStyle: { verticalAlign: 'top' },
       render: (r: DecisionRight) => {
         const decidesLabel = r.deciderName || (r.decider ? labelFor(r.decider, people, groups) : null);
         return decidesLabel ? (
@@ -770,10 +793,11 @@ export default function DecisionRightsPage() {
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <DataTable
-                rows={filteredRows}
+                rows={sorted}
                 columns={decisionColumns}
                 rowKey={(r) => r.id}
                 selection={sel}
+                sort={{ sortKey, sortDir, onSort: toggleSort }}
                 expansion={{
                   expandedIds,
                   onToggleExpanded: toggleExpand,

@@ -19,6 +19,7 @@ import ErrorState from '../components/ErrorState';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import { useSortedList } from '../hooks/useSortedList';
 
 // ── Types ──
 
@@ -288,19 +289,43 @@ export default function SopsPage({
     return true;
   });
 
-  const sel = useRowSelection(filtered, (s) => s.id);
+  // Sort — URL-persisted via ?sort=&dir=. Category sorts by the resolved
+  // display label; owner sorts by the resolved owner name with unassigned
+  // rows last regardless of direction. Roles (a multi-value join) stays
+  // non-sortable, matching the Agents "Organizations" column.
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    filtered,
+    {
+      code: (a, b) => (a.code || '').localeCompare(b.code || ''),
+      title: (a, b) => (a.title || '').localeCompare(b.title || ''),
+      category: (a, b) => (CATEGORY_LABELS[a.category] || a.category).localeCompare(CATEGORY_LABELS[b.category] || b.category),
+      steps: (a, b) => (a.steps?.length || 0) - (b.steps?.length || 0),
+      status: (a, b) => (a.status || '').localeCompare(b.status || ''),
+      owner: (a, b) => {
+        const an = a.ownerName || '';
+        const bn = b.ownerName || '';
+        if (!an && !bn) return 0;
+        if (!an) return 1;
+        if (!bn) return -1;
+        return an.localeCompare(bn);
+      },
+    },
+    'code',
+  );
+
+  const sel = useRowSelection(sorted, (s) => s.id);
 
   const sopColumns = ([
     sopCols.isVisible('code') && {
-      key: 'code', header: 'Code', width: 80, cellStyle: { fontFamily: 'var(--font-mono)', fontSize: 12 },
+      key: 'code', header: 'Code', sortable: true, width: 80, cellStyle: { fontFamily: 'var(--font-mono)', fontSize: 12 },
       render: (sop: Sop) => sop.code,
     },
     sopCols.isVisible('title') && {
-      key: 'title', header: 'Title', cellStyle: { fontWeight: 500 },
+      key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
       render: (sop: Sop) => sop.title,
     },
     sopCols.isVisible('category') && {
-      key: 'category', header: 'Category',
+      key: 'category', header: 'Category', sortable: true,
       render: (sop: Sop) => (
         <span style={badge(CATEGORY_COLORS[sop.category] || CATEGORY_COLORS.OTHER)}>{CATEGORY_LABELS[sop.category] || sop.category}</span>
       ),
@@ -315,17 +340,17 @@ export default function SopsPage({
       ),
     },
     sopCols.isVisible('steps') && {
-      key: 'steps', header: 'Steps', align: 'center' as const,
+      key: 'steps', header: 'Steps', sortable: true, align: 'center' as const,
       render: (sop: Sop) => sop.steps?.length || 0,
     },
     sopCols.isVisible('status') && {
-      key: 'status', header: 'Status',
+      key: 'status', header: 'Status', sortable: true,
       render: (sop: Sop) => (
         <span style={badge(STATUS_COLORS[sop.status] || STATUS_COLORS.DRAFT)}>{sop.status}</span>
       ),
     },
     sopCols.isVisible('owner') && {
-      key: 'owner', header: 'Owner', cellStyle: { fontSize: 12 },
+      key: 'owner', header: 'Owner', sortable: true, cellStyle: { fontSize: 12 },
       render: (sop: Sop) => sop.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
     },
     {
@@ -584,10 +609,11 @@ export default function SopsPage({
       ) : (
         <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
           <DataTable
-            rows={filtered}
+            rows={sorted}
             columns={sopColumns}
             rowKey={(s) => s.id}
             selection={sel}
+            sort={{ sortKey, sortDir, onSort: toggleSort }}
             expansion={{
               expandedIds: expandedId ? new Set([expandedId]) : new Set(),
               onToggleExpanded: (id) => setExpandedId((prev) => prev === id ? null : id),

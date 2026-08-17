@@ -453,6 +453,14 @@ export default function PeoplePage() {
       email: (a, b) => (a.email || '').localeCompare(b.email || ''),
       role: (a, b) => a.role.localeCompare(b.role),
       title: (a, b) => (a.title || '').localeCompare(b.title || ''),
+      // Total governance involvement (groups + roles + domains) per person.
+      governance: (a, b) => {
+        const tot = (id: string) => { const g = govSummary[id]; return g ? g.groups + g.roles + g.domains : 0; };
+        return tot(a.id) - tot(b.id);
+      },
+      // Number of unqualified (skill-gap) activities per person.
+      skillgaps: (a, b) =>
+        (skillCoverageByPerson[a.id]?.unqualifiedCount || 0) - (skillCoverageByPerson[b.id]?.unqualifiedCount || 0),
     },
     'name',
     'asc',
@@ -1125,10 +1133,10 @@ export default function PeoplePage() {
                         </th>
                         <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                         <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
-                        <th scope="col" style={thStyle}>Governance</th>
+                        <SortableTh sortKey="governance" active={sortKey} dir={sortDir} onClick={toggleSort}>Governance</SortableTh>
                         <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
                         {selectedOrgId && (
-                          <th scope="col" style={{ ...thStyle, width: 110 }} title="Process activities this person is responsible for that require a skill they don't hold.">Skill gaps</th>
+                          <SortableTh sortKey="skillgaps" active={sortKey} dir={sortDir} onClick={toggleSort} width={110} title="Process activities this person is responsible for that require a skill they don't hold.">Skill gaps</SortableTh>
                         )}
                         <th scope="col" style={{ ...thStyle, width: 70, textAlign: 'center' }}>Actions</th>
                       </tr>

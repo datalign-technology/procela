@@ -649,8 +649,23 @@ export default function DataAssetsPage({
       name: (a, b) => a.name.localeCompare(b.name),
       description: (a, b) => (a.description || '').localeCompare(b.description || ''),
       system: (a, b) => systemName(a.systemId).localeCompare(systemName(b.systemId)),
+      // Sort by the source binding label the Source cell renders
+      // ("<asset>.<column>"); unbound assets sort to the end either way.
+      source: (a, b) => {
+        const ba = primaryBindingOf(a.id);
+        const bb = primaryBindingOf(b.id);
+        const sa = ba ? `${ba.sourceAsset}${ba.sourceColumn ? '.' + ba.sourceColumn : ''}` : '';
+        const sb = bb ? `${bb.sourceAsset}${bb.sourceColumn ? '.' + bb.sourceColumn : ''}` : '';
+        if (!sa && !sb) return 0;
+        if (!sa) return 1;
+        if (!sb) return -1;
+        return sa.localeCompare(sb);
+      },
+      tier: (a, b) => compareTier(a.governanceTier, b.governanceTier),
+      health: (a, b) => (a.healthScore ?? 0) - (b.healthScore ?? 0),
       domain: (a, b) => (a.domainName || '').localeCompare(b.domainName || ''),
       owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
+      steward: (a, b) => (a.stewardName || '').localeCompare(b.stewardName || ''),
       updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'name',
@@ -1074,7 +1089,7 @@ export default function DataAssetsPage({
       render: (asset: DataAssetEntity) => systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
     },
     isVisible('source') && {
-      key: 'source', header: 'Source', cellStyle: { fontSize: 12, color: 'var(--color-text-secondary)' },
+      key: 'source', header: 'Source', sortable: true, cellStyle: { fontSize: 12, color: 'var(--color-text-secondary)' },
       render: (asset: DataAssetEntity) => {
         const binding = primaryBindingOf(asset.id);
         const connName = binding ? connectionNameById[binding.connectionId] : undefined;
@@ -1090,7 +1105,7 @@ export default function DataAssetsPage({
       },
     },
     isVisible('tier') && {
-      key: 'tier', header: 'Tier',
+      key: 'tier', header: 'Tier', sortable: true,
       render: (asset: DataAssetEntity) => {
         const inherited = isInheritedAsset(asset.orgId, activeOrgId);
         return (
@@ -1121,7 +1136,7 @@ export default function DataAssetsPage({
       },
     },
     isVisible('health') && {
-      key: 'health', header: 'Health',
+      key: 'health', header: 'Health', sortable: true,
       render: (asset: DataAssetEntity) => {
         const inherited = isInheritedAsset(asset.orgId, activeOrgId);
         return canWrite && !inherited ? (
@@ -1144,7 +1159,7 @@ export default function DataAssetsPage({
       render: (asset: DataAssetEntity) => asset.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
     },
     isVisible('steward') && {
-      key: 'steward', header: 'Steward',
+      key: 'steward', header: 'Steward', sortable: true,
       render: (asset: DataAssetEntity) => asset.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
     },
     {

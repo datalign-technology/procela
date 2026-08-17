@@ -789,6 +789,13 @@ export default function SystemsPage({
       type: (a, b) => (a.systemType || '').localeCompare(b.systemType || ''),
       description: (a, b) => (a.description || '').localeCompare(b.description || ''),
       owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
+      // Sort by the number of connections serving the system (what the
+      // Connections cell shows as "N configured").
+      connections: (a, b) => {
+        const ca = connections.filter((c) => connSystemIds(c).includes(a.id)).length;
+        const cb = connections.filter((c) => connSystemIds(c).includes(b.id)).length;
+        return ca - cb;
+      },
       updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'name',
@@ -877,7 +884,7 @@ export default function SystemsPage({
       ),
     },
     systemCols.isVisible('connections') && {
-      key: 'connections', header: 'Connections', width: 140,
+      key: 'connections', header: 'Connections', sortable: true, width: 140,
       render: (sys: SystemEntity) => {
         const sysConnections = connections.filter((c) => connSystemIds(c).includes(sys.id));
         const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
