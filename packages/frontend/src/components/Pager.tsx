@@ -7,7 +7,7 @@ import type { Pagination } from '../hooks/usePagination';
 // one page, so small lists are visually untouched.
 // ──────────────────────────────────────────────────────────────────────────
 
-const PAGE_SIZES = [20, 50, 100, 200];
+const PAGE_SIZES = [15, 50, 100, 200];
 
 // Windowed page list: always the first and last page, the current page and its
 // neighbours, with '…' gaps between runs.

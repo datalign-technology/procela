@@ -464,7 +464,7 @@ export default function PeoplePage() {
 
   // Cap how many rows render for a large roster; sort / filter / select-all
   // above still operate over the whole filtered list.
-  const peoplePage = usePagination(sortedPeople, 20);
+  const peoplePage = usePagination(sortedPeople, 15);
   const pagedPeople = peoplePage.pageItems;
 
   const orgOptions = flattenTreeForSelect(tree);
