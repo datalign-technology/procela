@@ -77,8 +77,11 @@ router.get('/', async (req: Request, res: Response) => {
     if (!nodeIds.has(n.id)) { nodeIds.add(n.id); nodes.push(n); }
   };
 
-  // Process nodes (top 3 levels: VALUE_STREAM, PROCESS, ACTIVITY)
-  const topLevels = new Set(['VALUE_STREAM', 'PROCESS', 'ACTIVITY']);
+  // Process nodes (the four drill levels: VALUE_STREAM, PROCESS, SUBPROCESS,
+  // ACTIVITY). The client's depth control collapses/expands this tree and rolls
+  // cross-hierarchy edges up to the deepest visible ancestor, so the full tree
+  // is sent and the drilling happens client-side.
+  const topLevels = new Set(['VALUE_STREAM', 'PROCESS', 'SUBPROCESS', 'ACTIVITY']);
   const filteredProcesses = orgId
     ? (() => {
         const scope = getVisibleOrgScope(orgId as string)!;

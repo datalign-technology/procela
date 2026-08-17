@@ -37,6 +37,9 @@ interface TypeCfg {
   plural: string;
 }
 
+/** Drill affordance for a process node (see collapseHierarchy). */
+interface ExpandCtl { state: 'expand' | 'collapse'; count: number; childLevel: string }
+
 interface Props {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
@@ -45,6 +48,10 @@ interface Props {
   onSelect: (n: DiagramNode) => void;
   typeConfig: Record<string, TypeCfg>;
   columnOrder: string[];
+  /** Visible process id → expand/collapse control. When present, a node draws a
+   *  small caret badge that drills into (or out of) that branch. */
+  expandControls?: Map<string, ExpandCtl>;
+  onToggleExpand?: (id: string) => void;
 }
 
 const NODE_W = 150;
@@ -88,6 +95,7 @@ function edgeStyle(e: DiagramEdge): { color: string; legend: string } {
 
 export default function EnterpriseDiagram({
   nodes, edges, selected, impactSet, onSelect, typeConfig, columnOrder,
+  expandControls, onToggleExpand,
 }: Props) {
   // Measure the available width so each lane wraps its nodes to fit instead
   // of running off the right edge.
@@ -414,6 +422,34 @@ export default function EnterpriseDiagram({
                   )}
                 </text>
               )}
+              {/* Drill caret — expand reveals this branch's hidden children,
+                  collapse hides them. Its own click must not also select. */}
+              {(() => {
+                const ec = expandControls?.get(n.id);
+                if (!ec || !onToggleExpand) return null;
+                const w = ec.state === 'expand' ? 26 : 18;
+                return (
+                  <g
+                    transform={`translate(${NODE_W - w - 6},${NODE_H - 18})`}
+                    style={{ cursor: 'pointer' }}
+                    onClick={(ev) => { ev.stopPropagation(); onToggleExpand(n.id); }}
+                    opacity={opacity}
+                  >
+                    <title>{ec.state === 'expand' ? `Show ${ec.count} ${ec.childLevel === 'ACTIVITY' ? 'activities' : 'children'}` : 'Hide children'}</title>
+                    <rect width={w} height={13} rx={6.5} fill={cfg.bg} stroke={cfg.color} strokeWidth={0.75} />
+                    <text
+                      x={w / 2}
+                      y={9.5}
+                      fontSize={9}
+                      fontWeight={700}
+                      textAnchor="middle"
+                      style={{ fill: cfg.color }}
+                    >
+                      {ec.state === 'expand' ? `+${ec.count}` : '−'}
+                    </text>
+                  </g>
+                );
+              })()}
             </g>
           );
         })}

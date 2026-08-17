@@ -1,7 +1,15 @@
 import { SkeletonRows } from '../components/Skeleton';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, X } from 'lucide-react';
 import { apiClient } from '../api/client';
+import {
+  collapseProcessHierarchy,
+  availableLevels,
+  collapseBranch,
+  LEVEL_PLURAL,
+  type ProcessLevel,
+} from '../lib/collapseHierarchy';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import SecondaryButton from '../components/SecondaryButton';
@@ -65,6 +73,27 @@ const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: (size: numb
 };
 
 const COLUMN_ORDER: string[] = ['process', 'system', 'data-asset', 'domain', 'person'];
+
+// Title-case labels for the process-depth (drill) control.
+const DEPTH_LABEL: Record<ProcessLevel, string> = {
+  VALUE_STREAM: 'Value Streams',
+  PROCESS: 'Processes',
+  SUBPROCESS: 'Sub-processes',
+  ACTIVITY: 'Activities',
+};
+
+// Process levels that can be linked to a data asset (mappings live at the
+// activity level and below); higher levels drill down into the map instead.
+const MAPPABLE_LEVELS = new Set(['ACTIVITY', 'TASK', 'EXECUTION']);
+
+// Shared pill style for the detail-panel Connect / drill actions.
+const connectLinkStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 5,
+  padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+  border: '1px solid var(--color-primary)', cursor: 'pointer',
+  background: 'var(--color-primary-light)', color: 'var(--color-primary)',
+  textDecoration: 'none',
+};
 
 // Preset views — each defines which entity types to show and which edge types matter
 interface ViewPreset {
@@ -151,6 +180,19 @@ export default function EnterpriseViewPage() {
   const [selectedByType, setSelectedByType] = useState<Record<string, Set<string> | null>>({});
   const setTypeSelection = (type: string, sel: Set<string> | null) =>
     setSelectedByType((prev) => ({ ...prev, [type]: sel }));
+  // Process drill depth. The tree renders down to `depthLevel`; anything deeper
+  // collapses into its ancestor and its data/system edges roll up. `expandedIds`
+  // is the per-branch override — a process drilled into while the rest stay
+  // collapsed. Default to the deepest level so the view opens fully expanded
+  // (today's behaviour) and drill-UP is the new opt-in.
+  const [depthLevel, setDepthLevel] = useState<ProcessLevel>('ACTIVITY');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // Toggle one process branch open/closed. Collapsing also drops descendants
+  // from the set so re-expanding starts one level down again.
+  const toggleExpand = (id: string) =>
+    setExpandedIds((prev) =>
+      prev.has(id) ? collapseBranch(prev, id, edges) : new Set(prev).add(id),
+    );
 
   const fetchData = useCallback(async () => {
     try {
@@ -171,6 +213,17 @@ export default function EnterpriseViewPage() {
 
   const preset = VIEW_PRESETS[activeView] || VIEW_PRESETS.all;
 
+  // Collapse the process hierarchy to the chosen depth first (rolling edges up
+  // to the nearest visible ancestor), then run the existing preset / governance
+  // / per-type filters over the collapsed graph. Levels available for the drill
+  // control come from the FULL node set so a segment doesn't vanish once you've
+  // drilled past it.
+  const { nodes: cNodes, edges: cEdges, expandControls } = useMemo(
+    () => collapseProcessHierarchy(nodes, edges, depthLevel, expandedIds),
+    [nodes, edges, depthLevel, expandedIds],
+  );
+  const processLevels = useMemo(() => availableLevels(nodes), [nodes]);
+
   // Reset the Cards-mode focus and search whenever the preset changes, so a
   // type focused under one lens doesn't linger (possibly empty) under another.
   useEffect(() => {
@@ -178,9 +231,18 @@ export default function EnterpriseViewPage() {
     setSearch('');
   }, [activeView]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Changing the global depth clears per-branch expansions so the view is
+  // predictable (a drilled-in branch doesn't linger under a different depth).
+  useEffect(() => { setExpandedIds(new Set()); }, [depthLevel]);
+
+  // A node that collapses out of view can't stay selected.
+  useEffect(() => {
+    if (selected && !cNodes.some((n) => n.id === selected.id)) setSelected(null);
+  }, [cNodes, selected]);
+
   // Filter by active preset, then by governance toggle, then by the per-type
   // entity filter (the dropdowns).
-  const presetNodes = nodes.filter((n) => preset.entityTypes.has(n.type));
+  const presetNodes = cNodes.filter((n) => preset.entityTypes.has(n.type));
   // Whether this preset surfaces any governance value streams — gates the
   // Include-governance toggle so it only appears when there's something to fold
   // in. A governance process node (and its process descendants) carry
@@ -201,7 +263,7 @@ export default function EnterpriseViewPage() {
   };
   const typeVisibleNodes = govNodes.filter(nodeSelected);
   const typeVisibleIds = new Set(typeVisibleNodes.map((n) => n.id));
-  const filteredEdges = edges.filter((e) =>
+  const filteredEdges = cEdges.filter((e) =>
     preset.edgeTypes.has(e.type) && typeVisibleIds.has(e.source) && typeVisibleIds.has(e.target),
   );
   // "Hide unconnected" drops nodes that have no edge in the current view. Edges
@@ -219,7 +281,7 @@ export default function EnterpriseViewPage() {
     if (byType[n.type]) byType[n.type].push(n);
   }
 
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const nodeMap = new Map(cNodes.map((n) => [n.id, n]));
 
   // Impact analysis BFS — uses filtered edges so it respects the active view
   const impactSet = new Set<string>();
@@ -369,6 +431,26 @@ export default function EnterpriseViewPage() {
               <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>{n.meta.role.replace('_', ' ')}</span>
             )}
           </div>
+          {/* Drill-into-this-branch affordance. Expand reveals this process's
+              hidden children; collapse hides them again. */}
+          {(() => {
+            const ec = expandControls.get(n.id);
+            if (!ec) return null;
+            return (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleExpand(n.id); }}
+                style={{
+                  marginTop: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  fontSize: 11, fontWeight: 600, color: 'var(--color-primary)',
+                }}
+              >
+                {ec.state === 'expand'
+                  ? `＋ ${ec.count} ${LEVEL_PLURAL[ec.childLevel]}`
+                  : `− Hide ${LEVEL_PLURAL[ec.childLevel]}`}
+              </button>
+            );
+          })()}
         </div>
       </div>
     );
@@ -412,8 +494,36 @@ export default function EnterpriseViewPage() {
         </div>
       )}
 
-      {/* Controls: governance toggle · counts · export · display mode */}
+      {/* Controls: depth · governance toggle · counts · export · display mode */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', fontSize: 13, flexWrap: 'wrap' }}>
+        {/* Process depth (drill up / drill down). Renders down to the chosen
+            level; deeper nodes collapse into their ancestor with their data /
+            system edges rolled up. Only offered when the catalog actually has
+            more than one process level. */}
+        {presetTypes.includes('process') && processLevels.length > 1 && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Depth:</span>
+            <div role="group" aria-label="Process depth" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
+              {processLevels.map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => setDepthLevel(lvl)}
+                  aria-pressed={depthLevel === lvl}
+                  title={`Show the process tree down to ${DEPTH_LABEL[lvl]}`}
+                  style={{
+                    padding: '3px 10px', fontSize: 11, fontWeight: depthLevel === lvl ? 600 : 400,
+                    border: 'none', cursor: 'pointer',
+                    background: depthLevel === lvl ? 'var(--color-primary)' : 'transparent',
+                    color: depthLevel === lvl ? '#fff' : 'var(--color-text-secondary)',
+                  }}
+                >
+                  {DEPTH_LABEL[lvl]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {hasGovernance && (
           <button
             type="button"
@@ -508,6 +618,8 @@ export default function EnterpriseViewPage() {
               onSelect={(n) => selectNode(n as GraphNode)}
               typeConfig={TYPE_CONFIG}
               columnOrder={visibleTypes}
+              expandControls={expandControls}
+              onToggleExpand={toggleExpand}
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -642,6 +754,49 @@ export default function EnterpriseViewPage() {
               <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
                 {selected.meta.description}
               </p>
+            )}
+
+            {/* Connect & drill actions — bridge from viewing a process/activity
+                to authoring its data / system links. Activities (and levels
+                below) deep-link to the Data Mapping editor prefilled to this
+                node; higher levels open the Process ↔ Data Map to drill down.
+                Expandable branches also get an inline expand/collapse here so
+                the diagram's small caret isn't the only way to drill. */}
+            {selected.type === 'process' && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {MAPPABLE_LEVELS.has(selected.meta.level) ? (
+                  <Link
+                    to={`/processes/data-map?view=table&newFor=${selected.id}`}
+                    style={connectLinkStyle}
+                  >
+                    Connect data / system →
+                  </Link>
+                ) : (
+                  <Link to="/processes/data-map" style={connectLinkStyle}>
+                    Open in Process ↔ Data Map →
+                  </Link>
+                )}
+                {(() => {
+                  const ec = expandControls.get(selected.id);
+                  if (!ec) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(selected.id)}
+                      style={{
+                        ...connectLinkStyle,
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text-secondary)',
+                        borderColor: 'var(--color-border)',
+                      }}
+                    >
+                      {ec.state === 'expand'
+                        ? `＋ ${ec.count} ${LEVEL_PLURAL[ec.childLevel]}`
+                        : `− Hide ${LEVEL_PLURAL[ec.childLevel]}`}
+                    </button>
+                  );
+                })()}
+              </div>
             )}
 
             {/* Meta details */}
