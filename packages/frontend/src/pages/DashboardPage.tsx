@@ -253,7 +253,7 @@ function MyDashboard() {
   }, [user?.email]);
 
   if (loading) return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="My Dashboard" />
       <Card padding={20}><SkeletonRows rows={4} columnWidths={[180, null, 90]} /></Card>
     </div>
@@ -264,7 +264,7 @@ function MyDashboard() {
     // linked to a person record in this org (admins, SSO users not yet
     // imported). The section still shows so an enabled widget doesn't vanish.
     return (
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 16 }}>
         <SectionHeading title="My Dashboard" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
@@ -287,7 +287,7 @@ function MyDashboard() {
   });
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="My Dashboard" marginBottom={4} />
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
         Welcome back, {data.person.name}. Here’s what needs your attention.
@@ -475,7 +475,7 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
       to: '/data-assets?sort=healthScore&dir=asc', zero: stats.averageHealth === 0 },
   ];
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       {/* Heading row carries the lens toggle so the user can sweep the
           KPI strip between operational and governance work without
           leaving the dashboard. Value Streams / Processes / Coverage
@@ -511,7 +511,7 @@ function GovernancePosture({ stats }: { stats: DashboardStats }) {
     { label: tierLabel('BRONZE'), value: g.bronze, color: TIER_CHART_COLOR.BRONZE },
   ];
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Governance Posture" />
       <Card padding="18px 22px">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 24, alignItems: 'center' }}>
@@ -544,7 +544,7 @@ function CatalogShape({ stats }: { stats: DashboardStats }) {
   ];
   const total = rows.reduce((s, r) => s + r.value, 0);
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Catalog Shape" />
       <Card padding="16px 20px">
         {total === 0 ? (
@@ -591,7 +591,7 @@ function DashboardTrends({ stats }: { stats: DashboardStats }) {
   const weeksAgo = points.length;
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Trends" right={<span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {weeksAgo} weeks</span>} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         {metrics.map((m) => {
@@ -626,20 +626,47 @@ function DashboardTrends({ stats }: { stats: DashboardStats }) {
 
 type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity' | 'skillGaps';
 
-// Order groups the four narrow analytical widgets contiguously
-// (programMaturity, gaps, skillGaps, stewardOnboarding) so they pair
-// two-up cleanly — Program Maturity + Governance Gaps on one row, Skill
-// Gaps + Steward Onboarding on the next — instead of Skill Gaps stranding
-// itself in a masonry column.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'programMaturity', 'gaps', 'catalogShape', 'skillGaps', 'stewardOnboarding', 'whatsNext', 'quickActions', 'recentActivity'];
+// Default order follows an inverted-pyramid reading of importance, top → bottom:
+//   1. myDashboard       — personal, act-now (your overdue tasks / critical issues)
+//   2. overview          — the headline KPI strip, scannable at a glance
+//   3. governancePosture — the state-of-governance hero visual (tier donut + gauges)
+//   4. trends            — direction over time (are the numbers improving?)
+//   5. gaps              — concrete problems to fix   ┐ narrow pair
+//   6. programMaturity   — where we are in the journey ┘
+//   7. skillGaps         — supporting analytic ┐ narrow pair
+//   8. catalogShape      — supporting analytic ┘
+//   9. stewardOnboarding — supporting (lone narrow → fills its own row)
+//  10. whatsNext         — recommended next steps (the call to action)
+//  11. quickActions      — navigation shortcuts (utility)
+//  12. recentActivity    — the audit feed (least glanceable, bottom)
+// The five narrow analytical widgets (gaps → stewardOnboarding) stay
+// contiguous so they pair two-up cleanly instead of stranding a lone card in a
+// masonry column; the surrounding full-width bands anchor the top and bottom.
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'skillGaps', 'catalogShape', 'stewardOnboarding', 'whatsNext', 'quickActions', 'recentActivity'];
 
-// Sections that read best full-bleed (the wide KPI strip, the personal
-// summary's two-column body, What's Next, the quick-action tiles, and the
-// Recent Activity feed). Everything else is a narrow analytical widget that
-// pairs two-up. Bands take a full-width row *in place*, so the reorder /
-// hide system still controls order — the layout just stops wasting the
-// right half of the page on narrow cards.
-const FULL_WIDTH_SECTIONS = new Set<SectionKey>(['overview', 'myDashboard', 'governancePosture', 'trends', 'whatsNext', 'quickActions', 'recentActivity']);
+type SectionWidth = 'full' | 'half';
+
+// Default width per section. `full` takes its own row; consecutive `half`
+// sections pack two-up so the page stays tight (less vertical scrolling).
+// The user can override any of these in Customize — this is only the
+// starting layout. Chosen to keep the wide surfaces (KPI strip, the personal
+// two-column body, What's Next cards, Quick-Action tiles, the activity feed)
+// full-bleed while the analytical widgets — including Governance Posture and
+// Trends — pair up.
+const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
+  myDashboard: 'full',
+  overview: 'full',
+  governancePosture: 'half',
+  trends: 'half',
+  gaps: 'half',
+  programMaturity: 'half',
+  skillGaps: 'half',
+  catalogShape: 'half',
+  stewardOnboarding: 'half',
+  whatsNext: 'full',
+  quickActions: 'full',
+  recentActivity: 'full',
+};
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
@@ -656,36 +683,43 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   recentActivity: 'Recent Activity',
 };
 
+interface StoredLayout { order: string[]; hidden: string[]; width?: Record<string, SectionWidth> }
+
 function useDashboardLayout() {
   const STORAGE_KEY = 'procela_dashboard_layout';
   const KNOWN_KEYS = new Set<SectionKey>(DEFAULT_SECTIONS);
   const isKnown = (k: string): k is SectionKey => KNOWN_KEYS.has(k as SectionKey);
+  const read = (): StoredLayout | null => {
+    try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) as StoredLayout : null; } catch { return null; }
+  };
+
   const [order, setOrder] = useState<SectionKey[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { order: string[]; hidden: string[] };
-        const cleaned = (parsed.order || []).filter(isKnown);
-        // Append any DEFAULT keys missing from the stored layout (e.g. new sections added in a release)
-        for (const k of DEFAULT_SECTIONS) if (!cleaned.includes(k)) cleaned.push(k);
-        return cleaned.length > 0 ? cleaned : DEFAULT_SECTIONS;
-      }
-    } catch { /* */ }
+    const parsed = read();
+    if (parsed) {
+      const cleaned = (parsed.order || []).filter(isKnown);
+      // Append any DEFAULT keys missing from the stored layout (new sections added in a release)
+      for (const k of DEFAULT_SECTIONS) if (!cleaned.includes(k)) cleaned.push(k);
+      return cleaned.length > 0 ? cleaned : DEFAULT_SECTIONS;
+    }
     return DEFAULT_SECTIONS;
   });
   const [hidden, setHidden] = useState<Set<SectionKey>>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { order: string[]; hidden: string[] };
-        return new Set((parsed.hidden || []).filter(isKnown));
-      }
-    } catch { /* */ }
-    return new Set();
+    const parsed = read();
+    return parsed ? new Set((parsed.hidden || []).filter(isKnown)) : new Set();
+  });
+  const [width, setWidthState] = useState<Record<SectionKey, SectionWidth>>(() => {
+    const parsed = read();
+    // Start from the defaults, then apply any stored per-section overrides, so
+    // a section added in a later release inherits its default width.
+    const w = { ...DEFAULT_WIDTHS };
+    if (parsed?.width) for (const [k, v] of Object.entries(parsed.width)) {
+      if (isKnown(k) && (v === 'full' || v === 'half')) w[k] = v;
+    }
+    return w;
   });
 
-  const persist = (o: SectionKey[], h: Set<SectionKey>) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ order: o, hidden: Array.from(h) }));
+  const persist = (o: SectionKey[], h: Set<SectionKey>, w: Record<SectionKey, SectionWidth>) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ order: o, hidden: Array.from(h), width: w }));
   };
 
   const moveUp = (key: SectionKey) => {
@@ -694,7 +728,7 @@ function useDashboardLayout() {
       if (idx <= 0) return prev;
       const next = [...prev];
       [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      persist(next, hidden);
+      persist(next, hidden, width);
       return next;
     });
   };
@@ -705,7 +739,7 @@ function useDashboardLayout() {
       if (idx < 0 || idx >= prev.length - 1) return prev;
       const next = [...prev];
       [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-      persist(next, hidden);
+      persist(next, hidden, width);
       return next;
     });
   };
@@ -714,7 +748,15 @@ function useDashboardLayout() {
     setHidden((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
-      persist(order, next);
+      persist(order, next, width);
+      return next;
+    });
+  };
+
+  const setWidth = (key: SectionKey, w: SectionWidth) => {
+    setWidthState((prev) => {
+      const next = { ...prev, [key]: w };
+      persist(order, hidden, next);
       return next;
     });
   };
@@ -722,10 +764,11 @@ function useDashboardLayout() {
   const reset = () => {
     setOrder(DEFAULT_SECTIONS);
     setHidden(new Set());
-    persist(DEFAULT_SECTIONS, new Set());
+    setWidthState({ ...DEFAULT_WIDTHS });
+    persist(DEFAULT_SECTIONS, new Set(), { ...DEFAULT_WIDTHS });
   };
 
-  return { order, hidden, moveUp, moveDown, toggle, reset };
+  return { order, hidden, width, moveUp, moveDown, toggle, setWidth, reset };
 }
 
 // Icons match the sidebar rail via renderNavIcon(route). Was
@@ -745,7 +788,7 @@ const quickActions = [
 
 function QuickActions() {
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Quick Actions" />
       <div style={{
         display: 'grid',
@@ -870,7 +913,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
     // Empty state instead of hiding — no recommendations means the org is in
     // good shape, which is worth saying rather than showing nothing.
     return (
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 16 }}>
         <SectionHeading title="What's Next" />
         <Card padding="16px 20px">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--color-text-secondary)' }}>
@@ -883,7 +926,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   }
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="What's Next" />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {shown.map((s) => (
@@ -917,7 +960,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
  *  behaviour. */
 function RecentActivity() {
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Recent Activity" right={<Link to="/audit-log" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View full audit log →</Link>} />
       <ActivityFeed inline />
     </div>
@@ -954,7 +997,7 @@ function ProgramMaturity() {
   const phaseNames = ['', 'Foundation Definition', 'Structural Design', 'People & Processes', 'Operationalization'];
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Program Maturity" />
       <Card padding="16px 20px">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
@@ -1007,7 +1050,7 @@ function StewardOnboarding() {
   if (data.total === 0) {
     // Empty state instead of hiding once we know there are no onboarding tasks.
     return (
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 16 }}>
         <SectionHeading title="Steward Onboarding" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
@@ -1025,7 +1068,7 @@ function StewardOnboarding() {
   const rate = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Steward Onboarding" />
       <Card padding="16px 20px">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -1062,7 +1105,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
   const warningTotal = items.filter((i) => i.severity === 'warning').reduce((s, i) => s + i.count, 0);
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Governance Gaps" />
       {total === 0 ? (
         <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--color-success)', fontSize: 13, fontWeight: 500 }}>
@@ -1239,6 +1282,29 @@ export default function DashboardPage() {
                   ><ChevronDown size={12} strokeWidth={2.5} /></button>
                 </div>
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{SECTION_LABELS[key]}</span>
+                {/* Width — Half packs two-up (tighter, less scrolling); Full
+                    takes its own row. Disabled while the section is hidden. */}
+                <div role="group" aria-label={`${SECTION_LABELS[key]} width`} style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', opacity: layout.hidden.has(key) ? 0.5 : 1 }}>
+                  {(['half', 'full'] as const).map((w) => (
+                    <button
+                      key={w}
+                      type="button"
+                      onClick={() => layout.setWidth(key, w)}
+                      disabled={layout.hidden.has(key)}
+                      aria-pressed={layout.width[key] === w}
+                      title={w === 'half' ? 'Half width (pairs two-up)' : 'Full width (own row)'}
+                      style={{
+                        padding: '2px 9px', fontSize: 10, fontWeight: layout.width[key] === w ? 600 : 400,
+                        border: 'none', cursor: layout.hidden.has(key) ? 'default' : 'pointer',
+                        textTransform: 'capitalize',
+                        background: layout.width[key] === w ? 'var(--color-primary)' : 'transparent',
+                        color: layout.width[key] === w ? '#fff' : 'var(--color-text-secondary)',
+                      }}
+                    >
+                      {w}
+                    </button>
+                  ))}
+                </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
@@ -1252,7 +1318,7 @@ export default function DashboardPage() {
             ))}
           </div>
           <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 8 }}>
-            Reorder sections with arrows. Uncheck to hide. Your layout is saved automatically.
+            Reorder with the arrows, set each section Half (pairs two-up) or Full width, and uncheck to hide. Your layout is saved automatically.
           </div>
         </Card>
       )}
@@ -1262,21 +1328,19 @@ export default function DashboardPage() {
       ) : (
         <>
           <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
-          {/* Bands (Overview / My Dashboard / What's Next / Quick Actions /
-              Recent Activity) take a full-width row; the narrow analytical
-              widgets pair up two-up (like Program Maturity + Governance Gaps)
-              in explicit rows. Deterministic pairing — instead of a masonry
-              column flow — keeps a card like Skill Gaps from stranding itself
-              in the right column, and re-chunking on hide means a hidden
-              section never leaves an empty half-row (a lone leftover widget
-              spans the full width). Pairs drop to one column below ~620px.
-              Vertical rhythm still comes from each widget's own marginBottom. */}
+          {/* Layout packs by each section's user-controlled width: a `full`
+              section takes its own row; runs of consecutive `half` sections
+              chunk two-up so the page stays tight. Deterministic pairing —
+              instead of a masonry column flow — keeps a card from stranding
+              itself, and re-chunking on hide/width-change means a hidden or
+              widened section never leaves an empty half-row (a lone leftover
+              half spans the full width). Pairs drop to one column below ~620px.
+              Vertical rhythm comes from each widget's own marginBottom. */}
           <div>
             {(() => {
               const visible = layout.order.filter((key) => !layout.hidden.has(key));
-              // Split the visible sections into rows: each band is its own
-              // full-width row; runs of consecutive narrow widgets chunk into
-              // pairs.
+              // Split the visible sections into rows: each `full` section is
+              // its own row; runs of consecutive `half` widgets chunk into pairs.
               const rows: Array<{ band?: SectionKey; pair?: SectionKey[] }> = [];
               let run: SectionKey[] = [];
               const flushRun = () => {
@@ -1284,7 +1348,7 @@ export default function DashboardPage() {
                 run = [];
               };
               for (const key of visible) {
-                if (FULL_WIDTH_SECTIONS.has(key)) { flushRun(); rows.push({ band: key }); }
+                if (layout.width[key] === 'full') { flushRun(); rows.push({ band: key }); }
                 else run.push(key);
               }
               flushRun();
