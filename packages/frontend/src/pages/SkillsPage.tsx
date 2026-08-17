@@ -7,7 +7,7 @@ import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
-import { useOrgContext } from '../stores/orgContext';
+import { useOrgContext, VALUE_STREAM_LEVELS } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
@@ -85,7 +85,7 @@ function formatCategory(cat: string): string {
 }
 
 export default function SkillsPage() {
-  const { activeOrgId, orgs } = useOrgContext();
+  const { activeOrgId, activeOrgName, activeOrgType, orgs, setActiveOrg } = useOrgContext();
   const orgNameById = new Map(orgs.map((o) => [o.id, o.name]));
   const { addToast } = useToastStore();
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -151,6 +151,25 @@ export default function SkillsPage() {
   const isInherited = (s: Skill) => !!s.orgId && !!activeOrgId && s.orgId !== activeOrgId;
   const ownerNameFor = (s: Skill) => orgNameById.get(s.orgId) || 'another org';
   const selectableSkills = sorted.filter((s) => !isInherited(s));
+
+  // Scope banner — skills can only be OWNED at company/division level, and the
+  // Edit/Delete buttons are gated to the owning org. So when the active scope
+  // can't own skills (a department/team) or every visible skill belongs to a
+  // different org, the whole list is read-only. Explain why and offer a
+  // one-click switch to the owning org(s), since a hover tooltip on a greyed
+  // button is easy to miss (even a Super Admin hits this — it's scope, not role).
+  const inheritedSkills = skills.filter(isInherited);
+  const editableCount = skills.length - inheritedSkills.length;
+  const scopeCanOwn = !activeOrgType || VALUE_STREAM_LEVELS.includes(activeOrgType);
+  // Surface the banner when the scope can't own skills at all (a department /
+  // team), or when the read-only skills are the majority — the common case of
+  // viewing a division while the parent company owns most of the taxonomy.
+  const showScopeBanner = !!activeOrgId && inheritedSkills.length > 0
+    && (!scopeCanOwn || inheritedSkills.length >= editableCount);
+  // Distinct owning orgs among the read-only skills, resolved to switch targets.
+  const ownerOrgs = Array.from(new Set(inheritedSkills.map((s) => s.orgId)))
+    .map((id) => orgs.find((o) => o.id === id))
+    .filter((o): o is (typeof orgs)[number] => !!o);
   const sel = useRowSelection(selectableSkills, (s) => s.id);
 
   // ── CRUD ──
@@ -332,6 +351,54 @@ export default function SkillsPage() {
           taxonomy to get started, then customise to match your organization.
         </HelpPopover>
       </PageHeader>
+
+      {/* Scope banner — why the list is read-only, and how to fix it. */}
+      {showScopeBanner && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
+            padding: '10px 14px', marginBottom: 12,
+            background: 'var(--color-primary-light)',
+            border: '1px solid var(--color-primary)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.5,
+          }}
+        >
+          <span style={{ display: 'inline-flex', flexShrink: 0, color: 'var(--color-primary)', marginTop: 1 }}>
+            {renderNavIcon('/skills', { size: 16, strokeWidth: 1.8 })}
+          </span>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <strong style={{ color: 'var(--color-text)' }}>These skills are read-only in the current scope.</strong>{' '}
+            {scopeCanOwn
+              ? <>They’re owned by {ownerOrgs.length === 1 ? 'another organization' : 'other organizations'}, and skills are edited from the organization that owns them.</>
+              : <>You’re viewing <strong style={{ color: 'var(--color-text)' }}>{activeOrgName}</strong>{activeOrgType ? ` (a ${activeOrgType})` : ''}, which can’t own skills — they live at the company or division level.</>}
+            {' '}Switch your active organization to edit:
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+              {ownerOrgs.slice(0, 4).map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setActiveOrg(o.id, o.name, o.type)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '4px 12px', borderRadius: 999, cursor: 'pointer',
+                    fontSize: 12, fontWeight: 600,
+                    border: '1px solid var(--color-primary)',
+                    background: 'var(--color-surface)', color: 'var(--color-primary)',
+                  }}
+                >
+                  Switch to {o.name}
+                  {o.type && <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.7 }}>{o.type}</span>}
+                </button>
+              ))}
+              {ownerOrgs.length > 4 && (
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', alignSelf: 'center' }}>+{ownerOrgs.length - 4} more</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
