@@ -197,6 +197,26 @@ The personal **My Dashboard** strip at the top has its own four tiles
 Sub-counts surface when relevant (e.g. *"3 overdue"* in red under
 Open Tasks). Zero-count tiles fade the number but still link through.
 
+Below the KPIs the Dashboard shows its state as charts, not just
+numbers:
+
+- **Governance Posture** — a tier-mix donut (Certified / Managed /
+  Uncertified assets) beside semicircular **Coverage** and **Avg
+  Health** gauges.
+- **Trends** — sparklines of Coverage, Avg Health and Open Gaps over
+  the last several weeks, each with a ▲/▼ delta; the headline matches
+  the live Overview tile.
+- **Governance Gaps** — the open gap signals as a critical-vs-warning
+  severity bar over a list of counts, each linking to its fix.
+- **Catalog Shape** — bars for the size of each process level (Value
+  Streams → Processes → Sub-processes → Activities).
+
+**Make it yours.** Click **Customize** to reorder each section
+(arrows), set its width **Half** (two-up, tighter) or **Full** (own
+row), and show/hide it. The layout is saved automatically per browser;
+**Reset to Default** restores the shipped importance-ordered
+arrangement.
+
 Skim the rest of the page: **Program Maturity** (current governance
 phase), **Skill Gaps** (more on this in Module 6).
 
