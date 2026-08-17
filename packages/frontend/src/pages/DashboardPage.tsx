@@ -14,6 +14,12 @@ import SectionHeading from '../components/SectionHeading';
 import StatTile from '../components/StatTile';
 import Meter from '../components/Meter';
 import ProgressRing from '../components/ProgressRing';
+import Gauge from '../components/Gauge';
+import Donut from '../components/Donut';
+import MiniBarChart from '../components/MiniBarChart';
+import Sparkline from '../components/Sparkline';
+import { useTierLabel } from '../lib/governanceTier';
+import { useNavigate } from 'react-router-dom';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
@@ -486,16 +492,146 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
   );
 }
 
+// Tier donut fills — a bronze / silver / gold medal ramp. Validated for
+// CVD + normal-vision separation (the grey "silver" is intentional and always
+// carries a labelled legend). Fixed hex like the tier badge palette so the
+// medal metaphor stays stable across themes.
+const TIER_CHART_COLOR: Record<'GOLD' | 'SILVER' | 'BRONZE', string> = {
+  GOLD: '#b8860b', SILVER: '#64748b', BRONZE: '#b45309',
+};
+
+// ── Governance Posture — tier donut + coverage / health gauges ──
+function GovernancePosture({ stats }: { stats: DashboardStats }) {
+  const tierLabel = useTierLabel();
+  const g = stats.governance;
+  const tierTotal = g.gold + g.silver + g.bronze;
+  const segments = [
+    { label: tierLabel('GOLD'), value: g.gold, color: TIER_CHART_COLOR.GOLD },
+    { label: tierLabel('SILVER'), value: g.silver, color: TIER_CHART_COLOR.SILVER },
+    { label: tierLabel('BRONZE'), value: g.bronze, color: TIER_CHART_COLOR.BRONZE },
+  ];
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <SectionHeading title="Governance Posture" />
+      <Card padding="18px 22px">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 24, alignItems: 'center' }}>
+          <div>
+            <SectionLabel>Governance tier mix</SectionLabel>
+            {tierTotal > 0 ? (
+              <Donut segments={segments} centerLabel="Assets" size={116} thickness={16} />
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No data assets yet.</div>
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-around', gap: 16, flexWrap: 'wrap' }}>
+            <Gauge value={stats.coverage.percentage} label="Coverage" />
+            <Gauge value={stats.averageHealth} label="Avg Health" />
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── Catalog Shape — magnitude of each process level ──
+function CatalogShape({ stats }: { stats: DashboardStats }) {
+  const navigate = useNavigate();
+  const rows = [
+    { label: 'Value Streams', value: stats.valueStreams, to: '/processes' },
+    { label: 'Processes', value: stats.processes, to: '/processes' },
+    { label: 'Sub-processes', value: stats.subProcesses, to: '/processes' },
+    { label: 'Activities', value: stats.activities, to: '/processes' },
+  ];
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <SectionHeading title="Catalog Shape" />
+      <Card padding="16px 20px">
+        {total === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No processes defined yet.</div>
+        ) : (
+          <MiniBarChart rows={rows} onRowClick={(to) => { if (to) navigate(to); }} />
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Trends — sparklines + week-over-window deltas from /dashboard/trends ──
+interface TrendPoint { date: string; coverage: number; avgHealth: number; gaps: number; dataAssets: number; mappings: number; }
+function DashboardTrends({ stats }: { stats: DashboardStats }) {
+  const { activeOrgId } = useOrgContext();
+  const [points, setPoints] = useState<TrendPoint[] | null>(null);
+  useEffect(() => {
+    if (!activeOrgId) { setPoints(null); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: { points: TrendPoint[] } }>(`/dashboard/trends?orgId=${activeOrgId}`);
+        setPoints(res.data?.points || []);
+      } catch { setPoints([]); }
+    })();
+  }, [activeOrgId]);
+
+  if (!points) return null;           // loading — stay quiet to avoid a flash
+  if (points.length < 1) return null; // no history to draw
+
+  // Live "now" values, so the trend's headline always agrees with the KPI
+  // tiles above it. The snapshots form the historical trail; the current
+  // stats are appended as the final point.
+  const g = stats.gaps || ({} as DashboardStats['gaps']);
+  const liveGaps = (g.unmappedActivities || g.unmappedSteps || 0) + (g.ungovernedAssets || 0)
+    + (g.ownerlessItems || 0) + (g.orphanAssets || 0) + (g.ungovernedDomains || 0);
+  const live = { coverage: stats.coverage.percentage, avgHealth: stats.averageHealth, gaps: liveGaps };
+
+  const metrics = [
+    { key: 'coverage' as const, label: 'Coverage', unit: '%', to: '/mappings', goodUp: true },
+    { key: 'avgHealth' as const, label: 'Avg Health', unit: '%', to: '/data-assets?sort=healthScore&dir=asc', goodUp: true },
+    { key: 'gaps' as const, label: 'Open Gaps', unit: '', to: '/gap-detection', goodUp: false },
+  ];
+  const weeksAgo = points.length;
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <SectionHeading title="Trends" right={<span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {weeksAgo} weeks</span>} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+        {metrics.map((m) => {
+          const series = [...points.map((p) => p[m.key]), live[m.key]];
+          const first = series[0];
+          const last = live[m.key];
+          const delta = last - first;
+          const improved = m.goodUp ? delta >= 0 : delta <= 0;
+          const deltaColor = delta === 0 ? 'var(--color-text-muted)' : improved ? 'var(--color-success)' : 'var(--color-error)';
+          const arrow = delta === 0 ? '' : delta > 0 ? '▲' : '▼';
+          return (
+            <Link key={m.key} to={m.to} style={{ ...cardStyle, padding: '12px 14px', textDecoration: 'none', color: 'var(--color-text)', display: 'block' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
+                <div style={{ lineHeight: 1.1 }}>
+                  <span style={{ fontSize: 22, fontWeight: 700 }}>{last}{m.unit}</span>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: deltaColor, marginTop: 2 }}>
+                    {arrow} {Math.abs(delta)}{m.unit} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs {weeksAgo}w ago</span>
+                  </div>
+                </div>
+                <Sparkline points={series} color="var(--color-primary)" title={`${m.label}, last ${weeksAgo} weeks`} />
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity' | 'skillGaps';
+type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity' | 'skillGaps';
 
 // Order groups the four narrow analytical widgets contiguously
 // (programMaturity, gaps, skillGaps, stewardOnboarding) so they pair
 // two-up cleanly — Program Maturity + Governance Gaps on one row, Skill
 // Gaps + Steward Onboarding on the next — instead of Skill Gaps stranding
 // itself in a masonry column.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'skillGaps', 'stewardOnboarding', 'whatsNext', 'quickActions', 'recentActivity'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'programMaturity', 'gaps', 'catalogShape', 'skillGaps', 'stewardOnboarding', 'whatsNext', 'quickActions', 'recentActivity'];
 
 // Sections that read best full-bleed (the wide KPI strip, the personal
 // summary's two-column body, What's Next, the quick-action tiles, and the
@@ -503,13 +639,16 @@ const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMatur
 // pairs two-up. Bands take a full-width row *in place*, so the reorder /
 // hide system still controls order — the layout just stops wasting the
 // right half of the page on narrow cards.
-const FULL_WIDTH_SECTIONS = new Set<SectionKey>(['overview', 'myDashboard', 'whatsNext', 'quickActions', 'recentActivity']);
+const FULL_WIDTH_SECTIONS = new Set<SectionKey>(['overview', 'myDashboard', 'governancePosture', 'trends', 'whatsNext', 'quickActions', 'recentActivity']);
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
   overview: 'Overview',
+  governancePosture: 'Governance Posture',
+  trends: 'Trends',
   programMaturity: 'Program Maturity',
   gaps: 'Governance Gaps',
+  catalogShape: 'Catalog Shape',
   skillGaps: 'Skill Gaps',
   whatsNext: "What's Next",
   stewardOnboarding: 'Steward Onboarding',
@@ -919,6 +1058,8 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
   ];
   const total = items.reduce((s, i) => s + i.count, 0);
   const sevColors = { critical: 'var(--color-error)', warning: 'var(--color-warning)', info: 'var(--color-info)' };
+  const criticalTotal = items.filter((i) => i.severity === 'critical').reduce((s, i) => s + i.count, 0);
+  const warningTotal = items.filter((i) => i.severity === 'warning').reduce((s, i) => s + i.count, 0);
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -929,6 +1070,23 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {/* Severity split — the balance of critical vs warning at a glance,
+              before reading the individual rows. Status colours carry an
+              explicit count label beside them, never colour alone. */}
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', background: 'var(--color-bg)', gap: 2 }}>
+              {criticalTotal > 0 && <div title={`${criticalTotal} critical`} style={{ flex: criticalTotal, background: sevColors.critical, borderRadius: 5 }} />}
+              {warningTotal > 0 && <div title={`${warningTotal} warning`} style={{ flex: warningTotal, background: sevColors.warning, borderRadius: 5 }} />}
+            </div>
+            <div style={{ display: 'flex', gap: 14, marginTop: 6, fontSize: 11 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-text-secondary)' }}>
+                <span style={{ width: 9, height: 9, borderRadius: 2, background: sevColors.critical }} /> {criticalTotal} critical
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-text-secondary)' }}>
+                <span style={{ width: 9, height: 9, borderRadius: 2, background: sevColors.warning }} /> {warningTotal} warning
+              </span>
+            </div>
+          </div>
           {items.filter((i) => i.count > 0).map((item) => (
             <Link key={item.label} to={item.link} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit', transition: 'background 0.1s' }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -1007,8 +1165,11 @@ export default function DashboardPage() {
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myDashboard: <MyDashboard />,
     overview: <StatsOverview stats={stats} />,
+    governancePosture: <GovernancePosture stats={stats} />,
+    trends: <DashboardTrends stats={stats} />,
     programMaturity: <ProgramMaturity />,
     gaps: <GapsOverview stats={stats} />,
+    catalogShape: <CatalogShape stats={stats} />,
     skillGaps: <SkillGapsWidget />,
     whatsNext: <WhatsNext stats={stats} />,
     stewardOnboarding: <StewardOnboarding />,

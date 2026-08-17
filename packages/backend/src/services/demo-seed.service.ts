@@ -25,6 +25,7 @@ import { governanceIssues } from '../routes/governance-issues';
 import { dataQualityRules } from '../routes/data-quality';
 import { connectors, connectorEvents } from '../routes/connectors';
 import { calendarEvents } from '../routes/governance-calendar';
+import { statsSnapshots, type StatsSnapshot } from '../routes/dashboard';
 import { aiTemplateCache } from '../routes/ai';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
@@ -55,6 +56,7 @@ function sweep(): void {
     [connectors, 'connectors'],
     [connectorEvents, 'connectorEvents'],
     [calendarEvents, 'calendarEvents'],
+    [statsSnapshots, 'statsSnapshots'],
   ];
   for (const [arr, storeName] of stores) {
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -90,6 +92,7 @@ export interface DemoSeedReport {
   connectors: number;
   connectorEvents: number;
   calendarEvents: number;
+  statsSnapshots: number;
   persona: { id: string; name: string };
 }
 
@@ -472,6 +475,44 @@ export function seedDemoData(): DemoSeedReport {
   });
   saveStore('calendarEvents', calendarEvents);
 
+  // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
+  //
+  // Seeds a realistic improving trend (coverage + health climb, gaps
+  // fall) ending near each org's current stats, so the Dashboard
+  // sparklines show REAL history (>= 2 snapshots ⇒ non-synthesized).
+  // The most-recent row is dated today; the rest step back one week
+  // each. Ids are `demo-` prefixed so the reseed sweep clears them.
+  const STATS_WEEKS = 10;
+  function weeklySnapshots(
+    orgId: string,
+    end: Pick<StatsSnapshot, 'coverage' | 'avgHealth' | 'gaps' | 'dataAssets' | 'mappings'>,
+  ): StatsSnapshot[] {
+    const rows: StatsSnapshot[] = [];
+    for (let i = 0; i < STATS_WEEKS; i++) {
+      const progress = i / (STATS_WEEKS - 1); // 0 (oldest) → 1 (newest, = end)
+      const capturedAt = daysFromNow(-(STATS_WEEKS - 1 - i) * 7).slice(0, 10);
+      const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+      rows.push({
+        id: `${P}stats-${orgId}-${i}`,
+        orgId,
+        capturedAt,
+        coverage: i === STATS_WEEKS - 1 ? end.coverage : clamp(Math.round(end.coverage - (1 - progress) * 22), 0, 100),
+        avgHealth: i === STATS_WEEKS - 1 ? end.avgHealth : clamp(Math.round(end.avgHealth - (1 - progress) * 15), 0, 100),
+        gaps: i === STATS_WEEKS - 1 ? end.gaps : Math.max(0, Math.round(end.gaps + (1 - progress) * 6)),
+        dataAssets: i === STATS_WEEKS - 1 ? end.dataAssets : Math.max(0, Math.round(end.dataAssets - (1 - progress) * 3)),
+        mappings: i === STATS_WEEKS - 1 ? end.mappings : Math.max(0, Math.round(end.mappings - (1 - progress) * 3)),
+      });
+    }
+    return rows;
+  }
+  statsSnapshots.push(
+    ...weeklySnapshots(orgTidewater.id, { coverage: 60, avgHealth: 68, gaps: 9, dataAssets: 9, mappings: 7 }),
+    ...weeklySnapshots(orgElectric.id, { coverage: 67, avgHealth: 66, gaps: 5, dataAssets: 4, mappings: 4 }),
+    ...weeklySnapshots(orgWater.id, { coverage: 75, avgHealth: 82, gaps: 3, dataAssets: 3, mappings: 3 }),
+    ...weeklySnapshots(orgShared.id, { coverage: 40, avgHealth: 70, gaps: 4, dataAssets: 0, mappings: 0 }),
+  );
+  saveStore('statsSnapshots', statsSnapshots);
+
   // ── AI template cache — pre-warm the wand for Tidewater ──
   // A live demo can't afford the 10–30s Claude wait on the "Generate
   // processes" wand. Seeding two hand-crafted templates against the
@@ -623,6 +664,7 @@ export function seedDemoData(): DemoSeedReport {
     connectors: 2,
     connectorEvents: 5,
     calendarEvents: 1,
+    statsSnapshots: STATS_WEEKS * 4,
     persona: { id: susan.id, name: susan.name },
   };
 }
