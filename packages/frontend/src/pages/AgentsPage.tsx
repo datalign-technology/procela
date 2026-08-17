@@ -788,6 +788,8 @@ export default function AgentsPage() {
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all agents"
             emptyMessage="No agents match the current filters."
+            pageSize={20}
+            countNoun={['agent', 'agents']}
             expansion={{
               expandedIds: expandedAgentIds,
               onToggleExpanded: toggleAgentExpanded,

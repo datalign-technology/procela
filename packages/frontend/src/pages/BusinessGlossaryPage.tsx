@@ -950,6 +950,8 @@ export default function BusinessGlossaryPage() {
                 sort={{ sortKey, sortDir, onSort: toggleSort }}
                 selectAllLabel="Select all terms"
                 emptyMessage="No terms match the current filters."
+                pageSize={20}
+                countNoun={['term', 'terms']}
               />
             )}
           </Card>

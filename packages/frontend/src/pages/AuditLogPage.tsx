@@ -94,7 +94,7 @@ export default function AuditLogPage() {
 
   // Page the loaded entries so a long history stays a fixed height. Export
   // actions (below) still cover the whole filtered / server-side set.
-  const auditPage = usePagination(filtered, 50);
+  const auditPage = usePagination(filtered, 20);
 
   const exportCsv = () => {
     const header = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity', 'Entity ID'];
