@@ -1524,7 +1524,7 @@ export default function SystemsPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all systems"
             emptyMessage="No systems match the current filters."
-            pageSize={20}
+            pageSize={15}
             countNoun={['system', 'systems']}
           />
         )}
