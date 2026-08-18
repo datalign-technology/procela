@@ -25,6 +25,23 @@ services:
       timeout: 5s
       retries: 5
 
+  # Local SMTP catcher. Accepts every message the backend sends and shows
+  # them in a web inbox — nothing leaves your machine. This is what makes
+  # "Report a problem" (and password-reset email) actually deliver in dev:
+  # open the inbox to read what would have been sent to support@procela.ai.
+  #   • SMTP  → mailpit:1025 (in-network) / localhost:1025 (host)
+  #   • Inbox → http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # web inbox
+    environment:
+      # Accept whatever credentials the backend presents (dev only) so the
+      # nodemailer AUTH handshake always succeeds against the catcher.
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+
   backend:
     build:
       context: ./packages/backend
@@ -36,11 +53,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql://procela:procela@postgres:5432/procela
       REDIS_URL: redis://redis:6379
+      # Point outbound mail at the Mailpit catcher. These override anything
+      # in .env for the dev stack; for real SMTP in Docker, edit these.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USER: dev
+      SMTP_PASS: dev
+      SMTP_SECURE: "false"
+      MAIL_FROM: "Procela (dev) <noreply@procela.local>"
+      APP_URL: http://localhost:3000
+      SUPPORT_EMAIL: support@procela.ai
     volumes:
       - ./packages/backend/src:/app/src
       - ./packages/backend/prisma:/app/prisma

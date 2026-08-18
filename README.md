@@ -49,6 +49,10 @@ To enable AI-driven features (industry template generation, data suggestions, th
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+### Email in local dev
+
+`docker compose up` bundles a [Mailpit](https://mailpit.axllent.org/) catcher, so transactional email — password resets and **Report a problem** submissions — actually delivers instead of falling back to the audit log. Read captured messages in the web inbox at **http://localhost:8025**; nothing leaves your machine. Running the backend on the host with `npm run dev`? Start just the catcher with `docker compose up mailpit` and uncomment the Mailpit block in `.env`.
+
 ## Available scripts
 
 | Script          | Description                                      |
