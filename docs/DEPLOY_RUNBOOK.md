@@ -138,7 +138,14 @@ openssl rsa -in jwt-private.pem -pubout -out jwt-public.pem
 Not generated locally:
 
 - **`ANTHROPIC_API_KEY`** — from the Anthropic Console (`sk-ant-…`).
-- **SMTP creds** — from your mail provider (SES SMTP, SendGrid, etc.).
+- **SMTP creds** — from your mail provider (Resend, SES SMTP, SendGrid,
+  Postmark, etc.). Any authenticated SMTP relay works — the backend uses a
+  standard nodemailer transporter, no provider-specific code. For **Resend**:
+  `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`,
+  `SMTP_USER=resend`, `SMTP_PASS=<Resend API key>`, and a `MAIL_FROM` on a
+  domain verified in Resend (its SPF/DKIM go on a `send.` subdomain, so a
+  root MX/SPF pointed at your inbox provider — e.g. Google Workspace — is
+  unaffected).
 - **IdP config** (`COGNITO_*` / `OIDC_*` / `SAML_*`) — from Entra ID /
   Okta / Cognito. SAML: the IdP consumes Procela's SP metadata at
   `GET /api/v1/auth/saml/metadata`.
