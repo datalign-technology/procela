@@ -89,7 +89,7 @@ Required column: **P** = PROD-REQUIRED, **C** = conditionally required
 | `APP_URL` | P | password-reset / support email links point nowhere | plain env | `config.*` ConfigMap |
 | `CORS_ALLOWED_ORIGINS` | P | dev fallback echoes the request origin (unsafe) | plain env | ConfigMap |
 | `SMTP_HOST/PORT/USER/PASS/SECURE`, `MAIL_FROM` | P | password reset + support fall back to audit-log only | `SMTP_PASS` → `〈prefix〉/app/smtp_pass`; rest = `enable_smtp` tfvars | `secrets.smtpPass` + ConfigMap |
-| `SUPPORT_EMAIL` | · | "Report a problem" reports are audit-logged, not emailed | plain env | ConfigMap |
+| `SUPPORT_EMAIL` | · | defaults to `support@procela.ai`; override to route "Report a problem" elsewhere. Still needs SMTP to email — without it, reports are audit-logged only | plain env | ConfigMap |
 | `AUTH_PROVIDER` + provider block | C | unrecognized/`dev` ⇒ dev provider (any email logs in) — **prod refuses to boot** | `auth_provider` tfvar (validated `oidc`\|`saml`\|`local`, default `oidc`) | ConfigMap |
 | `OIDC_*` (Cognito federates via OIDC) | C | required when `AUTH_PROVIDER=oidc` | `oidc_issuer`/`oidc_client_id` tfvars (`enable_oidc`); `OIDC_CLIENT_SECRET` → secret | ConfigMap / `secrets.*` |
 | `SAML_ENTRY_POINT/ISSUER/IDP_CERT/CALLBACK_URL` | C | required when `AUTH_PROVIDER=saml` | `SAML_IDP_CERT` → secret; rest plain | `secrets.samlIdpCert` + ConfigMap |

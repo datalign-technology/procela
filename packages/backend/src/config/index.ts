@@ -75,9 +75,11 @@ export const config = {
   appUrl: process.env.APP_URL || '',
 
   // Support inbox — where in-app "Report a problem" submissions are
-  // emailed. Unset ⇒ reports are still recorded to the audit trail,
-  // just not emailed (same audit-only fallback as password reset).
-  supportEmail: process.env.SUPPORT_EMAIL || '',
+  // emailed. Defaults to Procela's own support inbox; override with
+  // SUPPORT_EMAIL to route to a customer-managed inbox. Delivery still
+  // requires SMTP to be configured — without it, reports are recorded to
+  // the audit trail only (same audit-only fallback as password reset).
+  supportEmail: process.env.SUPPORT_EMAIL || 'support@procela.ai',
 
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',

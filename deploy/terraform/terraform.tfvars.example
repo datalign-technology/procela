@@ -27,7 +27,7 @@ desired_count     = 1
 # Empty values are fine for a first plan; set for a real deploy.
 app_url              = "https://procela.example.com"
 cors_allowed_origins = "" # extra browser origins, comma-separated
-support_email        = "" # in-app "Report a problem" inbox
+support_email        = "support@procela.ai" # in-app "Report a problem" inbox
 
 # ── Authentication ──
 # AUTH_PROVIDER: oidc | saml | local. Cognito is NOT a value — it federates
