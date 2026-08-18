@@ -71,6 +71,49 @@ manually-added column is never overwritten except for a `dataType` refresh.
 
 ---
 
+## Two discovery paths, one catalog
+
+Procela has two ways to populate the data catalog, and they write the **same
+two tables** (`data_assets` + `data_asset_columns`) with the **same field
+shapes**:
+
+- **Option 1 — direct Connection.** Procela connects straight to the source
+  (a SaaS deployment reaching a reachable warehouse, or an operator using the
+  in-app Sync / Connection flow). It can Test the connection, Discover tables,
+  introspect columns live, and run data-quality rules against live data.
+- **Option 2 — edge connector.** The `@procela/connector` agent runs inside
+  the customer's network and ships metadata outbound. Used when the source is
+  not directly reachable from Procela.
+
+**The connector is the metadata-only subset of a direct Connection.** Everything
+the agent's `/report` writes, a direct Connection also writes — into the same
+columns:
+
+| What arrives | Table · columns | Option 1 (Connection) | Option 2 (connector) |
+|---|---|---|---|
+| Table exists (name, owning system) | `data_assets` · `name`, `description`, `systemId` | ✅ creates/updates | ✅ creates as `BRONZE` if new |
+| Freshness (row count, last-synced, health) | `data_assets` · `healthScore`, `healthScoreAt`, `lastSyncedByConnectorId`, `lastSyncedAt` | ✅ | ✅ |
+| Column names & types | `data_asset_columns` · `columnName`, `dataType`, `sourceAsset`, `sourceColumn` | ✅ live introspection | ✅ from the report |
+| Live column introspection on demand (Test / Discover) | — | ✅ | ❌ metadata push only |
+| Data-quality rule execution against live data | `DataQualityRule` results | ✅ | ❌ |
+
+Option 1 is a **superset**: it adds interactive Test/Discover, live column
+introspection, and running DQ rules against live data. Option 2 delivers the
+same catalog rows, minus anything that requires live access to the source.
+
+**Neither path copies raw rows into Procela.** Both persist *metadata about* the
+data; the actual records stay in the source system.
+
+Because both paths land in the same `data_assets` table, everything
+downstream is **source-agnostic**: mapping to process steps, gap detection,
+governance, lineage, and the dashboards all read `data_assets` and never ask
+where a row came from. Connector-discovered tables simply arrive
+**Bronze / unowned / unmapped** — they show up as orphan work items for a
+steward to classify and map, exactly like any hand-added asset that hasn't been
+governed yet.
+
+---
+
 ## Everything else is UI / API-only
 
 All other models are never written by the connector path, including:

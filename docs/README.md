@@ -34,7 +34,7 @@ Standalone documents that don't belong in the app or the code.
 | [`POSTGRES.md`](./POSTGRES.md) | How to run the backend against Postgres locally and the repository pattern every entity follows. The cutover is complete; this is the reference shape for adding a **new** entity. |
 | [`POSTGRES_CUTOVER_PLAN.md`](./POSTGRES_CUTOVER_PLAN.md) | Engineering plan (now executed) for moving persistence from JSON files to Postgres — current state, the boot-safety fix, and the ~10-PR sequence with critical path. Historical record of the cutover. |
 | [`POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md`](./POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md) | File-level conversion design for the riskiest cutover step — routing the report engine through repositories without per-row N+1 joins. |
-| [`DATA_OWNERSHIP.md`](./DATA_OWNERSHIP.md) | Which tables and columns are written by the interactive UI / REST API versus the on-prem edge agent (`@procela/connector`) — the four co-managed tables, their column-level split, and the audit-only write stance. |
+| [`DATA_OWNERSHIP.md`](./DATA_OWNERSHIP.md) | Which tables and columns are written by the interactive UI / REST API versus the on-prem edge agent (`@procela/connector`) — the four co-managed tables, their column-level split, the audit-only write stance, and how the connector (Option 2) maps onto a direct Connection (Option 1) as the metadata-only subset of the same catalog. |
 | [`RBAC_PERMISSION_MATRIX.md`](./RBAC_PERMISSION_MATRIX.md) | Authoritative reference for role-based authorization. `packages/backend/src/lib/permissions.ts` is the source of truth; this explains it. |
 
 ### GA tightening audit
