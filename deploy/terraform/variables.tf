@@ -221,8 +221,8 @@ variable "cors_allowed_origins" {
 
 variable "support_email" {
   type        = string
-  description = "Inbox for in-app 'Report a problem' submissions (SUPPORT_EMAIL). Unset ⇒ audit-log only."
-  default     = ""
+  description = "Inbox for in-app 'Report a problem' submissions (SUPPORT_EMAIL). Defaults to Procela's support inbox; override to route to a customer-managed inbox. Needs SMTP to actually email, else audit-log only."
+  default     = "support@procela.ai"
 }
 
 variable "smtp_host" {
