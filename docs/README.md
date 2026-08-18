@@ -16,7 +16,7 @@ Standalone documents that don't belong in the app or the code.
 |---|---|
 | [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md) | What remains between "demo-ready" and running a real customer in production — infra, secrets, ops, and roadmap, plus the fast-path subset for a single pilot. |
 | [`PILOT_GO_LIVE_WORKSHEET.md`](./PILOT_GO_LIVE_WORKSHEET.md) | The fast-path subset above, as an ordered tick-through operator worksheet for standing up one pilot customer on AWS. All ops/config, no code. |
-| [`DEPLOY_RUNBOOK.md`](./DEPLOY_RUNBOOK.md) | Day-0 secret & config provisioning: how to generate each secret, where it lives (AWS Secrets Manager / Helm), and how to verify the app came up configured. Covers checklist #6–#12. |
+| [`DEPLOY_RUNBOOK.md`](./DEPLOY_RUNBOOK.md) | Day-0 secret & config provisioning: how to generate each secret, where it lives (AWS Secrets Manager / Helm), and how to verify the app came up configured. Covers checklist #6–#12. Opens with a **Deployment models** section (multi-tenant SaaS vs. SaaS + on-prem connector vs. fully on-premise). |
 | [`DR_RUNBOOK.md`](./DR_RUNBOOK.md) | Disaster-recovery procedures — restore from backup, roll back a migration, rotate a compromised secret, full rebuild — for checklist #23. |
 | [`RELEASING.md`](./RELEASING.md) | How the on-prem connector container image is released and published to GHCR — `connector-v*` tags → semver + `latest`, trunk → `edge`/`sha-*`, manual dispatch, provenance/SBOM, and the one-time package-visibility prerequisite. |
 

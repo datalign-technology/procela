@@ -20,6 +20,42 @@ Related docs — do not duplicate them here:
 
 ---
 
+## Deployment models — how many environments do you run?
+
+**Procela is multi-tenant.** Every table carries an `org_id` and that scope
+is enforced on every query, so a **single deployment hosts many customers at
+once**, each fully isolated. You do **not** stand up a separate environment
+per client by default — a client is an *organization* inside a shared
+deployment, and within a client you can still model their own company →
+division → department tree. Pick the model per customer:
+
+| Model | Who hosts the app | Where the customer's source data lives | When to use |
+|---|---|---|---|
+| **1. Cloud SaaS (shared)** | You, once (the AWS stack) | In cloud-reachable sources Procela connects to directly | The default. Onboard the customer as an org; nothing to install on their side. |
+| **2. Cloud SaaS + on-prem connector** | You, once | Stays behind the customer's firewall | Most common for enterprises. The customer runs one lightweight edge-agent container that ships **only catalog metadata** (table names, row counts, freshness) out over HTTPS — connection strings and row data never leave their network. |
+| **3. Fully on-premise / self-hosted** | The customer, their own instance | Entirely within their environment | Only when data-residency, air-gap, or security policy requires it. They run the Helm/Kubernetes chart (or Docker Compose) against their own Postgres, Redis, and IdP. |
+
+**The on-prem *connector* is not an on-prem *environment*.** A cloud-hosted
+(SaaS) customer can use the connector to reach firewalled databases *without*
+hosting the platform themselves — that's model 2, not model 3. Only model 3
+means a customer runs the whole app.
+
+Which part of this runbook applies:
+
+- **Models 1 & 2** — you provision the AWS stack once via
+  [`../deploy/terraform/README.md`](../deploy/terraform/README.md) and follow
+  [`PILOT_GO_LIVE_WORKSHEET.md`](./PILOT_GO_LIVE_WORKSHEET.md); §3 below is
+  your secret-placement path. The connector (model 2) is set up per-customer
+  from **Settings → Integrations** in-app, not here.
+- **Model 3** — the customer follows the on-prem path,
+  [`../deploy/helm/procela/README.md`](../deploy/helm/procela/README.md); §4
+  below is their secret-placement path.
+
+Everything else in this runbook (the secret catalog, generation, and
+verification) is the same regardless of model.
+
+---
+
 ## 0. How Procela reads config
 
 - All config is environment variables (12-factor). The authoritative
