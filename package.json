@@ -14,7 +14,8 @@
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",
     "e2e:clean": "tsx e2e/clean.ts",
-    "loadtest": "tsx loadtest/run.ts"
+    "loadtest": "tsx loadtest/run.ts",
+    "verify:email": "node scripts/verify-resend.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
