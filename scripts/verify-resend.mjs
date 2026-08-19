@@ -46,7 +46,12 @@ try {
     if (key in process.env) continue;
     let val = m[2].trim();
     if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      // Quoted: take the literal inner content ('#' inside quotes is not a comment).
       val = val.slice(1, -1);
+    } else {
+      // Unquoted: strip an inline comment (whitespace + '#' … to end of line),
+      // matching dotenv. A '#' with no preceding space (e.g. in a password) is kept.
+      val = val.replace(/\s+#.*$/, '').trim();
     }
     process.env[key] = val;
   }
