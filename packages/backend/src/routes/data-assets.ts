@@ -199,7 +199,7 @@ const VALID_RETENTION_UNITS = ['DAYS', 'MONTHS', 'YEARS'] as const;
 const createDataAssetBodySchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
-  systemId: z.string().optional(),
+  systemId: z.string().nullable().optional(),
   owner: z.string().optional(),
   ownerPersonId: z.string().nullable().optional(),
   stewardIds: z.array(z.string()).optional(),
@@ -223,7 +223,7 @@ const createDataAssetBodySchema = z.object({
 const updateDataAssetBodySchema = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
-  systemId: z.string().optional(),
+  systemId: z.string().nullable().optional(),
   owner: z.string().optional(),
   ownerPersonId: z.string().nullable().optional(),
   stewardIds: z.array(z.string()).optional(),
@@ -937,7 +937,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   if (name !== undefined) asset.name = name;
   if (description !== undefined) asset.description = description;
-  if (systemId !== undefined) asset.systemId = systemId;
+  if (systemId !== undefined) asset.systemId = systemId || '';
   if (owner !== undefined) asset.owner = owner;
   if (ownerPersonId !== undefined) asset.ownerPersonId = ownerPersonId || null;
   if (stewardIds !== undefined && Array.isArray(stewardIds)) asset.stewardIds = stewardIds;
