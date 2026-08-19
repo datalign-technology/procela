@@ -44,6 +44,19 @@ export async function initOrgScope(): Promise<void> {
   if (hasDatabase()) await refreshOrgScopeCache();
 }
 
+/**
+ * Refresh the cache immediately after an org mutation so the synchronous
+ * scope checks (isOwnershipLevel / getVisibleOrgScope) reflect the change on
+ * the very next request instead of waiting out the TTL. Without this, a
+ * caller that creates an org and then creates a system owned by it in the
+ * same burst (e.g. the seed scripts) is rejected because the new org isn't in
+ * the cached snapshot yet. No-op in JSON mode, where orgSource() already reads
+ * the live array.
+ */
+export async function invalidateOrgScopeCache(): Promise<void> {
+  if (hasDatabase()) await refreshOrgScopeCache();
+}
+
 function orgSource(): readonly OrgLike[] {
   if (!hasDatabase()) return organizations;
   if (orgCache && Date.now() - orgCacheAt <= ORG_CACHE_TTL_MS) return orgCache;

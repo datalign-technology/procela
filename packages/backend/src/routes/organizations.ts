@@ -209,6 +209,7 @@ router.delete('/all', async (req: AuthenticatedRequest, res: Response) => {
   for (const id of ids) {
     await orgRepo.delete(id);
   }
+  await (require('../lib/org-scope').invalidateOrgScopeCache)();
   logger.info({ count }, 'Deleted all organizations');
   res.json({ success: true, deleted: count });
 });
@@ -299,6 +300,11 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   await orgRepo.create(org);
+  // Refresh the org-scope cache so a system/asset owned by this new org can be
+  // created in the same request burst (e.g. the seed scripts) without tripping
+  // the "company or division level" check on a stale cache. Lazy-required to
+  // avoid the org-scope ↔ organizations circular import.
+  await (require('../lib/org-scope').invalidateOrgScopeCache)();
   res.status(201).json({ success: true, data: org });
 });
 
@@ -360,6 +366,9 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
   }
   org.updatedAt = new Date().toISOString();
   await orgRepo.update(org.id, org);
+  // A type/parent change alters ownership-level and visibility; refresh the
+  // scope cache so the change is reflected on the next request, not after the TTL.
+  await (require('../lib/org-scope').invalidateOrgScopeCache)();
   res.json({ success: true, data: org });
 });
 
@@ -820,6 +829,7 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
     childOrgsDeleted, childOrgsMoved,
   }, 'Deleted organization with cleanup');
 
+  await (require('../lib/org-scope').invalidateOrgScopeCache)();
   res.json({
     success: true,
     deletedOrgId: org.id,
@@ -1036,6 +1046,9 @@ router.post('/import', async (req: AuthenticatedRequest, res: Response) => {
       nameToId.set(org.name.toLowerCase(), org.id);
     }
 
+    // Reflect the imported orgs in the scope cache so a follow-up systems /
+    // data-assets CSV import (or seed step) sees them as valid owners.
+    await (require('../lib/org-scope').invalidateOrgScopeCache)();
     logger.info({ created: created.length, skipped: skipped.length }, 'Imported organizations');
     res.status(201).json({
       success: true,
