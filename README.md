@@ -55,6 +55,13 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 To send through a **real relay** (e.g. Resend — uncomment its block in `.env`), verify the wiring with one command: `npm run verify:email` sends a live test message through your configured SMTP relay and reports whether it was accepted.
 
+### Seed demo data
+
+Two ways to load the Tidewater Utilities demo fixture — both need the app **already running** (they seed through the REST API, so they work in either JSON or Postgres mode):
+
+- **In-app:** sign in and use **Get Started** (calls `POST /api/v1/admin/demo-seed`; requires a `SUPER_ADMIN`).
+- **CLI:** with `npm run dev` up in another terminal, run `npm run db:seed -w packages/backend`. It targets `http://localhost:3001/api/v1` by default; pass a different base as an argument (`node scripts/seed-tidewater.js <baseUrl>`) for other setups.
+
 ## Available scripts
 
 | Script          | Description                                      |
