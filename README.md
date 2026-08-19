@@ -53,6 +53,8 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 `docker compose up` bundles a [Mailpit](https://mailpit.axllent.org/) catcher, so transactional email — password resets and **Report a problem** submissions — actually delivers instead of falling back to the audit log. Read captured messages in the web inbox at **http://localhost:8025**; nothing leaves your machine. Running the backend on the host with `npm run dev`? Start just the catcher with `docker compose up mailpit` and uncomment the Mailpit block in `.env`.
 
+To send through a **real relay** (e.g. Resend — uncomment its block in `.env`), verify the wiring with one command: `npm run verify:email` sends a live test message through your configured SMTP relay and reports whether it was accepted.
+
 ## Available scripts
 
 | Script          | Description                                      |
@@ -61,6 +63,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 | `npm run build` | Build both packages for production               |
 | `npm test`      | Run tests across all packages                    |
 | `npm run lint`  | Lint all packages                                |
+| `npm run verify:email` | Send one real test email through your configured SMTP relay (Resend by default) to confirm delivery is wired |
 
 ## Authentication providers
 
