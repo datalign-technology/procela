@@ -63,9 +63,20 @@ enable_oidc  = false # OIDC_CLIENT_SECRET (AUTH_PROVIDER=oidc)
 enable_saml  = false # SAML_IDP_CERT (AUTH_PROVIDER=saml)
 enable_scim  = false # SCIM_BEARER_TOKEN — /scim/v2 endpoints
 
-# SMTP non-secret config (used when enable_smtp = true):
+# SMTP non-secret config (used when enable_smtp = true). The SMTP_PASS
+# secret is populated out-of-band (see above); these are the non-secret bits.
 smtp_host   = ""
 smtp_port   = 587
 smtp_user   = ""
 smtp_secure = false
 mail_from   = "Procela <noreply@procela.io>"
+
+# ── Resend (https://resend.com) — swap the SMTP block above for these ──
+# The API key goes in the smtp_pass secret (not here). mail_from must be on a
+# domain verified in Resend. Port 465 = implicit TLS; use 587 + smtp_secure =
+# false for STARTTLS if 465 is blocked.
+# smtp_host   = "smtp.resend.com"
+# smtp_port   = 465
+# smtp_user   = "resend"
+# smtp_secure = true
+# mail_from   = "Procela <noreply@procela.ai>"
