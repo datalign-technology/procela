@@ -43,6 +43,33 @@ npm run dev
 
 The frontend opens at `http://localhost:5173` and the API at `http://localhost:3001`. With no `DATABASE_URL` set, the first run drops a `.procela-data/` directory next to the backend — that's where every entity (people, orgs, processes, data assets, audit log) lives on the JSON default. Set `DATABASE_URL` to run against PostgreSQL instead (see [`docs/POSTGRES.md`](./docs/POSTGRES.md)).
 
+### Running against Postgres
+
+The JSON default needs nothing. To run the real Postgres stack instead:
+
+```bash
+# 1. Uncomment DATABASE_URL in .env (leave it commented for JSON mode):
+#    DATABASE_URL=postgresql://procela:procela@localhost:5432/procela
+
+# 2. Start Postgres (Docker Desktop / daemon must be running):
+docker compose up -d postgres          # confirm: docker compose ps → healthy on 5432
+
+# 3. Generate the Prisma client + apply the schema (one-time, or after schema changes):
+npm run db:generate -w packages/backend
+npm run db:migrate  -w packages/backend
+
+# 4. Run the app (reads DATABASE_URL from .env):
+npm run dev
+```
+
+> **Windows / PowerShell:** the Prisma CLI reads `.env` from its own working
+> directory, not the repo root — if `db:migrate` reports "Environment
+> variable not found: DATABASE_URL", set it for the session first:
+> `$env:DATABASE_URL="postgresql://procela:procela@localhost:5432/procela"`.
+
+Miss step 1 and the app silently runs in JSON mode; miss steps 2–3 and it
+boots with `Cannot read properties of undefined (reading 'findUnique')`.
+
 To enable AI-driven features (industry template generation, data suggestions, the in-app assistant) drop your Anthropic key into `.env`:
 
 ```bash
@@ -57,10 +84,26 @@ To send through a **real relay** (e.g. Resend — uncomment its block in `.env`)
 
 ### Seed demo data
 
-Two ways to load the Tidewater Utilities demo fixture — both need the app **already running** (they seed through the REST API, so they work in either JSON or Postgres mode):
+Two sample tenants ship with the repo — **Momentum Industries** (defence /
+shipbuilding, the default) and **Tidewater Utilities** (electric + water).
+The CLI seeders go through the REST API, so **the app must already be
+running** (`npm run dev` in another terminal) — and they work in either
+JSON or Postgres mode:
 
-- **In-app:** sign in and use **Get Started** (calls `POST /api/v1/admin/demo-seed`; requires a `SUPER_ADMIN`).
-- **CLI:** with `npm run dev` up in another terminal, run `npm run db:seed -w packages/backend`. It targets `http://localhost:3001/api/v1` by default; pass a different base as an argument (`node scripts/seed-tidewater.js <baseUrl>`) for other setups.
+```bash
+npm run db:seed          -w packages/backend   # Tidewater Utilities
+npm run db:seed:momentum -w packages/backend   # Momentum Industries
+```
+
+Both target `http://localhost:3001/api/v1` by default; pass a different base
+as an argument (`node scripts/seed-tidewater.js <baseUrl>`) for other setups.
+
+Alternatively, sign in and use the in-app **Get Started** button (calls
+`POST /api/v1/admin/demo-seed`; requires a `SUPER_ADMIN`) — note this path
+seeds through the JSON stores, so for a **Postgres** environment prefer the
+CLI seeders above. Broader CSV fixtures and their import order live in
+[`test-data/utility/`](./test-data/utility/README.md) and
+[`test-data/shipbuilder/`](./test-data/shipbuilder/README.md).
 
 ## Available scripts
 

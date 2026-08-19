@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "node scripts/seed-tidewater.js http://localhost:3001/api/v1",
+    "db:seed:momentum": "node scripts/seed-momentum-governance.js http://localhost:3001/api/v1",
     "db:migrate-json": "tsx scripts/migrate-json-to-postgres.ts",
     "test": "tsx --test src/__tests__/*.test.ts",
     "test:live-db": "tsx --test src/__tests__/live-db.test.ts",
