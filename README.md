@@ -99,7 +99,7 @@ npm run db:seed          -w packages/backend   # Tidewater Utilities
 npm run db:seed:momentum -w packages/backend   # Momentum Industries
 ```
 
-Both target `http://localhost:3001/api/v1` by default; pass a different base
+Both target `http://127.0.0.1:3001/api/v1` by default; pass a different base
 as an argument (`node scripts/seed-tidewater.js <baseUrl>`) for other setups.
 
 Alternatively, sign in and use the in-app **Get Started** button (calls
