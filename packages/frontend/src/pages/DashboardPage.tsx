@@ -1399,16 +1399,19 @@ export default function DashboardPage() {
               flushRun();
 
               return rows.map((row) => {
-                if (row.band) return <div key={`band-${row.band}`}>{sectionMap[row.band]}</div>;
+                if (row.band) return <div key={`band-${row.band}`} className="dashboard-section-cell">{sectionMap[row.band]}</div>;
                 const keys = row.pair!;
                 // Lone leftover narrow widget fills the row — no dangling half.
-                if (keys.length === 1) return <div key={`solo-${keys[0]}`}>{sectionMap[keys[0]]}</div>;
+                if (keys.length === 1) return <div key={`solo-${keys[0]}`} className="dashboard-section-cell">{sectionMap[keys[0]]}</div>;
                 return (
                   <div
                     key={`pair-${keys.join('-')}`}
                     style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', columnGap: 16, alignItems: 'start' }}
                   >
-                    {keys.map((k) => <div key={k}>{sectionMap[k]}</div>)}
+                    {/* dashboard-section-cell collapses (display:none) when its
+                        widget renders nothing, so a null half never strands an
+                        empty column — the paired widget reflows to fill. */}
+                    {keys.map((k) => <div key={k} className="dashboard-section-cell">{sectionMap[k]}</div>)}
                   </div>
                 );
               });
