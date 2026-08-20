@@ -16,8 +16,15 @@ import path from 'path';
 // while diagnosing the AI probe failing after key rotation.
 const REPO_ROOT_ENV = path.resolve(__dirname, '..', '..', '..', '.env');
 const BACKEND_ENV = path.resolve(__dirname, '..', '.env');
-dotenv.config({ path: REPO_ROOT_ENV, override: true });
-dotenv.config({ path: BACKEND_ENV, override: true });
+// Load root first, then the backend workspace file with override — so
+// packages/backend/.env overrides the repo-root .env. Record which files
+// actually loaded so the boot log names them: a stale/shadowing backend .env
+// (whose blank var silently overrides the root's real one) is otherwise
+// invisible and painful to diagnose. logger isn't imported yet here, so the
+// summary is emitted once it is available (see loadedEnvFiles usage below).
+const loadedEnvFiles = [REPO_ROOT_ENV, BACKEND_ENV].filter(
+  (p) => !dotenv.config({ path: p, override: true }).error,
+);
 
 import express from 'express';
 import cors from 'cors';
@@ -95,6 +102,21 @@ import agentExecutionsRouter from './routes/agent-executions';
 import agentSchedulesRouter from './routes/agent-schedules';
 
 const app = express();
+
+// Surface which .env file(s) actually loaded, in precedence order. When both
+// exist, packages/backend/.env overrides the repo-root .env — so a blank var
+// there silently shadows the root's real value. Naming the files at boot turns
+// that from an hours-long hunt into a one-line "oh, it read the other file".
+if (loadedEnvFiles.length === 0) {
+  logger.warn('No .env file found (checked repo-root and packages/backend/) — using shell environment only');
+} else if (loadedEnvFiles.length > 1) {
+  logger.info(
+    { files: loadedEnvFiles, override: `${BACKEND_ENV} overrides ${REPO_ROOT_ENV}` },
+    'Loaded multiple .env files — packages/backend/.env overrides the repo-root .env',
+  );
+} else {
+  logger.info({ file: loadedEnvFiles[0] }, 'Loaded .env file');
+}
 
 // ---------------------------------------------------------------------------
 // Middleware
