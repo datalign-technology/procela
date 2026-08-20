@@ -17,7 +17,7 @@ alternate industry). All names, emails, and figures are fictional.
 - **Scripted** (org tree + DAMA governance-role people, via the REST API):
   with the app running, `npm run db:seed:momentum -w packages/backend`
   (or `node packages/backend/scripts/seed-momentum-governance.js
-  http://localhost:3001/api/v1`).
+  http://127.0.0.1:3001/api/v1`).
 - **CSV import** (the broader people/systems set documented below): the
   in-app **Import** buttons on the Organizations, Systems, and People
   pages. The two overlap on the org hierarchy but aren't identical — the
