@@ -1343,6 +1343,20 @@ model GapSnapshot {
   @@map("gap_snapshots")
 }
 
+model StatsSnapshot {
+  id         String @id @default(uuid()) @db.Uuid
+  orgId      String @db.Uuid
+  capturedAt String
+  coverage   Float
+  avgHealth  Float
+  gaps       Int
+  dataAssets Int
+  mappings   Int
+
+  @@index([orgId])
+  @@map("stats_snapshots")
+}
+
 model ProcessVersion {
   id        String  @id @default(uuid()) @db.Uuid
   nodeId    String  @db.Uuid
