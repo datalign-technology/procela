@@ -471,3 +471,12 @@ body[data-density="compact"] textarea {
   }
 }
 
+/* Dashboard section cells: a widget that renders nothing when it has no
+   data yet (e.g. Program Maturity, Steward Onboarding) must not leave an
+   empty grid cell stranded next to its paired half-width neighbour.
+   Collapsing the empty cell lets the surviving widget reflow to fill the
+   row instead of showing a blank column. */
+.dashboard-section-cell:empty {
+  display: none;
+}
+
