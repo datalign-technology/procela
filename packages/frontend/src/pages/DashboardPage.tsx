@@ -1384,13 +1384,16 @@ export default function DashboardPage() {
           <div>
             {(() => {
               const visible = layout.order.filter((key) => !layout.hidden.has(key));
-              // Split the visible sections into rows: each `full` section is
-              // its own row; runs of consecutive `half` widgets chunk into pairs.
-              const rows: Array<{ band?: SectionKey; pair?: SectionKey[] }> = [];
+              // Split the visible sections into rows: each `full` section is its
+              // own full-width row; a run of consecutive `half` widgets renders
+              // as ONE two-column grid (not fixed pairs) so grid auto-flow can
+              // backfill — a widget that renders nothing collapses and the
+              // following halves move up to fill, keeping every half at half
+              // width with no stranded empty column.
+              const rows: Array<{ band?: SectionKey; run?: SectionKey[] }> = [];
               let run: SectionKey[] = [];
               const flushRun = () => {
-                for (let i = 0; i < run.length; i += 2) rows.push({ pair: run.slice(i, i + 2) });
-                run = [];
+                if (run.length > 0) { rows.push({ run: run.slice() }); run = []; }
               };
               for (const key of visible) {
                 if (layout.width[key] === 'full') { flushRun(); rows.push({ band: key }); }
@@ -1398,19 +1401,14 @@ export default function DashboardPage() {
               }
               flushRun();
 
-              return rows.map((row) => {
+              return rows.map((row, ri) => {
                 if (row.band) return <div key={`band-${row.band}`} className="dashboard-section-cell">{sectionMap[row.band]}</div>;
-                const keys = row.pair!;
-                // Lone leftover narrow widget fills the row — no dangling half.
-                if (keys.length === 1) return <div key={`solo-${keys[0]}`} className="dashboard-section-cell">{sectionMap[keys[0]]}</div>;
+                const keys = row.run!;
+                // .dashboard-half-grid is a responsive 2-column grid; each cell
+                // collapses (display:none) when its widget renders nothing, so
+                // auto-flow reflows the remaining halves to fill both columns.
                 return (
-                  <div
-                    key={`pair-${keys.join('-')}`}
-                    style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', columnGap: 16, alignItems: 'start' }}
-                  >
-                    {/* dashboard-section-cell collapses (display:none) when its
-                        widget renders nothing, so a null half never strands an
-                        empty column — the paired widget reflows to fill. */}
+                  <div key={`run-${ri}-${keys.join('-')}`} className="dashboard-half-grid">
                     {keys.map((k) => <div key={k} className="dashboard-section-cell">{sectionMap[k]}</div>)}
                   </div>
                 );
