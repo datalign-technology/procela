@@ -79,7 +79,10 @@ export const config = {
   // SUPPORT_EMAIL to route to a customer-managed inbox. Delivery still
   // requires SMTP to be configured — without it, reports are recorded to
   // the audit trail only (same audit-only fallback as password reset).
-  supportEmail: process.env.SUPPORT_EMAIL || 'support@procela.ai',
+  // Strip a trailing inline comment defensively: this value is used verbatim
+  // as the email recipient, so an env line like `SUPPORT_EMAIL=addr # note`
+  // that slips past .env parsing must not poison the To address.
+  supportEmail: (process.env.SUPPORT_EMAIL || 'support@procela.ai').replace(/\s+#.*$/, '').trim(),
 
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
