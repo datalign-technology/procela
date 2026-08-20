@@ -60,6 +60,22 @@ function readConfig(): MailConfig | null {
   };
 }
 
+/** Names of the required SMTP env vars that are currently unset. Used to make
+ *  the "not configured" boot log actionable — a common failure is one empty
+ *  var (e.g. SMTP_USER/SMTP_PASS blanked by a later line, or a missing
+ *  APP_URL) silently disabling all outbound mail. */
+function missingMailVars(): string[] {
+  const required: Record<string, unknown> = {
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT,
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASS: resolveEnvSecretSync(process.env.SMTP_PASS),
+    MAIL_FROM: process.env.MAIL_FROM,
+    APP_URL: process.env.APP_URL,
+  };
+  return Object.entries(required).filter(([, v]) => !v).map(([k]) => k);
+}
+
 const config = readConfig();
 let transporter: Transporter | null = null;
 let ready = false;
@@ -85,7 +101,10 @@ if (config) {
       logger.warn({ err, host: config.host }, 'SMTP verification failed — falling back to dev audit-log delivery');
     });
 } else {
-  logger.info('SMTP not configured — outbound mail will fall back to the audit log');
+  logger.info(
+    { missing: missingMailVars() },
+    'SMTP not configured — outbound mail will fall back to the audit log',
+  );
 }
 
 export function isConfigured(): boolean {
