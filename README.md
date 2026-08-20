@@ -49,7 +49,7 @@ The JSON default needs nothing. To run the real Postgres stack instead:
 
 ```bash
 # 1. Uncomment DATABASE_URL in .env (leave it commented for JSON mode):
-#    DATABASE_URL=postgresql://procela:procela@localhost:5432/procela
+#    DATABASE_URL=postgresql://procela:procela@127.0.0.1:5432/procela
 
 # 2. Start Postgres (Docker Desktop / daemon must be running):
 docker compose up -d postgres          # confirm: docker compose ps → healthy on 5432
@@ -65,7 +65,11 @@ npm run dev
 > **Windows / PowerShell:** the Prisma CLI reads `.env` from its own working
 > directory, not the repo root — if `db:migrate` reports "Environment
 > variable not found: DATABASE_URL", set it for the session first:
-> `$env:DATABASE_URL="postgresql://procela:procela@localhost:5432/procela"`.
+> `$env:DATABASE_URL="postgresql://procela:procela@127.0.0.1:5432/procela"`.
+> Use `127.0.0.1`, not `localhost`: on Windows `localhost` resolves to IPv6
+> (`::1`) first, where Docker's 5432 forward may not answer — the backend
+> then fails with "Can't reach database server at localhost:5432" even though
+> the container is healthy.
 
 Miss step 1 and the app silently runs in JSON mode; miss steps 2–3 and it
 boots with `Cannot read properties of undefined (reading 'findUnique')`.
