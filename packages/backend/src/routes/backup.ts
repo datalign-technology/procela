@@ -112,7 +112,7 @@ router.post(
   '/reset-all',
   authenticateToken,
   authorize('SUPER_ADMIN'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const { confirm } = req.body || {};
     if (confirm !== 'RESET') {
       res.status(400).json({
@@ -128,7 +128,7 @@ router.post(
     const actorEmail = req.user?.email || null;
     const beforeCounts = { auditLogs: auditLogs.length };
 
-    const summary = wipeAllStores();
+    const summary = await wipeAllStores();
 
     // The audit log was just nuked too — record a single bootstrap
     // entry so the reset is auditable. auditService.log re-creates
@@ -153,6 +153,7 @@ router.post(
       data: {
         filesCleared: summary.filesCleared,
         storesReloaded: summary.storesReloaded.length,
+        tablesTruncated: summary.tablesTruncated,
         message: 'Every store has been cleared. Your session will be invalidated; sign out and complete the onboarding wizard to set up a new organization.',
       },
     });
