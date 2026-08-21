@@ -7,7 +7,7 @@ import { rateLimit } from '../middleware/rate-limit';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { people, computeAccessibleOrgs, isActive as isPersonActive, getRoleForOrg } from './people';
-import { organizations } from './organizations';
+import { getCachedOrgList } from '../lib/org-scope';
 import { loadStore } from '../lib/persistence';
 import { getRefreshTokensRepository, type StoredRefreshToken } from '../db/refresh-tokens.repo';
 import { getPeopleRepository } from '../db/people.repo';
@@ -1480,8 +1480,12 @@ router.get('/accessible-orgs', authenticateToken, async (req: AuthenticatedReque
   const person = (await peopleRepo.list()).find((p) => p.email.toLowerCase() === (user.email || '').toLowerCase());
 
   if (!person) {
-    // No people record — dev fallback, show all working-level orgs (deduplicated by name+type)
-    const all = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
+    // No people record — dev fallback, show all working-level orgs (deduplicated
+    // by name+type). Read the org-scope cache, not the raw `organizations`
+    // array: in Postgres mode the array is stale boot-state (empty), so a dev
+    // login like Eleanor — who has no Person row — would otherwise see no orgs
+    // ("No organization defined") right after the demo seed.
+    const all = getCachedOrgList().filter((o) => WORKING_LEVELS.includes(o.type));
     const seen = new Set<string>();
     const deduped = all.filter((o) => {
       const key = `${o.name.toLowerCase()}|${o.type}`;
