@@ -3,7 +3,7 @@ import path from 'path';
 import { randomBytes } from 'crypto';
 import type { ZodType, ZodTypeDef } from 'zod';
 import logger from './logger';
-import { hasDatabase } from '../db/prisma';
+import { hasDatabase, getPrisma } from '../db/prisma';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Postgres cutover PR 9 — stale-store read diagnostic.
@@ -302,8 +302,17 @@ export function reloadAllStores(): string[] {
  *  on disk; their in-memory copies (if any) only reset on restart.
  *  Same caveat as the GDPR cascade — the file-level walk catches
  *  every JSON store including future ones; the in-memory registry
- *  catches only opted-in modules. */
-export function wipeAllStores(): { filesCleared: number; storesReloaded: string[] } {
+ *  catches only opted-in modules.
+ *
+ *  Postgres: when DATABASE_URL is set the source of truth is the
+ *  database, not the JSON files, so the wipe also TRUNCATEs every
+ *  application table. `_prisma_migrations` is preserved so the schema
+ *  history stays intact; RESTART IDENTITY resets any serial sequences;
+ *  CASCADE lets the truncate span the whole FK graph in one statement
+ *  regardless of relation direction. Without this step a reset in
+ *  Postgres mode cleared only the (stale) JSON files and left every
+ *  real row in place. */
+export async function wipeAllStores(): Promise<{ filesCleared: number; storesReloaded: string[]; tablesTruncated: number }> {
   let filesCleared = 0;
   if (fs.existsSync(DATA_DIR)) {
     for (const file of fs.readdirSync(DATA_DIR)) {
@@ -317,5 +326,24 @@ export function wipeAllStores(): { filesCleared: number; storesReloaded: string[
     target.splice(0, target.length);
     storesReloaded.push(name);
   }
-  return { filesCleared, storesReloaded };
+
+  let tablesTruncated = 0;
+  if (hasDatabase()) {
+    const prisma = getPrisma();
+    // Enumerate live tables from the catalog so the wipe stays correct
+    // as the schema grows — no hardcoded table list to drift.
+    const rows = (await prisma.$queryRawUnsafe(
+      `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`,
+    )) as Array<{ tablename: string }>;
+    const tables = rows
+      .map((r: { tablename: string }) => r.tablename)
+      .filter((t: string) => t !== '_prisma_migrations');
+    if (tables.length) {
+      const list = tables.map((t) => `"public"."${t.replace(/"/g, '""')}"`).join(', ');
+      await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+      tablesTruncated = tables.length;
+    }
+  }
+
+  return { filesCleared, storesReloaded, tablesTruncated };
 }

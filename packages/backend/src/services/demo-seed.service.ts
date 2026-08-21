@@ -30,6 +30,24 @@ import { aiTemplateCache } from '../routes/ai';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
+import type { Repository } from '../db/repository';
+import { getOrganizationsRepository } from '../db/organizations.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getAgentsRepository } from '../db/agents.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
+import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
+import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
+import { getConnectorsRepository } from '../db/connectors.repo';
+import { getConnectorEventsRepository } from '../db/connector-events.repo';
+import { getCalendarEventsRepository } from '../db/calendar-events.repo';
+import { getStatsSnapshotsRepository } from '../db/stats-snapshots.repo';
+
 const P = 'demo-'; // shared prefix — sweep target on reseed
 
 function now() { return new Date().toISOString(); }
@@ -39,31 +57,110 @@ function daysFromNow(n: number): string {
   return d.toISOString();
 }
 
-function sweep(): void {
-  const stores: Array<[any[], string]> = [
-    [organizations, 'organizations'],
-    [people, 'people'],
-    [systems, 'systems'],
-    [agents, 'agents'],
-    [dataDomains, 'dataDomains'],
-    [dataAssets, 'dataAssets'],
-    [processNodes, 'processNodes'],
-    [flowRelationships, 'flowRelationships'],
-    [mappings, 'mappings'],
-    [governanceTasks, 'governanceTasks'],
-    [governanceIssues, 'governanceIssues'],
-    [dataQualityRules, 'dataQualityRules'],
-    [connectors, 'connectors'],
-    [connectorEvents, 'connectorEvents'],
-    [calendarEvents, 'calendarEvents'],
-    [statsSnapshots, 'statsSnapshots'],
-  ];
-  for (const [arr, storeName] of stores) {
-    for (let i = arr.length - 1; i >= 0; i--) {
-      if (arr[i]?.id?.startsWith(P)) arr.splice(i, 1);
-    }
-    saveStore(storeName, arr);
+// ── Repository handles ──────────────────────────────────────────────
+// Every store the seeder writes goes through its repository so the
+// fixture persists to Postgres (when DATABASE_URL is set) AND the JSON
+// store (otherwise). In JSON mode each repo wraps the same in-memory
+// array the routes import, so the array-based assertions in
+// demo-seed.test.ts still see the rows. aiTemplateCache is the one
+// exception — an in-memory-only store keyed by industry string with no
+// Prisma model, so it keeps its push + saveStore path.
+interface DemoRepos {
+  organizations: Repository<any>;
+  people: Repository<any>;
+  systems: Repository<any>;
+  agents: Repository<any>;
+  dataDomains: Repository<any>;
+  dataAssets: Repository<any>;
+  processNodes: Repository<any>;
+  flowRelationships: Repository<any>;
+  mappings: Repository<any>;
+  governanceTasks: Repository<any>;
+  governanceIssues: Repository<any>;
+  dataQualityRules: Repository<any>;
+  connectors: Repository<any>;
+  connectorEvents: Repository<any>;
+  calendarEvents: Repository<any>;
+  statsSnapshots: Repository<any>;
+}
+
+function buildRepos(): DemoRepos {
+  return {
+    organizations: getOrganizationsRepository(organizations as any),
+    people: getPeopleRepository(people as any),
+    systems: getSystemsRepository(systems as any),
+    agents: getAgentsRepository(agents as any),
+    dataDomains: getDataDomainsRepository(dataDomains as any),
+    dataAssets: getDataAssetsRepository(dataAssets as any),
+    processNodes: getProcessNodesRepository(processNodes as any),
+    flowRelationships: getFlowRelationshipsRepository(flowRelationships as any),
+    mappings: getMappingsRepository(mappings as any),
+    governanceTasks: getGovernanceTasksRepository(governanceTasks as any),
+    governanceIssues: getGovernanceIssuesRepository(governanceIssues as any),
+    dataQualityRules: getDataQualityRulesRepository(dataQualityRules as any),
+    connectors: getConnectorsRepository(connectors as any),
+    connectorEvents: getConnectorEventsRepository(connectorEvents as any),
+    calendarEvents: getCalendarEventsRepository(calendarEvents as any),
+    statsSnapshots: getStatsSnapshotsRepository(statsSnapshots as any),
+  };
+}
+
+/** Create every row in `rows` through `repo`, in order. */
+async function createAll(repo: Repository<any>, rows: any[]): Promise<void> {
+  for (const row of rows) await repo.create(row);
+}
+
+/** Delete all `demo-`-prefixed rows the repo currently holds. Orgs are
+ *  handled leaf-first by the caller because the org-hierarchy parent FK
+ *  is ON DELETE RESTRICT — deleting a parent before its children fails
+ *  in Postgres. Every other entity is safe in any order (child FKs are
+ *  Cascade / SetNull). */
+async function sweepRepo(repo: Repository<any>): Promise<void> {
+  const all = await repo.list();
+  for (const row of all) {
+    if (typeof row?.id === 'string' && row.id.startsWith(P)) await repo.delete(row.id);
   }
+}
+
+/** Delete demo orgs leaf-first so the ON DELETE RESTRICT parent FK on
+ *  the org hierarchy never blocks a delete: repeatedly remove every
+ *  demo org that is not the parent of another remaining demo org. */
+async function sweepOrgs(repo: Repository<any>): Promise<void> {
+  let remaining = (await repo.list()).filter(
+    (o: any) => typeof o?.id === 'string' && o.id.startsWith(P),
+  );
+  while (remaining.length) {
+    const parentIds = new Set(remaining.map((o: any) => o.parentId).filter(Boolean));
+    const leaves = remaining.filter((o: any) => !parentIds.has(o.id));
+    // If a cycle ever slipped in, fall back to deleting everything so
+    // we don't spin forever — the demo tree is acyclic by construction.
+    const toDelete = leaves.length ? leaves : remaining;
+    for (const o of toDelete) await repo.delete(o.id);
+    const deleted = new Set(toDelete.map((o: any) => o.id));
+    remaining = remaining.filter((o: any) => !deleted.has(o.id));
+  }
+}
+
+async function sweep(repos: DemoRepos): Promise<void> {
+  // Reverse dependency order — children before parents — so Postgres
+  // FK checks pass even where a relation is RESTRICT rather than
+  // Cascade. Organizations are swept last, leaf-first (see sweepOrgs).
+  await sweepRepo(repos.statsSnapshots);
+  await sweepRepo(repos.calendarEvents);
+  await sweepRepo(repos.connectorEvents);
+  await sweepRepo(repos.connectors);
+  await sweepRepo(repos.dataQualityRules);
+  await sweepRepo(repos.governanceIssues);
+  await sweepRepo(repos.governanceTasks);
+  await sweepRepo(repos.mappings);
+  await sweepRepo(repos.flowRelationships);
+  await sweepRepo(repos.processNodes);
+  await sweepRepo(repos.dataAssets);
+  await sweepRepo(repos.dataDomains);
+  await sweepRepo(repos.agents);
+  await sweepRepo(repos.systems);
+  await sweepRepo(repos.people);
+  await sweepOrgs(repos.organizations);
   // AI template cache is keyed by industry string, not `id`. Sweep
   // demo-owned keys separately so a reseed refreshes the pre-warmed
   // Electric + Water entries.
@@ -102,8 +199,9 @@ export interface DemoSeedReport {
  * demo persona (Susan Chen) so the caller can offer a "sign in as
  * Susan" action next.
  */
-export function seedDemoData(): DemoSeedReport {
-  sweep();
+export async function seedDemoData(): Promise<DemoSeedReport> {
+  const repos = buildRepos();
+  await sweep(repos);
   const ts = now();
 
   // ── Organizations ──
@@ -120,8 +218,7 @@ export function seedDemoData(): DemoSeedReport {
   // under the water division so the tree isn't lopsided.
   const orgWaterOps = { id: P + 'org-water-ops', parentId: orgWater.id, name: 'Water Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
   const orgWaterCustomer = { id: P + 'org-water-customer', parentId: orgWater.id, name: 'Water Customer Service', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  organizations.push(orgTidewater, orgElectric, orgWater, orgShared, orgIT, orgRegulatory, orgTd, orgCustomerElectric, orgWaterOps, orgWaterCustomer);
-  saveStore('organizations', organizations);
+  await createAll(repos.organizations, [orgTidewater, orgElectric, orgWater, orgShared, orgIT, orgRegulatory, orgTd, orgCustomerElectric, orgWaterOps, orgWaterCustomer]);
 
   // ── People (compact — enough to tell the demo story) ──
   // Susan Chen is the demo persona: signed-in user for the demo. Owns
@@ -157,8 +254,7 @@ export function seedDemoData(): DemoSeedReport {
   const priya = { id: P + 'person-priya', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Priya Sharma', email: 'priya.sharma@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Distribution Control', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const kaia = { id: P + 'person-kaia', orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Kaia Nakamura', email: 'kaia.nakamura@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Water Customer Data', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const diego = { id: P + 'person-diego', orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Diego Alvarez', email: 'diego.alvarez@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Billing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  people.push(susan, marisol, devon, jennifer, brandon, melissa, harold, natalie, andre, kwame, amara, tobias, lorraine, phillip, samira, isabella, deborah, nadia, marcus, sophie, rafael, priya, kaia, diego);
-  saveStore('people', people);
+  await createAll(repos.people, [susan, marisol, devon, jennifer, brandon, melissa, harold, natalie, andre, kwame, amara, tobias, lorraine, phillip, samira, isabella, deborah, nadia, marcus, sophie, rafael, priya, kaia, diego]);
 
   // ── Systems ──
   const sysSCADA = { id: P + 'sys-scada', orgId: orgElectric.id, name: 'SCADA', description: 'Supervisory Control And Data Acquisition — real-time grid telemetry.', systemType: 'OT', vendorName: 'GE', ownerPersonId: tobias.id, stewardIds: [], createdAt: ts, updatedAt: ts };
@@ -170,24 +266,22 @@ export function seedDemoData(): DemoSeedReport {
   // Water-specific systems (parallel to electric's SCADA + OMS).
   const sysLIMS = { id: P + 'sys-lims', orgId: orgWater.id, name: 'LIMS', description: 'Laboratory Information Management System — water quality tests, sample chain of custody, effluent monitoring.', systemType: 'IT', vendorName: 'LabWare', ownerPersonId: sophie.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
   const sysHydraulic = { id: P + 'sys-hydraulic', orgId: orgWater.id, name: 'Hydraulic Model', description: 'Distribution network hydraulic simulation — pressure, flow, main-break impact analysis.', systemType: 'OT', vendorName: 'Bentley OpenFlows', ownerPersonId: priya.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
-  systems.push(sysSCADA, sysCIS, sysAMI, sysOMS, sysGIS, sysWarehouse, sysLIMS, sysHydraulic);
-  saveStore('systems', systems);
+  await createAll(repos.systems, [sysSCADA, sysCIS, sysAMI, sysOMS, sysGIS, sysWarehouse, sysLIMS, sysHydraulic]);
 
   // ── Agents (5 — one of each type, all wired to responsible persons) ──
-  agents.push(
+  await createAll(repos.agents, [
     { id: P + 'agent-outage-model', orgIds: [orgElectric.id], name: 'Outage Prediction Model', agentType: 'AI', description: 'Predicts distribution outage probability from weather and asset health.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: amara.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
     { id: P + 'agent-ami-pipeline', orgIds: [orgTidewater.id], name: 'AMI Meter Ingestion Pipeline', agentType: 'PIPELINE', description: 'Hourly ETL for electric and water meter interval data into the data lake.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: kwame.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
     { id: P + 'agent-notify-bot', orgIds: [orgTidewater.id], name: 'Customer Notification Bot', agentType: 'BOT', description: 'Automated SMS and voice outage notifications and restoration updates.', provider: 'Twilio', status: 'ACTIVE', ownerPersonId: samira.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
     { id: P + 'agent-pi-service', orgIds: [orgElectric.id], name: 'PI Historian Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract historian tags.', provider: 'OSIsoft', status: 'ACTIVE', ownerPersonId: tobias.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
     { id: P + 'agent-compliance', orgIds: [orgTidewater.id], name: 'Compliance Report Generator', agentType: 'OTHER', description: 'Scheduled generator producing NPDES DMR and DWR monthly submissions.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: isabella.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-  );
-  saveStore('agents', agents);
+  ]);
 
   // ── Data Domains ──
   const domCustomer = { id: P + 'domain-customer', orgId: orgTidewater.id, name: 'Customer Data', description: 'Customer accounts, addresses, service history, billing.', ownerId: susan.id, stewardIds: [natalie.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   const domOps = { id: P + 'domain-ops', orgId: orgTidewater.id, name: 'Operational Data', description: 'Grid, generation, metering — the real-time and near-real-time operational feeds.', ownerId: jennifer.id, stewardIds: [brandon.id, deborah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   const domRegulatory = { id: P + 'domain-regulatory', orgId: orgTidewater.id, name: 'Regulatory Data', description: 'Compliance evidence, filings, rate case data, NERC CIP + EPA SDWA.', ownerId: lorraine.id, stewardIds: [phillip.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  dataDomains.push(domCustomer, domOps, domRegulatory);
+  await createAll(repos.dataDomains, [domCustomer, domOps, domRegulatory]);
 
   // ── Data Assets (with domain inheritance where the pattern applies) ──
   const assetOutageLogs = { id: P + 'asset-outage-logs', orgId: orgElectric.id, name: 'Outage Logs', description: 'Per-event SCADA records of distribution outages.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 62, createdAt: ts, updatedAt: ts };
@@ -205,14 +299,12 @@ export function seedDemoData(): DemoSeedReport {
   const assetDistPressure = { id: P + 'asset-dist-pressure', orgId: orgWater.id, name: 'Distribution Pressure Reads', description: 'Continuous pressure telemetry from PRV stations and district metered areas.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
   const assetWaterQuality = { id: P + 'asset-water-quality', orgId: orgWater.id, name: 'Water Quality Results', description: 'Lab and in-line water quality samples — turbidity, chlorine residual, coliform, pH.', systemId: sysLIMS.id, owner: '', ownerPersonId: sophie.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 79, createdAt: ts, updatedAt: ts };
   const assetNPDES = { id: P + 'asset-npdes', orgId: orgWater.id, name: 'NPDES Discharge Records', description: 'Wastewater effluent discharge monitoring reports for state and EPA submissions.', systemId: sysLIMS.id, owner: '', ownerPersonId: isabella.id, stewardIds: [phillip.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
-  dataAssets.push(assetOutageLogs, assetCustomerMaster, assetMeterReads, assetGeneration, orphanLegacyBilling, orphanMeterCsv, assetDistPressure, assetWaterQuality, assetNPDES);
-  saveStore('dataAssets', dataAssets);
+  await createAll(repos.dataAssets, [assetOutageLogs, assetCustomerMaster, assetMeterReads, assetGeneration, orphanLegacyBilling, orphanMeterCsv, assetDistPressure, assetWaterQuality, assetNPDES]);
 
   // Wire the domain → asset backrefs so the Domains page shows counts.
-  domCustomer.dataAssetIds = [assetCustomerMaster.id];
-  domOps.dataAssetIds = [assetOutageLogs.id, assetMeterReads.id, assetGeneration.id, assetDistPressure.id, assetWaterQuality.id];
-  domRegulatory.dataAssetIds = [assetNPDES.id];
-  saveStore('dataDomains', dataDomains);
+  await repos.dataDomains.update(domCustomer.id, { dataAssetIds: [assetCustomerMaster.id] });
+  await repos.dataDomains.update(domOps.id, { dataAssetIds: [assetOutageLogs.id, assetMeterReads.id, assetGeneration.id, assetDistPressure.id, assetWaterQuality.id] });
+  await repos.dataDomains.update(domRegulatory.id, { dataAssetIds: [assetNPDES.id] });
 
   // ── Process hierarchy (Tidewater Electric) ──
   // Compact but meaningful: one value stream, two processes, one
@@ -229,16 +321,16 @@ export function seedDemoData(): DemoSeedReport {
   const actTriage = { id: P + 'node-act-triage', parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Outage triage', description: 'Classify incoming outages, dispatch first responders.', activityId: 'ACT-DEMO-1', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Field crew on site within 30 minutes for Tier 1 outages\n\nP95 30 min from detection', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actDispatch = { id: P + 'node-act-dispatch', parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Crew dispatch', description: 'Assign crews to outages by location + skill.', activityId: 'ACT-DEMO-2', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'Line Superintendent', systemIds: [sysGIS.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actNotify = { id: P + 'node-act-notify', parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Customer notification sent', description: 'SMS/email/voice notifications to affected customers.', activityId: 'ACT-DEMO-3', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, responsibleRole: 'Manager Contact Center', responsiblePersonId: samira.id, systemIds: [sysCIS.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  processNodes.push(vs, procDetect, procRestore, spTriage, actSignal, actTriage, actDispatch, actNotify);
+  await createAll(repos.processNodes, [vs, procDetect, procRestore, spTriage, actSignal, actTriage, actDispatch, actNotify]);
 
   // Flow relationships wiring the Electric activity chain. Feeds the
   // Dependencies panel: Outage triage sees actSignal as predecessor
   // and actDispatch as successor; actDispatch fans into actNotify.
-  flowRelationships.push(
+  await createAll(repos.flowRelationships, [
     { id: P + 'flow-1', fromNodeId: actSignal.id, toNodeId: actTriage.id, type: 'SEQUENCE' as const, label: 'anomaly confirmed', createdAt: ts },
     { id: P + 'flow-2', fromNodeId: actTriage.id, toNodeId: actDispatch.id, type: 'SEQUENCE' as const, label: 'crew required', createdAt: ts },
     { id: P + 'flow-3', fromNodeId: actDispatch.id, toNodeId: actNotify.id, type: 'SEQUENCE' as const, label: 'ETA available', createdAt: ts },
-  );
+  ]);
 
   // ── Process hierarchy (Tidewater Water) ──
   // Mirrors the Electric shape: one value stream, two processes, one
@@ -252,18 +344,16 @@ export function seedDemoData(): DemoSeedReport {
   const actDetectBreak = { id: P + 'node-act-detect-break', parentId: spBreakTriage.id, level: 'ACTIVITY' as const, name: 'Detect main break', description: 'Acoustic sensors + pressure anomalies flag likely breaks.', activityId: 'ACT-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, responsibleRole: 'System Operator Lead — Water Treatment', responsiblePersonId: rafael.id, systemIds: [sysSCADA.id, sysHydraulic.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Break confirmed within 15 minutes of anomaly signal\n\nP95 15 min from anomaly to dispatch', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actDispatchWater = { id: P + 'node-act-dispatch-water', parentId: procMainBreak.id, level: 'ACTIVITY' as const, name: 'Dispatch repair crew', description: 'Match crew skill + equipment to the break location and severity.', activityId: 'ACT-DEMO-W2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, responsibleRole: 'Manager Water Distribution Control', systemIds: [sysGIS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actWaterQualityTest = { id: P + 'node-act-quality-test', parentId: procTreatment.id, level: 'ACTIVITY' as const, name: 'Water quality sample test', description: 'Draw + analyse the shift sample; log turbidity, chlorine residual, coliform.', activityId: 'ACT-DEMO-W3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: rafael.id, responsibleRole: 'Data Steward Water Operations', responsiblePersonId: sophie.id, systemIds: [sysLIMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 2, successMeasure: 'Every shift sample logged within 4 hours', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  processNodes.push(vsW, procMainBreak, procTreatment, spBreakTriage, actDetectBreak, actDispatchWater, actWaterQualityTest);
-  saveStore('processNodes', processNodes);
+  await createAll(repos.processNodes, [vsW, procMainBreak, procTreatment, spBreakTriage, actDetectBreak, actDispatchWater, actWaterQualityTest]);
 
   // Water-side flow — Detect main break → Dispatch repair crew.
   // Mirrors the electric predecessor/successor story.
-  flowRelationships.push(
+  await createAll(repos.flowRelationships, [
     { id: P + 'flow-w1', fromNodeId: actDetectBreak.id, toNodeId: actDispatchWater.id, type: 'SEQUENCE' as const, label: 'break confirmed', createdAt: ts },
-  );
-  saveStore('flowRelationships', flowRelationships);
+  ]);
 
   // ── Mappings ──
-  mappings.push(
+  await createAll(repos.mappings, [
     { id: P + 'map-1', orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetOutageLogs.id, linkType: 'INPUT', notes: 'Consumes raw outage records', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: P + 'map-2', orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Cross-references affected customers', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: P + 'map-3', orgId: orgElectric.id, processStepId: actNotify.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Pulls customer contact preferences', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
@@ -272,19 +362,17 @@ export function seedDemoData(): DemoSeedReport {
     { id: P + 'map-w1', orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetDistPressure.id, linkType: 'INPUT', notes: 'Reads pressure telemetry to confirm the break signal', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: P + 'map-w2', orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Identifies the customers in the affected zone', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: P + 'map-w3', orgId: orgWater.id, processStepId: actWaterQualityTest.id, dataAssetId: assetWaterQuality.id, linkType: 'OUTPUT', notes: 'Writes the shift sample result set', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-  );
-  saveStore('mappings', mappings);
+  ]);
 
   // ── Governance tasks assigned to Susan (populates My Dashboard) ──
-  governanceTasks.push(
+  await createAll(repos.governanceTasks, [
     { id: P + 'task-1', orgId: orgTidewater.id, title: 'Approve Q3 data classification review', description: 'Review the AI-suggested sensitivity tags on Customer Master and Outage Logs and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: susan.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetCustomerMaster.id, automationMode: 'HUMAN' as any, createdBy: marisol.id, createdAt: ts, updatedAt: ts, completedAt: null },
     { id: P + 'task-2', orgId: orgTidewater.id, title: 'Sign off on Regulatory Data domain scope', description: 'Lorraine has proposed expanding the Regulatory Data domain to cover new SDWA reporting fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: susan.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domRegulatory.id, automationMode: 'HUMAN' as any, createdBy: lorraine.id, createdAt: ts, updatedAt: ts, completedAt: null },
     { id: P + 'task-3', orgId: orgTidewater.id, title: 'Retire Legacy Billing Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: susan.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyBilling.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
-  );
-  saveStore('governanceTasks', governanceTasks);
+  ]);
 
   // ── One open governance issue assigned to Susan ──
-  governanceIssues.push({
+  await repos.governanceIssues.create({
     id: P + 'issue-1',
     orgId: orgTidewater.id,
     title: 'Generation Output tier below Silver — critical process, ungoverned',
@@ -302,7 +390,6 @@ export function seedDemoData(): DemoSeedReport {
     updatedAt: ts,
     closedAt: null,
   } as any);
-  saveStore('governanceIssues', governanceIssues);
 
   // ── Data Quality rules ──
   // Two rules that tell a demo story:
@@ -346,8 +433,7 @@ export function seedDemoData(): DemoSeedReport {
     createdAt: ts,
     updatedAt: ts,
   };
-  dataQualityRules.push(dqPassing, dqFailing);
-  saveStore('dataQualityRules', dataQualityRules);
+  await createAll(repos.dataQualityRules, [dqPassing, dqFailing]);
 
   // ── Edge connector (on-prem agent) ──
   // One healthy connector shows the customer their in-network agent
@@ -378,22 +464,22 @@ export function seedDemoData(): DemoSeedReport {
     createdAt: connectorCreatedAt,
     updatedAt: connectorHeartbeatAt,
   };
-  connectors.push(conn);
-  saveStore('connectors', connectors);
+  await repos.connectors.create(conn);
 
   // Wire the connector's most recent sync onto Meter Reads so the
   // Data Asset detail page shows the "Synced 5 min ago" chip during
-  // the demo. Cast through any because the field lives on the asset
-  // as a runtime extension that the connector route adds without a
-  // schema change — the frontend picks it up unconditionally.
-  (assetMeterReads as any).lastSyncedByConnectorId = conn.id;
-  (assetMeterReads as any).lastSyncedAt = connectorSyncAt;
-  saveStore('dataAssets', dataAssets);
+  // the demo. These fields live on the asset as a runtime extension
+  // that the connector route adds without a schema change — the
+  // frontend picks it up unconditionally.
+  await repos.dataAssets.update(assetMeterReads.id, {
+    lastSyncedByConnectorId: conn.id,
+    lastSyncedAt: connectorSyncAt,
+  } as any);
 
   // Connector activity feed — the "Events" tab on the connector
   // detail. Order is chronological ascending; the UI reverses on
   // render so newest reads first.
-  connectorEvents.push(
+  await createAll(repos.connectorEvents, [
     {
       id: P + 'ce-paired', connectorId: conn.id, orgId: orgTidewater.id,
       type: 'PAIRED', ts: connectorCreatedAt,
@@ -419,8 +505,7 @@ export function seedDemoData(): DemoSeedReport {
       type: 'HEARTBEAT', ts: connectorHeartbeatAt,
       data: { agentVersion: '1.2.0' },
     },
-  );
-  saveStore('connectorEvents', connectorEvents);
+  ]);
 
   // Second connector — PAIRING state. Shows the other half of the
   // agent lifecycle so the demo can walk both "just installed,
@@ -442,8 +527,7 @@ export function seedDemoData(): DemoSeedReport {
     createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
   };
-  connectors.push(pairingConn as any);
-  saveStore('connectors', connectors);
+  await repos.connectors.create(pairingConn as any);
 
   // ── Governance calendar event ──
   // Populates the fourth My Dashboard tile (Upcoming Events) so
@@ -453,7 +537,7 @@ export function seedDemoData(): DemoSeedReport {
   const dayNow = new Date();
   const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
   const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
-  calendarEvents.push({
+  await repos.calendarEvents.create({
     id: P + 'cal-dgc',
     orgId: orgTidewater.id,
     name: 'Data Governance Committee weekly',
@@ -473,7 +557,6 @@ export function seedDemoData(): DemoSeedReport {
     createdAt: ts,
     updatedAt: ts,
   });
-  saveStore('calendarEvents', calendarEvents);
 
   // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
   //
@@ -505,13 +588,12 @@ export function seedDemoData(): DemoSeedReport {
     }
     return rows;
   }
-  statsSnapshots.push(
+  await createAll(repos.statsSnapshots, [
     ...weeklySnapshots(orgTidewater.id, { coverage: 60, avgHealth: 68, gaps: 9, dataAssets: 9, mappings: 7 }),
     ...weeklySnapshots(orgElectric.id, { coverage: 67, avgHealth: 66, gaps: 5, dataAssets: 4, mappings: 4 }),
     ...weeklySnapshots(orgWater.id, { coverage: 75, avgHealth: 82, gaps: 3, dataAssets: 3, mappings: 3 }),
     ...weeklySnapshots(orgShared.id, { coverage: 40, avgHealth: 70, gaps: 4, dataAssets: 0, mappings: 0 }),
-  );
-  saveStore('statsSnapshots', statsSnapshots);
+  ]);
 
   // ── AI template cache — pre-warm the wand for Tidewater ──
   // A live demo can't afford the 10–30s Claude wait on the "Generate

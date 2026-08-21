@@ -31,10 +31,10 @@ function requireSuperAdmin(req: AuthenticatedRequest, res: Response): boolean {
  * pass first so the endpoint always converges on a known good
  * state.
  */
-router.post('/demo-seed', (req: AuthenticatedRequest, res: Response) => {
+router.post('/demo-seed', async (req: AuthenticatedRequest, res: Response) => {
   if (!requireSuperAdmin(req, res)) return;
   try {
-    const report = seedDemoData();
+    const report = await seedDemoData();
     auditService.log(report.persona.id, req.user?.sub || null, 'Admin', 'demo-seed', 'CREATE', null, report);
     logger.info({ actor: req.user?.email || req.user?.sub, report }, 'Demo seed applied');
     res.json({
