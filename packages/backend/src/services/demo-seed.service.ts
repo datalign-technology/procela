@@ -38,6 +38,11 @@ import { raciOverrides } from '../routes/dashboard';
 import { sops } from '../routes/sops';
 import { glossaryTerms } from '../routes/business-glossary';
 import { operationsManuals } from '../routes/operations-manuals';
+import { dataLineageLinks, assetLineageEdges } from '../routes/data-lineage';
+import { maturitySnapshots } from '../routes/maturity-trends';
+import { gapSnapshots } from '../services/digest.service';
+import { agentSchedules } from '../routes/agent-schedules';
+import { agentExecutions } from '../routes/agent-executions';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
@@ -69,6 +74,12 @@ import { getRaciOverridesRepository } from '../db/raci-overrides.repo';
 import { getSopsRepository } from '../db/sops.repo';
 import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
 import { getOperationsManualsRepository } from '../db/operations-manuals.repo';
+import { getDataLineageLinksRepository } from '../db/data-lineage-links.repo';
+import { getAssetLineageEdgesRepository } from '../db/asset-lineage-edges.repo';
+import { getMaturitySnapshotsRepository } from '../db/maturity-snapshots.repo';
+import { getGapSnapshotsRepository } from '../db/gap-snapshots.repo';
+import { getAgentSchedulesRepository } from '../db/agent-schedules.repo';
+import { getAgentExecutionsRepository } from '../db/agent-executions.repo';
 
 const P = 'demo-'; // shared prefix — sweep target on reseed
 
@@ -162,6 +173,12 @@ interface DemoRepos {
   sops: Repository<any>;
   glossaryTerms: Repository<any>;
   operationsManuals: Repository<any>;
+  dataLineageLinks: Repository<any>;
+  assetLineageEdges: Repository<any>;
+  maturitySnapshots: Repository<any>;
+  gapSnapshots: Repository<any>;
+  agentSchedules: Repository<any>;
+  agentExecutions: Repository<any>;
 }
 
 function buildRepos(): DemoRepos {
@@ -192,6 +209,12 @@ function buildRepos(): DemoRepos {
     sops: getSopsRepository(sops as any),
     glossaryTerms: getGlossaryTermsRepository(glossaryTerms as any),
     operationsManuals: getOperationsManualsRepository(operationsManuals as any),
+    dataLineageLinks: getDataLineageLinksRepository(dataLineageLinks as any),
+    assetLineageEdges: getAssetLineageEdgesRepository(assetLineageEdges as any),
+    maturitySnapshots: getMaturitySnapshotsRepository(maturitySnapshots as any),
+    gapSnapshots: getGapSnapshotsRepository(gapSnapshots as any),
+    agentSchedules: getAgentSchedulesRepository(agentSchedules as any),
+    agentExecutions: getAgentExecutionsRepository(agentExecutions as any),
   };
 }
 
@@ -257,6 +280,12 @@ async function sweep(repos: DemoRepos): Promise<void> {
   // Governance-depth entities first: decision rights + program are
   // independent; groups self-parent (leaf-first); controls reference
   // policies (controls before policies).
+  await sweepRepo(repos.agentExecutions);
+  await sweepRepo(repos.agentSchedules);
+  await sweepRepo(repos.gapSnapshots);
+  await sweepRepo(repos.maturitySnapshots);
+  await sweepRepo(repos.assetLineageEdges);
+  await sweepRepo(repos.dataLineageLinks);
   await sweepRepo(repos.operationsManuals);
   await sweepRepo(repos.glossaryTerms);
   await sweepRepo(repos.sops);
@@ -449,6 +478,86 @@ async function seedDocsDepth(repos: DemoRepos, ts: string, ctx: DocsDepthCtx): P
     { id: P + 'om-cdo', orgId, roleType: 'CDO', label: 'Chief Data Officer Operations', purpose: 'The recurring cadence for the enterprise data leader.', daily: ['Scan the open-issues bell for anything critical.'], weekly: ['Chair the Data Governance Council.', 'Review portfolio health + coverage trend.'], monthly: ['Report program metrics to the executive team.'], quarterly: ['Refresh the governance roadmap.', 'Sponsor a maturity assessment.'], escalation: ['Unresolved cross-domain disputes escalate to the CDO.'], customContent: '', isCustom: false, ownerPersonId: cdoId, createdAt: ts, updatedAt: ts },
     { id: P + 'om-owner', orgId, roleType: 'DATA_OWNER', label: 'Data Owner Operations', purpose: 'The recurring cadence for a domain data owner.', daily: [], weekly: ['Triage new issues on owned assets.'], monthly: ['Review DQ scorecards for owned domains.'], quarterly: ['Run access recertification (SOP-003).'], escalation: ['Tier-drop on a critical asset escalates to the Council.'], customContent: '', isCustom: false, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
     { id: P + 'om-steward', orgId, roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward Operations', purpose: 'The recurring cadence for a business data steward.', daily: ['Clear the metadata queue for assigned assets.'], weekly: ['Review AI-suggested sensitivity tags.'], monthly: ['Reconcile glossary terms with source-of-truth changes.'], quarterly: [], escalation: ['Ambiguous ownership escalates to the Data Owner.'], customContent: '', isCustom: false, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+  ]);
+}
+
+// ── Lineage + trend history ─────────────────────────────────────────
+// System→system + asset→asset lineage edges (profile-specific, so the
+// caller passes them), plus maturity and gap snapshot history per org
+// (generic improving trend, so the Maturity and gap-trend charts show
+// real history rather than a synthesized single point).
+interface LineageTrendCtx {
+  orgIds: string[];
+  links: Array<{ id: string; orgId: string; sourceSystemId: string; targetSystemId: string; dataAssetId: string | null; description: string; flowType: string; frequency: string }>;
+  edges: Array<{ id: string; orgId: string; sourceAssetId: string; targetAssetId: string }>;
+}
+
+const TREND_WEEKS = 6;
+const MATURITY_DIMS = ['Governance', 'Data Quality', 'Metadata', 'Architecture', 'Adoption'];
+
+async function seedLineageAndTrends(repos: DemoRepos, ts: string, ctx: LineageTrendCtx): Promise<void> {
+  // Lineage.
+  await createAll(repos.dataLineageLinks, ctx.links.map((l) => ({ ...l, status: 'ACTIVE', createdAt: ts, updatedAt: ts })));
+  await createAll(repos.assetLineageEdges, ctx.edges.map((e) => ({ ...e, source: 'manual', sourceRef: null, lastSeenAt: ts, createdAt: ts })));
+
+  // Trend history — maturity + gap snapshots per org.
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  for (const orgId of ctx.orgIds) {
+    const mat: any[] = [];
+    const gaps: any[] = [];
+    for (let i = 0; i < TREND_WEEKS; i++) {
+      const progress = i / (TREND_WEEKS - 1); // 0 (oldest) → 1 (newest)
+      const when = daysFromNow(-(TREND_WEEKS - 1 - i) * 7);
+      mat.push({
+        id: `${P}mat-${orgId}-${i}`, orgId, timestamp: when,
+        overall: round1(2.4 + progress * 1.4),
+        dimensions: MATURITY_DIMS.map((name, di) => ({ name, score: round1(Math.min(5, 2.2 + progress * 1.5 + di * 0.1)) })),
+      });
+      gaps.push({
+        id: `${P}gap-${orgId}-${i}`, orgId, takenAt: when,
+        metrics: {
+          activities: 15,
+          mappedActivities: Math.round(6 + progress * 6),
+          coveragePct: Math.round(40 + progress * 35),
+          orphanAssets: Math.max(0, Math.round(4 - progress * 2)),
+          ungovernedAssets: Math.max(0, Math.round(5 - progress * 3)),
+          ownerlessItems: Math.max(0, Math.round(6 - progress * 4)),
+        },
+      });
+    }
+    await createAll(repos.maturitySnapshots, mat);
+    await createAll(repos.gapSnapshots, gaps);
+  }
+}
+
+// ── Agent operations (per profile — references a seeded agent + activity) ──
+// Two schedules and three executions (approved / awaiting-review /
+// failed) so the Agents "runs" surface shows a real lifecycle.
+interface AgentOpsCtx {
+  orgId: string;
+  agentId: string;
+  agentName: string;
+  activityId: string;
+  activityName: string;
+  roleType: string;
+  createdBy: string;
+  reviewerId: string;
+}
+
+async function seedAgentOps(repos: DemoRepos, ts: string, ctx: AgentOpsCtx): Promise<void> {
+  const { orgId, agentId, agentName, activityId, activityName, roleType, createdBy, reviewerId } = ctx;
+  const base = { orgId, agentId, agentName, activityId, activityName, roleType };
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
+
+  await createAll(repos.agentSchedules, [
+    { id: P + 'sched-daily', ...base, frequency: 'DAILY', status: 'ACTIVE', startAt: daysFromNow(-30), nextRunAt: daysFromNow(1), lastRunAt: hoursAgo(6), runCount: 24, createdBy, createdAt: ts, updatedAt: ts },
+    { id: P + 'sched-weekly', ...base, frequency: 'WEEKLY', status: 'PAUSED', startAt: daysFromNow(-60), nextRunAt: null, lastRunAt: daysFromNow(-9), runCount: 6, createdBy, createdAt: ts, updatedAt: ts },
+  ]);
+
+  await createAll(repos.agentExecutions, [
+    { id: P + 'exec-approved', ...base, status: 'SUCCESS', startedAt: hoursAgo(6), completedAt: hoursAgo(6), output: `## ${activityName} — draft\n\nGenerated summary reviewed and approved.`, error: null, durationMs: 4200, reviewStatus: 'APPROVED', reviewedBy: reviewerId, reviewedAt: hoursAgo(5), promotedDocumentId: null, createdAt: hoursAgo(6) },
+    { id: P + 'exec-pending', ...base, status: 'SUCCESS', startedAt: hoursAgo(2), completedAt: hoursAgo(2), output: `## ${activityName} — draft\n\nAwaiting steward review.`, error: null, durationMs: 3800, reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null, promotedDocumentId: null, createdAt: hoursAgo(2) },
+    { id: P + 'exec-failed', ...base, status: 'FAILED', startedAt: hoursAgo(1), completedAt: hoursAgo(1), output: '', error: 'Model call timed out after 60s', durationMs: null, reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null, promotedDocumentId: null, createdAt: hoursAgo(1) },
   ]);
 }
 
@@ -1020,6 +1129,23 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // Docs depth — SOPs, glossary terms, operations manuals.
   await seedDocsDepth(repos, ts, { orgId: orgTidewater.id, ownerId: natalie.id, cdoId: susan.id, domainId: domCustomer.id });
 
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgTidewater.id, orgElectric.id, orgWater.id],
+    links: [
+      { id: P + 'lin-1', orgId: orgTidewater.id, sourceSystemId: sysAMI.id, targetSystemId: sysWarehouse.id, dataAssetId: assetMeterReads.id, description: 'AMI interval reads land in the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: P + 'lin-2', orgId: orgTidewater.id, sourceSystemId: sysCIS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetCustomerMaster.id, description: 'Customer master syncs nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: P + 'lin-3', orgId: orgElectric.id, sourceSystemId: sysSCADA.id, targetSystemId: sysOMS.id, dataAssetId: assetOutageLogs.id, description: 'SCADA events stream into the outage management system.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+    ],
+    edges: [
+      { id: P + 'edge-1', orgId: orgTidewater.id, sourceAssetId: assetMeterReads.id, targetAssetId: assetCustomerMaster.id },
+      { id: P + 'edge-2', orgId: orgElectric.id, sourceAssetId: assetOutageLogs.id, targetAssetId: assetGeneration.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgTidewater.id, agentId: P + 'agent-compliance', agentName: 'Compliance Report Generator', activityId: actTriage.id, activityName: 'Outage triage', roleType: 'DATA_QUALITY_ANALYST', createdBy: susan.id, reviewerId: marisol.id });
+
   logger.info({ persona: susan.name }, 'Demo data seeded');
 
   return {
@@ -1378,6 +1504,23 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
 
   // Docs depth — SOPs, glossary terms, operations manuals.
   await seedDocsDepth(repos, ts, { orgId: orgMeridian.id, ownerId: dmitri.id, cdoId: elena.id, domainId: domDesign.id });
+
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgMeridian.id, orgNewCon.id, orgSustain.id],
+    links: [
+      { id: P + 'lin-1', orgId: orgMeridian.id, sourceSystemId: sysERP.id, targetSystemId: sysWarehouse.id, dataAssetId: assetMaterialReceipts.id, description: 'ERP goods receipts sync nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: P + 'lin-2', orgId: orgNewCon.id, sourceSystemId: sysMES.id, targetSystemId: sysWarehouse.id, dataAssetId: assetWorkOrders.id, description: 'Shop-floor work order status feeds the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: P + 'lin-3', orgId: orgNewCon.id, sourceSystemId: sysWeldHist.id, targetSystemId: sysWarehouse.id, dataAssetId: assetWeldTelemetry.id, description: 'Weld historian tags stream into the warehouse.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+    ],
+    edges: [
+      { id: P + 'edge-1', orgId: orgMeridian.id, sourceAssetId: assetProductModel.id, targetAssetId: assetBOM.id },
+      { id: P + 'edge-2', orgId: orgNewCon.id, sourceAssetId: assetWeldTelemetry.id, targetAssetId: assetWeldRecords.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgMeridian.id, agentId: P + 'agent-cert-gen', agentName: 'Naval Cert Package Generator', activityId: actWeldQA.id, activityName: 'Weld QA & radiography sign-off', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: elena.id, reviewerId: priyanka.id });
 
   logger.info({ persona: elena.name }, 'Demo data seeded (shipbuilding)');
 

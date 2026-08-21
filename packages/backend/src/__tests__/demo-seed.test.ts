@@ -78,6 +78,16 @@ const { sops } = require('../routes/sops');
 const { glossaryTerms } = require('../routes/business-glossary');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { operationsManuals } = require('../routes/operations-manuals');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { dataLineageLinks, assetLineageEdges } = require('../routes/data-lineage');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { maturitySnapshots } = require('../routes/maturity-trends');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { gapSnapshots } = require('../services/digest.service');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { agentSchedules } = require('../routes/agent-schedules');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { agentExecutions } = require('../routes/agent-executions');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -157,6 +167,12 @@ describe('demo-seed endpoint', () => {
       [sops, 'sops'],
       [glossaryTerms, 'glossaryTerms'],
       [operationsManuals, 'operationsManuals'],
+      [dataLineageLinks, 'dataLineageLinks'],
+      [assetLineageEdges, 'assetLineageEdges'],
+      [maturitySnapshots, 'maturitySnapshots'],
+      [gapSnapshots, 'gapSnapshots'],
+      [agentSchedules, 'agentSchedules'],
+      [agentExecutions, 'agentExecutions'],
     ];
     for (const [arr, name] of stores) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
@@ -181,7 +197,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals, dataLineageLinks, assetLineageEdges, maturitySnapshots, gapSnapshots, agentSchedules, agentExecutions]) sweep(s);
     // RACI overrides key on nodeId (no id) — clear demo-prefixed nodes.
     for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith('demo-')) raciOverrides.splice(i, 1);
   });
@@ -437,6 +453,33 @@ describe('demo-seed endpoint', () => {
       // SOPs carry ordered steps; glossary has an approved term.
       assert.ok(demo(sops).every((s: any) => Array.isArray(s.steps) && s.steps.length > 0));
       assert.ok(demo(glossaryTerms).some((t: any) => t.status === 'APPROVED'));
+    });
+
+    it(`seeds lineage + trend history for ${industry}`, async () => {
+      await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      assert.strictEqual(demo(dataLineageLinks).length, 3, 'lineage links');
+      assert.strictEqual(demo(assetLineageEdges).length, 2, 'asset edges');
+      // 6 weekly snapshots per org × 3 orgs.
+      assert.strictEqual(demo(maturitySnapshots).length, 18, 'maturity snapshots');
+      assert.strictEqual(demo(gapSnapshots).length, 18, 'gap snapshots');
+
+      // Lineage links join two distinct systems; trend history climbs.
+      assert.ok(demo(dataLineageLinks).every((l: any) => l.sourceSystemId !== l.targetSystemId));
+      const oneOrg = demo(maturitySnapshots).filter((m: any) => m.orgId === demo(maturitySnapshots)[0].orgId).sort((a: any, b: any) => a.timestamp.localeCompare(b.timestamp));
+      assert.ok(oneOrg[oneOrg.length - 1].overall > oneOrg[0].overall, 'maturity trend climbs');
+    });
+
+    it(`seeds agent operations (schedules + executions) for ${industry}`, async () => {
+      await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      assert.strictEqual(demo(agentSchedules).length, 2, 'agent schedules');
+      assert.strictEqual(demo(agentExecutions).length, 3, 'agent executions');
+      // Execution lifecycle: an approved, a pending-review, and a failed run.
+      const execs = demo(agentExecutions);
+      assert.ok(execs.some((e: any) => e.status === 'SUCCESS' && e.reviewStatus === 'APPROVED'));
+      assert.ok(execs.some((e: any) => e.reviewStatus === 'PENDING'));
+      assert.ok(execs.some((e: any) => e.status === 'FAILED' && e.error));
     });
   }
 });
