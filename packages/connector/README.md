@@ -178,6 +178,47 @@ npm run lint -w packages/connector
 - Freshness states in the Procela UI: **ONLINE** (heartbeat in
   the last 30 min), **STALE** (30 min – 4 h), **OFFLINE** (> 4 h).
 
+## Behind a corporate proxy
+
+Enterprises often force all outbound traffic through an inspecting HTTP
+proxy. Node's built-in `fetch` does **not** read the proxy environment
+variables on its own (unlike `curl`), so the connector reads them for it
+and installs a proxy dispatcher at startup:
+
+- Set **`HTTPS_PROXY`** (or `HTTP_PROXY`) to your proxy URL, including the
+  scheme — e.g. `http://proxy.corp:3128`. A value missing the `http://`
+  is treated as a typo and the connector goes direct with an explanatory
+  log line rather than silently ignoring it.
+- **`NO_PROXY`** is honoured (comma-separated hosts/domains, or `*`), so
+  you can carve the Procela host back out to go direct.
+- Only the **outbound Procela traffic** (pair / heartbeat / report) is
+  proxied. Source-database connections (`pg` / `mysql2` / `mssql` /
+  `oracledb`) open their own TCP sockets and are **not** routed through
+  the proxy — those targets sit inside your network, where an internet
+  proxy would only break them.
+
+Every start logs which path it took, so a bad proxy setting is
+diagnosable from the container logs alone (passwords are redacted):
+
+```
+[procela-connector] proxy: routing via http://proxy.corp:3128/
+[procela-connector] proxy: no proxy configured — going direct
+[procela-connector] proxy: app.procela.ai excluded by NO_PROXY — going direct
+```
+
+**TLS-inspecting proxies.** When the proxy re-signs traffic with your
+company's own certificate authority, point `NODE_EXTRA_CA_CERTS` at the
+CA's PEM bundle. Node reads it at startup — no connector setting changes:
+
+```bash
+docker run --rm \
+  -e HTTPS_PROXY=http://proxy.corp:3128 \
+  -e NODE_EXTRA_CA_CERTS=/etc/procela/corp-ca.pem \
+  -v "$(pwd)/corp-ca.pem:/etc/procela/corp-ca.pem:ro" \
+  -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml:ro" \
+  ghcr.io/datalign-technology/procela-connector:edge
+```
+
 ## Supported sources
 
 | Type         | Config `type:` | Status |

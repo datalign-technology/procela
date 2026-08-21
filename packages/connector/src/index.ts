@@ -36,6 +36,7 @@ import { scanMysql } from './mysql';
 import { scanDbt } from './dbt';
 import { scanOracle } from './oracle';
 import { withRetry } from './retry';
+import { configureProxy } from './proxy';
 
 // Resolvers for ${ENV_VAR} / ${file:/path} references in source
 // connection strings — the real process env + filesystem.
@@ -170,6 +171,11 @@ async function runScan(cfg: ConnectorConfig): Promise<void> {
 
 async function main(): Promise<void> {
   const { path, cfg } = loadConfig();
+  // Install the HTTPS/HTTP proxy dispatcher before any fetch runs —
+  // pairOnce/heartbeat/report all go through native fetch, which does
+  // not read the proxy env vars on its own. Logs which path it took so
+  // a broken proxy install is diagnosable from the container logs.
+  log(`proxy: ${configureProxy(cfg.procelaUrl)}`);
   // Pair-and-keep-going: capture the new token, then drop into the
   // steady-state loop using it. If pairing is the only step the
   // operator wanted, they can ctrl-c right after.
