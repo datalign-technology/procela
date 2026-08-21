@@ -5,8 +5,20 @@ resource "aws_lb" "app" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
 
-  # Reference-only: production should enable access logs to a dedicated S3
-  # bucket and consider `drop_invalid_header_fields = true`.
+  # Off by default to keep the reference plan unchanged; recommended true for
+  # production (see alb_drop_invalid_header_fields).
+  drop_invalid_header_fields = var.alb_drop_invalid_header_fields
+
+  # Access logs to the locked-down bucket when enable_access_logs = true
+  # (bucket + policy live in logging.tf).
+  dynamic "access_logs" {
+    for_each = var.enable_access_logs ? [1] : []
+    content {
+      bucket  = aws_s3_bucket.alb_logs[0].id
+      prefix  = "alb"
+      enabled = true
+    }
+  }
 
   tags = {
     Name = "${local.name_prefix}-alb"

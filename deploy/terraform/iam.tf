@@ -49,6 +49,19 @@ data "aws_iam_policy_document" "task_execution_secrets" {
       aws_secretsmanager_secret.saml_idp_cert.arn,
     ]
   }
+
+  # When the Secrets Manager entries are encrypted with a customer-managed
+  # CMK, the execution role must be allowed to decrypt under it to inject the
+  # secrets into the container.
+  dynamic "statement" {
+    for_each = var.enable_kms_cmk ? [1] : []
+    content {
+      sid       = "DecryptSecretsCmk"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = [aws_kms_key.secrets[0].arn]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "task_execution_secrets" {

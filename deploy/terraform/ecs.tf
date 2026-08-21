@@ -1,6 +1,8 @@
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${local.name_prefix}-backend"
   retention_in_days = var.log_retention_days
+  # AWS-owned key by default; customer-managed CMK when enable_kms_cmk = true.
+  kms_key_id = local.kms_logs_arn
 }
 
 # Optional secrets / config injected into the task only when their feature

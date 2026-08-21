@@ -254,3 +254,170 @@ variable "mail_from" {
   description = "From header for outbound mail (MAIL_FROM)."
   default     = "Procela <noreply@procela.io>"
 }
+
+# ── Production-hardening toggles ─────────────────────────────────────────────
+# Everything below defaults to false/empty so the REFERENCE deployment is
+# unchanged: with no toggle flipped, `terraform plan` produces exactly the
+# resources it did before this block existed. Each toggle only ADDS or
+# reconfigures infrastructure — none of it changes application behaviour.
+# These map 1:1 to the ⚙ items in docs/AWS_PRODUCTION_GUIDE.md §5. Flip them
+# on individually (or all at once for a full hardened stack), then ALWAYS
+# `terraform plan` and review before applying to a live environment — several
+# of these force resource replacement (KMS re-encrypt, NAT restructure).
+
+# 5.1 Data durability ────────────────────────────────────────────────────────
+
+variable "rds_multi_az" {
+  type        = bool
+  description = "Run RDS as Multi-AZ: a synchronous standby in the second AZ fails over automatically. Roughly doubles DB cost."
+  default     = false
+}
+
+variable "rds_deletion_protection" {
+  type        = bool
+  description = <<-EOT
+    Protect the database from destruction. When true: deletion_protection is on
+    (a `terraform destroy` / console delete is blocked until you turn it off),
+    a final snapshot is taken on delete (skip_final_snapshot = false), and
+    automated backups are retained. Leave false for throwaway/reference stacks.
+  EOT
+  default     = false
+}
+
+variable "rds_performance_insights" {
+  type        = bool
+  description = "Enable RDS Performance Insights for query-level diagnostics. Uses the RDS KMS CMK when enable_kms_cmk is also true, otherwise the AWS-managed key."
+  default     = false
+}
+
+variable "rds_performance_insights_retention_days" {
+  type        = number
+  description = "Performance Insights retention. 7 (free tier) or a multiple of 31 up to 731. Only used when rds_performance_insights = true."
+  default     = 7
+}
+
+# 5.2 Encryption — customer-managed KMS keys ─────────────────────────────────
+
+variable "enable_kms_cmk" {
+  type        = bool
+  description = <<-EOT
+    Create customer-managed KMS keys (with annual rotation) and point RDS
+    storage, Secrets Manager entries, the CloudWatch log group, and the
+    frontend S3 bucket at them instead of AWS-owned keys. Enabling this on an
+    EXISTING stack re-encrypts those resources (RDS storage change, secret
+    re-wrap) — review the plan carefully.
+  EOT
+  default     = false
+}
+
+variable "kms_deletion_window_days" {
+  type        = number
+  description = "Waiting period (days) before a scheduled KMS key deletion completes. 7–30."
+  default     = 30
+}
+
+# 5.3 Network isolation ──────────────────────────────────────────────────────
+
+variable "enable_vpc_endpoints" {
+  type        = bool
+  description = "Create VPC endpoints (S3 gateway + ECR/Secrets Manager/CloudWatch Logs interface) so tasks reach those services privately instead of over the NAT gateway."
+  default     = false
+}
+
+variable "enable_nat_per_az" {
+  type        = bool
+  description = "Deploy one NAT gateway per AZ (with its own EIP and private route table) so a single-AZ outage does not sever egress for the healthy AZ. Off = one shared NAT (cheaper). Toggling on an existing stack re-indexes the NAT/EIP/route-table resources."
+  default     = false
+}
+
+variable "restrict_alb_to_cloudfront" {
+  type        = bool
+  description = "Restrict the ALB security group's 80/443 ingress to AWS's managed CloudFront origin-facing prefix list instead of 0.0.0.0/0, so the ALB is only reachable through CloudFront."
+  default     = false
+}
+
+variable "alb_drop_invalid_header_fields" {
+  type        = bool
+  description = "Have the ALB drop HTTP headers with invalid fields before forwarding to the backend (recommended for production)."
+  default     = false
+}
+
+# 5.4 Edge protection — WAF ──────────────────────────────────────────────────
+
+variable "enable_waf" {
+  type        = bool
+  description = "Create a WAFv2 web ACL (CLOUDFRONT scope, us-east-1) with AWS managed rule groups + a rate limit, and attach it to the CloudFront distribution."
+  default     = false
+}
+
+variable "waf_rate_limit" {
+  type        = number
+  description = "WAF rate-based rule threshold: max requests per 5-minute window per source IP before blocking. Only used when enable_waf = true."
+  default     = 2000
+}
+
+# 5.5 Secret rotation ────────────────────────────────────────────────────────
+
+variable "enable_db_secret_rotation" {
+  type        = bool
+  description = "Enable automatic rotation of the RDS master-password secret. Requires db_rotation_lambda_arn to point at a Secrets-Manager rotation function (e.g. the AWS SAR SecretsManagerRDSPostgreSQLRotationSingleUser Lambda). See deploy/terraform/README.md."
+  default     = false
+}
+
+variable "db_rotation_lambda_arn" {
+  type        = string
+  description = "ARN of the Lambda that rotates the DB password secret. Required when enable_db_secret_rotation = true; left empty otherwise."
+  default     = ""
+}
+
+variable "db_rotation_days" {
+  type        = number
+  description = "How often (days) to rotate the DB password secret when rotation is enabled."
+  default     = 30
+}
+
+# 5.6 Observability — access logs & alarms ───────────────────────────────────
+
+variable "enable_access_logs" {
+  type        = bool
+  description = "Create locked-down S3 buckets and enable access logging on the ALB and the CloudFront distribution."
+  default     = false
+}
+
+variable "enable_monitoring_alarms" {
+  type        = bool
+  description = "Create an SNS topic and CloudWatch alarms for the essentials (ALB 5xx + unhealthy hosts, ECS CPU/memory, RDS CPU/storage/connections)."
+  default     = false
+}
+
+variable "alarm_email" {
+  type        = string
+  description = "Optional email address subscribed to the alarm SNS topic. Leave empty to wire subscriptions manually. Only used when enable_monitoring_alarms = true."
+  default     = ""
+}
+
+# 5.7 Threat detection & audit trail ─────────────────────────────────────────
+
+variable "enable_cloudtrail" {
+  type        = bool
+  description = "Create a multi-region CloudTrail (with log-file validation) and its locked-down S3 bucket, recording every AWS API call in this account."
+  default     = false
+}
+
+variable "enable_guardduty" {
+  type        = bool
+  description = "Enable Amazon GuardDuty threat detection in this account/region."
+  default     = false
+}
+
+variable "enable_security_hub" {
+  type        = bool
+  description = "Enable AWS Security Hub in this account/region (aggregates GuardDuty/Config/etc. findings)."
+  default     = false
+}
+
+variable "enable_config" {
+  type        = bool
+  description = "Enable AWS Config: a configuration recorder + delivery channel (with its own S3 bucket and IAM role) tracking resource configuration and drift."
+  default     = false
+}

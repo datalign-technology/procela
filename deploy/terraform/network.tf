@@ -5,6 +5,11 @@ data "aws_availability_zones" "available" {
 locals {
   name_prefix = "${var.project_name}-${var.environment}"
   azs         = slice(data.aws_availability_zones.available.names, 0, 2)
+
+  # One shared NAT by default; one per AZ when enable_nat_per_az = true. The
+  # EIP / NAT gateway / private route table resources are counted on this so
+  # the reference deployment stays at a single NAT.
+  nat_count = var.enable_nat_per_az ? length(local.azs) : 1
 }
 
 # --- VPC ---------------------------------------------------------------------
@@ -61,9 +66,10 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# --- Private subnets + single NAT gateway -----------------------------------
-# One NAT is a cost-shaping choice. Production typically deploys one NAT per
-# AZ so a single-AZ outage does not sever egress for tasks in the healthy AZ.
+# --- Private subnets + NAT gateway(s) ---------------------------------------
+# One shared NAT by default (a cost-shaping choice). With enable_nat_per_az =
+# true there is one NAT per AZ, so a single-AZ outage does not sever egress
+# for tasks in the healthy AZ. local.nat_count drives the fan-out.
 
 resource "aws_subnet" "private" {
   count             = length(var.private_subnet_cidrs)
@@ -78,66 +84,83 @@ resource "aws_subnet" "private" {
 }
 
 resource "aws_eip" "nat" {
+  count  = local.nat_count
   domain = "vpc"
 
   tags = {
-    Name = "${local.name_prefix}-nat-eip"
+    Name = "${local.name_prefix}-nat-eip-${count.index}"
   }
 
   depends_on = [aws_internet_gateway.main]
 }
 
 resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
+  count         = local.nat_count
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
 
   tags = {
-    Name = "${local.name_prefix}-nat"
+    Name = "${local.name_prefix}-nat-${count.index}"
   }
 
   depends_on = [aws_internet_gateway.main]
 }
 
 resource "aws_route_table" "private" {
+  count  = local.nat_count
   vpc_id = aws_vpc.main.id
 
   route {
     cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main.id
+    nat_gateway_id = aws_nat_gateway.main[count.index].id
   }
 
   tags = {
-    Name = "${local.name_prefix}-private-rt"
+    Name = "${local.name_prefix}-private-rt-${count.index}"
   }
 }
 
+# Each private subnet routes through the NAT in its own AZ when per-AZ NAT is
+# on; otherwise every subnet shares the single route table (index 0).
 resource "aws_route_table_association" "private" {
   count          = length(aws_subnet.private)
   subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
+  route_table_id = aws_route_table.private[var.enable_nat_per_az ? count.index : 0].id
 }
 
 # --- Security groups --------------------------------------------------------
+
+# AWS-managed prefix list of CloudFront's origin-facing IP ranges. Fetched
+# only when we intend to lock the ALB down to CloudFront-only ingress.
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  count = var.restrict_alb_to_cloudfront ? 1 : 0
+  name  = "com.amazonaws.global.cloudfront.origin-facing"
+}
 
 resource "aws_security_group" "alb" {
   name        = "${local.name_prefix}-alb"
   description = "Ingress to the public ALB (HTTPS from the world, HTTP redirect)."
   vpc_id      = aws_vpc.main.id
 
+  # By default open to the world; when restrict_alb_to_cloudfront = true the
+  # source becomes CloudFront's managed prefix list so only CloudFront can
+  # reach the ALB directly.
   ingress {
-    description = "HTTPS from anywhere"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "HTTPS (world, or CloudFront-only when restricted)"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    cidr_blocks     = var.restrict_alb_to_cloudfront ? [] : ["0.0.0.0/0"]
+    prefix_list_ids = var.restrict_alb_to_cloudfront ? [data.aws_ec2_managed_prefix_list.cloudfront[0].id] : []
   }
 
   ingress {
-    description = "HTTP for redirect to HTTPS"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "HTTP for redirect to HTTPS (world, or CloudFront-only when restricted)"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    cidr_blocks     = var.restrict_alb_to_cloudfront ? [] : ["0.0.0.0/0"]
+    prefix_list_ids = var.restrict_alb_to_cloudfront ? [data.aws_ec2_managed_prefix_list.cloudfront[0].id] : []
   }
 
   egress {

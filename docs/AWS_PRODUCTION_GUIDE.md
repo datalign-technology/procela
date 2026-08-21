@@ -176,9 +176,12 @@ probe — a bad key shows up there).
 
 Everything above gives you a *working* stack. The items below are what
 separate "reference" from "hardened." Each is: **what it is**, **why it
-matters**, and **how**. Items marked **⚙ needs Terraform** don't have a
-toggle in the module yet — they're the "code later" work; the rest are
-existing variables or AWS console/CLI steps.
+matters**, and **how**. Items marked **✅ Toggle** now have an opt-in
+variable in the module (all default off — flip them in
+`terraform.tfvars`, then `terraform plan` and review; the full table is
+in [`deploy/terraform/README.md`](../deploy/terraform/README.md#production-hardening-toggles)).
+The rest are existing variables, AWS console/CLI steps, or noted as out
+of scope.
 
 Do the **must-haves** for any production system; the **strongly-advised**
 set is expected for anything holding customer data.
@@ -187,10 +190,10 @@ set is expected for anything holding customer data.
 
 | Item | Why | How |
 |---|---|---|
-| **RDS Multi-AZ** | A standby copy in a second AZ fails over automatically if one data center dies. | ⚙ needs Terraform (add `multi_az = true` in `rds.tf`). |
-| **Deletion protection + final snapshot** | Stops an accidental `terraform destroy` from wiping the DB with no backup. | ⚙ needs Terraform (`deletion_protection = true`, `skip_final_snapshot = false`). |
+| **RDS Multi-AZ** | A standby copy in a second AZ fails over automatically if one data center dies. | ✅ Toggle `rds_multi_az = true`. |
+| **Deletion protection + final snapshot** | Stops an accidental `terraform destroy` from wiping the DB with no backup. | ✅ Toggle `rds_deletion_protection = true` (flips deletion protection, final snapshot, and backup retention together). |
 | **Longer backup retention + PITR** | Point-in-time recovery lets you rewind to any second in the window after a bad write. Requires retention > 0. | Raise `db_backup_retention_days` (existing var) to e.g. 14–35. |
-| **Performance Insights** | Diagnose slow queries under load. | ⚙ needs Terraform. |
+| **Performance Insights** | Diagnose slow queries under load. | ✅ Toggle `rds_performance_insights = true`. |
 
 Recovery procedures live in [`DR_RUNBOOK.md` §1](./DR_RUNBOOK.md#1-restore-the-database-from-backup).
 
@@ -200,17 +203,18 @@ Recovery procedures live in [`DR_RUNBOOK.md` §1](./DR_RUNBOOK.md#1-restore-the-
 with keys AWS controls. A **customer-managed key (CMK)** means *you*
 control the key, its rotation, and who can use it — required by most
 compliance regimes.
-**How:** ⚙ needs Terraform — create KMS keys and point RDS, the S3
-buckets, Secrets Manager, and CloudWatch Log groups at them.
+**How:** ✅ Toggle `enable_kms_cmk = true` — creates auto-rotating CMKs
+and points RDS storage, Secrets Manager, the CloudWatch log group, and
+the frontend S3 bucket at them (`deploy/terraform/kms.tf`).
 
 ### 5.3 Network isolation — shrink the attack surface
 
 | Item | Why | How |
 |---|---|---|
-| **Private ALB** | The load balancer shouldn't be reachable from the open internet — only from CloudFront. | ⚙ needs Terraform (CloudFront→ALB via VPC origin or PrivateLink). |
-| **Private CloudFront** | If the frontend isn't meant to be public, gate it (signed URLs/cookies + a CloudFront Function checking auth). | ⚙ needs Terraform. |
-| **VPC endpoints** | Let tasks reach S3/ECR/Secrets Manager/CloudWatch *privately* instead of over the NAT — cheaper and more isolated. | ⚙ needs Terraform. |
-| **NAT gateway per AZ** | The module uses one NAT to save cost; a single-AZ outage then cuts egress for the other AZ. | ⚙ needs Terraform. |
+| **CloudFront-only ALB** | The load balancer shouldn't be reachable from the open internet — only from CloudFront. | ✅ Toggle `restrict_alb_to_cloudfront = true` locks the ALB security group to CloudFront's managed prefix list. (A *fully* private ALB via VPC origin/PrivateLink remains out of scope — see README.) |
+| **Private CloudFront** | If the frontend isn't meant to be public, gate it (signed URLs/cookies + a CloudFront Function checking auth). | Out of scope — needs app-level auth wiring (see README "Still out of scope"). |
+| **VPC endpoints** | Let tasks reach S3/ECR/Secrets Manager/CloudWatch *privately* instead of over the NAT — cheaper and more isolated. | ✅ Toggle `enable_vpc_endpoints = true`. |
+| **NAT gateway per AZ** | The module uses one NAT to save cost; a single-AZ outage then cuts egress for the other AZ. | ✅ Toggle `enable_nat_per_az = true`. |
 
 ### 5.4 Edge protection — block bad traffic before it lands
 
@@ -218,36 +222,40 @@ buckets, Secrets Manager, and CloudWatch Log groups at them.
   injection, bad bots, rate floods). **Must-have for a public app.**
 - **AWS Shield Advanced** — extra DDoS protection if your org subscribes.
 
-**How:** ⚙ needs Terraform (attach a WAF web ACL to the CloudFront
-distribution).
+**How:** ✅ Toggle `enable_waf = true` — creates a WAFv2 web ACL (AWS
+managed rule groups + a `waf_rate_limit` rate rule) and attaches it to
+CloudFront (`deploy/terraform/waf.tf`). Shield Advanced is a separate
+AWS subscription, enabled outside this module.
 
 ### 5.5 Secrets rotation
 
 **What:** Long-lived secrets (especially the DB password) should rotate
-automatically. **How:** Secrets Manager rotation Lambdas (⚙ needs
-Terraform). The *manual* rotation steps for every secret are already
-documented in [`DR_RUNBOOK.md` §3](./DR_RUNBOOK.md#3-rotate-a-compromised-secret--api-key) —
-automate them next.
+automatically. **How:** ✅ Toggle `enable_db_secret_rotation = true` and
+pass `db_rotation_lambda_arn` (deploy AWS's SAR Postgres rotation Lambda
+first — see the Terraform README "Secret rotation"). The *manual*
+rotation steps for every secret are documented in
+[`DR_RUNBOOK.md` §3](./DR_RUNBOOK.md#3-rotate-a-compromised-secret--api-key).
 
 ### 5.6 Observability — see what's happening
 
 - **Access logs** on the ALB and CloudFront → a dedicated, locked-down
-  log bucket. ⚙ needs Terraform.
+  log bucket. ✅ Toggle `enable_access_logs = true`.
 - **Ship application logs** somewhere queryable (OpenSearch/Datadog)
-  rather than only CloudWatch. ⚙ needs Terraform / integration.
+  rather than only CloudWatch. Out of scope — integration-specific.
 - **CloudWatch alarms** on the essentials: backend 5xx rate, ECS
   CPU/memory, RDS CPU/storage/connections, ALB unhealthy hosts — wired to
-  a pager/Slack. ⚙ needs Terraform.
+  a pager/Slack. ✅ Toggle `enable_monitoring_alarms = true` (+ optional
+  `alarm_email`); subscribe a pager/Slack to the output SNS topic.
 
 ### 5.7 Threat detection & audit trail
 
-Turn these on (console or Terraform), ideally aggregated into the
-security account:
+Each has a toggle (`security.tf`); in a multi-account org you'd
+typically also aggregate findings into a dedicated security account.
 
-- **CloudTrail** — records every AWS API call (who did what).
-- **GuardDuty** — flags suspicious activity automatically.
-- **AWS Config** — tracks resource configuration drift/compliance.
-- **Security Hub** — one dashboard across the above.
+- **CloudTrail** — records every AWS API call (who did what). ✅ `enable_cloudtrail = true`.
+- **GuardDuty** — flags suspicious activity automatically. ✅ `enable_guardduty = true`.
+- **AWS Config** — tracks resource configuration drift/compliance. ✅ `enable_config = true`.
+- **Security Hub** — one dashboard across the above. ✅ `enable_security_hub = true`.
 
 > Procela also has its **own** in-app audit log (every entity change is
 > hash-chained). AWS CloudTrail covers the *infrastructure* layer; the
@@ -308,21 +316,30 @@ A backup you've never restored is a guess, not a backup.
 
 ## What's already coded vs. what's "code later"
 
-Because you chose *guide-first*, here's the honest split so you know the
-size of the remaining Terraform work:
+Here's the honest split so you know exactly what a toggle covers and
+what's left to you.
 
-**Already in the module (turn on via variables / after-apply steps):**
-base VPC + subnets, RDS Postgres, ECS Fargate, ALB (HTTPS), CloudFront +
-S3 frontend, Secrets Manager wiring, optional Redis, backup-retention and
-log-retention knobs, `desired_count` scaling, and the auth-provider vars.
+**The reference stack (always on):** base VPC + subnets, RDS Postgres,
+ECS Fargate, ALB (HTTPS), CloudFront + S3 frontend, Secrets Manager
+wiring, optional Redis, backup-retention and log-retention knobs,
+`desired_count` scaling, and the auth-provider vars.
 
-**Not yet coded (the ⚙ items above) — candidate follow-up PRs:**
-Multi-AZ + deletion protection + final snapshot, KMS CMKs, WAF, private
-ALB / private CloudFront, VPC endpoints, NAT-per-AZ, access logs, alarms,
-secrets-rotation Lambdas, GuardDuty/Config/Security Hub/CloudTrail, and a
-per-environment stack layout.
+**Hardening — now shipped as opt-in toggles** (all default off; flip in
+`terraform.tfvars`, then `terraform plan` and review): Multi-AZ,
+deletion protection + final snapshot, Performance Insights, KMS CMKs,
+WAF, CloudFront-only ALB + drop-invalid-headers, VPC endpoints,
+NAT-per-AZ, access logs, CloudWatch alarms + SNS, DB secret rotation
+(bring a rotation Lambda ARN), and GuardDuty / Security Hub / AWS Config
+/ CloudTrail. The full toggle table is in
+[`deploy/terraform/README.md`](../deploy/terraform/README.md#production-hardening-toggles).
+
+**Still genuinely out of scope** (process/pipeline or app-level work, not
+a single module toggle): a *fully* private ALB via CloudFront VPC origin
+/ PrivateLink (the toggle above locks ingress to CloudFront IPs, which
+covers the common case), private CloudFront with app-level auth, shipping
+application logs to OpenSearch/Datadog, a CI/CD pipeline, and a
+per-environment / per-account stack layout.
 
 The Terraform README says it plainly: *"None of these are hard to bolt on
 — the module is deliberately kept small so the delta from reference to
-hardened is auditable."* When you're ready, we can implement these as
-reviewable, one-concern-at-a-time PRs.
+hardened is auditable."*
