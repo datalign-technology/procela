@@ -731,11 +731,21 @@ const SECTION_LABELS: Record<SectionKey, string> = {
 interface StoredLayout { order: string[]; hidden: string[]; width?: Record<string, SectionWidth> }
 
 function useDashboardLayout() {
-  const STORAGE_KEY = 'procela_dashboard_layout';
+  // Scope the saved layout to the signed-in user, so two people sharing a
+  // browser (or the same device across accounts) don't clobber each other's
+  // dashboard. `read` falls back to the legacy shared key so anyone who
+  // customized before this change keeps their layout until they next adjust
+  // it — the first write lands under the per-user key.
+  const userId = useAuthStore((s) => s.user?.id) ?? 'anon';
+  const STORAGE_KEY = `procela_dashboard_layout:${userId}`;
+  const LEGACY_KEY = 'procela_dashboard_layout';
   const KNOWN_KEYS = new Set<SectionKey>(DEFAULT_SECTIONS);
   const isKnown = (k: string): k is SectionKey => KNOWN_KEYS.has(k as SectionKey);
   const read = (): StoredLayout | null => {
-    try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) as StoredLayout : null; } catch { return null; }
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
+      return raw ? JSON.parse(raw) as StoredLayout : null;
+    } catch { return null; }
   };
 
   const [order, setOrder] = useState<SectionKey[]>(() => {
