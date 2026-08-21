@@ -32,6 +32,9 @@ import { governanceControls } from '../routes/governance-controls';
 import { governanceGroups } from '../routes/governance-groups';
 import { governancePrograms } from '../routes/governance-program';
 import { decisionRights } from '../routes/decision-rights';
+import { skills } from '../routes/skills';
+import { damaRoles } from '../routes/dama-roles';
+import { raciOverrides } from '../routes/dashboard';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
@@ -57,6 +60,9 @@ import { getGovernanceControlsRepository } from '../db/governance-controls.repo'
 import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
 import { getGovernanceProgramsRepository } from '../db/governance-programs.repo';
 import { getDecisionRightsRepository } from '../db/decision-rights.repo';
+import { getSkillsRepository } from '../db/skills.repo';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
+import { getRaciOverridesRepository } from '../db/raci-overrides.repo';
 
 const P = 'demo-'; // shared prefix — sweep target on reseed
 
@@ -145,6 +151,8 @@ interface DemoRepos {
   governanceGroups: Repository<any>;
   governancePrograms: Repository<any>;
   decisionRights: Repository<any>;
+  skills: Repository<any>;
+  damaRoles: Repository<any>;
 }
 
 function buildRepos(): DemoRepos {
@@ -170,7 +178,15 @@ function buildRepos(): DemoRepos {
     governanceGroups: getGovernanceGroupsRepository(governanceGroups as any),
     governancePrograms: getGovernanceProgramsRepository(governancePrograms as any),
     decisionRights: getDecisionRightsRepository(decisionRights as any),
+    skills: getSkillsRepository(skills as any),
+    damaRoles: getDamaRolesRepository(damaRoles as any),
   };
+}
+
+/** RACI overrides use a non-standard repo (list/upsert/remove, composite
+ *  key, no id) so they live outside DemoRepos. Built on demand. */
+function raciRepo() {
+  return getRaciOverridesRepository(raciOverrides as any);
 }
 
 /** Create every row in `rows` through `repo`, in order. */
@@ -210,6 +226,18 @@ async function sweepHierarchy(repo: Repository<any>): Promise<void> {
   }
 }
 
+/** RACI overrides have no id — they key on (nodeId, personId). Demo
+ *  rows are identified by their `demo-`-prefixed nodeId. */
+async function sweepRaci(): Promise<void> {
+  const repo = raciRepo();
+  const all = await repo.list();
+  for (const row of all) {
+    if (typeof row?.nodeId === 'string' && row.nodeId.startsWith(P)) {
+      await repo.remove(row.nodeId, row.personId);
+    }
+  }
+}
+
 async function sweep(repos: DemoRepos): Promise<void> {
   // Reverse dependency order — children before parents — so Postgres
   // FK checks pass even where a relation is RESTRICT rather than
@@ -217,6 +245,9 @@ async function sweep(repos: DemoRepos): Promise<void> {
   // Governance-depth entities first: decision rights + program are
   // independent; groups self-parent (leaf-first); controls reference
   // policies (controls before policies).
+  await sweepRaci();
+  await sweepRepo(repos.damaRoles);
+  await sweepRepo(repos.skills);
   await sweepRepo(repos.decisionRights);
   await sweepRepo(repos.governancePrograms);
   await sweepHierarchy(repos.governanceGroups);
@@ -298,6 +329,74 @@ async function seedGovernanceDepth(repos: DemoRepos, ts: string, ctx: GovDepthCt
     { id: P + 'dr-classification', orgId, decision: 'Approve data classification changes', description: 'Who signs off when an asset\'s sensitivity tier changes.', category: 'CLASSIFICATION', decider: cdoId, deciderType: 'PERSON', recommends: ['DATA_GOVERNANCE_LEAD'], approves: ['CDO'], informed: ['DATA_OWNER'], escalationPath: 'Council → CDO', createdAt: ts, updatedAt: ts },
     { id: P + 'dr-dispute', orgId, decision: 'Resolve cross-domain data disputes', description: 'Escalation path when two domains disagree on ownership.', category: 'ISSUE', decider: grpCouncil.id, deciderType: 'GROUP', recommends: ['DATA_OWNER'], approves: ['DATA_GOVERNANCE_LEAD'], informed: ['CDO'], escalationPath: 'Domain owners → Council', createdAt: ts, updatedAt: ts },
   ]);
+}
+
+// ── People depth (shared by both industry profiles) ─────────────────
+// A skills catalog (one per DAMA-ish competency), skill assignments on
+// the key personas, the DAMA role map, and one RACI override. Like
+// governance depth, the content is industry-neutral so both profiles
+// get identical people depth — only the org, domains, and personas
+// differ. Skills catalog ids are fixed `demo-skill-*` strings.
+interface PeopleDepthCtx {
+  orgId: string;
+  domainIds: [string, string, string];
+  cdoId: string;
+  govLeadId: string;
+  dataOwnerId: string;
+  stewardId: string;
+  techStewardId: string;
+  engineerId: string;
+  architectId: string;
+  raciNodeId: string;
+  raciPersonId: string;
+}
+
+async function seedPeopleDepth(repos: DemoRepos, ts: string, ctx: PeopleDepthCtx): Promise<void> {
+  const { orgId } = ctx;
+  const sid = (k: string) => P + 'skill-' + k;
+
+  // Skills catalog — one per competency category.
+  const skillDefs: Array<[string, string, string, string]> = [
+    ['dq', 'DATA_QUALITY', 'Data Quality Management', 'Profiling, rules, remediation, and DQ measurement.'],
+    ['meta', 'METADATA', 'Metadata Management', 'Cataloguing, lineage, and business-glossary curation.'],
+    ['arch', 'ARCHITECTURE', 'Data Architecture', 'Modelling, integration patterns, and platform design.'],
+    ['sec', 'SECURITY', 'Data Security & Privacy', 'Classification, access control, and privacy compliance.'],
+    ['integ', 'INTEGRATION', 'Data Integration', 'Pipelines, ELT, and source-system connectivity.'],
+    ['analytics', 'ANALYTICS', 'Analytics & BI', 'Reporting, dashboards, and self-service analytics.'],
+    ['gov', 'GOVERNANCE', 'Data Governance', 'Policy, stewardship, and operating-model design.'],
+    ['comm', 'COMMUNICATION', 'Stakeholder Communication', 'Facilitation, training, and change management.'],
+  ];
+  await createAll(repos.skills, skillDefs.map(([k, category, name, description]) => ({
+    id: sid(k), orgId, name, description, category, createdAt: ts, updatedAt: ts,
+  })));
+
+  // Skill assignments — denormalized onto Person.skillIds.
+  const assignments: Array<[string, string[]]> = [
+    [ctx.cdoId, ['gov', 'comm']],
+    [ctx.govLeadId, ['gov', 'meta']],
+    [ctx.dataOwnerId, ['analytics', 'gov']],
+    [ctx.stewardId, ['dq', 'meta']],
+    [ctx.techStewardId, ['integ', 'dq']],
+    [ctx.engineerId, ['integ', 'arch']],
+    [ctx.architectId, ['arch', 'sec']],
+  ];
+  for (const [personId, keys] of assignments) {
+    await repos.people.update(personId, { skillIds: keys.map(sid) });
+  }
+
+  // DAMA role map.
+  await createAll(repos.damaRoles, [
+    { id: P + 'dama-cdo', personId: ctx.cdoId, agentId: null, agentName: null, roleType: 'CDO', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
+    { id: P + 'dama-govlead', personId: ctx.govLeadId, agentId: null, agentName: null, roleType: 'DATA_GOVERNANCE_LEAD', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
+    { id: P + 'dama-owner', personId: ctx.dataOwnerId, agentId: null, agentName: null, roleType: 'DATA_OWNER', scopeType: 'DOMAIN', scopeId: ctx.domainIds[0], since: ts, createdAt: ts },
+    { id: P + 'dama-bsteward', personId: ctx.stewardId, agentId: null, agentName: null, roleType: 'BUSINESS_DATA_STEWARD', scopeType: 'DOMAIN', scopeId: ctx.domainIds[0], since: ts, createdAt: ts },
+    { id: P + 'dama-tsteward', personId: ctx.techStewardId, agentId: null, agentName: null, roleType: 'TECHNICAL_DATA_STEWARD', scopeType: 'DOMAIN', scopeId: ctx.domainIds[1], since: ts, createdAt: ts },
+    { id: P + 'dama-engineer', personId: ctx.engineerId, agentId: null, agentName: null, roleType: 'DATA_ENGINEER', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
+    { id: P + 'dama-architect', personId: ctx.architectId, agentId: null, agentName: null, roleType: 'DATA_ARCHITECT', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
+  ]);
+
+  // One RACI override so the matrix shows a deliberate deviation.
+  await raciRepo().upsert({ nodeId: ctx.raciNodeId, personId: ctx.raciPersonId, value: 'C', reason: 'Consulted for cross-domain impact review' } as any);
 }
 
 export interface DemoSeedReport {
@@ -850,6 +949,21 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     tenantName: 'Tidewater Utilities',
   });
 
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgTidewater.id,
+    domainIds: [domCustomer.id, domOps.id, domRegulatory.id],
+    cdoId: susan.id,
+    govLeadId: marisol.id,
+    dataOwnerId: devon.id,
+    stewardId: natalie.id,
+    techStewardId: brandon.id,
+    engineerId: kwame.id,
+    architectId: amara.id,
+    raciNodeId: actTriage.id,
+    raciPersonId: melissa.id,
+  });
+
   logger.info({ persona: susan.name }, 'Demo data seeded');
 
   return {
@@ -1189,6 +1303,21 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
     dataOwnerId: grant.id,
     stewardIds: [dmitri.id, warrick.id],
     tenantName: 'Meridian Shipbuilding',
+  });
+
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgMeridian.id,
+    domainIds: [domDesign.id, domProduction.id, domQuality.id],
+    cdoId: elena.id,
+    govLeadId: priyanka.id,
+    dataOwnerId: grant.id,
+    stewardId: dmitri.id,
+    techStewardId: warrick.id,
+    engineerId: ravi.id,
+    architectId: meghan.id,
+    raciNodeId: actWeld.id,
+    raciPersonId: chenwei.id,
   });
 
   logger.info({ persona: elena.name }, 'Demo data seeded (shipbuilding)');
