@@ -72,6 +72,12 @@ const { skills } = require('../routes/skills');
 const { damaRoles } = require('../routes/dama-roles');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { raciOverrides } = require('../routes/dashboard');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { sops } = require('../routes/sops');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { glossaryTerms } = require('../routes/business-glossary');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { operationsManuals } = require('../routes/operations-manuals');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -148,6 +154,9 @@ describe('demo-seed endpoint', () => {
       [decisionRights, 'decisionRights'],
       [skills, 'skills'],
       [damaRoles, 'damaRoles'],
+      [sops, 'sops'],
+      [glossaryTerms, 'glossaryTerms'],
+      [operationsManuals, 'operationsManuals'],
     ];
     for (const [arr, name] of stores) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
@@ -172,7 +181,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals]) sweep(s);
     // RACI overrides key on nodeId (no id) — clear demo-prefixed nodes.
     for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith('demo-')) raciOverrides.splice(i, 1);
   });
@@ -416,6 +425,18 @@ describe('demo-seed endpoint', () => {
       const demoRaci = raciOverrides.filter((r: any) => r?.nodeId?.startsWith('demo-'));
       assert.strictEqual(demoRaci.length, 1, 'one RACI override');
       assert.ok(['R', 'A', 'C', 'I'].includes(demoRaci[0].value));
+    });
+
+    it(`seeds docs depth (SOPs, glossary, operations manuals) for ${industry}`, async () => {
+      await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      assert.strictEqual(demo(sops).length, 3, 'SOPs');
+      assert.strictEqual(demo(glossaryTerms).length, 4, 'glossary terms');
+      assert.strictEqual(demo(operationsManuals).length, 3, 'operations manuals');
+
+      // SOPs carry ordered steps; glossary has an approved term.
+      assert.ok(demo(sops).every((s: any) => Array.isArray(s.steps) && s.steps.length > 0));
+      assert.ok(demo(glossaryTerms).some((t: any) => t.status === 'APPROVED'));
     });
   }
 });

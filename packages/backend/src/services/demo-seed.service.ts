@@ -35,6 +35,9 @@ import { decisionRights } from '../routes/decision-rights';
 import { skills } from '../routes/skills';
 import { damaRoles } from '../routes/dama-roles';
 import { raciOverrides } from '../routes/dashboard';
+import { sops } from '../routes/sops';
+import { glossaryTerms } from '../routes/business-glossary';
+import { operationsManuals } from '../routes/operations-manuals';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
@@ -63,6 +66,9 @@ import { getDecisionRightsRepository } from '../db/decision-rights.repo';
 import { getSkillsRepository } from '../db/skills.repo';
 import { getDamaRolesRepository } from '../db/dama-roles.repo';
 import { getRaciOverridesRepository } from '../db/raci-overrides.repo';
+import { getSopsRepository } from '../db/sops.repo';
+import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
+import { getOperationsManualsRepository } from '../db/operations-manuals.repo';
 
 const P = 'demo-'; // shared prefix — sweep target on reseed
 
@@ -153,6 +159,9 @@ interface DemoRepos {
   decisionRights: Repository<any>;
   skills: Repository<any>;
   damaRoles: Repository<any>;
+  sops: Repository<any>;
+  glossaryTerms: Repository<any>;
+  operationsManuals: Repository<any>;
 }
 
 function buildRepos(): DemoRepos {
@@ -180,6 +189,9 @@ function buildRepos(): DemoRepos {
     decisionRights: getDecisionRightsRepository(decisionRights as any),
     skills: getSkillsRepository(skills as any),
     damaRoles: getDamaRolesRepository(damaRoles as any),
+    sops: getSopsRepository(sops as any),
+    glossaryTerms: getGlossaryTermsRepository(glossaryTerms as any),
+    operationsManuals: getOperationsManualsRepository(operationsManuals as any),
   };
 }
 
@@ -245,6 +257,9 @@ async function sweep(repos: DemoRepos): Promise<void> {
   // Governance-depth entities first: decision rights + program are
   // independent; groups self-parent (leaf-first); controls reference
   // policies (controls before policies).
+  await sweepRepo(repos.operationsManuals);
+  await sweepRepo(repos.glossaryTerms);
+  await sweepRepo(repos.sops);
   await sweepRaci();
   await sweepRepo(repos.damaRoles);
   await sweepRepo(repos.skills);
@@ -397,6 +412,44 @@ async function seedPeopleDepth(repos: DemoRepos, ts: string, ctx: PeopleDepthCtx
 
   // One RACI override so the matrix shows a deliberate deviation.
   await raciRepo().upsert({ nodeId: ctx.raciNodeId, personId: ctx.raciPersonId, value: 'C', reason: 'Consulted for cross-domain impact review' } as any);
+}
+
+// ── Docs depth (shared by both industry profiles) ───────────────────
+// SOPs, business-glossary terms, and role operations manuals. Content
+// is industry-neutral governance documentation, so both profiles get
+// identical docs depth — only the org, owner, and one domain link
+// differ.
+interface DocsDepthCtx {
+  orgId: string;
+  ownerId: string;
+  cdoId: string;
+  domainId: string;
+}
+
+async function seedDocsDepth(repos: DemoRepos, ts: string, ctx: DocsDepthCtx): Promise<void> {
+  const { orgId, ownerId, cdoId, domainId } = ctx;
+
+  // SOPs (3).
+  await createAll(repos.sops, [
+    { id: P + 'sop-onboard', orgId, code: 'SOP-001', title: 'Onboard a new data asset', purpose: 'Register a new asset with an owner, a tier, and a domain so it enters governance.', category: 'ONBOARDING', applicableRoles: ['DATA_OWNER', 'BUSINESS_DATA_STEWARD'], triggerEvent: 'A new data asset is discovered or created.', steps: [{ order: 1, title: 'Register the asset', description: 'Create the asset record with a business description.', estimatedMinutes: 10 }, { order: 2, title: 'Assign owner + steward', description: 'Set the accountable owner and the operational steward.', estimatedMinutes: 5 }, { order: 3, title: 'Set governance tier', description: 'Classify Bronze / Silver / Gold and note the rationale.', estimatedMinutes: 5 }], status: 'ACTIVE', version: 1, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+    { id: P + 'sop-dq-incident', orgId, code: 'SOP-002', title: 'Respond to a data quality incident', purpose: 'Triage and resolve a failing data quality rule before it reaches a report.', category: 'INCIDENT', applicableRoles: ['DATA_QUALITY_ANALYST', 'TECHNICAL_DATA_STEWARD'], triggerEvent: 'A data quality rule moves to FAILING.', steps: [{ order: 1, title: 'Confirm the failure', description: 'Re-run the rule and inspect the failure samples.', estimatedMinutes: 15 }, { order: 2, title: 'Open an issue', description: 'Raise a governance issue and assign the domain steward.', estimatedMinutes: 5 }, { order: 3, title: 'Remediate + re-measure', description: 'Fix at source, then re-run to confirm PASSING.', estimatedMinutes: 30 }], status: 'ACTIVE', version: 1, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+    { id: P + 'sop-access-review', orgId, code: 'SOP-003', title: 'Quarterly access recertification', purpose: 'Owners recertify who can access their assets each quarter.', category: 'REVIEW', applicableRoles: ['DATA_OWNER'], triggerEvent: 'Start of each quarter.', steps: [{ order: 1, title: 'Pull the access list', description: 'Export current grants per owned asset.', estimatedMinutes: 10 }, { order: 2, title: 'Certify or revoke', description: 'Confirm each grant is still needed; revoke the rest.', estimatedMinutes: 20 }], status: 'DRAFT', version: 1, ownerPersonId: cdoId, createdAt: ts, updatedAt: ts },
+  ]);
+
+  // Glossary terms (4).
+  await createAll(repos.glossaryTerms, [
+    { id: P + 'term-golden-record', orgId, term: 'Golden Record', definition: 'The single authoritative version of an entity, reconciled across source systems.', context: 'Master data management.', synonyms: ['System of Record', 'Single Source of Truth'], domainId, ownerPersonId: ownerId, status: 'APPROVED', category: 'BUSINESS', exampleValues: 'The reconciled customer master row for account 10432.', businessRules: 'One golden record per real-world entity; conflicts resolved by survivorship rules.', sourceOfTruth: 'Master Data Management hub', createdAt: ts, updatedAt: ts },
+    { id: P + 'term-governance-tier', orgId, term: 'Governance Tier', definition: 'The maturity level at which an asset is governed: Bronze, Silver, or Gold.', context: 'Data governance.', synonyms: ['Data Tier'], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: 'Bronze, Silver, Gold', businessRules: 'Gold requires an owner, DQ rules, and a certified definition.', sourceOfTruth: 'Data Governance Standard', createdAt: ts, updatedAt: ts },
+    { id: P + 'term-data-owner', orgId, term: 'Data Owner', definition: 'The person accountable for an asset or domain — its quality, access, and lifecycle.', context: 'Accountability model.', synonyms: [], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: '', businessRules: 'Exactly one owner per asset; must be a named person, not a team.', sourceOfTruth: 'Data Governance Charter', createdAt: ts, updatedAt: ts },
+    { id: P + 'term-data-domain', orgId, term: 'Data Domain', definition: 'A logical grouping of related data assets under a single stewardship remit.', context: 'Domain model.', synonyms: ['Subject Area'], domainId: null, ownerPersonId: ownerId, status: 'PROPOSED', category: 'TECHNICAL', exampleValues: 'Customer Data, Operational Data', businessRules: 'Every asset belongs to exactly one domain.', sourceOfTruth: 'Domain catalogue', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // Operations manuals (3) — per DAMA role.
+  await createAll(repos.operationsManuals, [
+    { id: P + 'om-cdo', orgId, roleType: 'CDO', label: 'Chief Data Officer Operations', purpose: 'The recurring cadence for the enterprise data leader.', daily: ['Scan the open-issues bell for anything critical.'], weekly: ['Chair the Data Governance Council.', 'Review portfolio health + coverage trend.'], monthly: ['Report program metrics to the executive team.'], quarterly: ['Refresh the governance roadmap.', 'Sponsor a maturity assessment.'], escalation: ['Unresolved cross-domain disputes escalate to the CDO.'], customContent: '', isCustom: false, ownerPersonId: cdoId, createdAt: ts, updatedAt: ts },
+    { id: P + 'om-owner', orgId, roleType: 'DATA_OWNER', label: 'Data Owner Operations', purpose: 'The recurring cadence for a domain data owner.', daily: [], weekly: ['Triage new issues on owned assets.'], monthly: ['Review DQ scorecards for owned domains.'], quarterly: ['Run access recertification (SOP-003).'], escalation: ['Tier-drop on a critical asset escalates to the Council.'], customContent: '', isCustom: false, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+    { id: P + 'om-steward', orgId, roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward Operations', purpose: 'The recurring cadence for a business data steward.', daily: ['Clear the metadata queue for assigned assets.'], weekly: ['Review AI-suggested sensitivity tags.'], monthly: ['Reconcile glossary terms with source-of-truth changes.'], quarterly: [], escalation: ['Ambiguous ownership escalates to the Data Owner.'], customContent: '', isCustom: false, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+  ]);
 }
 
 export interface DemoSeedReport {
@@ -964,6 +1017,9 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     raciPersonId: melissa.id,
   });
 
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgTidewater.id, ownerId: natalie.id, cdoId: susan.id, domainId: domCustomer.id });
+
   logger.info({ persona: susan.name }, 'Demo data seeded');
 
   return {
@@ -1319,6 +1375,9 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
     raciNodeId: actWeld.id,
     raciPersonId: chenwei.id,
   });
+
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgMeridian.id, ownerId: dmitri.id, cdoId: elena.id, domainId: domDesign.id });
 
   logger.info({ persona: elena.name }, 'Demo data seeded (shipbuilding)');
 
