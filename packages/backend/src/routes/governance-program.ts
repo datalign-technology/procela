@@ -120,31 +120,45 @@ function buildDefaultProgram(orgId: string): StoredGovernanceProgram {
 // Phase computation
 // ---------------------------------------------------------------------------
 
-function computePhaseStatus(program: StoredGovernanceProgram): PhaseStatus {
-  // Defensive require avoids circular dependency issues when this module
-  // is imported during the initial load of its siblings.
-  let domains: any[] = [];
-  let governanceGroups: any[] = [];
-  let damaRoles: any[] = [];
-  let processNodes: any[] = [];
-  let policies: any[] = [];
-  let governanceTasks: any[] = [];
-  try { domains = require('./data-domains').dataDomains; } catch {}
-  try { governanceGroups = require('./governance-groups').governanceGroups; } catch {}
-  try { damaRoles = require('./dama-roles').damaRoles; } catch {}
-  try { processNodes = require('./process-catalog').processNodes; } catch {}
-  try { policies = require('./governance-policies').governancePolicies; } catch {}
-  try { governanceTasks = require('./governance-tasks').governanceTasks; } catch {}
+// Load an org's slice of a sibling store through its repository. The lazy
+// require keeps the original circular-import safety (this module is imported
+// while its siblings are still loading), and going through the repo — rather
+// than reading the in-memory array directly — is what makes phase computation
+// correct in Postgres mode, where those arrays are empty and the DB is the
+// source of truth.
+async function listOrgScoped(
+  routePath: string,
+  arrayExport: string,
+  repoPath: string,
+  repoAccessor: string,
+  orgId: string,
+): Promise<any[]> {
+  try {
+    const store = require(routePath)[arrayExport];
+    const getRepo = require(repoPath)[repoAccessor];
+    const repo = getRepo(store);
+    return await repo.list({ orgId });
+  } catch {
+    return [];
+  }
+}
 
+async function computePhaseStatus(program: StoredGovernanceProgram): Promise<PhaseStatus> {
   const orgId = program.orgId;
 
-  const orgDomains = domains.filter((d: any) => d.orgId === orgId);
-  const orgGroups = governanceGroups.filter((g: any) => g.orgId === orgId);
-  const orgRoles = damaRoles.filter(
+  const [orgDomains, orgGroups, allRoles, orgPolicies, orgProcesses] = await Promise.all([
+    listOrgScoped('./data-domains', 'dataDomains', '../db/data-domains.repo', 'getDataDomainsRepository', orgId),
+    listOrgScoped('./governance-groups', 'governanceGroups', '../db/governance-groups.repo', 'getGovernanceGroupsRepository', orgId),
+    // DamaRole has no orgId column — its repo.list ignores the filter and
+    // returns every row, so scope it here by the ORG-scoped assignment.
+    listOrgScoped('./dama-roles', 'damaRoles', '../db/dama-roles.repo', 'getDamaRolesRepository', orgId),
+    listOrgScoped('./governance-policies', 'governancePolicies', '../db/governance-policies.repo', 'getGovernancePoliciesRepository', orgId),
+    listOrgScoped('./process-catalog', 'processNodes', '../db/process-nodes.repo', 'getProcessNodesRepository', orgId),
+  ]);
+
+  const orgRoles = allRoles.filter(
     (r: any) => r.scopeType === 'ORG' && r.scopeId === orgId,
   );
-  const orgPolicies = policies.filter((p: any) => p.orgId === orgId);
-  const orgProcesses = processNodes.filter((n: any) => n.orgId === orgId);
 
   // ── Phase 1 — Foundation Definition
   const phase1Checks: PhaseCheck[] = [
@@ -284,8 +298,8 @@ function computePhaseStatus(program: StoredGovernanceProgram): PhaseStatus {
 // Recommendations
 // ---------------------------------------------------------------------------
 
-function computeRecommendations(program: StoredGovernanceProgram): Recommendation[] {
-  const status = computePhaseStatus(program);
+async function computeRecommendations(program: StoredGovernanceProgram): Promise<Recommendation[]> {
+  const status = await computePhaseStatus(program);
   const recs: Recommendation[] = [];
 
   // Phase 1
@@ -440,11 +454,15 @@ router.get('/', async (req: Request, res: Response) => {
   const orgIdQuery = req.query.orgId as string | undefined;
   const orgId = orgIdQuery || DEV_ORG_ID;
 
+  // Read through the repository so Postgres mode sees seeded/created
+  // programs — the in-memory `governancePrograms` array is empty there.
+  const all = await governanceProgramsRepo.list();
+
   // Prefer an exact-match program for this org. Fall back to org-scope
   // filter only if no direct match — programs are per-org.
-  let program = governancePrograms.find((p) => p.orgId === orgId);
+  let program = all.find((p) => p.orgId === orgId);
   if (!program) {
-    const scoped = filterByOrgScope(governancePrograms, orgId);
+    const scoped = filterByOrgScope(all, orgId);
     program = scoped[0];
   }
 
@@ -460,7 +478,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/governance-program/:id — update the program */
 router.put('/:id', async (req: Request, res: Response) => {
-  const program = governancePrograms.find((p) => p.id === req.params.id);
+  const program = await governanceProgramsRepo.get(String(req.params.id));
   if (!program) {
     res.status(404).json({ success: false, error: 'Governance program not found' });
     return;
@@ -550,7 +568,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     // Entering ACTIVE (launch or relaunch) is gated on phase completion.
     if (to === 'ACTIVE') {
-      const phaseStatus = computePhaseStatus(program);
+      const phaseStatus = await computePhaseStatus(program);
       const p = phaseStatus.phases;
 
       // Phase 1 is a hard prerequisite — launching with no scope or
@@ -628,23 +646,23 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-program/:id/status — compute current phase */
 router.get('/:id/status', async (req: Request, res: Response) => {
-  const program = governancePrograms.find((p) => p.id === req.params.id);
+  const program = await governanceProgramsRepo.get(String(req.params.id));
   if (!program) {
     res.status(404).json({ success: false, error: 'Governance program not found' });
     return;
   }
-  const status = computePhaseStatus(program);
+  const status = await computePhaseStatus(program);
   res.json({ success: true, data: status });
 });
 
 /** GET /api/v1/governance-program/:id/recommendations — next-step suggestions */
 router.get('/:id/recommendations', async (req: Request, res: Response) => {
-  const program = governancePrograms.find((p) => p.id === req.params.id);
+  const program = await governanceProgramsRepo.get(String(req.params.id));
   if (!program) {
     res.status(404).json({ success: false, error: 'Governance program not found' });
     return;
   }
-  const recommendations = computeRecommendations(program);
+  const recommendations = await computeRecommendations(program);
   res.json({ success: true, data: recommendations });
 });
 

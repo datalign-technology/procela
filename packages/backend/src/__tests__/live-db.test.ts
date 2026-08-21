@@ -75,6 +75,13 @@ import { executeReport } from '../services/report-engine';
 import { getVisibleOrgScope, refreshOrgScopeCache } from '../lib/org-scope';
 import { getSettingRepository } from '../db/settings.repo';
 
+// The governance-program route is exercised end-to-end over HTTP below — it
+// reads the program AND computes phase status from sibling stores, all of
+// which are empty in Postgres mode unless the handlers go through the repos.
+import express from 'express';
+import type { AddressInfo } from 'net';
+import govProgramRouter from '../routes/governance-program';
+
 // Lazy-require the Prisma client so this file doesn't blow up
 // module-load when Prisma hasn't been generated (local dev without
 // DATABASE_URL). The test bodies only touch it when running.
@@ -897,5 +904,66 @@ suite('live-db business flows', () => {
     const read = await repo.get<typeof value>('branding');
     assert.deepStrictEqual(read, value);
     assert.strictEqual(await repo.get('never-set'), null);
+  });
+
+  it('governance-program route: GET + status read the seeded program from Postgres, not an empty default', async () => {
+    const { orgId, personId } = await seedFixture();
+    const now = new Date().toISOString();
+
+    // A rich program plus the Phase 1/2 prerequisites, all via the Prisma
+    // repos — this mirrors what the demo seeder writes to Postgres.
+    const programs = prismaRepo(prismaGovernanceProgramsRepository);
+    const programId = randomUUID();
+    await programs.create({
+      id: programId, orgId, name: 'Seeded Program',
+      scope: { inScope: 'Everything in the catalog', outOfScope: '', boundaries: '', constraints: '' },
+      principles: { vision: 'Trusted data', principles: ['P1', 'P2'], decisionRights: '', operatingModel: 'FEDERATED' },
+      targetStartDate: null, targetLaunchDate: null,
+      status: 'ACTIVE', createdAt: now, updatedAt: now,
+    });
+    const domains = prismaRepo(prismaDataDomainsRepository);
+    await domains.create({
+      id: randomUUID(), orgId, name: 'Customer', description: '', ownerId: personId,
+      stewardIds: [], dataAssetIds: [], status: 'ACTIVE', createdAt: now, updatedAt: now,
+    });
+    const groups = prismaRepo(prismaGovernanceGroupsRepository);
+    await groups.create({
+      id: randomUUID(), orgId, name: 'Council', type: 'COUNCIL', parentId: null,
+      description: '', charter: '', status: 'ACTIVE', members: [], createdAt: now, updatedAt: now,
+    });
+    const dama = prismaRepo(prismaDamaRolesRepository);
+    for (const roleType of ['CDO', 'DATA_GOVERNANCE_LEAD']) {
+      await dama.create({
+        id: randomUUID(), personId, agentId: null, agentName: null,
+        roleType, scopeType: 'ORG', scopeId: orgId, since: now, createdAt: now,
+      });
+    }
+
+    // Drive the ACTUAL route handlers over HTTP against Postgres.
+    const app = express();
+    app.use(express.json());
+    app.use('/governance-program', govProgramRouter);
+    const server = app.listen(0);
+    await new Promise((r) => server.once('listening', () => r(null)));
+    const port = (server.address() as AddressInfo).port;
+    const base = `http://127.0.0.1:${port}/governance-program`;
+    try {
+      const prog = (await (await fetch(`${base}?orgId=${orgId}`)).json()) as any;
+      // The seeded program is returned — NOT a freshly-created empty default.
+      assert.strictEqual(prog.data.id, programId);
+      assert.strictEqual(prog.data.name, 'Seeded Program');
+      assert.strictEqual(prog.data.status, 'ACTIVE');
+      assert.deepStrictEqual(prog.data.principles.principles, ['P1', 'P2']);
+
+      const st = (await (await fetch(`${base}/${programId}/status`)).json()) as any;
+      // Phase computation read the seeded siblings from Postgres, not the
+      // empty in-memory arrays — so Phase 1 is complete and Phase 2 has
+      // real progress from the domain, council, and leadership roles.
+      assert.strictEqual(st.data.phases.phase1.completed, true);
+      assert.ok(st.data.phases.phase2.progress > 0);
+      assert.ok(st.data.overallProgress > 0);
+    } finally {
+      await new Promise((r) => server.close(() => r(null)));
+    }
   });
 });
