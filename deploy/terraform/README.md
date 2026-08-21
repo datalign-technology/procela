@@ -4,8 +4,9 @@ This module provisions the AWS surface described in `CLAUDE.md`
 (section "Infrastructure — AWS Prototype") as a single, reviewable
 Terraform stack. It exists so a procurement checklist can be answered
 with "here is how it deploys" rather than "here is `docker compose
-up`". It is **not** a hardened production deployment — see
-[What this is not](#what-this-is-not) below.
+up`". Out of the box it is a **reference** deployment, not a hardened
+one — but every hardening item ships as an opt-in toggle; see
+[Production hardening toggles](#production-hardening-toggles) below.
 
 ## What you get
 
@@ -140,38 +141,74 @@ The S3 bucket and DynamoDB lock table need to exist before
 `terraform init` will succeed with a remote backend; create them with
 a small bootstrap module or by hand.
 
-## What this is not
+## Production hardening toggles
 
-This is a **reference deployment for review and demo purposes**. A
-customer running Procela in production would extend it with at
-minimum:
+The base module above is the **reference deployment** — it deploys as
+described with every hardening toggle off, so it stays small and
+auditable. The production-hardening items from
+[`docs/AWS_PRODUCTION_GUIDE.md` §5](../../docs/AWS_PRODUCTION_GUIDE.md)
+are implemented here as **opt-in variables that all default to
+`false`/empty**. With none of them set, `terraform plan` produces
+exactly the reference resources; flipping one only *adds* or
+reconfigures infrastructure — none of it changes application
+behaviour.
 
-- **AWS WAF** in front of CloudFront, and **AWS Shield Advanced** if
-  the org is a Shield subscriber.
-- **A private CloudFront distribution** (signed URLs / signed cookies
-  + a CloudFront Function checking auth) if the frontend is not
-  intended to be publicly reachable.
-- **A private ALB** if the ALB should not be reachable from the
-  public internet (CloudFront -> ALB via VPC origin, or PrivateLink).
-- **RDS Multi-AZ**, Performance Insights, longer backup retention,
-  **`deletion_protection = true`**, and a final snapshot on
-  destroy.
-- **VPC endpoints** for S3, ECR, Secrets Manager, and CloudWatch Logs
-  so task egress does not need to traverse the NAT (both for cost
-  and for network isolation).
-- **A NAT per AZ** — this module uses one NAT for cost. A single-AZ
-  outage under the current layout severs egress for the other AZ.
-- **KMS customer-managed keys** for RDS, Secrets Manager, S3, and
-  CloudWatch Logs instead of the AWS-managed defaults.
-- **GuardDuty**, **Security Hub**, **AWS Config**, and centralised
-  **CloudTrail** in a security account.
-- **Access logs** on the ALB and CloudFront distributed to a
-  dedicated log bucket, and application logs shipped somewhere
-  queryable (OpenSearch, Datadog, etc.) instead of only CloudWatch.
-- **Secrets rotation** via Secrets Manager rotation Lambdas (esp.
-  the DB password).
-- A **CI/CD pipeline** that builds and pushes the backend image and
-  syncs the frontend to S3 on merge to main.
+> Enable them individually or all at once. Several force resource
+> replacement or re-encryption (KMS, NAT restructure), so **always
+> `terraform plan` and review before applying to a live stack.**
+
+| Concern | Variable(s) | What it does |
+|---|---|---|
+| **RDS Multi-AZ** | `rds_multi_az` | Synchronous standby in the second AZ with automatic failover. |
+| **RDS deletion protection** | `rds_deletion_protection` | Blocks deletes, takes a final snapshot, keeps automated backups. |
+| **Performance Insights** | `rds_performance_insights`, `rds_performance_insights_retention_days` | Query-level RDS diagnostics (uses the RDS CMK when KMS is on). |
+| **KMS CMKs** | `enable_kms_cmk`, `kms_deletion_window_days` | Customer-managed, auto-rotating keys for RDS storage, Secrets Manager, the log group, and the frontend S3 bucket (`kms.tf`). |
+| **VPC endpoints** | `enable_vpc_endpoints` | S3 gateway + ECR/Secrets Manager/CloudWatch Logs interface endpoints so tasks reach AWS privately instead of over NAT (`vpc-endpoints.tf`). |
+| **NAT per AZ** | `enable_nat_per_az` | One NAT + EIP + private route table per AZ instead of one shared NAT (`network.tf`). |
+| **CloudFront-only ALB** | `restrict_alb_to_cloudfront` | ALB security group ingress restricted to CloudFront's managed prefix list (`network.tf`). |
+| **Drop invalid headers** | `alb_drop_invalid_header_fields` | ALB strips malformed HTTP headers before forwarding. |
+| **WAF** | `enable_waf`, `waf_rate_limit` | WAFv2 web ACL (CLOUDFRONT scope, us-east-1) with AWS managed rule groups + rate limit, attached to CloudFront (`waf.tf`). |
+| **DB secret rotation** | `enable_db_secret_rotation`, `db_rotation_lambda_arn`, `db_rotation_days` | Automatic rotation of the master-password secret via a rotation Lambda (see below). |
+| **Access logs** | `enable_access_logs` | Locked-down S3 buckets + access logging on the ALB and CloudFront (`logging.tf`). |
+| **Alarms** | `enable_monitoring_alarms`, `alarm_email` | SNS topic + CloudWatch alarms on ALB 5xx/unhealthy hosts, ECS CPU/memory, RDS CPU/storage/connections (`monitoring.tf`). |
+| **Threat detection & audit** | `enable_cloudtrail`, `enable_guardduty`, `enable_security_hub`, `enable_config` | Multi-region CloudTrail, GuardDuty, Security Hub, and AWS Config with their buckets/roles (`security.tf`). |
+
+The `outputs.tf` file exposes the new resources (KMS key ARNs, WAF ACL
+ARN, log-bucket names, the alarm SNS topic, the CloudTrail bucket) —
+all `null` unless the matching toggle is on.
+
+### Secret rotation
+
+`enable_db_secret_rotation` wires an
+`aws_secretsmanager_secret_rotation` onto the DB-password secret, but
+Secrets Manager needs a rotation **Lambda** to call. Rather than bundle
+one, the module takes its ARN as `db_rotation_lambda_arn` so you use
+AWS's maintained function. Deploy the serverless app
+`SecretsManagerRDSPostgreSQLRotationSingleUser` from the AWS Serverless
+Application Repository (give its Lambda a security group allowed into
+the RDS SG on 5432), then set:
+
+```hcl
+enable_db_secret_rotation = true
+db_rotation_lambda_arn    = "arn:aws:lambda:<region>:<account>:function:<rotation-fn>"
+```
+
+Manual rotation steps for every secret are in
+[`docs/DR_RUNBOOK.md` §3](../../docs/DR_RUNBOOK.md).
+
+### Still out of scope (do it around the module)
+
+A few production concerns are process/pipeline rather than a single
+module toggle:
+
+- **Private CloudFront** (signed URLs/cookies + an auth CloudFront
+  Function) if the frontend must not be publicly reachable.
+- **A fully private ALB** via a CloudFront VPC origin / PrivateLink —
+  `restrict_alb_to_cloudfront` locks ingress to CloudFront IPs, which
+  covers the common case without the VPC-origin plumbing.
+- **Shipping application logs** to OpenSearch/Datadog beyond CloudWatch.
+- **A CI/CD pipeline** that builds/pushes the backend image and syncs
+  the frontend on merge to main.
 - **Per-environment stacks** (dev / staging / prod) with separate
   state files and separate AWS accounts.
 

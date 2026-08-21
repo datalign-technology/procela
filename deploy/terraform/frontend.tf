@@ -35,8 +35,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      # SSE-S3 by default; customer-managed CMK when enable_kms_cmk = true.
+      sse_algorithm     = var.enable_kms_cmk ? "aws:kms" : "AES256"
+      kms_master_key_id = local.kms_s3_arn
     }
+    bucket_key_enabled = var.enable_kms_cmk
   }
 }
 
@@ -68,6 +71,20 @@ resource "aws_cloudfront_distribution" "frontend" {
   price_class         = "PriceClass_100" # US, Canada, Europe — cheapest tier.
 
   aliases = var.cloudfront_certificate_arn == null ? [] : [var.domain_name]
+
+  # WAFv2 web ACL (CLOUDFRONT scope, us-east-1) when enable_waf = true.
+  web_acl_id = var.enable_waf ? aws_wafv2_web_acl.cloudfront[0].arn : null
+
+  # Standard access logs to the locked-down log bucket when enable_access_logs
+  # is on (see logging.tf for the bucket + its ACL grant).
+  dynamic "logging_config" {
+    for_each = var.enable_access_logs ? [1] : []
+    content {
+      bucket          = aws_s3_bucket.cloudfront_logs[0].bucket_domain_name
+      prefix          = "cloudfront/"
+      include_cookies = false
+    }
+  }
 
   # --- S3 origin (default) --
   origin {

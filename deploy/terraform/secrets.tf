@@ -17,6 +17,7 @@ resource "aws_secretsmanager_secret" "db_password" {
   name                    = "${local.name_prefix}/db/password"
   description             = "Master password for the Procela RDS Postgres instance."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "db_password" {
@@ -24,10 +25,27 @@ resource "aws_secretsmanager_secret_version" "db_password" {
   secret_string = random_password.db.result
 }
 
+# Automatic rotation of the master DB password — enabled only when
+# enable_db_secret_rotation = true AND a rotation Lambda ARN is supplied.
+# Deploy the AWS-provided rotation function first (SAR app
+# SecretsManagerRDSPostgreSQLRotationSingleUser), give its Lambda network
+# access to the RDS SG, then pass its ARN as db_rotation_lambda_arn. See the
+# "Secret rotation" section of README.md.
+resource "aws_secretsmanager_secret_rotation" "db_password" {
+  count               = var.enable_db_secret_rotation && var.db_rotation_lambda_arn != "" ? 1 : 0
+  secret_id           = aws_secretsmanager_secret.db_password.id
+  rotation_lambda_arn = var.db_rotation_lambda_arn
+
+  rotation_rules {
+    automatically_after_days = var.db_rotation_days
+  }
+}
+
 resource "aws_secretsmanager_secret" "database_url" {
   name                    = "${local.name_prefix}/app/database_url"
   description             = "Full postgres:// URL the backend reads as DATABASE_URL."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "database_url" {
@@ -46,6 +64,7 @@ resource "aws_secretsmanager_secret" "jwt_private_key" {
   name                    = "${local.name_prefix}/app/jwt_private_key"
   description             = "PEM-encoded RSA/EC private key used to sign Procela JWTs. Populate with `aws secretsmanager put-secret-value`."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "jwt_private_key_placeholder" {
@@ -61,6 +80,7 @@ resource "aws_secretsmanager_secret" "jwt_public_key" {
   name                    = "${local.name_prefix}/app/jwt_public_key"
   description             = "PEM-encoded public key paired with jwt_private_key. Distributed to relying services / SDKs."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "jwt_public_key_placeholder" {
@@ -76,6 +96,7 @@ resource "aws_secretsmanager_secret" "jwt_secret" {
   name                    = "${local.name_prefix}/app/jwt_secret"
   description             = "HMAC secret used for symmetric-signed tokens (session cookies, short-lived callbacks)."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "random_password" "jwt_secret" {
@@ -96,6 +117,7 @@ resource "aws_secretsmanager_secret" "anthropic_api_key" {
   name                    = "${local.name_prefix}/app/anthropic_api_key"
   description             = "Anthropic Claude API key used by the backend for template generation, suggestions, and the assistant."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "anthropic_api_key_placeholder" {
@@ -136,6 +158,7 @@ resource "aws_secretsmanager_secret" "mfa_encryption_key" {
   name                    = "${local.name_prefix}/app/mfa_encryption_key"
   description             = "AES-256-GCM master key for at-rest TOTP/MFA secret encryption (MFA_ENCRYPTION_KEY)."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "mfa_encryption_key" {
@@ -160,6 +183,7 @@ resource "aws_secretsmanager_secret" "scim_bearer_token" {
   name                    = "${local.name_prefix}/app/scim_bearer_token"
   description             = "Static bearer token IdPs present to /scim/v2 (SCIM_BEARER_TOKEN)."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "scim_bearer_token" {
@@ -178,6 +202,7 @@ resource "aws_secretsmanager_secret" "redis_url" {
   name                    = "${local.name_prefix}/app/redis_url"
   description             = "redis:// URL for the shared rate limiter (REDIS_URL). Populate out-of-band."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "redis_url_placeholder" {
@@ -193,6 +218,7 @@ resource "aws_secretsmanager_secret" "smtp_pass" {
   name                    = "${local.name_prefix}/app/smtp_pass"
   description             = "SMTP password for transactional email (SMTP_PASS). Populate out-of-band."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "smtp_pass_placeholder" {
@@ -208,6 +234,7 @@ resource "aws_secretsmanager_secret" "oidc_client_secret" {
   name                    = "${local.name_prefix}/app/oidc_client_secret"
   description             = "OIDC client secret when AUTH_PROVIDER=oidc (OIDC_CLIENT_SECRET). Populate out-of-band."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "oidc_client_secret_placeholder" {
@@ -223,6 +250,7 @@ resource "aws_secretsmanager_secret" "saml_idp_cert" {
   name                    = "${local.name_prefix}/app/saml_idp_cert"
   description             = "IdP signing certificate (PEM) when AUTH_PROVIDER=saml (SAML_IDP_CERT). Populate out-of-band."
   recovery_window_in_days = 7
+  kms_key_id              = local.kms_secrets_arn
 }
 
 resource "aws_secretsmanager_secret_version" "saml_idp_cert_placeholder" {
