@@ -742,8 +742,24 @@ function useDashboardLayout() {
     const parsed = read();
     if (parsed) {
       const cleaned = (parsed.order || []).filter(isKnown);
-      // Append any DEFAULT keys missing from the stored layout (new sections added in a release)
-      for (const k of DEFAULT_SECTIONS) if (!cleaned.includes(k)) cleaned.push(k);
+      // Insert any DEFAULT keys missing from the stored layout (sections added
+      // in a later release) at their default-relative position — NOT appended
+      // to the end. Appending stranded a new lead section like My Dashboard at
+      // the BOTTOM for every existing user, because their saved order predates
+      // it. For each missing key we splice it in just before the first
+      // later-in-default section that's already present, so it surfaces where
+      // the default layout intends while still preserving the user's own
+      // ordering of the sections they have customized.
+      for (let di = 0; di < DEFAULT_SECTIONS.length; di++) {
+        const key = DEFAULT_SECTIONS[di];
+        if (cleaned.includes(key)) continue;
+        let insertAt = cleaned.length;
+        for (let dj = di + 1; dj < DEFAULT_SECTIONS.length; dj++) {
+          const laterIdx = cleaned.indexOf(DEFAULT_SECTIONS[dj]);
+          if (laterIdx !== -1) { insertAt = laterIdx; break; }
+        }
+        cleaned.splice(insertAt, 0, key);
+      }
       return cleaned.length > 0 ? cleaned : DEFAULT_SECTIONS;
     }
     return DEFAULT_SECTIONS;
