@@ -27,6 +27,11 @@ import { connectors, connectorEvents } from '../routes/connectors';
 import { calendarEvents } from '../routes/governance-calendar';
 import { statsSnapshots, type StatsSnapshot } from '../routes/dashboard';
 import { aiTemplateCache } from '../routes/ai';
+import { governancePolicies } from '../routes/governance-policies';
+import { governanceControls } from '../routes/governance-controls';
+import { governanceGroups } from '../routes/governance-groups';
+import { governancePrograms } from '../routes/governance-program';
+import { decisionRights } from '../routes/decision-rights';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
@@ -47,6 +52,11 @@ import { getConnectorsRepository } from '../db/connectors.repo';
 import { getConnectorEventsRepository } from '../db/connector-events.repo';
 import { getCalendarEventsRepository } from '../db/calendar-events.repo';
 import { getStatsSnapshotsRepository } from '../db/stats-snapshots.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
+import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
+import { getGovernanceProgramsRepository } from '../db/governance-programs.repo';
+import { getDecisionRightsRepository } from '../db/decision-rights.repo';
 
 const P = 'demo-'; // shared prefix — sweep target on reseed
 
@@ -130,6 +140,11 @@ interface DemoRepos {
   connectorEvents: Repository<any>;
   calendarEvents: Repository<any>;
   statsSnapshots: Repository<any>;
+  governancePolicies: Repository<any>;
+  governanceControls: Repository<any>;
+  governanceGroups: Repository<any>;
+  governancePrograms: Repository<any>;
+  decisionRights: Repository<any>;
 }
 
 function buildRepos(): DemoRepos {
@@ -150,6 +165,11 @@ function buildRepos(): DemoRepos {
     connectorEvents: getConnectorEventsRepository(connectorEvents as any),
     calendarEvents: getCalendarEventsRepository(calendarEvents as any),
     statsSnapshots: getStatsSnapshotsRepository(statsSnapshots as any),
+    governancePolicies: getGovernancePoliciesRepository(governancePolicies as any),
+    governanceControls: getGovernanceControlsRepository(governanceControls as any),
+    governanceGroups: getGovernanceGroupsRepository(governanceGroups as any),
+    governancePrograms: getGovernanceProgramsRepository(governancePrograms as any),
+    decisionRights: getDecisionRightsRepository(decisionRights as any),
   };
 }
 
@@ -170,10 +190,11 @@ async function sweepRepo(repo: Repository<any>): Promise<void> {
   }
 }
 
-/** Delete demo orgs leaf-first so the ON DELETE RESTRICT parent FK on
- *  the org hierarchy never blocks a delete: repeatedly remove every
- *  demo org that is not the parent of another remaining demo org. */
-async function sweepOrgs(repo: Repository<any>): Promise<void> {
+/** Delete demo rows of a self-parenting entity (organizations,
+ *  governance groups) leaf-first, so a parent FK never blocks a delete:
+ *  repeatedly remove every demo row that is not the parent of another
+ *  remaining demo row. */
+async function sweepHierarchy(repo: Repository<any>): Promise<void> {
   let remaining = (await repo.list()).filter(
     (o: any) => typeof o?.id === 'string' && o.id.startsWith(P),
   );
@@ -192,7 +213,15 @@ async function sweepOrgs(repo: Repository<any>): Promise<void> {
 async function sweep(repos: DemoRepos): Promise<void> {
   // Reverse dependency order — children before parents — so Postgres
   // FK checks pass even where a relation is RESTRICT rather than
-  // Cascade. Organizations are swept last, leaf-first (see sweepOrgs).
+  // Cascade. Organizations are swept last, leaf-first (sweepHierarchy).
+  // Governance-depth entities first: decision rights + program are
+  // independent; groups self-parent (leaf-first); controls reference
+  // policies (controls before policies).
+  await sweepRepo(repos.decisionRights);
+  await sweepRepo(repos.governancePrograms);
+  await sweepHierarchy(repos.governanceGroups);
+  await sweepRepo(repos.governanceControls);
+  await sweepRepo(repos.governancePolicies);
   await sweepRepo(repos.statsSnapshots);
   await sweepRepo(repos.calendarEvents);
   await sweepRepo(repos.connectorEvents);
@@ -208,7 +237,7 @@ async function sweep(repos: DemoRepos): Promise<void> {
   await sweepRepo(repos.agents);
   await sweepRepo(repos.systems);
   await sweepRepo(repos.people);
-  await sweepOrgs(repos.organizations);
+  await sweepHierarchy(repos.organizations);
   // AI template cache is keyed by industry string, not `id`. Sweep
   // every demo-owned key (both industries) so switching industries
   // never leaves a stale pre-warmed template behind.
@@ -216,6 +245,59 @@ async function sweep(repos: DemoRepos): Promise<void> {
     if (DEMO_AI_CACHE_KEYS.has(aiTemplateCache[i]?.industry)) aiTemplateCache.splice(i, 1);
   }
   saveStore('aiTemplateCache', aiTemplateCache);
+}
+
+// ── Governance depth (shared by both industry profiles) ─────────────
+// Policies → controls → groups → program → decision rights. The
+// content is industry-neutral (a DAMA-shaped program looks the same in
+// a utility and a shipyard), so both profiles seed identical governance
+// depth for guaranteed parity — only the org, personas, and program
+// name differ. Ids are fixed `demo-` strings; only one tenant is seeded
+// at a time, so they never collide across industries.
+interface GovDepthCtx {
+  orgId: string;
+  cdoId: string;
+  govLeadId: string;
+  dataOwnerId: string;
+  stewardIds: [string, string];
+  tenantName: string;
+}
+
+async function seedGovernanceDepth(repos: DemoRepos, ts: string, ctx: GovDepthCtx): Promise<void> {
+  const { orgId, cdoId, govLeadId, dataOwnerId, stewardIds, tenantName } = ctx;
+
+  // Policies (3) — a charter, a classification policy, a quality standard.
+  const polCharter = { id: P + 'pol-charter', orgId, code: 'CHA-001', name: 'Data Governance Charter', description: 'Mandate, scope, and operating model for the data governance program.', documentType: 'CHARTER', status: 'ACTIVE', ownerAssignmentId: cdoId, category: 'GOVERNANCE', reviewFrequency: 'ANNUAL', nextReviewDate: daysFromNow(120).slice(0, 10), effectiveDate: daysFromNow(-200).slice(0, 10), content: 'The data governance program exists to make data a trusted, owned, discoverable asset across the enterprise.', createdAt: ts, updatedAt: ts };
+  const polClassification = { id: P + 'pol-classification', orgId, code: 'POL-001', name: 'Data Classification Policy', description: 'How data is classified by sensitivity and the handling rules per tier.', documentType: 'POLICY', status: 'ACTIVE', ownerAssignmentId: govLeadId, category: 'CLASSIFICATION', reviewFrequency: 'SEMI_ANNUAL', nextReviewDate: daysFromNow(60).slice(0, 10), effectiveDate: daysFromNow(-150).slice(0, 10), content: 'Every asset is tagged Public, Internal, Confidential, or Restricted, with handling rules per tier.', createdAt: ts, updatedAt: ts };
+  const polQuality = { id: P + 'pol-quality', orgId, code: 'STD-001', name: 'Data Quality Standard', description: 'Minimum quality thresholds and the dimensions measured per asset tier.', documentType: 'STANDARD', status: 'UNDER_REVIEW', ownerAssignmentId: stewardIds[0], category: 'DATA_QUALITY', reviewFrequency: 'QUARTERLY', nextReviewDate: daysFromNow(30).slice(0, 10), effectiveDate: daysFromNow(-90).slice(0, 10), content: 'Gold assets must measure completeness, accuracy, and timeliness at or above the tier threshold.', createdAt: ts, updatedAt: ts };
+  await createAll(repos.governancePolicies, [polCharter, polClassification, polQuality]);
+
+  // Controls (3) — each tied to a policy.
+  await createAll(repos.governanceControls, [
+    { id: P + 'ctl-completeness', orgId, policyId: polQuality.id, code: 'CTL-001', name: 'Completeness threshold enforcement', description: 'DQ rules flag an asset when completeness falls below the standard.', controlType: 'DETECTIVE', automationMode: 'HUMAN', status: 'ACTIVE', ownerAssignmentId: stewardIds[0], evidenceRequired: true, createdAt: ts, updatedAt: ts },
+    { id: P + 'ctl-sensitivity', orgId, policyId: polClassification.id, code: 'CTL-002', name: 'Sensitivity tag review', description: 'A steward reviews AI-suggested sensitivity tags before they take effect.', controlType: 'PREVENTIVE', automationMode: 'HYBRID', status: 'ACTIVE', ownerAssignmentId: govLeadId, evidenceRequired: true, createdAt: ts, updatedAt: ts },
+    { id: P + 'ctl-access', orgId, policyId: polCharter.id, code: 'CTL-003', name: 'Quarterly access recertification', description: 'Owners recertify who has access to their assets each quarter.', controlType: 'DETECTIVE', automationMode: 'HUMAN', status: 'DRAFT', ownerAssignmentId: cdoId, evidenceRequired: false, createdAt: ts, updatedAt: ts },
+  ]);
+
+  // Groups (2) — a council with a stewardship team beneath it.
+  const grpCouncil = { id: P + 'grp-council', orgId, parentId: null, name: 'Data Governance Council', description: 'Cross-domain decision body for the data program.', charter: 'Approve policies, resolve escalations, own the governance roadmap.', type: 'COUNCIL', status: 'ACTIVE', members: [{ personId: cdoId, agentId: null, groupRole: 'CHAIR', since: ts }, { personId: govLeadId, agentId: null, groupRole: 'SECRETARY', since: ts }, { personId: dataOwnerId, agentId: null, groupRole: 'MEMBER', since: ts }], createdAt: ts, updatedAt: ts };
+  const grpSteward = { id: P + 'grp-steward', orgId, parentId: grpCouncil.id, name: 'Data Stewardship Team', description: 'Operational stewards executing governance day-to-day.', charter: 'Maintain metadata, run data quality, triage issues.', type: 'STEWARDSHIP_TEAM', status: 'ACTIVE', members: [{ personId: stewardIds[0], agentId: null, groupRole: 'CHAIR', since: ts }, { personId: stewardIds[1], agentId: null, groupRole: 'MEMBER', since: ts }], createdAt: ts, updatedAt: ts };
+  await createAll(repos.governanceGroups, [grpCouncil, grpSteward]);
+
+  // Program (1 per org).
+  await repos.governancePrograms.create({
+    id: P + 'gov-program', orgId, name: `${tenantName} Data Governance Program`,
+    scope: { inScope: 'Enterprise processes, data domains, and systems in the catalog.', outOfScope: 'Personal productivity data and unmanaged spreadsheets.', boundaries: 'All business units in the org hierarchy.', constraints: 'Regulatory reporting deadlines take priority over roadmap work.' },
+    principles: { vision: 'Trusted data, owned by the business, discoverable by everyone.', principles: ['Data is an asset', 'Every asset has an owner', 'Govern by tier, not by fiat', 'Automate the routine controls'], decisionRights: 'Council approves policy; domain owners approve domain scope.', operatingModel: 'FEDERATED' },
+    targetStartDate: daysFromNow(-180).slice(0, 10), targetLaunchDate: daysFromNow(-60).slice(0, 10),
+    status: 'ACTIVE', createdAt: ts, updatedAt: ts,
+  });
+
+  // Decision rights (2) — one person-decided, one group-decided.
+  await createAll(repos.decisionRights, [
+    { id: P + 'dr-classification', orgId, decision: 'Approve data classification changes', description: 'Who signs off when an asset\'s sensitivity tier changes.', category: 'CLASSIFICATION', decider: cdoId, deciderType: 'PERSON', recommends: ['DATA_GOVERNANCE_LEAD'], approves: ['CDO'], informed: ['DATA_OWNER'], escalationPath: 'Council → CDO', createdAt: ts, updatedAt: ts },
+    { id: P + 'dr-dispute', orgId, decision: 'Resolve cross-domain data disputes', description: 'Escalation path when two domains disagree on ownership.', category: 'ISSUE', decider: grpCouncil.id, deciderType: 'GROUP', recommends: ['DATA_OWNER'], approves: ['DATA_GOVERNANCE_LEAD'], informed: ['CDO'], escalationPath: 'Domain owners → Council', createdAt: ts, updatedAt: ts },
+  ]);
 }
 
 export interface DemoSeedReport {
@@ -758,6 +840,16 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   );
   saveStore('aiTemplateCache', aiTemplateCache);
 
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgTidewater.id,
+    cdoId: susan.id,
+    govLeadId: marisol.id,
+    dataOwnerId: devon.id,
+    stewardIds: [natalie.id, brandon.id],
+    tenantName: 'Tidewater Utilities',
+  });
+
   logger.info({ persona: susan.name }, 'Demo data seeded');
 
   return {
@@ -1088,6 +1180,16 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
     },
   );
   saveStore('aiTemplateCache', aiTemplateCache);
+
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgMeridian.id,
+    cdoId: elena.id,
+    govLeadId: priyanka.id,
+    dataOwnerId: grant.id,
+    stewardIds: [dmitri.id, warrick.id],
+    tenantName: 'Meridian Shipbuilding',
+  });
 
   logger.info({ persona: elena.name }, 'Demo data seeded (shipbuilding)');
 

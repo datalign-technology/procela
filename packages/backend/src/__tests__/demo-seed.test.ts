@@ -43,6 +43,16 @@ const { connectors, connectorEvents } = require('../routes/connectors');
 const { calendarEvents } = require('../routes/governance-calendar');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { aiTemplateCache } = require('../routes/ai');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governancePolicies } = require('../routes/governance-policies');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governanceControls } = require('../routes/governance-controls');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governanceGroups } = require('../routes/governance-groups');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governancePrograms } = require('../routes/governance-program');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { decisionRights } = require('../routes/decision-rights');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -112,6 +122,11 @@ describe('demo-seed endpoint', () => {
       [connectors, 'connectors'],
       [connectorEvents, 'connectorEvents'],
       [calendarEvents, 'calendarEvents'],
+      [governancePolicies, 'governancePolicies'],
+      [governanceControls, 'governanceControls'],
+      [governanceGroups, 'governanceGroups'],
+      [governancePrograms, 'governancePrograms'],
+      [decisionRights, 'decisionRights'],
     ];
     for (const [arr, name] of stores) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
@@ -134,7 +149,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights]) sweep(s);
   });
 
   it('rejects non-super-admin callers with 403', async () => {
@@ -328,4 +343,29 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(failing.dataAssetId, 'demo-asset-weld-records');
     assert.strictEqual(issue.dataAssetId, 'demo-asset-weld-records', 'issue + failing DQ target one asset');
   });
+
+  // ── Governance depth — seeded for both industries at parity ──
+
+  for (const industry of ['utilities', 'shipbuilding'] as const) {
+    it(`seeds governance depth (policies/controls/groups/program/decision rights) for ${industry}`, async () => {
+      await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      assert.strictEqual(demo(governancePolicies).length, 3, 'policies');
+      assert.strictEqual(demo(governanceControls).length, 3, 'controls');
+      assert.strictEqual(demo(governanceGroups).length, 2, 'groups');
+      assert.strictEqual(demo(governancePrograms).length, 1, 'program');
+      assert.strictEqual(demo(decisionRights).length, 2, 'decision rights');
+
+      // Each control points at a seeded policy.
+      const policyIds = new Set(demo(governancePolicies).map((p: any) => p.id));
+      for (const ctl of demo(governanceControls)) {
+        assert.ok(policyIds.has(ctl.policyId), `control ${ctl.id} → a seeded policy`);
+      }
+      // The stewardship team nests under the council.
+      const council = demo(governanceGroups).find((g: any) => g.type === 'COUNCIL');
+      const team = demo(governanceGroups).find((g: any) => g.type === 'STEWARDSHIP_TEAM');
+      assert.ok(council && team);
+      assert.strictEqual(team.parentId, council.id, 'team nests under council');
+    });
+  }
 });
