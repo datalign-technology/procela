@@ -43,6 +43,14 @@ import { maturitySnapshots } from '../routes/maturity-trends';
 import { gapSnapshots } from '../services/digest.service';
 import { agentSchedules } from '../routes/agent-schedules';
 import { agentExecutions } from '../routes/agent-executions';
+import { comments } from '../routes/comments';
+import { tags } from '../routes/tags';
+import { attachments } from '../routes/attachments';
+import { reports } from '../routes/reports';
+import { analysisReports } from '../routes/analysis-reports';
+import { savedViews } from '../routes/saved-views';
+import { dataAssetColumns, dataAssetBindings } from '../routes/data-assets';
+import { connections } from '../routes/connections';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
@@ -80,6 +88,15 @@ import { getMaturitySnapshotsRepository } from '../db/maturity-snapshots.repo';
 import { getGapSnapshotsRepository } from '../db/gap-snapshots.repo';
 import { getAgentSchedulesRepository } from '../db/agent-schedules.repo';
 import { getAgentExecutionsRepository } from '../db/agent-executions.repo';
+import { getCommentsRepository } from '../db/comments.repo';
+import { getTagsRepository } from '../db/tags.repo';
+import { getAttachmentsRepository } from '../db/attachments.repo';
+import { getReportsRepository } from '../db/reports.repo';
+import { getAnalysisReportsRepository } from '../db/analysis-reports.repo';
+import { getSavedViewsRepository } from '../db/saved-views.repo';
+import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
+import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
+import { getConnectionsRepository } from '../db/connections.repo';
 
 const P = 'demo-'; // shared prefix — sweep target on reseed
 
@@ -179,6 +196,15 @@ interface DemoRepos {
   gapSnapshots: Repository<any>;
   agentSchedules: Repository<any>;
   agentExecutions: Repository<any>;
+  comments: Repository<any>;
+  tags: Repository<any>;
+  attachments: Repository<any>;
+  reports: Repository<any>;
+  analysisReports: Repository<any>;
+  savedViews: Repository<any>;
+  dataAssetColumns: Repository<any>;
+  dataAssetBindings: Repository<any>;
+  connections: Repository<any>;
 }
 
 function buildRepos(): DemoRepos {
@@ -215,6 +241,15 @@ function buildRepos(): DemoRepos {
     gapSnapshots: getGapSnapshotsRepository(gapSnapshots as any),
     agentSchedules: getAgentSchedulesRepository(agentSchedules as any),
     agentExecutions: getAgentExecutionsRepository(agentExecutions as any),
+    comments: getCommentsRepository(comments as any),
+    tags: getTagsRepository(tags as any),
+    attachments: getAttachmentsRepository(attachments as any),
+    reports: getReportsRepository(reports as any),
+    analysisReports: getAnalysisReportsRepository(analysisReports as any),
+    savedViews: getSavedViewsRepository(savedViews as any),
+    dataAssetColumns: getDataAssetColumnsRepository(dataAssetColumns as any),
+    dataAssetBindings: getDataAssetBindingsRepository(dataAssetBindings as any),
+    connections: getConnectionsRepository(connections as any),
   };
 }
 
@@ -280,6 +315,15 @@ async function sweep(repos: DemoRepos): Promise<void> {
   // Governance-depth entities first: decision rights + program are
   // independent; groups self-parent (leaf-first); controls reference
   // policies (controls before policies).
+  await sweepRepo(repos.savedViews);
+  await sweepRepo(repos.analysisReports);
+  await sweepRepo(repos.reports);
+  await sweepRepo(repos.attachments);
+  await sweepRepo(repos.tags);
+  await sweepRepo(repos.comments);
+  await sweepRepo(repos.dataAssetBindings);
+  await sweepRepo(repos.dataAssetColumns);
+  await sweepRepo(repos.connections);
   await sweepRepo(repos.agentExecutions);
   await sweepRepo(repos.agentSchedules);
   await sweepRepo(repos.gapSnapshots);
@@ -558,6 +602,76 @@ async function seedAgentOps(repos: DemoRepos, ts: string, ctx: AgentOpsCtx): Pro
     { id: P + 'exec-approved', ...base, status: 'SUCCESS', startedAt: hoursAgo(6), completedAt: hoursAgo(6), output: `## ${activityName} — draft\n\nGenerated summary reviewed and approved.`, error: null, durationMs: 4200, reviewStatus: 'APPROVED', reviewedBy: reviewerId, reviewedAt: hoursAgo(5), promotedDocumentId: null, createdAt: hoursAgo(6) },
     { id: P + 'exec-pending', ...base, status: 'SUCCESS', startedAt: hoursAgo(2), completedAt: hoursAgo(2), output: `## ${activityName} — draft\n\nAwaiting steward review.`, error: null, durationMs: 3800, reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null, promotedDocumentId: null, createdAt: hoursAgo(2) },
     { id: P + 'exec-failed', ...base, status: 'FAILED', startedAt: hoursAgo(1), completedAt: hoursAgo(1), output: '', error: 'Model call timed out after 60s', durationMs: null, reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null, promotedDocumentId: null, createdAt: hoursAgo(1) },
+  ]);
+}
+
+// ── Collaboration + reporting + connections ─────────────────────────
+// A warehouse connection with asset columns + a binding, comments/tags/
+// attachments on a seeded asset + system, and org-scoped reports,
+// analysis, and saved views — so the collaboration affordances and the
+// reporting/connection pages light up. References a profile-specific
+// asset + system, so the caller passes their ids.
+interface CollabReportingCtx {
+  orgId: string;
+  assetId: string;
+  systemId: string;
+  personId: string;
+  personName: string;
+}
+
+async function seedCollabAndReporting(repos: DemoRepos, ts: string, ctx: CollabReportingCtx): Promise<void> {
+  const { orgId, assetId, systemId, personId, personName } = ctx;
+
+  // Connection (warehouse) + asset columns + a binding.
+  const connId = P + 'conn-warehouse';
+  await repos.connections.create({
+    id: connId, orgId, name: 'Analytics Warehouse',
+    connectionType: 'DATA_WAREHOUSE',
+    config: { warehouseType: 'SNOWFLAKE', account: 'demo-account', warehouse: 'DEMO_WH', database: 'ANALYTICS', schema: 'PUBLIC' },
+    credentials: { username: 'procela_ro' },
+    status: 'CONNECTED', lastTestedAt: ts, lastTestResult: 'Connection successful', createdAt: ts, updatedAt: ts,
+  });
+  await createAll(repos.dataAssetColumns, [
+    { id: P + 'col-id', dataAssetId: assetId, columnName: 'id', dataType: 'UUID', description: 'Primary key.', sourceConnectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: 'id', createdAt: ts, updatedAt: ts },
+    { id: P + 'col-name', dataAssetId: assetId, columnName: 'name', dataType: 'String', description: 'Display name.', sourceConnectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: 'name', createdAt: ts, updatedAt: ts },
+    { id: P + 'col-status', dataAssetId: assetId, columnName: 'status', dataType: 'String', description: 'Lifecycle status.', sourceConnectionId: null, sourceAsset: null, sourceColumn: null, createdAt: ts, updatedAt: ts },
+    { id: P + 'col-updated', dataAssetId: assetId, columnName: 'updated_at', dataType: 'Timestamp', description: 'Last change timestamp.', sourceConnectionId: null, sourceAsset: null, sourceColumn: null, createdAt: ts, updatedAt: ts },
+  ]);
+  await repos.dataAssetBindings.create({ id: P + 'binding-primary', orgId, dataAssetId: assetId, connectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: null, label: 'Primary warehouse table', isPrimary: true, createdAt: ts, updatedAt: ts });
+
+  // Comments — a thread on the asset.
+  const commentId = P + 'comment-root';
+  await createAll(repos.comments, [
+    { id: commentId, orgId, entityType: 'DataAsset', entityId: assetId, parentId: null, userId: personId, userName: personName, content: 'Confirmed the governance tier with the domain owner — good to certify.', mentions: [], createdAt: ts, updatedAt: ts, deletedAt: null },
+    { id: P + 'comment-reply', orgId, entityType: 'DataAsset', entityId: assetId, parentId: commentId, userId: personId, userName: personName, content: 'Certification scheduled for next review cycle.', mentions: [], createdAt: ts, updatedAt: ts, deletedAt: null },
+  ]);
+
+  // Tags — on the asset and its system.
+  await createAll(repos.tags, [
+    { id: P + 'tag-certified', orgId, entityType: 'DataAsset', entityId: assetId, tag: 'certified', createdBy: personId, createdAt: ts },
+    { id: P + 'tag-reviewed', orgId, entityType: 'DataAsset', entityId: assetId, tag: 'pii-reviewed', createdBy: personId, createdAt: ts },
+    { id: P + 'tag-sor', orgId, entityType: 'System', entityId: systemId, tag: 'source-of-record', createdBy: personId, createdAt: ts },
+  ]);
+
+  // Attachments — a link and a file.
+  await createAll(repos.attachments, [
+    { id: P + 'attach-url', orgId, entityType: 'DataAsset', entityId: assetId, type: 'URL', name: 'Data dictionary', description: 'Canonical field definitions.', url: 'https://wiki.internal/data-dictionary', uploadedBy: personId, createdAt: ts, updatedAt: ts },
+    { id: P + 'attach-file', orgId, entityType: 'DataAsset', entityId: assetId, type: 'FILE', name: 'Lineage diagram.png', description: 'Upstream lineage sketch.', fileName: 'lineage.png', filePath: '/var/procela/attachments/demo-lineage.png', fileSize: 82344, mimeType: 'image/png', uploadedBy: personId, createdAt: ts, updatedAt: ts },
+  ]);
+
+  // Reports (report-builder definitions).
+  await createAll(repos.reports, [
+    { id: P + 'report-ungoverned', orgId, name: 'Ungoverned critical assets', description: 'Bronze-tier assets that support critical processes.', ownerId: personId, visibility: 'org', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }, { field: 'healthScore' }], filters: [], sort: { field: 'healthScore', direction: 'asc' }, limit: 100 }, createdAt: ts, updatedAt: ts },
+    { id: P + 'report-tiers', orgId, name: 'Assets by governance tier', description: 'All assets with their tier and health.', ownerId: personId, visibility: 'private', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }], filters: [], limit: 500 }, createdAt: ts, updatedAt: ts },
+  ]);
+
+  // Analysis report (pivot config).
+  await repos.analysisReports.create({ id: P + 'analysis-coverage', orgId, name: 'Coverage by division', description: 'Asset coverage split across divisions.', ownerId: personId, config: { rowDim: 'org', colDim: 'governanceTier', measure: 'count' }, createdAt: ts, updatedAt: ts });
+
+  // Saved views (per-page filter snapshots).
+  await createAll(repos.savedViews, [
+    { id: P + 'view-bronze', orgId, pageKey: 'data-assets', name: 'Bronze tier', ownerId: personId, ownerName: personName, filters: { governanceTier: 'BRONZE' }, createdAt: ts, updatedAt: ts },
+    { id: P + 'view-tier1', orgId, pageKey: 'processes', name: 'Tier 1 activities', ownerId: personId, ownerName: personName, filters: { criticalityTier: 'TIER_1' }, createdAt: ts, updatedAt: ts },
   ]);
 }
 
@@ -1146,6 +1260,9 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // Agent operations — schedules + executions for a seeded agent.
   await seedAgentOps(repos, ts, { orgId: orgTidewater.id, agentId: P + 'agent-compliance', agentName: 'Compliance Report Generator', activityId: actTriage.id, activityName: 'Outage triage', roleType: 'DATA_QUALITY_ANALYST', createdBy: susan.id, reviewerId: marisol.id });
 
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgTidewater.id, assetId: assetCustomerMaster.id, systemId: sysCIS.id, personId: natalie.id, personName: 'Natalie Greer' });
+
   logger.info({ persona: susan.name }, 'Demo data seeded');
 
   return {
@@ -1521,6 +1638,9 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
 
   // Agent operations — schedules + executions for a seeded agent.
   await seedAgentOps(repos, ts, { orgId: orgMeridian.id, agentId: P + 'agent-cert-gen', agentName: 'Naval Cert Package Generator', activityId: actWeldQA.id, activityName: 'Weld QA & radiography sign-off', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: elena.id, reviewerId: priyanka.id });
+
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgMeridian.id, assetId: assetProductModel.id, systemId: sysPLM.id, personId: dmitri.id, personName: 'Dmitri Volkov' });
 
   logger.info({ persona: elena.name }, 'Demo data seeded (shipbuilding)');
 

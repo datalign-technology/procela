@@ -88,6 +88,22 @@ const { gapSnapshots } = require('../services/digest.service');
 const { agentSchedules } = require('../routes/agent-schedules');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { agentExecutions } = require('../routes/agent-executions');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { comments } = require('../routes/comments');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { tags } = require('../routes/tags');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { attachments } = require('../routes/attachments');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { reports } = require('../routes/reports');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { analysisReports } = require('../routes/analysis-reports');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { savedViews } = require('../routes/saved-views');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { dataAssetColumns, dataAssetBindings } = require('../routes/data-assets');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { connections } = require('../routes/connections');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -173,6 +189,15 @@ describe('demo-seed endpoint', () => {
       [gapSnapshots, 'gapSnapshots'],
       [agentSchedules, 'agentSchedules'],
       [agentExecutions, 'agentExecutions'],
+      [comments, 'comments'],
+      [tags, 'tags'],
+      [attachments, 'attachments'],
+      [reports, 'reports'],
+      [analysisReports, 'analysisReports'],
+      [savedViews, 'savedViews'],
+      [dataAssetColumns, 'dataAssetColumns'],
+      [dataAssetBindings, 'dataAssetBindings'],
+      [connections, 'connections'],
     ];
     for (const [arr, name] of stores) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
@@ -197,7 +222,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals, dataLineageLinks, assetLineageEdges, maturitySnapshots, gapSnapshots, agentSchedules, agentExecutions]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals, dataLineageLinks, assetLineageEdges, maturitySnapshots, gapSnapshots, agentSchedules, agentExecutions, comments, tags, attachments, reports, analysisReports, savedViews, dataAssetColumns, dataAssetBindings, connections]) sweep(s);
     // RACI overrides key on nodeId (no id) — clear demo-prefixed nodes.
     for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith('demo-')) raciOverrides.splice(i, 1);
   });
@@ -480,6 +505,28 @@ describe('demo-seed endpoint', () => {
       assert.ok(execs.some((e: any) => e.status === 'SUCCESS' && e.reviewStatus === 'APPROVED'));
       assert.ok(execs.some((e: any) => e.reviewStatus === 'PENDING'));
       assert.ok(execs.some((e: any) => e.status === 'FAILED' && e.error));
+    });
+
+    it(`seeds collaboration + reporting + connections for ${industry}`, async () => {
+      await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      assert.strictEqual(demo(connections).length, 1, 'connection');
+      assert.strictEqual(demo(dataAssetColumns).length, 4, 'asset columns');
+      assert.strictEqual(demo(dataAssetBindings).length, 1, 'asset binding');
+      assert.strictEqual(demo(comments).length, 2, 'comments');
+      assert.strictEqual(demo(tags).length, 3, 'tags');
+      assert.strictEqual(demo(attachments).length, 2, 'attachments');
+      assert.strictEqual(demo(reports).length, 2, 'reports');
+      assert.strictEqual(demo(analysisReports).length, 1, 'analysis report');
+      assert.strictEqual(demo(savedViews).length, 2, 'saved views');
+
+      // Comment thread: a root + a reply pointing at it.
+      const root = demo(comments).find((c: any) => c.parentId === null);
+      const reply = demo(comments).find((c: any) => c.parentId !== null);
+      assert.ok(root && reply && reply.parentId === root.id, 'reply nests under root');
+      // Binding points at the seeded connection; a report has an entity+columns.
+      assert.strictEqual(demo(dataAssetBindings)[0].connectionId, demo(connections)[0].id);
+      assert.ok(demo(reports).every((r: any) => r.definition?.entity && Array.isArray(r.definition.columns)));
     });
   }
 });
