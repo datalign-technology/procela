@@ -53,6 +53,7 @@ import { savedViews } from '../routes/saved-views';
 import { dataAssetColumns, dataAssetBindings } from '../routes/data-assets';
 import { connections } from '../routes/connections';
 import { saveStore } from '../lib/persistence';
+import { invalidateOrgScopeCache } from '../lib/org-scope';
 import logger from '../lib/logger';
 
 import type { Repository } from '../db/repository';
@@ -723,9 +724,16 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
   const repos = buildRepos();
   await sweep(repos);
   const ts = now();
-  return industry === 'shipbuilding'
-    ? seedShipbuilding(repos, ts)
-    : seedUtilities(repos, ts);
+  const report = industry === 'shipbuilding'
+    ? await seedShipbuilding(repos, ts)
+    : await seedUtilities(repos, ts);
+  // Refresh the org-scope cache so accessible-orgs and the synchronous
+  // scope checks see the freshly-seeded orgs immediately. In Postgres mode
+  // that cache is otherwise stale until its TTL, so the org picker would
+  // read "No organization defined" until it expired. Mirrors what the org
+  // route does after a create; no-op in JSON mode.
+  await invalidateOrgScopeCache();
+  return report;
 }
 
 /**
