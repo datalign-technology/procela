@@ -119,7 +119,10 @@ describe('demo-seed endpoint', () => {
     }
     // AI cache doesn't carry a `demo-` id field — clean the two
     // known demo-owned entries by industry key.
-    const demoKeys = new Set(['utilities|tidewater electric', 'utilities|tidewater water']);
+    const demoKeys = new Set([
+      'utilities|tidewater electric', 'utilities|tidewater water',
+      'defense & shipbuilding|ship construction', 'defense & shipbuilding|fleet sustainment',
+    ]);
     for (let i = aiTemplateCache.length - 1; i >= 0; i--) {
       if (demoKeys.has(aiTemplateCache[i]?.industry)) aiTemplateCache.splice(i, 1);
     }
@@ -260,5 +263,69 @@ describe('demo-seed endpoint', () => {
     assert.ok(orphanB);
     assert.strictEqual(mappedAssetIds.has(orphanA.id), false, 'Legacy Billing Extract should be orphaned');
     assert.strictEqual(mappedAssetIds.has(orphanB.id), false, 'Meter CSV Dump should be orphaned');
+  });
+
+  // ── Shipbuilding industry profile — parity with utilities ──
+
+  it('rejects an unknown industry with 400', async () => {
+    const res = await request(port, 'POST', '/admin/demo-seed', { industry: 'aerospace' }, 'SUPER_ADMIN');
+    assert.strictEqual(res.status, 400);
+    assert.match(res.body.error, /Unknown industry/);
+  });
+
+  it('seeds the shipbuilding profile at the same counts as utilities', async () => {
+    const res = await request(port, 'POST', '/admin/demo-seed', { industry: 'shipbuilding' }, 'SUPER_ADMIN');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.persona.name, 'Elena Ruiz');
+
+    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
+    assert.strictEqual(demoCount(organizations), 10, 'orgs');
+    assert.strictEqual(demoCount(people), 24, 'people');
+    assert.strictEqual(demoCount(systems), 8, 'systems');
+    assert.strictEqual(demoCount(agents), 5, 'agents');
+    assert.strictEqual(demoCount(dataDomains), 3, 'domains');
+    assert.strictEqual(demoCount(dataAssets), 9, 'assets');
+    assert.strictEqual(demoCount(processNodes), 15, 'process nodes');
+    assert.strictEqual(demoCount(mappings), 7, 'mappings');
+    assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
+    assert.strictEqual(demoCount(governanceIssues), 1, 'issues');
+    assert.strictEqual(demoCount(dataQualityRules), 2, 'DQ rules');
+    assert.strictEqual(demoCount(connectors), 2, 'connectors');
+    assert.strictEqual(demoCount(connectorEvents), 5, 'connector events');
+    assert.strictEqual(demoCount(calendarEvents), 1, 'calendar events');
+  });
+
+  it('switching industry replaces the previous tenant — no compounding', async () => {
+    // Seed utilities, then shipbuilding: the sweep must clear the
+    // utilities rows so only the shipbuilding tenant remains.
+    await request(port, 'POST', '/admin/demo-seed', { industry: 'utilities' }, 'SUPER_ADMIN');
+    await request(port, 'POST', '/admin/demo-seed', { industry: 'shipbuilding' }, 'SUPER_ADMIN');
+
+    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
+    assert.strictEqual(demoCount(organizations), 10, 'orgs after switch');
+    assert.strictEqual(demoCount(people), 24, 'people after switch');
+
+    // Utilities-only rows should be gone; shipbuilding rows present.
+    assert.ok(!people.some((p: any) => p.id === 'demo-person-susan-chen'), 'Susan (utilities) cleared');
+    assert.ok(people.some((p: any) => p.id === 'demo-person-elena-ruiz'), 'Elena (shipbuilding) present');
+    // AI cache should hold the shipbuilding keys, not the utilities ones.
+    assert.ok(aiTemplateCache.some((c: any) => c.industry === 'defense & shipbuilding|ship construction'));
+    assert.ok(!aiTemplateCache.some((c: any) => c.industry === 'utilities|tidewater electric'), 'utilities cache cleared');
+  });
+
+  it('shipbuilding plants orphan assets and a failing DQ rule on the same asset as its issue', async () => {
+    await request(port, 'POST', '/admin/demo-seed', { industry: 'shipbuilding' }, 'SUPER_ADMIN');
+    const mappedAssetIds = new Set(mappings.filter((m: any) => m.dataAssetId).map((m: any) => m.dataAssetId));
+    assert.ok(dataAssets.find((a: any) => a.id === 'demo-asset-legacy-drawings'));
+    assert.ok(dataAssets.find((a: any) => a.id === 'demo-asset-nesting-csv'));
+    assert.strictEqual(mappedAssetIds.has('demo-asset-legacy-drawings'), false, 'Legacy Drawing Extract orphaned');
+    assert.strictEqual(mappedAssetIds.has('demo-asset-nesting-csv'), false, 'Nesting CSV Dump orphaned');
+
+    const failing = dataQualityRules.find((r: any) => r.id?.startsWith('demo-') && r.status === 'FAILING');
+    const issue = governanceIssues.find((i: any) => i.id?.startsWith('demo-'));
+    assert.ok(failing && issue);
+    assert.strictEqual(failing.dataAssetId, 'demo-asset-weld-records');
+    assert.strictEqual(issue.dataAssetId, 'demo-asset-weld-records', 'issue + failing DQ target one asset');
   });
 });
