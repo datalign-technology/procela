@@ -57,7 +57,7 @@ interface RaciOverride {
   value: string; // R, A, C, I
   reason?: string;
 }
-const raciOverrides: RaciOverride[] = loadStore<RaciOverride>('raciOverrides');
+export const raciOverrides: RaciOverride[] = loadStore<RaciOverride>('raciOverrides');
 registerStore('raciOverrides', raciOverrides);
 // RACI overrides read/write through the repository (Postgres or JSON) — PR 7c.
 const raciRepo = getRaciOverridesRepository(raciOverrides);

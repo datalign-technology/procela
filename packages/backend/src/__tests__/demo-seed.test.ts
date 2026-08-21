@@ -53,6 +53,12 @@ const { governanceGroups } = require('../routes/governance-groups');
 const { governancePrograms } = require('../routes/governance-program');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { decisionRights } = require('../routes/decision-rights');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { skills } = require('../routes/skills');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { damaRoles } = require('../routes/dama-roles');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { raciOverrides } = require('../routes/dashboard');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -127,11 +133,15 @@ describe('demo-seed endpoint', () => {
       [governanceGroups, 'governanceGroups'],
       [governancePrograms, 'governancePrograms'],
       [decisionRights, 'decisionRights'],
+      [skills, 'skills'],
+      [damaRoles, 'damaRoles'],
     ];
     for (const [arr, name] of stores) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
       saveStore(name, arr);
     }
+    for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith('demo-')) raciOverrides.splice(i, 1);
+    saveStore('raciOverrides', raciOverrides);
     // AI cache doesn't carry a `demo-` id field — clean the two
     // known demo-owned entries by industry key.
     const demoKeys = new Set([
@@ -149,7 +159,9 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles]) sweep(s);
+    // RACI overrides key on nodeId (no id) — clear demo-prefixed nodes.
+    for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith('demo-')) raciOverrides.splice(i, 1);
   });
 
   it('rejects non-super-admin callers with 403', async () => {
@@ -366,6 +378,31 @@ describe('demo-seed endpoint', () => {
       const team = demo(governanceGroups).find((g: any) => g.type === 'STEWARDSHIP_TEAM');
       assert.ok(council && team);
       assert.strictEqual(team.parentId, council.id, 'team nests under council');
+    });
+
+    it(`seeds people depth (skills, skill assignments, DAMA roles, RACI) for ${industry}`, async () => {
+      await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      assert.strictEqual(demo(skills).length, 8, 'skills catalog');
+      assert.strictEqual(demo(damaRoles).length, 7, 'DAMA roles');
+
+      // Every seeded DAMA role references a seeded skill-independent person
+      // and its scope; there should be exactly one CDO (single-holder).
+      const cdoRoles = demo(damaRoles).filter((r: any) => r.roleType === 'CDO');
+      assert.strictEqual(cdoRoles.length, 1, 'exactly one CDO');
+
+      // Skill assignments land on people as skillIds.
+      const withSkills = people.filter((p: any) => p.id?.startsWith('demo-') && Array.isArray(p.skillIds) && p.skillIds.length > 0);
+      assert.ok(withSkills.length >= 7, `expected 7+ people with skills, got ${withSkills.length}`);
+      const skillIds = new Set(demo(skills).map((s: any) => s.id));
+      for (const p of withSkills) {
+        for (const sidv of p.skillIds) assert.ok(skillIds.has(sidv), `person skill ${sidv} is a seeded skill`);
+      }
+
+      // One RACI override on a demo activity.
+      const demoRaci = raciOverrides.filter((r: any) => r?.nodeId?.startsWith('demo-'));
+      assert.strictEqual(demoRaci.length, 1, 'one RACI override');
+      assert.ok(['R', 'A', 'C', 'I'].includes(demoRaci[0].value));
     });
   }
 });
