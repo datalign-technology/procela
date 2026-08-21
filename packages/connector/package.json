@@ -20,6 +20,7 @@
     "mysql2": "^3.11.5",
     "oracledb": "^6.10.0",
     "pg": "^8.13.1",
+    "undici": "^6.28.0",
     "yaml": "^2.6.1"
   },
   "devDependencies": {
