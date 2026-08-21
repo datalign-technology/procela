@@ -52,7 +52,15 @@ function maybeInstrumentStore<T>(name: string, arr: T[]): T[] {
   return instrumentStaleStore(name, arr);
 }
 
-const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
+// Where JSON stores live. Defaults to `.procela-data` under the process
+// cwd. PROCELA_DATA_DIR overrides it — used by tests that persist real
+// rows (e.g. the demo-seed suite) to write into a private temp directory
+// so their disk writes don't race other test files that share the
+// default directory. Read once at module load, so a test that needs the
+// override must set the env var before this module is first imported.
+const DATA_DIR = process.env.PROCELA_DATA_DIR
+  ? path.resolve(process.env.PROCELA_DATA_DIR)
+  : path.resolve(process.cwd(), '.procela-data');
 
 export function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });

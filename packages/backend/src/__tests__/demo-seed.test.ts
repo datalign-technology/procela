@@ -12,6 +12,19 @@ import assert from 'node:assert';
 import http from 'http';
 import express from 'express';
 import type { AddressInfo } from 'net';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
+
+// Isolate this suite's JSON persistence into a private temp directory.
+// The demo-seed endpoint persists real rows to disk; the default
+// `.procela-data` is shared by every test file (node --test runs files
+// in parallel processes off the same cwd), so those writes could race a
+// count-sensitive route suite that loads the same store mid-seed. Point
+// this process at its own dir before the first require pulls in the
+// persistence module. ESM evaluates the imports above first, so `fs` is
+// ready and this runs before the requires below.
+process.env.PROCELA_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'procela-demo-seed-'));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const adminRouter = require('../routes/admin').default;
