@@ -28,6 +28,10 @@ process.env.PROCELA_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'procela-de
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const adminRouter = require('../routes/admin').default;
+// Demo ids are deterministic UUIDs (see demoId in the service) — require it
+// AFTER PROCELA_DATA_DIR is set so persistence loads against the temp dir.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { demoId, DEMO_ID_SENTINEL } = require('../services/demo-seed.service');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { organizations } = require('../routes/organizations');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -200,10 +204,10 @@ describe('demo-seed endpoint', () => {
       [connections, 'connections'],
     ];
     for (const [arr, name] of stores) {
-      for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
+      for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith(DEMO_ID_SENTINEL)) arr.splice(i, 1);
       saveStore(name, arr);
     }
-    for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith('demo-')) raciOverrides.splice(i, 1);
+    for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith(DEMO_ID_SENTINEL)) raciOverrides.splice(i, 1);
     saveStore('raciOverrides', raciOverrides);
     // AI cache doesn't carry a `demo-` id field — clean the two
     // known demo-owned entries by industry key.
@@ -220,11 +224,24 @@ describe('demo-seed endpoint', () => {
 
   beforeEach(() => {
     const sweep = (arr: any[]) => {
-      for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
+      for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith(DEMO_ID_SENTINEL)) arr.splice(i, 1);
     };
     for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals, dataLineageLinks, assetLineageEdges, maturitySnapshots, gapSnapshots, agentSchedules, agentExecutions, comments, tags, attachments, reports, analysisReports, savedViews, dataAssetColumns, dataAssetBindings, connections]) sweep(s);
     // RACI overrides key on nodeId (no id) — clear demo-prefixed nodes.
-    for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith('demo-')) raciOverrides.splice(i, 1);
+    for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith(DEMO_ID_SENTINEL)) raciOverrides.splice(i, 1);
+  });
+
+  it('generates valid, deterministic UUID demo ids (Postgres @db.Uuid safe)', () => {
+    // The id columns are @db.Uuid in Postgres, so a non-UUID string id is
+    // rejected on insert (JSON mode tolerates any string). Guard the format
+    // here so that regression is caught without needing a live database.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    for (const key of ['org-tidewater', 'person-susan-chen', 'skill-dq', 'stats-abc-0', 'mat-def-3']) {
+      assert.match(demoId(key), UUID_RE, `${key} → valid UUID`);
+    }
+    assert.ok(demoId('org-tidewater').startsWith(DEMO_ID_SENTINEL), 'carries the demo sentinel prefix');
+    assert.strictEqual(demoId('org-tidewater'), demoId('org-tidewater'), 'deterministic (idempotent reseed)');
+    assert.notStrictEqual(demoId('a'), demoId('b'), 'distinct keys → distinct ids');
   });
 
   it('rejects non-super-admin callers with 403', async () => {
@@ -239,7 +256,7 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(res.body.success, true);
     assert.strictEqual(res.body.data.persona.name, 'Susan Chen');
 
-    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
+    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL)).length;
     assert.strictEqual(demoCount(organizations), 10, 'orgs');
     assert.strictEqual(demoCount(people), 24, 'people');
     assert.strictEqual(demoCount(systems), 8, 'systems');
@@ -259,7 +276,7 @@ describe('demo-seed endpoint', () => {
   it('is idempotent — second call replaces the first, no row compounding', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
-    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
+    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL)).length;
     // Counts should match the single-seed expectations.
     assert.strictEqual(demoCount(organizations), 10);
     assert.strictEqual(demoCount(people), 24);
@@ -268,7 +285,7 @@ describe('demo-seed endpoint', () => {
 
   it('populates Susan Chen persona with tasks + issue', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
-    const susan = people.find((p: any) => p.id === 'demo-person-susan-chen');
+    const susan = people.find((p: any) => p.id === demoId('person-susan-chen'));
     assert.ok(susan, 'Susan should be seeded');
     const susanTasks = governanceTasks.filter((t: any) => t.assigneeId === susan.id);
     assert.ok(susanTasks.length >= 3, `expected 3+ tasks for Susan, got ${susanTasks.length}`);
@@ -278,7 +295,7 @@ describe('demo-seed endpoint', () => {
 
   it('seeds two DQ rules — one passing, one failing — for the demo tile story', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
-    const rules = dataQualityRules.filter((r: any) => r.id?.startsWith('demo-'));
+    const rules = dataQualityRules.filter((r: any) => r.id?.startsWith(DEMO_ID_SENTINEL));
     assert.strictEqual(rules.length, 2);
     const passing = rules.find((r: any) => r.status === 'PASSING');
     const failing = rules.find((r: any) => r.status === 'FAILING');
@@ -287,7 +304,7 @@ describe('demo-seed endpoint', () => {
     // The FAILING rule should target Generation Output — that's the
     // asset the seeded governance issue references, so the demo
     // story stays coherent.
-    assert.strictEqual(failing.dataAssetId, 'demo-asset-generation-output');
+    assert.strictEqual(failing.dataAssetId, demoId('asset-generation-output'));
   });
 
   it('pre-warms the AI wand cache for Tidewater Electric + Water', async () => {
@@ -304,7 +321,7 @@ describe('demo-seed endpoint', () => {
 
   it('seeds a paired connector, its events, and wires Meter Reads sync fields', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
-    const conn = connectors.find((c: any) => c.id === 'demo-conn-tidewater');
+    const conn = connectors.find((c: any) => c.id === demoId('conn-tidewater'));
     assert.ok(conn, 'expected the demo connector');
     assert.strictEqual(conn.status, 'ONLINE');
     assert.strictEqual(conn.agentVersion, '1.2.0');
@@ -319,7 +336,7 @@ describe('demo-seed endpoint', () => {
 
     // Meter Reads should carry the sync chip fields so the Data Asset
     // detail page reads "Synced N min ago".
-    const meter = dataAssets.find((a: any) => a.id === 'demo-asset-meter-reads');
+    const meter = dataAssets.find((a: any) => a.id === demoId('asset-meter-reads'));
     assert.ok(meter);
     assert.strictEqual((meter as any).lastSyncedByConnectorId, conn.id);
     assert.ok((meter as any).lastSyncedAt);
@@ -327,8 +344,8 @@ describe('demo-seed endpoint', () => {
 
   it('seeds a PAIRING connector alongside the ONLINE one', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
-    const online = connectors.find((c: any) => c.id === 'demo-conn-tidewater');
-    const pairing = connectors.find((c: any) => c.id === 'demo-conn-pairing');
+    const online = connectors.find((c: any) => c.id === demoId('conn-tidewater'));
+    const pairing = connectors.find((c: any) => c.id === demoId('conn-pairing'));
     assert.ok(online);
     assert.ok(pairing, 'expected the PAIRING connector');
     assert.strictEqual(pairing.tokenHash, null, 'PAIRING connector should not have a claimed token');
@@ -337,18 +354,18 @@ describe('demo-seed endpoint', () => {
 
   it('seeds a governance calendar event owned by Susan', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
-    const ev = calendarEvents.find((c: any) => c.id === 'demo-cal-dgc');
+    const ev = calendarEvents.find((c: any) => c.id === demoId('cal-dgc'));
     assert.ok(ev);
     assert.strictEqual(ev.cadence, 'WEEKLY');
-    assert.ok(Array.isArray(ev.attendees) && ev.attendees.includes('demo-person-susan-chen'), 'Susan is an attendee');
+    assert.ok(Array.isArray(ev.attendees) && ev.attendees.includes(demoId('person-susan-chen')), 'Susan is an attendee');
     assert.ok(new Date(ev.nextOccurrence).getTime() > Date.now());
   });
 
   it('plants orphan assets not referenced by any mapping', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
     const mappedAssetIds = new Set(mappings.filter((m: any) => m.dataAssetId).map((m: any) => m.dataAssetId));
-    const orphanA = dataAssets.find((a: any) => a.id === 'demo-asset-legacy-billing');
-    const orphanB = dataAssets.find((a: any) => a.id === 'demo-asset-meter-csv');
+    const orphanA = dataAssets.find((a: any) => a.id === demoId('asset-legacy-billing'));
+    const orphanB = dataAssets.find((a: any) => a.id === demoId('asset-meter-csv'));
     assert.ok(orphanA);
     assert.ok(orphanB);
     assert.strictEqual(mappedAssetIds.has(orphanA.id), false, 'Legacy Billing Extract should be orphaned');
@@ -369,7 +386,7 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(res.body.success, true);
     assert.strictEqual(res.body.data.persona.name, 'Elena Ruiz');
 
-    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
+    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL)).length;
     assert.strictEqual(demoCount(organizations), 10, 'orgs');
     assert.strictEqual(demoCount(people), 24, 'people');
     assert.strictEqual(demoCount(systems), 8, 'systems');
@@ -392,13 +409,13 @@ describe('demo-seed endpoint', () => {
     await request(port, 'POST', '/admin/demo-seed', { industry: 'utilities' }, 'SUPER_ADMIN');
     await request(port, 'POST', '/admin/demo-seed', { industry: 'shipbuilding' }, 'SUPER_ADMIN');
 
-    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
+    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL)).length;
     assert.strictEqual(demoCount(organizations), 10, 'orgs after switch');
     assert.strictEqual(demoCount(people), 24, 'people after switch');
 
     // Utilities-only rows should be gone; shipbuilding rows present.
-    assert.ok(!people.some((p: any) => p.id === 'demo-person-susan-chen'), 'Susan (utilities) cleared');
-    assert.ok(people.some((p: any) => p.id === 'demo-person-elena-ruiz'), 'Elena (shipbuilding) present');
+    assert.ok(!people.some((p: any) => p.id === demoId('person-susan-chen')), 'Susan (utilities) cleared');
+    assert.ok(people.some((p: any) => p.id === demoId('person-elena-ruiz')), 'Elena (shipbuilding) present');
     // AI cache should hold the shipbuilding keys, not the utilities ones.
     assert.ok(aiTemplateCache.some((c: any) => c.industry === 'defense & shipbuilding|ship construction'));
     assert.ok(!aiTemplateCache.some((c: any) => c.industry === 'utilities|tidewater electric'), 'utilities cache cleared');
@@ -407,16 +424,16 @@ describe('demo-seed endpoint', () => {
   it('shipbuilding plants orphan assets and a failing DQ rule on the same asset as its issue', async () => {
     await request(port, 'POST', '/admin/demo-seed', { industry: 'shipbuilding' }, 'SUPER_ADMIN');
     const mappedAssetIds = new Set(mappings.filter((m: any) => m.dataAssetId).map((m: any) => m.dataAssetId));
-    assert.ok(dataAssets.find((a: any) => a.id === 'demo-asset-legacy-drawings'));
-    assert.ok(dataAssets.find((a: any) => a.id === 'demo-asset-nesting-csv'));
-    assert.strictEqual(mappedAssetIds.has('demo-asset-legacy-drawings'), false, 'Legacy Drawing Extract orphaned');
-    assert.strictEqual(mappedAssetIds.has('demo-asset-nesting-csv'), false, 'Nesting CSV Dump orphaned');
+    assert.ok(dataAssets.find((a: any) => a.id === demoId('asset-legacy-drawings')));
+    assert.ok(dataAssets.find((a: any) => a.id === demoId('asset-nesting-csv')));
+    assert.strictEqual(mappedAssetIds.has(demoId('asset-legacy-drawings')), false, 'Legacy Drawing Extract orphaned');
+    assert.strictEqual(mappedAssetIds.has(demoId('asset-nesting-csv')), false, 'Nesting CSV Dump orphaned');
 
-    const failing = dataQualityRules.find((r: any) => r.id?.startsWith('demo-') && r.status === 'FAILING');
-    const issue = governanceIssues.find((i: any) => i.id?.startsWith('demo-'));
+    const failing = dataQualityRules.find((r: any) => r.id?.startsWith(DEMO_ID_SENTINEL) && r.status === 'FAILING');
+    const issue = governanceIssues.find((i: any) => i.id?.startsWith(DEMO_ID_SENTINEL));
     assert.ok(failing && issue);
-    assert.strictEqual(failing.dataAssetId, 'demo-asset-weld-records');
-    assert.strictEqual(issue.dataAssetId, 'demo-asset-weld-records', 'issue + failing DQ target one asset');
+    assert.strictEqual(failing.dataAssetId, demoId('asset-weld-records'));
+    assert.strictEqual(issue.dataAssetId, demoId('asset-weld-records'), 'issue + failing DQ target one asset');
   });
 
   // ── Governance depth — seeded for both industries at parity ──
@@ -424,7 +441,7 @@ describe('demo-seed endpoint', () => {
   for (const industry of ['utilities', 'shipbuilding'] as const) {
     it(`seeds governance depth (policies/controls/groups/program/decision rights) for ${industry}`, async () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
-      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));
       assert.strictEqual(demo(governancePolicies).length, 3, 'policies');
       assert.strictEqual(demo(governanceControls).length, 3, 'controls');
       assert.strictEqual(demo(governanceGroups).length, 2, 'groups');
@@ -445,7 +462,7 @@ describe('demo-seed endpoint', () => {
 
     it(`seeds people depth (skills, skill assignments, DAMA roles, RACI) for ${industry}`, async () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
-      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));
       assert.strictEqual(demo(skills).length, 8, 'skills catalog');
       assert.strictEqual(demo(damaRoles).length, 7, 'DAMA roles');
 
@@ -455,7 +472,7 @@ describe('demo-seed endpoint', () => {
       assert.strictEqual(cdoRoles.length, 1, 'exactly one CDO');
 
       // Skill assignments land on people as skillIds.
-      const withSkills = people.filter((p: any) => p.id?.startsWith('demo-') && Array.isArray(p.skillIds) && p.skillIds.length > 0);
+      const withSkills = people.filter((p: any) => p.id?.startsWith(DEMO_ID_SENTINEL) && Array.isArray(p.skillIds) && p.skillIds.length > 0);
       assert.ok(withSkills.length >= 7, `expected 7+ people with skills, got ${withSkills.length}`);
       const skillIds = new Set(demo(skills).map((s: any) => s.id));
       for (const p of withSkills) {
@@ -463,14 +480,14 @@ describe('demo-seed endpoint', () => {
       }
 
       // One RACI override on a demo activity.
-      const demoRaci = raciOverrides.filter((r: any) => r?.nodeId?.startsWith('demo-'));
+      const demoRaci = raciOverrides.filter((r: any) => r?.nodeId?.startsWith(DEMO_ID_SENTINEL));
       assert.strictEqual(demoRaci.length, 1, 'one RACI override');
       assert.ok(['R', 'A', 'C', 'I'].includes(demoRaci[0].value));
     });
 
     it(`seeds docs depth (SOPs, glossary, operations manuals) for ${industry}`, async () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
-      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));
       assert.strictEqual(demo(sops).length, 3, 'SOPs');
       assert.strictEqual(demo(glossaryTerms).length, 4, 'glossary terms');
       assert.strictEqual(demo(operationsManuals).length, 3, 'operations manuals');
@@ -482,7 +499,7 @@ describe('demo-seed endpoint', () => {
 
     it(`seeds lineage + trend history for ${industry}`, async () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
-      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));
       assert.strictEqual(demo(dataLineageLinks).length, 3, 'lineage links');
       assert.strictEqual(demo(assetLineageEdges).length, 2, 'asset edges');
       // 6 weekly snapshots per org × 3 orgs.
@@ -497,7 +514,7 @@ describe('demo-seed endpoint', () => {
 
     it(`seeds agent operations (schedules + executions) for ${industry}`, async () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
-      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));
       assert.strictEqual(demo(agentSchedules).length, 2, 'agent schedules');
       assert.strictEqual(demo(agentExecutions).length, 3, 'agent executions');
       // Execution lifecycle: an approved, a pending-review, and a failed run.
@@ -509,7 +526,7 @@ describe('demo-seed endpoint', () => {
 
     it(`seeds collaboration + reporting + connections for ${industry}`, async () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
-      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-'));
+      const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));
       assert.strictEqual(demo(connections).length, 1, 'connection');
       assert.strictEqual(demo(dataAssetColumns).length, 4, 'asset columns');
       assert.strictEqual(demo(dataAssetBindings).length, 1, 'asset binding');

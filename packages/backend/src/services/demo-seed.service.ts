@@ -12,6 +12,7 @@
 // the reseed pass clears anything with that prefix from every
 // registered store first. Safe to run repeatedly.
 
+import { createHash } from 'crypto';
 import { organizations } from '../routes/organizations';
 import { people } from '../routes/people';
 import { systems } from '../routes/systems';
@@ -98,7 +99,19 @@ import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
 import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
 import { getConnectionsRepository } from '../db/connections.repo';
 
-const P = 'demo-'; // shared prefix — sweep target on reseed
+// Demo rows use deterministic UUIDs. Postgres id columns are `@db.Uuid`, so a
+// non-UUID id like "demo-org-x" is rejected on insert; in JSON mode any string
+// works, which is why this only bites under Postgres. demoId(key) hashes a
+// stable key into a valid UUID whose first group is a fixed sentinel
+// ("deadbeef"), so: reseeds are idempotent (same key → same id), cross-refs
+// stay consistent (both the create and the reference call demoId with the same
+// key), and the sweep can still recognize demo rows by that id prefix.
+export const DEMO_ID_SENTINEL = 'deadbeef';
+export function demoId(key: string): string {
+  const h = createHash('sha256').update(key).digest('hex');
+  // 8-4-4-4-12 hex → a syntactically valid UUID Postgres @db.Uuid accepts.
+  return `${DEMO_ID_SENTINEL}-${h.slice(0, 4)}-4${h.slice(4, 7)}-8${h.slice(7, 10)}-${h.slice(10, 22)}`;
+}
 
 function now() { return new Date().toISOString(); }
 function daysFromNow(n: number): string {
@@ -142,7 +155,7 @@ function weeklySnapshots(
     const capturedAt = daysFromNow(-(STATS_WEEKS - 1 - i) * 7).slice(0, 10);
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
     rows.push({
-      id: `${P}stats-${orgId}-${i}`,
+      id: demoId(`stats-${orgId}-${i}`),
       orgId,
       capturedAt,
       coverage: i === STATS_WEEKS - 1 ? end.coverage : clamp(Math.round(end.coverage - (1 - progress) * 22), 0, 100),
@@ -272,7 +285,7 @@ async function createAll(repo: Repository<any>, rows: any[]): Promise<void> {
 async function sweepRepo(repo: Repository<any>): Promise<void> {
   const all = await repo.list();
   for (const row of all) {
-    if (typeof row?.id === 'string' && row.id.startsWith(P)) await repo.delete(row.id);
+    if (typeof row?.id === 'string' && row.id.startsWith(DEMO_ID_SENTINEL)) await repo.delete(row.id);
   }
 }
 
@@ -282,7 +295,7 @@ async function sweepRepo(repo: Repository<any>): Promise<void> {
  *  remaining demo row. */
 async function sweepHierarchy(repo: Repository<any>): Promise<void> {
   let remaining = (await repo.list()).filter(
-    (o: any) => typeof o?.id === 'string' && o.id.startsWith(P),
+    (o: any) => typeof o?.id === 'string' && o.id.startsWith(DEMO_ID_SENTINEL),
   );
   while (remaining.length) {
     const parentIds = new Set(remaining.map((o: any) => o.parentId).filter(Boolean));
@@ -302,7 +315,7 @@ async function sweepRaci(): Promise<void> {
   const repo = raciRepo();
   const all = await repo.list();
   for (const row of all) {
-    if (typeof row?.nodeId === 'string' && row.nodeId.startsWith(P)) {
+    if (typeof row?.nodeId === 'string' && row.nodeId.startsWith(DEMO_ID_SENTINEL)) {
       await repo.remove(row.nodeId, row.personId);
     }
   }
@@ -350,7 +363,10 @@ async function sweep(repos: DemoRepos): Promise<void> {
   await sweepRepo(repos.governanceTasks);
   await sweepRepo(repos.mappings);
   await sweepRepo(repos.flowRelationships);
-  await sweepRepo(repos.processNodes);
+  // Process nodes self-parent with ON DELETE Cascade, so deleting a
+  // value stream would cascade its children; sweep leaf-first (like orgs)
+  // so each row is deleted while it still exists — no cascade re-delete.
+  await sweepHierarchy(repos.processNodes);
   await sweepRepo(repos.dataAssets);
   await sweepRepo(repos.dataDomains);
   await sweepRepo(repos.agents);
@@ -386,26 +402,26 @@ async function seedGovernanceDepth(repos: DemoRepos, ts: string, ctx: GovDepthCt
   const { orgId, cdoId, govLeadId, dataOwnerId, stewardIds, tenantName } = ctx;
 
   // Policies (3) — a charter, a classification policy, a quality standard.
-  const polCharter = { id: P + 'pol-charter', orgId, code: 'CHA-001', name: 'Data Governance Charter', description: 'Mandate, scope, and operating model for the data governance program.', documentType: 'CHARTER', status: 'ACTIVE', ownerAssignmentId: cdoId, category: 'GOVERNANCE', reviewFrequency: 'ANNUAL', nextReviewDate: daysFromNow(120).slice(0, 10), effectiveDate: daysFromNow(-200).slice(0, 10), content: 'The data governance program exists to make data a trusted, owned, discoverable asset across the enterprise.', createdAt: ts, updatedAt: ts };
-  const polClassification = { id: P + 'pol-classification', orgId, code: 'POL-001', name: 'Data Classification Policy', description: 'How data is classified by sensitivity and the handling rules per tier.', documentType: 'POLICY', status: 'ACTIVE', ownerAssignmentId: govLeadId, category: 'CLASSIFICATION', reviewFrequency: 'SEMI_ANNUAL', nextReviewDate: daysFromNow(60).slice(0, 10), effectiveDate: daysFromNow(-150).slice(0, 10), content: 'Every asset is tagged Public, Internal, Confidential, or Restricted, with handling rules per tier.', createdAt: ts, updatedAt: ts };
-  const polQuality = { id: P + 'pol-quality', orgId, code: 'STD-001', name: 'Data Quality Standard', description: 'Minimum quality thresholds and the dimensions measured per asset tier.', documentType: 'STANDARD', status: 'UNDER_REVIEW', ownerAssignmentId: stewardIds[0], category: 'DATA_QUALITY', reviewFrequency: 'QUARTERLY', nextReviewDate: daysFromNow(30).slice(0, 10), effectiveDate: daysFromNow(-90).slice(0, 10), content: 'Gold assets must measure completeness, accuracy, and timeliness at or above the tier threshold.', createdAt: ts, updatedAt: ts };
+  const polCharter = { id: demoId('pol-charter'), orgId, code: 'CHA-001', name: 'Data Governance Charter', description: 'Mandate, scope, and operating model for the data governance program.', documentType: 'CHARTER', status: 'ACTIVE', ownerAssignmentId: cdoId, category: 'GOVERNANCE', reviewFrequency: 'ANNUAL', nextReviewDate: daysFromNow(120).slice(0, 10), effectiveDate: daysFromNow(-200).slice(0, 10), content: 'The data governance program exists to make data a trusted, owned, discoverable asset across the enterprise.', createdAt: ts, updatedAt: ts };
+  const polClassification = { id: demoId('pol-classification'), orgId, code: 'POL-001', name: 'Data Classification Policy', description: 'How data is classified by sensitivity and the handling rules per tier.', documentType: 'POLICY', status: 'ACTIVE', ownerAssignmentId: govLeadId, category: 'CLASSIFICATION', reviewFrequency: 'SEMI_ANNUAL', nextReviewDate: daysFromNow(60).slice(0, 10), effectiveDate: daysFromNow(-150).slice(0, 10), content: 'Every asset is tagged Public, Internal, Confidential, or Restricted, with handling rules per tier.', createdAt: ts, updatedAt: ts };
+  const polQuality = { id: demoId('pol-quality'), orgId, code: 'STD-001', name: 'Data Quality Standard', description: 'Minimum quality thresholds and the dimensions measured per asset tier.', documentType: 'STANDARD', status: 'UNDER_REVIEW', ownerAssignmentId: stewardIds[0], category: 'DATA_QUALITY', reviewFrequency: 'QUARTERLY', nextReviewDate: daysFromNow(30).slice(0, 10), effectiveDate: daysFromNow(-90).slice(0, 10), content: 'Gold assets must measure completeness, accuracy, and timeliness at or above the tier threshold.', createdAt: ts, updatedAt: ts };
   await createAll(repos.governancePolicies, [polCharter, polClassification, polQuality]);
 
   // Controls (3) — each tied to a policy.
   await createAll(repos.governanceControls, [
-    { id: P + 'ctl-completeness', orgId, policyId: polQuality.id, code: 'CTL-001', name: 'Completeness threshold enforcement', description: 'DQ rules flag an asset when completeness falls below the standard.', controlType: 'DETECTIVE', automationMode: 'HUMAN', status: 'ACTIVE', ownerAssignmentId: stewardIds[0], evidenceRequired: true, createdAt: ts, updatedAt: ts },
-    { id: P + 'ctl-sensitivity', orgId, policyId: polClassification.id, code: 'CTL-002', name: 'Sensitivity tag review', description: 'A steward reviews AI-suggested sensitivity tags before they take effect.', controlType: 'PREVENTIVE', automationMode: 'HYBRID', status: 'ACTIVE', ownerAssignmentId: govLeadId, evidenceRequired: true, createdAt: ts, updatedAt: ts },
-    { id: P + 'ctl-access', orgId, policyId: polCharter.id, code: 'CTL-003', name: 'Quarterly access recertification', description: 'Owners recertify who has access to their assets each quarter.', controlType: 'DETECTIVE', automationMode: 'HUMAN', status: 'DRAFT', ownerAssignmentId: cdoId, evidenceRequired: false, createdAt: ts, updatedAt: ts },
+    { id: demoId('ctl-completeness'), orgId, policyId: polQuality.id, code: 'CTL-001', name: 'Completeness threshold enforcement', description: 'DQ rules flag an asset when completeness falls below the standard.', controlType: 'DETECTIVE', automationMode: 'HUMAN', status: 'ACTIVE', ownerAssignmentId: stewardIds[0], evidenceRequired: true, createdAt: ts, updatedAt: ts },
+    { id: demoId('ctl-sensitivity'), orgId, policyId: polClassification.id, code: 'CTL-002', name: 'Sensitivity tag review', description: 'A steward reviews AI-suggested sensitivity tags before they take effect.', controlType: 'PREVENTIVE', automationMode: 'HYBRID', status: 'ACTIVE', ownerAssignmentId: govLeadId, evidenceRequired: true, createdAt: ts, updatedAt: ts },
+    { id: demoId('ctl-access'), orgId, policyId: polCharter.id, code: 'CTL-003', name: 'Quarterly access recertification', description: 'Owners recertify who has access to their assets each quarter.', controlType: 'DETECTIVE', automationMode: 'HUMAN', status: 'DRAFT', ownerAssignmentId: cdoId, evidenceRequired: false, createdAt: ts, updatedAt: ts },
   ]);
 
   // Groups (2) — a council with a stewardship team beneath it.
-  const grpCouncil = { id: P + 'grp-council', orgId, parentId: null, name: 'Data Governance Council', description: 'Cross-domain decision body for the data program.', charter: 'Approve policies, resolve escalations, own the governance roadmap.', type: 'COUNCIL', status: 'ACTIVE', members: [{ personId: cdoId, agentId: null, groupRole: 'CHAIR', since: ts }, { personId: govLeadId, agentId: null, groupRole: 'SECRETARY', since: ts }, { personId: dataOwnerId, agentId: null, groupRole: 'MEMBER', since: ts }], createdAt: ts, updatedAt: ts };
-  const grpSteward = { id: P + 'grp-steward', orgId, parentId: grpCouncil.id, name: 'Data Stewardship Team', description: 'Operational stewards executing governance day-to-day.', charter: 'Maintain metadata, run data quality, triage issues.', type: 'STEWARDSHIP_TEAM', status: 'ACTIVE', members: [{ personId: stewardIds[0], agentId: null, groupRole: 'CHAIR', since: ts }, { personId: stewardIds[1], agentId: null, groupRole: 'MEMBER', since: ts }], createdAt: ts, updatedAt: ts };
+  const grpCouncil = { id: demoId('grp-council'), orgId, parentId: null, name: 'Data Governance Council', description: 'Cross-domain decision body for the data program.', charter: 'Approve policies, resolve escalations, own the governance roadmap.', type: 'COUNCIL', status: 'ACTIVE', members: [{ personId: cdoId, agentId: null, groupRole: 'CHAIR', since: ts }, { personId: govLeadId, agentId: null, groupRole: 'SECRETARY', since: ts }, { personId: dataOwnerId, agentId: null, groupRole: 'MEMBER', since: ts }], createdAt: ts, updatedAt: ts };
+  const grpSteward = { id: demoId('grp-steward'), orgId, parentId: grpCouncil.id, name: 'Data Stewardship Team', description: 'Operational stewards executing governance day-to-day.', charter: 'Maintain metadata, run data quality, triage issues.', type: 'STEWARDSHIP_TEAM', status: 'ACTIVE', members: [{ personId: stewardIds[0], agentId: null, groupRole: 'CHAIR', since: ts }, { personId: stewardIds[1], agentId: null, groupRole: 'MEMBER', since: ts }], createdAt: ts, updatedAt: ts };
   await createAll(repos.governanceGroups, [grpCouncil, grpSteward]);
 
   // Program (1 per org).
   await repos.governancePrograms.create({
-    id: P + 'gov-program', orgId, name: `${tenantName} Data Governance Program`,
+    id: demoId('gov-program'), orgId, name: `${tenantName} Data Governance Program`,
     scope: { inScope: 'Enterprise processes, data domains, and systems in the catalog.', outOfScope: 'Personal productivity data and unmanaged spreadsheets.', boundaries: 'All business units in the org hierarchy.', constraints: 'Regulatory reporting deadlines take priority over roadmap work.' },
     principles: { vision: 'Trusted data, owned by the business, discoverable by everyone.', principles: ['Data is an asset', 'Every asset has an owner', 'Govern by tier, not by fiat', 'Automate the routine controls'], decisionRights: 'Council approves policy; domain owners approve domain scope.', operatingModel: 'FEDERATED' },
     targetStartDate: daysFromNow(-180).slice(0, 10), targetLaunchDate: daysFromNow(-60).slice(0, 10),
@@ -414,8 +430,8 @@ async function seedGovernanceDepth(repos: DemoRepos, ts: string, ctx: GovDepthCt
 
   // Decision rights (2) — one person-decided, one group-decided.
   await createAll(repos.decisionRights, [
-    { id: P + 'dr-classification', orgId, decision: 'Approve data classification changes', description: 'Who signs off when an asset\'s sensitivity tier changes.', category: 'CLASSIFICATION', decider: cdoId, deciderType: 'PERSON', recommends: ['DATA_GOVERNANCE_LEAD'], approves: ['CDO'], informed: ['DATA_OWNER'], escalationPath: 'Council → CDO', createdAt: ts, updatedAt: ts },
-    { id: P + 'dr-dispute', orgId, decision: 'Resolve cross-domain data disputes', description: 'Escalation path when two domains disagree on ownership.', category: 'ISSUE', decider: grpCouncil.id, deciderType: 'GROUP', recommends: ['DATA_OWNER'], approves: ['DATA_GOVERNANCE_LEAD'], informed: ['CDO'], escalationPath: 'Domain owners → Council', createdAt: ts, updatedAt: ts },
+    { id: demoId('dr-classification'), orgId, decision: 'Approve data classification changes', description: 'Who signs off when an asset\'s sensitivity tier changes.', category: 'CLASSIFICATION', decider: cdoId, deciderType: 'PERSON', recommends: ['DATA_GOVERNANCE_LEAD'], approves: ['CDO'], informed: ['DATA_OWNER'], escalationPath: 'Council → CDO', createdAt: ts, updatedAt: ts },
+    { id: demoId('dr-dispute'), orgId, decision: 'Resolve cross-domain data disputes', description: 'Escalation path when two domains disagree on ownership.', category: 'ISSUE', decider: grpCouncil.id, deciderType: 'GROUP', recommends: ['DATA_OWNER'], approves: ['DATA_GOVERNANCE_LEAD'], informed: ['CDO'], escalationPath: 'Domain owners → Council', createdAt: ts, updatedAt: ts },
   ]);
 }
 
@@ -441,7 +457,7 @@ interface PeopleDepthCtx {
 
 async function seedPeopleDepth(repos: DemoRepos, ts: string, ctx: PeopleDepthCtx): Promise<void> {
   const { orgId } = ctx;
-  const sid = (k: string) => P + 'skill-' + k;
+  const sid = (k: string) => demoId('skill-' + k);
 
   // Skills catalog — one per competency category.
   const skillDefs: Array<[string, string, string, string]> = [
@@ -474,13 +490,13 @@ async function seedPeopleDepth(repos: DemoRepos, ts: string, ctx: PeopleDepthCtx
 
   // DAMA role map.
   await createAll(repos.damaRoles, [
-    { id: P + 'dama-cdo', personId: ctx.cdoId, agentId: null, agentName: null, roleType: 'CDO', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
-    { id: P + 'dama-govlead', personId: ctx.govLeadId, agentId: null, agentName: null, roleType: 'DATA_GOVERNANCE_LEAD', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
-    { id: P + 'dama-owner', personId: ctx.dataOwnerId, agentId: null, agentName: null, roleType: 'DATA_OWNER', scopeType: 'DOMAIN', scopeId: ctx.domainIds[0], since: ts, createdAt: ts },
-    { id: P + 'dama-bsteward', personId: ctx.stewardId, agentId: null, agentName: null, roleType: 'BUSINESS_DATA_STEWARD', scopeType: 'DOMAIN', scopeId: ctx.domainIds[0], since: ts, createdAt: ts },
-    { id: P + 'dama-tsteward', personId: ctx.techStewardId, agentId: null, agentName: null, roleType: 'TECHNICAL_DATA_STEWARD', scopeType: 'DOMAIN', scopeId: ctx.domainIds[1], since: ts, createdAt: ts },
-    { id: P + 'dama-engineer', personId: ctx.engineerId, agentId: null, agentName: null, roleType: 'DATA_ENGINEER', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
-    { id: P + 'dama-architect', personId: ctx.architectId, agentId: null, agentName: null, roleType: 'DATA_ARCHITECT', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
+    { id: demoId('dama-cdo'), personId: ctx.cdoId, agentId: null, agentName: null, roleType: 'CDO', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
+    { id: demoId('dama-govlead'), personId: ctx.govLeadId, agentId: null, agentName: null, roleType: 'DATA_GOVERNANCE_LEAD', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
+    { id: demoId('dama-owner'), personId: ctx.dataOwnerId, agentId: null, agentName: null, roleType: 'DATA_OWNER', scopeType: 'DOMAIN', scopeId: ctx.domainIds[0], since: ts, createdAt: ts },
+    { id: demoId('dama-bsteward'), personId: ctx.stewardId, agentId: null, agentName: null, roleType: 'BUSINESS_DATA_STEWARD', scopeType: 'DOMAIN', scopeId: ctx.domainIds[0], since: ts, createdAt: ts },
+    { id: demoId('dama-tsteward'), personId: ctx.techStewardId, agentId: null, agentName: null, roleType: 'TECHNICAL_DATA_STEWARD', scopeType: 'DOMAIN', scopeId: ctx.domainIds[1], since: ts, createdAt: ts },
+    { id: demoId('dama-engineer'), personId: ctx.engineerId, agentId: null, agentName: null, roleType: 'DATA_ENGINEER', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
+    { id: demoId('dama-architect'), personId: ctx.architectId, agentId: null, agentName: null, roleType: 'DATA_ARCHITECT', scopeType: 'ORG', scopeId: orgId, since: ts, createdAt: ts },
   ]);
 
   // One RACI override so the matrix shows a deliberate deviation.
@@ -504,24 +520,24 @@ async function seedDocsDepth(repos: DemoRepos, ts: string, ctx: DocsDepthCtx): P
 
   // SOPs (3).
   await createAll(repos.sops, [
-    { id: P + 'sop-onboard', orgId, code: 'SOP-001', title: 'Onboard a new data asset', purpose: 'Register a new asset with an owner, a tier, and a domain so it enters governance.', category: 'ONBOARDING', applicableRoles: ['DATA_OWNER', 'BUSINESS_DATA_STEWARD'], triggerEvent: 'A new data asset is discovered or created.', steps: [{ order: 1, title: 'Register the asset', description: 'Create the asset record with a business description.', estimatedMinutes: 10 }, { order: 2, title: 'Assign owner + steward', description: 'Set the accountable owner and the operational steward.', estimatedMinutes: 5 }, { order: 3, title: 'Set governance tier', description: 'Classify Bronze / Silver / Gold and note the rationale.', estimatedMinutes: 5 }], status: 'ACTIVE', version: 1, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
-    { id: P + 'sop-dq-incident', orgId, code: 'SOP-002', title: 'Respond to a data quality incident', purpose: 'Triage and resolve a failing data quality rule before it reaches a report.', category: 'INCIDENT', applicableRoles: ['DATA_QUALITY_ANALYST', 'TECHNICAL_DATA_STEWARD'], triggerEvent: 'A data quality rule moves to FAILING.', steps: [{ order: 1, title: 'Confirm the failure', description: 'Re-run the rule and inspect the failure samples.', estimatedMinutes: 15 }, { order: 2, title: 'Open an issue', description: 'Raise a governance issue and assign the domain steward.', estimatedMinutes: 5 }, { order: 3, title: 'Remediate + re-measure', description: 'Fix at source, then re-run to confirm PASSING.', estimatedMinutes: 30 }], status: 'ACTIVE', version: 1, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
-    { id: P + 'sop-access-review', orgId, code: 'SOP-003', title: 'Quarterly access recertification', purpose: 'Owners recertify who can access their assets each quarter.', category: 'REVIEW', applicableRoles: ['DATA_OWNER'], triggerEvent: 'Start of each quarter.', steps: [{ order: 1, title: 'Pull the access list', description: 'Export current grants per owned asset.', estimatedMinutes: 10 }, { order: 2, title: 'Certify or revoke', description: 'Confirm each grant is still needed; revoke the rest.', estimatedMinutes: 20 }], status: 'DRAFT', version: 1, ownerPersonId: cdoId, createdAt: ts, updatedAt: ts },
+    { id: demoId('sop-onboard'), orgId, code: 'SOP-001', title: 'Onboard a new data asset', purpose: 'Register a new asset with an owner, a tier, and a domain so it enters governance.', category: 'ONBOARDING', applicableRoles: ['DATA_OWNER', 'BUSINESS_DATA_STEWARD'], triggerEvent: 'A new data asset is discovered or created.', steps: [{ order: 1, title: 'Register the asset', description: 'Create the asset record with a business description.', estimatedMinutes: 10 }, { order: 2, title: 'Assign owner + steward', description: 'Set the accountable owner and the operational steward.', estimatedMinutes: 5 }, { order: 3, title: 'Set governance tier', description: 'Classify Bronze / Silver / Gold and note the rationale.', estimatedMinutes: 5 }], status: 'ACTIVE', version: 1, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+    { id: demoId('sop-dq-incident'), orgId, code: 'SOP-002', title: 'Respond to a data quality incident', purpose: 'Triage and resolve a failing data quality rule before it reaches a report.', category: 'INCIDENT', applicableRoles: ['DATA_QUALITY_ANALYST', 'TECHNICAL_DATA_STEWARD'], triggerEvent: 'A data quality rule moves to FAILING.', steps: [{ order: 1, title: 'Confirm the failure', description: 'Re-run the rule and inspect the failure samples.', estimatedMinutes: 15 }, { order: 2, title: 'Open an issue', description: 'Raise a governance issue and assign the domain steward.', estimatedMinutes: 5 }, { order: 3, title: 'Remediate + re-measure', description: 'Fix at source, then re-run to confirm PASSING.', estimatedMinutes: 30 }], status: 'ACTIVE', version: 1, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+    { id: demoId('sop-access-review'), orgId, code: 'SOP-003', title: 'Quarterly access recertification', purpose: 'Owners recertify who can access their assets each quarter.', category: 'REVIEW', applicableRoles: ['DATA_OWNER'], triggerEvent: 'Start of each quarter.', steps: [{ order: 1, title: 'Pull the access list', description: 'Export current grants per owned asset.', estimatedMinutes: 10 }, { order: 2, title: 'Certify or revoke', description: 'Confirm each grant is still needed; revoke the rest.', estimatedMinutes: 20 }], status: 'DRAFT', version: 1, ownerPersonId: cdoId, createdAt: ts, updatedAt: ts },
   ]);
 
   // Glossary terms (4).
   await createAll(repos.glossaryTerms, [
-    { id: P + 'term-golden-record', orgId, term: 'Golden Record', definition: 'The single authoritative version of an entity, reconciled across source systems.', context: 'Master data management.', synonyms: ['System of Record', 'Single Source of Truth'], domainId, ownerPersonId: ownerId, status: 'APPROVED', category: 'BUSINESS', exampleValues: 'The reconciled customer master row for account 10432.', businessRules: 'One golden record per real-world entity; conflicts resolved by survivorship rules.', sourceOfTruth: 'Master Data Management hub', createdAt: ts, updatedAt: ts },
-    { id: P + 'term-governance-tier', orgId, term: 'Governance Tier', definition: 'The maturity level at which an asset is governed: Bronze, Silver, or Gold.', context: 'Data governance.', synonyms: ['Data Tier'], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: 'Bronze, Silver, Gold', businessRules: 'Gold requires an owner, DQ rules, and a certified definition.', sourceOfTruth: 'Data Governance Standard', createdAt: ts, updatedAt: ts },
-    { id: P + 'term-data-owner', orgId, term: 'Data Owner', definition: 'The person accountable for an asset or domain — its quality, access, and lifecycle.', context: 'Accountability model.', synonyms: [], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: '', businessRules: 'Exactly one owner per asset; must be a named person, not a team.', sourceOfTruth: 'Data Governance Charter', createdAt: ts, updatedAt: ts },
-    { id: P + 'term-data-domain', orgId, term: 'Data Domain', definition: 'A logical grouping of related data assets under a single stewardship remit.', context: 'Domain model.', synonyms: ['Subject Area'], domainId: null, ownerPersonId: ownerId, status: 'PROPOSED', category: 'TECHNICAL', exampleValues: 'Customer Data, Operational Data', businessRules: 'Every asset belongs to exactly one domain.', sourceOfTruth: 'Domain catalogue', createdAt: ts, updatedAt: ts },
+    { id: demoId('term-golden-record'), orgId, term: 'Golden Record', definition: 'The single authoritative version of an entity, reconciled across source systems.', context: 'Master data management.', synonyms: ['System of Record', 'Single Source of Truth'], domainId, ownerPersonId: ownerId, status: 'APPROVED', category: 'BUSINESS', exampleValues: 'The reconciled customer master row for account 10432.', businessRules: 'One golden record per real-world entity; conflicts resolved by survivorship rules.', sourceOfTruth: 'Master Data Management hub', createdAt: ts, updatedAt: ts },
+    { id: demoId('term-governance-tier'), orgId, term: 'Governance Tier', definition: 'The maturity level at which an asset is governed: Bronze, Silver, or Gold.', context: 'Data governance.', synonyms: ['Data Tier'], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: 'Bronze, Silver, Gold', businessRules: 'Gold requires an owner, DQ rules, and a certified definition.', sourceOfTruth: 'Data Governance Standard', createdAt: ts, updatedAt: ts },
+    { id: demoId('term-data-owner'), orgId, term: 'Data Owner', definition: 'The person accountable for an asset or domain — its quality, access, and lifecycle.', context: 'Accountability model.', synonyms: [], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: '', businessRules: 'Exactly one owner per asset; must be a named person, not a team.', sourceOfTruth: 'Data Governance Charter', createdAt: ts, updatedAt: ts },
+    { id: demoId('term-data-domain'), orgId, term: 'Data Domain', definition: 'A logical grouping of related data assets under a single stewardship remit.', context: 'Domain model.', synonyms: ['Subject Area'], domainId: null, ownerPersonId: ownerId, status: 'PROPOSED', category: 'TECHNICAL', exampleValues: 'Customer Data, Operational Data', businessRules: 'Every asset belongs to exactly one domain.', sourceOfTruth: 'Domain catalogue', createdAt: ts, updatedAt: ts },
   ]);
 
   // Operations manuals (3) — per DAMA role.
   await createAll(repos.operationsManuals, [
-    { id: P + 'om-cdo', orgId, roleType: 'CDO', label: 'Chief Data Officer Operations', purpose: 'The recurring cadence for the enterprise data leader.', daily: ['Scan the open-issues bell for anything critical.'], weekly: ['Chair the Data Governance Council.', 'Review portfolio health + coverage trend.'], monthly: ['Report program metrics to the executive team.'], quarterly: ['Refresh the governance roadmap.', 'Sponsor a maturity assessment.'], escalation: ['Unresolved cross-domain disputes escalate to the CDO.'], customContent: '', isCustom: false, ownerPersonId: cdoId, createdAt: ts, updatedAt: ts },
-    { id: P + 'om-owner', orgId, roleType: 'DATA_OWNER', label: 'Data Owner Operations', purpose: 'The recurring cadence for a domain data owner.', daily: [], weekly: ['Triage new issues on owned assets.'], monthly: ['Review DQ scorecards for owned domains.'], quarterly: ['Run access recertification (SOP-003).'], escalation: ['Tier-drop on a critical asset escalates to the Council.'], customContent: '', isCustom: false, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
-    { id: P + 'om-steward', orgId, roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward Operations', purpose: 'The recurring cadence for a business data steward.', daily: ['Clear the metadata queue for assigned assets.'], weekly: ['Review AI-suggested sensitivity tags.'], monthly: ['Reconcile glossary terms with source-of-truth changes.'], quarterly: [], escalation: ['Ambiguous ownership escalates to the Data Owner.'], customContent: '', isCustom: false, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+    { id: demoId('om-cdo'), orgId, roleType: 'CDO', label: 'Chief Data Officer Operations', purpose: 'The recurring cadence for the enterprise data leader.', daily: ['Scan the open-issues bell for anything critical.'], weekly: ['Chair the Data Governance Council.', 'Review portfolio health + coverage trend.'], monthly: ['Report program metrics to the executive team.'], quarterly: ['Refresh the governance roadmap.', 'Sponsor a maturity assessment.'], escalation: ['Unresolved cross-domain disputes escalate to the CDO.'], customContent: '', isCustom: false, ownerPersonId: cdoId, createdAt: ts, updatedAt: ts },
+    { id: demoId('om-owner'), orgId, roleType: 'DATA_OWNER', label: 'Data Owner Operations', purpose: 'The recurring cadence for a domain data owner.', daily: [], weekly: ['Triage new issues on owned assets.'], monthly: ['Review DQ scorecards for owned domains.'], quarterly: ['Run access recertification (SOP-003).'], escalation: ['Tier-drop on a critical asset escalates to the Council.'], customContent: '', isCustom: false, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
+    { id: demoId('om-steward'), orgId, roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward Operations', purpose: 'The recurring cadence for a business data steward.', daily: ['Clear the metadata queue for assigned assets.'], weekly: ['Review AI-suggested sensitivity tags.'], monthly: ['Reconcile glossary terms with source-of-truth changes.'], quarterly: [], escalation: ['Ambiguous ownership escalates to the Data Owner.'], customContent: '', isCustom: false, ownerPersonId: ownerId, createdAt: ts, updatedAt: ts },
   ]);
 }
 
@@ -553,12 +569,12 @@ async function seedLineageAndTrends(repos: DemoRepos, ts: string, ctx: LineageTr
       const progress = i / (TREND_WEEKS - 1); // 0 (oldest) → 1 (newest)
       const when = daysFromNow(-(TREND_WEEKS - 1 - i) * 7);
       mat.push({
-        id: `${P}mat-${orgId}-${i}`, orgId, timestamp: when,
+        id: demoId(`mat-${orgId}-${i}`), orgId, timestamp: when,
         overall: round1(2.4 + progress * 1.4),
         dimensions: MATURITY_DIMS.map((name, di) => ({ name, score: round1(Math.min(5, 2.2 + progress * 1.5 + di * 0.1)) })),
       });
       gaps.push({
-        id: `${P}gap-${orgId}-${i}`, orgId, takenAt: when,
+        id: demoId(`gap-${orgId}-${i}`), orgId, takenAt: when,
         metrics: {
           activities: 15,
           mappedActivities: Math.round(6 + progress * 6),
@@ -594,14 +610,14 @@ async function seedAgentOps(repos: DemoRepos, ts: string, ctx: AgentOpsCtx): Pro
   const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
 
   await createAll(repos.agentSchedules, [
-    { id: P + 'sched-daily', ...base, frequency: 'DAILY', status: 'ACTIVE', startAt: daysFromNow(-30), nextRunAt: daysFromNow(1), lastRunAt: hoursAgo(6), runCount: 24, createdBy, createdAt: ts, updatedAt: ts },
-    { id: P + 'sched-weekly', ...base, frequency: 'WEEKLY', status: 'PAUSED', startAt: daysFromNow(-60), nextRunAt: null, lastRunAt: daysFromNow(-9), runCount: 6, createdBy, createdAt: ts, updatedAt: ts },
+    { id: demoId('sched-daily'), ...base, frequency: 'DAILY', status: 'ACTIVE', startAt: daysFromNow(-30), nextRunAt: daysFromNow(1), lastRunAt: hoursAgo(6), runCount: 24, createdBy, createdAt: ts, updatedAt: ts },
+    { id: demoId('sched-weekly'), ...base, frequency: 'WEEKLY', status: 'PAUSED', startAt: daysFromNow(-60), nextRunAt: daysFromNow(5), lastRunAt: daysFromNow(-9), runCount: 6, createdBy, createdAt: ts, updatedAt: ts },
   ]);
 
   await createAll(repos.agentExecutions, [
-    { id: P + 'exec-approved', ...base, status: 'SUCCESS', startedAt: hoursAgo(6), completedAt: hoursAgo(6), output: `## ${activityName} — draft\n\nGenerated summary reviewed and approved.`, error: null, durationMs: 4200, reviewStatus: 'APPROVED', reviewedBy: reviewerId, reviewedAt: hoursAgo(5), promotedDocumentId: null, createdAt: hoursAgo(6) },
-    { id: P + 'exec-pending', ...base, status: 'SUCCESS', startedAt: hoursAgo(2), completedAt: hoursAgo(2), output: `## ${activityName} — draft\n\nAwaiting steward review.`, error: null, durationMs: 3800, reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null, promotedDocumentId: null, createdAt: hoursAgo(2) },
-    { id: P + 'exec-failed', ...base, status: 'FAILED', startedAt: hoursAgo(1), completedAt: hoursAgo(1), output: '', error: 'Model call timed out after 60s', durationMs: null, reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null, promotedDocumentId: null, createdAt: hoursAgo(1) },
+    { id: demoId('exec-approved'), ...base, status: 'SUCCESS', startedAt: hoursAgo(6), completedAt: hoursAgo(6), output: `## ${activityName} — draft\n\nGenerated summary reviewed and approved.`, error: null, durationMs: 4200, reviewStatus: 'APPROVED', reviewedBy: reviewerId, reviewedAt: hoursAgo(5), promotedDocumentId: null, createdAt: hoursAgo(6) },
+    { id: demoId('exec-pending'), ...base, status: 'SUCCESS', startedAt: hoursAgo(2), completedAt: hoursAgo(2), output: `## ${activityName} — draft\n\nAwaiting steward review.`, error: null, durationMs: 3800, reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null, promotedDocumentId: null, createdAt: hoursAgo(2) },
+    { id: demoId('exec-failed'), ...base, status: 'FAILED', startedAt: hoursAgo(1), completedAt: hoursAgo(1), output: '', error: 'Model call timed out after 60s', durationMs: null, reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null, promotedDocumentId: null, createdAt: hoursAgo(1) },
   ]);
 }
 
@@ -623,7 +639,7 @@ async function seedCollabAndReporting(repos: DemoRepos, ts: string, ctx: CollabR
   const { orgId, assetId, systemId, personId, personName } = ctx;
 
   // Connection (warehouse) + asset columns + a binding.
-  const connId = P + 'conn-warehouse';
+  const connId = demoId('conn-warehouse');
   await repos.connections.create({
     id: connId, orgId, name: 'Analytics Warehouse',
     connectionType: 'DATA_WAREHOUSE',
@@ -632,46 +648,46 @@ async function seedCollabAndReporting(repos: DemoRepos, ts: string, ctx: CollabR
     status: 'CONNECTED', lastTestedAt: ts, lastTestResult: 'Connection successful', createdAt: ts, updatedAt: ts,
   });
   await createAll(repos.dataAssetColumns, [
-    { id: P + 'col-id', dataAssetId: assetId, columnName: 'id', dataType: 'UUID', description: 'Primary key.', sourceConnectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: 'id', createdAt: ts, updatedAt: ts },
-    { id: P + 'col-name', dataAssetId: assetId, columnName: 'name', dataType: 'String', description: 'Display name.', sourceConnectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: 'name', createdAt: ts, updatedAt: ts },
-    { id: P + 'col-status', dataAssetId: assetId, columnName: 'status', dataType: 'String', description: 'Lifecycle status.', sourceConnectionId: null, sourceAsset: null, sourceColumn: null, createdAt: ts, updatedAt: ts },
-    { id: P + 'col-updated', dataAssetId: assetId, columnName: 'updated_at', dataType: 'Timestamp', description: 'Last change timestamp.', sourceConnectionId: null, sourceAsset: null, sourceColumn: null, createdAt: ts, updatedAt: ts },
+    { id: demoId('col-id'), dataAssetId: assetId, columnName: 'id', dataType: 'UUID', description: 'Primary key.', sourceConnectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: 'id', createdAt: ts, updatedAt: ts },
+    { id: demoId('col-name'), dataAssetId: assetId, columnName: 'name', dataType: 'String', description: 'Display name.', sourceConnectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: 'name', createdAt: ts, updatedAt: ts },
+    { id: demoId('col-status'), dataAssetId: assetId, columnName: 'status', dataType: 'String', description: 'Lifecycle status.', sourceConnectionId: null, sourceAsset: null, sourceColumn: null, createdAt: ts, updatedAt: ts },
+    { id: demoId('col-updated'), dataAssetId: assetId, columnName: 'updated_at', dataType: 'Timestamp', description: 'Last change timestamp.', sourceConnectionId: null, sourceAsset: null, sourceColumn: null, createdAt: ts, updatedAt: ts },
   ]);
-  await repos.dataAssetBindings.create({ id: P + 'binding-primary', orgId, dataAssetId: assetId, connectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: null, label: 'Primary warehouse table', isPrimary: true, createdAt: ts, updatedAt: ts });
+  await repos.dataAssetBindings.create({ id: demoId('binding-primary'), orgId, dataAssetId: assetId, connectionId: connId, sourceAsset: 'ANALYTICS.PUBLIC.asset', sourceColumn: null, label: 'Primary warehouse table', isPrimary: true, createdAt: ts, updatedAt: ts });
 
   // Comments — a thread on the asset.
-  const commentId = P + 'comment-root';
+  const commentId = demoId('comment-root');
   await createAll(repos.comments, [
     { id: commentId, orgId, entityType: 'DataAsset', entityId: assetId, parentId: null, userId: personId, userName: personName, content: 'Confirmed the governance tier with the domain owner — good to certify.', mentions: [], createdAt: ts, updatedAt: ts, deletedAt: null },
-    { id: P + 'comment-reply', orgId, entityType: 'DataAsset', entityId: assetId, parentId: commentId, userId: personId, userName: personName, content: 'Certification scheduled for next review cycle.', mentions: [], createdAt: ts, updatedAt: ts, deletedAt: null },
+    { id: demoId('comment-reply'), orgId, entityType: 'DataAsset', entityId: assetId, parentId: commentId, userId: personId, userName: personName, content: 'Certification scheduled for next review cycle.', mentions: [], createdAt: ts, updatedAt: ts, deletedAt: null },
   ]);
 
   // Tags — on the asset and its system.
   await createAll(repos.tags, [
-    { id: P + 'tag-certified', orgId, entityType: 'DataAsset', entityId: assetId, tag: 'certified', createdBy: personId, createdAt: ts },
-    { id: P + 'tag-reviewed', orgId, entityType: 'DataAsset', entityId: assetId, tag: 'pii-reviewed', createdBy: personId, createdAt: ts },
-    { id: P + 'tag-sor', orgId, entityType: 'System', entityId: systemId, tag: 'source-of-record', createdBy: personId, createdAt: ts },
+    { id: demoId('tag-certified'), orgId, entityType: 'DataAsset', entityId: assetId, tag: 'certified', createdBy: personId, createdAt: ts },
+    { id: demoId('tag-reviewed'), orgId, entityType: 'DataAsset', entityId: assetId, tag: 'pii-reviewed', createdBy: personId, createdAt: ts },
+    { id: demoId('tag-sor'), orgId, entityType: 'System', entityId: systemId, tag: 'source-of-record', createdBy: personId, createdAt: ts },
   ]);
 
   // Attachments — a link and a file.
   await createAll(repos.attachments, [
-    { id: P + 'attach-url', orgId, entityType: 'DataAsset', entityId: assetId, type: 'URL', name: 'Data dictionary', description: 'Canonical field definitions.', url: 'https://wiki.internal/data-dictionary', uploadedBy: personId, createdAt: ts, updatedAt: ts },
-    { id: P + 'attach-file', orgId, entityType: 'DataAsset', entityId: assetId, type: 'FILE', name: 'Lineage diagram.png', description: 'Upstream lineage sketch.', fileName: 'lineage.png', filePath: '/var/procela/attachments/demo-lineage.png', fileSize: 82344, mimeType: 'image/png', uploadedBy: personId, createdAt: ts, updatedAt: ts },
+    { id: demoId('attach-url'), orgId, entityType: 'DataAsset', entityId: assetId, type: 'URL', name: 'Data dictionary', description: 'Canonical field definitions.', url: 'https://wiki.internal/data-dictionary', uploadedBy: personId, createdAt: ts, updatedAt: ts },
+    { id: demoId('attach-file'), orgId, entityType: 'DataAsset', entityId: assetId, type: 'FILE', name: 'Lineage diagram.png', description: 'Upstream lineage sketch.', fileName: 'lineage.png', filePath: '/var/procela/attachments/demo-lineage.png', fileSize: 82344, mimeType: 'image/png', uploadedBy: personId, createdAt: ts, updatedAt: ts },
   ]);
 
   // Reports (report-builder definitions).
   await createAll(repos.reports, [
-    { id: P + 'report-ungoverned', orgId, name: 'Ungoverned critical assets', description: 'Bronze-tier assets that support critical processes.', ownerId: personId, visibility: 'org', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }, { field: 'healthScore' }], filters: [], sort: { field: 'healthScore', direction: 'asc' }, limit: 100 }, createdAt: ts, updatedAt: ts },
-    { id: P + 'report-tiers', orgId, name: 'Assets by governance tier', description: 'All assets with their tier and health.', ownerId: personId, visibility: 'private', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }], filters: [], limit: 500 }, createdAt: ts, updatedAt: ts },
+    { id: demoId('report-ungoverned'), orgId, name: 'Ungoverned critical assets', description: 'Bronze-tier assets that support critical processes.', ownerId: personId, visibility: 'org', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }, { field: 'healthScore' }], filters: [], sort: { field: 'healthScore', direction: 'asc' }, limit: 100 }, createdAt: ts, updatedAt: ts },
+    { id: demoId('report-tiers'), orgId, name: 'Assets by governance tier', description: 'All assets with their tier and health.', ownerId: personId, visibility: 'private', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }], filters: [], limit: 500 }, createdAt: ts, updatedAt: ts },
   ]);
 
   // Analysis report (pivot config).
-  await repos.analysisReports.create({ id: P + 'analysis-coverage', orgId, name: 'Coverage by division', description: 'Asset coverage split across divisions.', ownerId: personId, config: { rowDim: 'org', colDim: 'governanceTier', measure: 'count' }, createdAt: ts, updatedAt: ts });
+  await repos.analysisReports.create({ id: demoId('analysis-coverage'), orgId, name: 'Coverage by division', description: 'Asset coverage split across divisions.', ownerId: personId, config: { rowDim: 'org', colDim: 'governanceTier', measure: 'count' }, createdAt: ts, updatedAt: ts });
 
   // Saved views (per-page filter snapshots).
   await createAll(repos.savedViews, [
-    { id: P + 'view-bronze', orgId, pageKey: 'data-assets', name: 'Bronze tier', ownerId: personId, ownerName: personName, filters: { governanceTier: 'BRONZE' }, createdAt: ts, updatedAt: ts },
-    { id: P + 'view-tier1', orgId, pageKey: 'processes', name: 'Tier 1 activities', ownerId: personId, ownerName: personName, filters: { criticalityTier: 'TIER_1' }, createdAt: ts, updatedAt: ts },
+    { id: demoId('view-bronze'), orgId, pageKey: 'data-assets', name: 'Bronze tier', ownerId: personId, ownerName: personName, filters: { governanceTier: 'BRONZE' }, createdAt: ts, updatedAt: ts },
+    { id: demoId('view-tier1'), orgId, pageKey: 'processes', name: 'Tier 1 activities', ownerId: personId, ownerName: personName, filters: { criticalityTier: 'TIER_1' }, createdAt: ts, updatedAt: ts },
   ]);
 }
 
@@ -719,100 +735,100 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
 async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
 
   // ── Organizations ──
-  const orgTidewater = { id: P + 'org-tidewater', parentId: null, name: 'Tidewater Utilities', type: 'company', industry: 'Utilities', description: 'Multi-utility demo tenant — electric + water + shared services.', headCount: 0, tenantSlug: 'tidewater', brandDisplayName: 'Tidewater Utilities', brandGlyph: '⚡', ssoButtonLabel: 'Sign in with Tidewater SSO', brandPrimaryColor: '#0f4f46', createdAt: ts, updatedAt: ts };
-  const orgElectric = { id: P + 'org-electric', parentId: orgTidewater.id, name: 'Tidewater Electric', type: 'division', industry: 'Utilities', description: 'Electric division', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgWater = { id: P + 'org-water', parentId: orgTidewater.id, name: 'Tidewater Water', type: 'division', industry: 'Utilities', description: 'Water division', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgShared = { id: P + 'org-shared', parentId: orgTidewater.id, name: 'Shared Services', type: 'division', industry: 'Utilities', description: 'IT / Finance / HR / Regulatory / Safety', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgIT = { id: P + 'org-it', parentId: orgShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgRegulatory = { id: P + 'org-regulatory', parentId: orgShared.id, name: 'Regulatory Affairs', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgTd = { id: P + 'org-td', parentId: orgElectric.id, name: 'Transmission & Distribution', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgCustomerElectric = { id: P + 'org-electric-customer', parentId: orgElectric.id, name: 'Electric Customer Service', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgTidewater = { id: demoId('org-tidewater'), parentId: null, name: 'Tidewater Utilities', type: 'company', industry: 'Utilities', description: 'Multi-utility demo tenant — electric + water + shared services.', headCount: 0, tenantSlug: 'tidewater', brandDisplayName: 'Tidewater Utilities', brandGlyph: '⚡', ssoButtonLabel: 'Sign in with Tidewater SSO', brandPrimaryColor: '#0f4f46', createdAt: ts, updatedAt: ts };
+  const orgElectric = { id: demoId('org-electric'), parentId: orgTidewater.id, name: 'Tidewater Electric', type: 'division', industry: 'Utilities', description: 'Electric division', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgWater = { id: demoId('org-water'), parentId: orgTidewater.id, name: 'Tidewater Water', type: 'division', industry: 'Utilities', description: 'Water division', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgShared = { id: demoId('org-shared'), parentId: orgTidewater.id, name: 'Shared Services', type: 'division', industry: 'Utilities', description: 'IT / Finance / HR / Regulatory / Safety', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgIT = { id: demoId('org-it'), parentId: orgShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgRegulatory = { id: demoId('org-regulatory'), parentId: orgShared.id, name: 'Regulatory Affairs', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgTd = { id: demoId('org-td'), parentId: orgElectric.id, name: 'Transmission & Distribution', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgCustomerElectric = { id: demoId('org-electric-customer'), parentId: orgElectric.id, name: 'Electric Customer Service', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
   // Water division mirrors Electric's shape: an operations department
   // (parallel to T&D) and a customer-service department, both nested
   // under the water division so the tree isn't lopsided.
-  const orgWaterOps = { id: P + 'org-water-ops', parentId: orgWater.id, name: 'Water Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgWaterCustomer = { id: P + 'org-water-customer', parentId: orgWater.id, name: 'Water Customer Service', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgWaterOps = { id: demoId('org-water-ops'), parentId: orgWater.id, name: 'Water Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgWaterCustomer = { id: demoId('org-water-customer'), parentId: orgWater.id, name: 'Water Customer Service', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
   await createAll(repos.organizations, [orgTidewater, orgElectric, orgWater, orgShared, orgIT, orgRegulatory, orgTd, orgCustomerElectric, orgWaterOps, orgWaterCustomer]);
 
   // ── People (compact — enough to tell the demo story) ──
   // Susan Chen is the demo persona: signed-in user for the demo. Owns
   // Customer Data, holds three open tasks + one issue, has an
   // upcoming event.
-  const susan = { id: P + 'person-susan-chen', orgIds: [orgTidewater.id], accessibleOrgIds: [orgTidewater.id, orgElectric.id, orgWater.id, orgShared.id, orgWaterOps.id, orgWaterCustomer.id], name: 'Susan Chen', email: 'susan.chen@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const marisol = { id: P + 'person-marisol', orgIds: [orgTidewater.id], accessibleOrgIds: [orgTidewater.id], name: 'Marisol Hadid', email: 'marisol.hadid@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const devon = { id: P + 'person-devon', orgIds: [orgElectric.id], accessibleOrgIds: [orgElectric.id], name: 'Devon Kershaw', email: 'devon.kershaw@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Owner Tidewater Electric', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const jennifer = { id: P + 'person-jennifer', orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id, orgElectric.id], name: 'Jennifer Vasquez', email: 'jennifer.vasquez@tidewater-utilities.com', role: 'EDITOR', title: 'Director Transmission & Distribution Ops', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const brandon = { id: P + 'person-brandon', orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id], name: 'Brandon Willis', email: 'brandon.willis@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Grid Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const melissa = { id: P + 'person-melissa', orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id], name: 'Melissa Patel', email: 'melissa.patel@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'System Operator Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const harold = { id: P + 'person-harold', orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id], name: 'Harold Lindstrom', email: 'harold.lindstrom@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Distribution Control Center', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const natalie = { id: P + 'person-natalie', orgIds: [orgCustomerElectric.id], accessibleOrgIds: [orgCustomerElectric.id], name: 'Natalie Greer', email: 'natalie.greer@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Customer Data', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const andre = { id: P + 'person-andre', orgIds: [orgCustomerElectric.id], accessibleOrgIds: [orgCustomerElectric.id], name: 'Andre Ferguson', email: 'andre.ferguson@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Billing & Revenue', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const kwame = { id: P + 'person-kwame', orgIds: [orgIT.id], accessibleOrgIds: [orgIT.id], name: 'Kwame Osei', email: 'kwame.osei@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const amara = { id: P + 'person-amara', orgIds: [orgIT.id], accessibleOrgIds: [orgIT.id], name: 'Amara Wambui', email: 'amara.wambui@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const tobias = { id: P + 'person-tobias', orgIds: [orgIT.id], accessibleOrgIds: [orgIT.id], name: 'Tobias Reinholt', email: 'tobias.reinholt@tidewater-utilities.com', role: 'EDITOR', title: 'Manager OT Cybersecurity', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const lorraine = { id: P + 'person-lorraine', orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Lorraine Kimura', email: 'lorraine.kimura@tidewater-utilities.com', role: 'EDITOR', title: 'Director Regulatory Affairs', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const phillip = { id: P + 'person-phillip', orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Phillip Rosenberg', email: 'phillip.rosenberg@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const samira = { id: P + 'person-samira', orgIds: [orgCustomerElectric.id], accessibleOrgIds: [orgCustomerElectric.id], name: 'Samira Farooq', email: 'samira.farooq@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Contact Center', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const isabella = { id: P + 'person-isabella', orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Isabella Rossi', email: 'isabella.rossi@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const susan = { id: demoId('person-susan-chen'), orgIds: [orgTidewater.id], accessibleOrgIds: [orgTidewater.id, orgElectric.id, orgWater.id, orgShared.id, orgWaterOps.id, orgWaterCustomer.id], name: 'Susan Chen', email: 'susan.chen@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const marisol = { id: demoId('person-marisol'), orgIds: [orgTidewater.id], accessibleOrgIds: [orgTidewater.id], name: 'Marisol Hadid', email: 'marisol.hadid@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const devon = { id: demoId('person-devon'), orgIds: [orgElectric.id], accessibleOrgIds: [orgElectric.id], name: 'Devon Kershaw', email: 'devon.kershaw@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Owner Tidewater Electric', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const jennifer = { id: demoId('person-jennifer'), orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id, orgElectric.id], name: 'Jennifer Vasquez', email: 'jennifer.vasquez@tidewater-utilities.com', role: 'EDITOR', title: 'Director Transmission & Distribution Ops', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const brandon = { id: demoId('person-brandon'), orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id], name: 'Brandon Willis', email: 'brandon.willis@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Grid Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const melissa = { id: demoId('person-melissa'), orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id], name: 'Melissa Patel', email: 'melissa.patel@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'System Operator Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const harold = { id: demoId('person-harold'), orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id], name: 'Harold Lindstrom', email: 'harold.lindstrom@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Distribution Control Center', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const natalie = { id: demoId('person-natalie'), orgIds: [orgCustomerElectric.id], accessibleOrgIds: [orgCustomerElectric.id], name: 'Natalie Greer', email: 'natalie.greer@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Customer Data', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const andre = { id: demoId('person-andre'), orgIds: [orgCustomerElectric.id], accessibleOrgIds: [orgCustomerElectric.id], name: 'Andre Ferguson', email: 'andre.ferguson@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Billing & Revenue', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const kwame = { id: demoId('person-kwame'), orgIds: [orgIT.id], accessibleOrgIds: [orgIT.id], name: 'Kwame Osei', email: 'kwame.osei@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const amara = { id: demoId('person-amara'), orgIds: [orgIT.id], accessibleOrgIds: [orgIT.id], name: 'Amara Wambui', email: 'amara.wambui@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const tobias = { id: demoId('person-tobias'), orgIds: [orgIT.id], accessibleOrgIds: [orgIT.id], name: 'Tobias Reinholt', email: 'tobias.reinholt@tidewater-utilities.com', role: 'EDITOR', title: 'Manager OT Cybersecurity', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const lorraine = { id: demoId('person-lorraine'), orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Lorraine Kimura', email: 'lorraine.kimura@tidewater-utilities.com', role: 'EDITOR', title: 'Director Regulatory Affairs', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const phillip = { id: demoId('person-phillip'), orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Phillip Rosenberg', email: 'phillip.rosenberg@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const samira = { id: demoId('person-samira'), orgIds: [orgCustomerElectric.id], accessibleOrgIds: [orgCustomerElectric.id], name: 'Samira Farooq', email: 'samira.farooq@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Contact Center', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const isabella = { id: demoId('person-isabella'), orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Isabella Rossi', email: 'isabella.rossi@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   // Referenced by the training guide (Module 4.1 override-owner example
   // + Module 4.3 domain steward table). Kept separate from the water
   // block because Deborah is on the electric generation side.
-  const deborah = { id: P + 'person-deborah', orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id, orgElectric.id], name: 'Deborah Kwon', email: 'deborah.kwon@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Generation', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const deborah = { id: demoId('person-deborah'), orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id, orgElectric.id], name: 'Deborah Kwon', email: 'deborah.kwon@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Generation', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   // Water division staff — mirrors the Electric footprint (division-
   // level Data Owner, an Ops director and two operators, plus a
   // customer-side steward + billing manager).
-  const nadia = { id: P + 'person-nadia', orgIds: [orgWater.id], accessibleOrgIds: [orgWater.id], name: 'Nadia Petrov', email: 'nadia.petrov@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Owner Tidewater Water', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const marcus = { id: P + 'person-marcus', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id, orgWater.id], name: 'Marcus Chen', email: 'marcus.chen@tidewater-utilities.com', role: 'EDITOR', title: 'Director Water Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const sophie = { id: P + 'person-sophie', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Sophie Larsson', email: 'sophie.larsson@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Water Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const rafael = { id: P + 'person-rafael', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Rafael Ortiz', email: 'rafael.ortiz@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'System Operator Lead — Water Treatment', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const priya = { id: P + 'person-priya', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Priya Sharma', email: 'priya.sharma@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Distribution Control', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const kaia = { id: P + 'person-kaia', orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Kaia Nakamura', email: 'kaia.nakamura@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Water Customer Data', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const diego = { id: P + 'person-diego', orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Diego Alvarez', email: 'diego.alvarez@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Billing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const nadia = { id: demoId('person-nadia'), orgIds: [orgWater.id], accessibleOrgIds: [orgWater.id], name: 'Nadia Petrov', email: 'nadia.petrov@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Owner Tidewater Water', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const marcus = { id: demoId('person-marcus'), orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id, orgWater.id], name: 'Marcus Chen', email: 'marcus.chen@tidewater-utilities.com', role: 'EDITOR', title: 'Director Water Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sophie = { id: demoId('person-sophie'), orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Sophie Larsson', email: 'sophie.larsson@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Water Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rafael = { id: demoId('person-rafael'), orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Rafael Ortiz', email: 'rafael.ortiz@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'System Operator Lead — Water Treatment', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const priya = { id: demoId('person-priya'), orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Priya Sharma', email: 'priya.sharma@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Distribution Control', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const kaia = { id: demoId('person-kaia'), orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Kaia Nakamura', email: 'kaia.nakamura@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Water Customer Data', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const diego = { id: demoId('person-diego'), orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Diego Alvarez', email: 'diego.alvarez@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Billing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   await createAll(repos.people, [susan, marisol, devon, jennifer, brandon, melissa, harold, natalie, andre, kwame, amara, tobias, lorraine, phillip, samira, isabella, deborah, nadia, marcus, sophie, rafael, priya, kaia, diego]);
 
   // ── Systems ──
-  const sysSCADA = { id: P + 'sys-scada', orgId: orgElectric.id, name: 'SCADA', description: 'Supervisory Control And Data Acquisition — real-time grid telemetry.', systemType: 'OT', vendorName: 'GE', ownerPersonId: tobias.id, stewardIds: [], createdAt: ts, updatedAt: ts };
-  const sysCIS = { id: P + 'sys-cis', orgId: orgTidewater.id, name: 'CIS', description: 'Customer Information System — accounts, addresses, service history.', systemType: 'IT', vendorName: 'Oracle', ownerPersonId: andre.id, stewardIds: [natalie.id], createdAt: ts, updatedAt: ts };
-  const sysAMI = { id: P + 'sys-ami', orgId: orgTidewater.id, name: 'AMI', description: 'Advanced Metering Infrastructure — interval reads from smart meters.', systemType: 'OT', vendorName: 'Itron', ownerPersonId: kwame.id, stewardIds: [], createdAt: ts, updatedAt: ts };
-  const sysOMS = { id: P + 'sys-oms', orgId: orgElectric.id, name: 'OMS', description: 'Outage Management System — event tracking, restoration workflows.', systemType: 'OT', vendorName: 'ABB', ownerPersonId: harold.id, stewardIds: [], createdAt: ts, updatedAt: ts };
-  const sysGIS = { id: P + 'sys-gis', orgId: orgTidewater.id, name: 'GIS', description: 'Geospatial Information System — assets in the field.', systemType: 'IT', vendorName: 'Esri', ownerPersonId: jennifer.id, stewardIds: [], createdAt: ts, updatedAt: ts };
-  const sysWarehouse = { id: P + 'sys-warehouse', orgId: orgTidewater.id, name: 'Data Warehouse', description: 'Enterprise analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: kwame.id, stewardIds: [], createdAt: ts, updatedAt: ts };
+  const sysSCADA = { id: demoId('sys-scada'), orgId: orgElectric.id, name: 'SCADA', description: 'Supervisory Control And Data Acquisition — real-time grid telemetry.', systemType: 'OT', vendorName: 'GE', ownerPersonId: tobias.id, stewardIds: [], createdAt: ts, updatedAt: ts };
+  const sysCIS = { id: demoId('sys-cis'), orgId: orgTidewater.id, name: 'CIS', description: 'Customer Information System — accounts, addresses, service history.', systemType: 'IT', vendorName: 'Oracle', ownerPersonId: andre.id, stewardIds: [natalie.id], createdAt: ts, updatedAt: ts };
+  const sysAMI = { id: demoId('sys-ami'), orgId: orgTidewater.id, name: 'AMI', description: 'Advanced Metering Infrastructure — interval reads from smart meters.', systemType: 'OT', vendorName: 'Itron', ownerPersonId: kwame.id, stewardIds: [], createdAt: ts, updatedAt: ts };
+  const sysOMS = { id: demoId('sys-oms'), orgId: orgElectric.id, name: 'OMS', description: 'Outage Management System — event tracking, restoration workflows.', systemType: 'OT', vendorName: 'ABB', ownerPersonId: harold.id, stewardIds: [], createdAt: ts, updatedAt: ts };
+  const sysGIS = { id: demoId('sys-gis'), orgId: orgTidewater.id, name: 'GIS', description: 'Geospatial Information System — assets in the field.', systemType: 'IT', vendorName: 'Esri', ownerPersonId: jennifer.id, stewardIds: [], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgTidewater.id, name: 'Data Warehouse', description: 'Enterprise analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: kwame.id, stewardIds: [], createdAt: ts, updatedAt: ts };
   // Water-specific systems (parallel to electric's SCADA + OMS).
-  const sysLIMS = { id: P + 'sys-lims', orgId: orgWater.id, name: 'LIMS', description: 'Laboratory Information Management System — water quality tests, sample chain of custody, effluent monitoring.', systemType: 'IT', vendorName: 'LabWare', ownerPersonId: sophie.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
-  const sysHydraulic = { id: P + 'sys-hydraulic', orgId: orgWater.id, name: 'Hydraulic Model', description: 'Distribution network hydraulic simulation — pressure, flow, main-break impact analysis.', systemType: 'OT', vendorName: 'Bentley OpenFlows', ownerPersonId: priya.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysLIMS = { id: demoId('sys-lims'), orgId: orgWater.id, name: 'LIMS', description: 'Laboratory Information Management System — water quality tests, sample chain of custody, effluent monitoring.', systemType: 'IT', vendorName: 'LabWare', ownerPersonId: sophie.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysHydraulic = { id: demoId('sys-hydraulic'), orgId: orgWater.id, name: 'Hydraulic Model', description: 'Distribution network hydraulic simulation — pressure, flow, main-break impact analysis.', systemType: 'OT', vendorName: 'Bentley OpenFlows', ownerPersonId: priya.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
   await createAll(repos.systems, [sysSCADA, sysCIS, sysAMI, sysOMS, sysGIS, sysWarehouse, sysLIMS, sysHydraulic]);
 
   // ── Agents (5 — one of each type, all wired to responsible persons) ──
   await createAll(repos.agents, [
-    { id: P + 'agent-outage-model', orgIds: [orgElectric.id], name: 'Outage Prediction Model', agentType: 'AI', description: 'Predicts distribution outage probability from weather and asset health.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: amara.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-    { id: P + 'agent-ami-pipeline', orgIds: [orgTidewater.id], name: 'AMI Meter Ingestion Pipeline', agentType: 'PIPELINE', description: 'Hourly ETL for electric and water meter interval data into the data lake.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: kwame.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-    { id: P + 'agent-notify-bot', orgIds: [orgTidewater.id], name: 'Customer Notification Bot', agentType: 'BOT', description: 'Automated SMS and voice outage notifications and restoration updates.', provider: 'Twilio', status: 'ACTIVE', ownerPersonId: samira.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-    { id: P + 'agent-pi-service', orgIds: [orgElectric.id], name: 'PI Historian Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract historian tags.', provider: 'OSIsoft', status: 'ACTIVE', ownerPersonId: tobias.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-    { id: P + 'agent-compliance', orgIds: [orgTidewater.id], name: 'Compliance Report Generator', agentType: 'OTHER', description: 'Scheduled generator producing NPDES DMR and DWR monthly submissions.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: isabella.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-outage-model'), orgIds: [orgElectric.id], name: 'Outage Prediction Model', agentType: 'AI', description: 'Predicts distribution outage probability from weather and asset health.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: amara.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-ami-pipeline'), orgIds: [orgTidewater.id], name: 'AMI Meter Ingestion Pipeline', agentType: 'PIPELINE', description: 'Hourly ETL for electric and water meter interval data into the data lake.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: kwame.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-notify-bot'), orgIds: [orgTidewater.id], name: 'Customer Notification Bot', agentType: 'BOT', description: 'Automated SMS and voice outage notifications and restoration updates.', provider: 'Twilio', status: 'ACTIVE', ownerPersonId: samira.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-pi-service'), orgIds: [orgElectric.id], name: 'PI Historian Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract historian tags.', provider: 'OSIsoft', status: 'ACTIVE', ownerPersonId: tobias.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-compliance'), orgIds: [orgTidewater.id], name: 'Compliance Report Generator', agentType: 'OTHER', description: 'Scheduled generator producing NPDES DMR and DWR monthly submissions.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: isabella.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
   ]);
 
   // ── Data Domains ──
-  const domCustomer = { id: P + 'domain-customer', orgId: orgTidewater.id, name: 'Customer Data', description: 'Customer accounts, addresses, service history, billing.', ownerId: susan.id, stewardIds: [natalie.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domOps = { id: P + 'domain-ops', orgId: orgTidewater.id, name: 'Operational Data', description: 'Grid, generation, metering — the real-time and near-real-time operational feeds.', ownerId: jennifer.id, stewardIds: [brandon.id, deborah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domRegulatory = { id: P + 'domain-regulatory', orgId: orgTidewater.id, name: 'Regulatory Data', description: 'Compliance evidence, filings, rate case data, NERC CIP + EPA SDWA.', ownerId: lorraine.id, stewardIds: [phillip.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domCustomer = { id: demoId('domain-customer'), orgId: orgTidewater.id, name: 'Customer Data', description: 'Customer accounts, addresses, service history, billing.', ownerId: susan.id, stewardIds: [natalie.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domOps = { id: demoId('domain-ops'), orgId: orgTidewater.id, name: 'Operational Data', description: 'Grid, generation, metering — the real-time and near-real-time operational feeds.', ownerId: jennifer.id, stewardIds: [brandon.id, deborah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domRegulatory = { id: demoId('domain-regulatory'), orgId: orgTidewater.id, name: 'Regulatory Data', description: 'Compliance evidence, filings, rate case data, NERC CIP + EPA SDWA.', ownerId: lorraine.id, stewardIds: [phillip.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   await createAll(repos.dataDomains, [domCustomer, domOps, domRegulatory]);
 
   // ── Data Assets (with domain inheritance where the pattern applies) ──
-  const assetOutageLogs = { id: P + 'asset-outage-logs', orgId: orgElectric.id, name: 'Outage Logs', description: 'Per-event SCADA records of distribution outages.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 62, createdAt: ts, updatedAt: ts };
-  const assetCustomerMaster = { id: P + 'asset-customer-master', orgId: orgTidewater.id, name: 'Customer Master', description: 'Service addresses, account status, billing terms.', systemId: sysCIS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 88, sensitivityTags: ['PII' as const], createdAt: ts, updatedAt: ts };
-  const assetMeterReads = { id: P + 'asset-meter-reads', orgId: orgTidewater.id, name: 'Meter Reads', description: 'AMI 15-minute interval consumption.', systemId: sysAMI.id, owner: '', ownerPersonId: andre.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 91, createdAt: ts, updatedAt: ts };
-  const assetGeneration = { id: P + 'asset-generation-output', orgId: orgElectric.id, name: 'Generation Output', description: 'Plant-level MWh by hour.', systemId: sysSCADA.id, owner: '', ownerPersonId: deborah.id, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 55, createdAt: ts, updatedAt: ts };
+  const assetOutageLogs = { id: demoId('asset-outage-logs'), orgId: orgElectric.id, name: 'Outage Logs', description: 'Per-event SCADA records of distribution outages.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 62, createdAt: ts, updatedAt: ts };
+  const assetCustomerMaster = { id: demoId('asset-customer-master'), orgId: orgTidewater.id, name: 'Customer Master', description: 'Service addresses, account status, billing terms.', systemId: sysCIS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 88, sensitivityTags: ['PII' as const], createdAt: ts, updatedAt: ts };
+  const assetMeterReads = { id: demoId('asset-meter-reads'), orgId: orgTidewater.id, name: 'Meter Reads', description: 'AMI 15-minute interval consumption.', systemId: sysAMI.id, owner: '', ownerPersonId: andre.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 91, createdAt: ts, updatedAt: ts };
+  const assetGeneration = { id: demoId('asset-generation-output'), orgId: orgElectric.id, name: 'Generation Output', description: 'Plant-level MWh by hour.', systemId: sysSCADA.id, owner: '', ownerPersonId: deborah.id, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 55, createdAt: ts, updatedAt: ts };
   // Planted orphans — obviously-named so Ask AI's "which data assets
   // have no process using them?" produces a quotable answer.
-  const orphanLegacyBilling = { id: P + 'asset-legacy-billing', orgId: orgTidewater.id, name: 'Legacy Billing Extract', description: 'Nightly dump from the retired billing system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
-  const orphanMeterCsv = { id: P + 'asset-meter-csv', orgId: orgTidewater.id, name: 'Meter CSV Dump', description: 'Ad-hoc CSV extract of yesterday\'s meter reads for an old vendor. Nobody remembers if it\'s still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanLegacyBilling = { id: demoId('asset-legacy-billing'), orgId: orgTidewater.id, name: 'Legacy Billing Extract', description: 'Nightly dump from the retired billing system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanMeterCsv = { id: demoId('asset-meter-csv'), orgId: orgTidewater.id, name: 'Meter CSV Dump', description: 'Ad-hoc CSV extract of yesterday\'s meter reads for an old vendor. Nobody remembers if it\'s still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
   // Water-side assets (parallel to Outage Logs / Generation Output on
   // the electric side). Distribution Pressure feeds the Main Break
   // Response process below; Water Quality Results are LIMS-sourced;
   // NPDES Discharge is the compliance evidence asset.
-  const assetDistPressure = { id: P + 'asset-dist-pressure', orgId: orgWater.id, name: 'Distribution Pressure Reads', description: 'Continuous pressure telemetry from PRV stations and district metered areas.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
-  const assetWaterQuality = { id: P + 'asset-water-quality', orgId: orgWater.id, name: 'Water Quality Results', description: 'Lab and in-line water quality samples — turbidity, chlorine residual, coliform, pH.', systemId: sysLIMS.id, owner: '', ownerPersonId: sophie.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 79, createdAt: ts, updatedAt: ts };
-  const assetNPDES = { id: P + 'asset-npdes', orgId: orgWater.id, name: 'NPDES Discharge Records', description: 'Wastewater effluent discharge monitoring reports for state and EPA submissions.', systemId: sysLIMS.id, owner: '', ownerPersonId: isabella.id, stewardIds: [phillip.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
+  const assetDistPressure = { id: demoId('asset-dist-pressure'), orgId: orgWater.id, name: 'Distribution Pressure Reads', description: 'Continuous pressure telemetry from PRV stations and district metered areas.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetWaterQuality = { id: demoId('asset-water-quality'), orgId: orgWater.id, name: 'Water Quality Results', description: 'Lab and in-line water quality samples — turbidity, chlorine residual, coliform, pH.', systemId: sysLIMS.id, owner: '', ownerPersonId: sophie.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 79, createdAt: ts, updatedAt: ts };
+  const assetNPDES = { id: demoId('asset-npdes'), orgId: orgWater.id, name: 'NPDES Discharge Records', description: 'Wastewater effluent discharge monitoring reports for state and EPA submissions.', systemId: sysLIMS.id, owner: '', ownerPersonId: isabella.id, stewardIds: [phillip.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
   await createAll(repos.dataAssets, [assetOutageLogs, assetCustomerMaster, assetMeterReads, assetGeneration, orphanLegacyBilling, orphanMeterCsv, assetDistPressure, assetWaterQuality, assetNPDES]);
 
   // Wire the domain → asset backrefs so the Domains page shows counts.
@@ -824,26 +840,26 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // Compact but meaningful: one value stream, two processes, one
   // sub-process per process, three activities. Enough to demo
   // Dependencies, BCM attributes, and mappings.
-  const vs = { id: P + 'node-vs-outage', parentId: null, level: 'VALUE_STREAM' as const, name: 'Outage Management', description: 'End-to-end restoration flow — detect, dispatch, communicate, recover.', activityId: 'VS-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const procDetect = { id: P + 'node-proc-detect', parentId: vs.id, level: 'PROCESS' as const, name: 'Detect & Assess', description: 'Detect outages via SCADA + customer channel, triage severity.', activityId: 'PRO-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const procRestore = { id: P + 'node-proc-restore', parentId: vs.id, level: 'PROCESS' as const, name: 'Restore & Communicate', description: 'Dispatch crews, restore service, notify customers.', activityId: 'PRO-DEMO-2', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const spTriage = { id: P + 'node-sp-triage', parentId: procDetect.id, level: 'SUBPROCESS' as const, name: 'Outage Triage', description: 'Sort outages by criticality, allocate crews.', activityId: 'SP-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const vs = { id: demoId('node-vs-outage'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Outage Management', description: 'End-to-end restoration flow — detect, dispatch, communicate, recover.', activityId: 'VS-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procDetect = { id: demoId('node-proc-detect'), parentId: vs.id, level: 'PROCESS' as const, name: 'Detect & Assess', description: 'Detect outages via SCADA + customer channel, triage severity.', activityId: 'PRO-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procRestore = { id: demoId('node-proc-restore'), parentId: vs.id, level: 'PROCESS' as const, name: 'Restore & Communicate', description: 'Dispatch crews, restore service, notify customers.', activityId: 'PRO-DEMO-2', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spTriage = { id: demoId('node-sp-triage'), parentId: procDetect.id, level: 'SUBPROCESS' as const, name: 'Outage Triage', description: 'Sort outages by criticality, allocate crews.', activityId: 'SP-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   // actSignal sits upstream of actTriage so the Dependencies panel on
   // the seeded Outage triage shows a real predecessor — matches
   // playbook beat 3's promise.
-  const actSignal = { id: P + 'node-act-signal', parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'SCADA anomaly detected', description: 'Grid telemetry flags a probable outage — voltage sag, breaker open, or historian gap.', activityId: 'ACT-DEMO-0', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actTriage = { id: P + 'node-act-triage', parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Outage triage', description: 'Classify incoming outages, dispatch first responders.', activityId: 'ACT-DEMO-1', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Field crew on site within 30 minutes for Tier 1 outages\n\nP95 30 min from detection', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actDispatch = { id: P + 'node-act-dispatch', parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Crew dispatch', description: 'Assign crews to outages by location + skill.', activityId: 'ACT-DEMO-2', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'Line Superintendent', systemIds: [sysGIS.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actNotify = { id: P + 'node-act-notify', parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Customer notification sent', description: 'SMS/email/voice notifications to affected customers.', activityId: 'ACT-DEMO-3', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, responsibleRole: 'Manager Contact Center', responsiblePersonId: samira.id, systemIds: [sysCIS.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actSignal = { id: demoId('node-act-signal'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'SCADA anomaly detected', description: 'Grid telemetry flags a probable outage — voltage sag, breaker open, or historian gap.', activityId: 'ACT-DEMO-0', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actTriage = { id: demoId('node-act-triage'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Outage triage', description: 'Classify incoming outages, dispatch first responders.', activityId: 'ACT-DEMO-1', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Field crew on site within 30 minutes for Tier 1 outages\n\nP95 30 min from detection', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actDispatch = { id: demoId('node-act-dispatch'), parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Crew dispatch', description: 'Assign crews to outages by location + skill.', activityId: 'ACT-DEMO-2', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'Line Superintendent', systemIds: [sysGIS.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actNotify = { id: demoId('node-act-notify'), parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Customer notification sent', description: 'SMS/email/voice notifications to affected customers.', activityId: 'ACT-DEMO-3', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, responsibleRole: 'Manager Contact Center', responsiblePersonId: samira.id, systemIds: [sysCIS.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   await createAll(repos.processNodes, [vs, procDetect, procRestore, spTriage, actSignal, actTriage, actDispatch, actNotify]);
 
   // Flow relationships wiring the Electric activity chain. Feeds the
   // Dependencies panel: Outage triage sees actSignal as predecessor
   // and actDispatch as successor; actDispatch fans into actNotify.
   await createAll(repos.flowRelationships, [
-    { id: P + 'flow-1', fromNodeId: actSignal.id, toNodeId: actTriage.id, type: 'SEQUENCE' as const, label: 'anomaly confirmed', createdAt: ts },
-    { id: P + 'flow-2', fromNodeId: actTriage.id, toNodeId: actDispatch.id, type: 'SEQUENCE' as const, label: 'crew required', createdAt: ts },
-    { id: P + 'flow-3', fromNodeId: actDispatch.id, toNodeId: actNotify.id, type: 'SEQUENCE' as const, label: 'ETA available', createdAt: ts },
+    { id: demoId('flow-1'), fromNodeId: actSignal.id, toNodeId: actTriage.id, type: 'SEQUENCE' as const, label: 'anomaly confirmed', createdAt: ts },
+    { id: demoId('flow-2'), fromNodeId: actTriage.id, toNodeId: actDispatch.id, type: 'SEQUENCE' as const, label: 'crew required', createdAt: ts },
+    { id: demoId('flow-3'), fromNodeId: actDispatch.id, toNodeId: actNotify.id, type: 'SEQUENCE' as const, label: 'ETA available', createdAt: ts },
   ]);
 
   // ── Process hierarchy (Tidewater Water) ──
@@ -851,43 +867,43 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // sub-process, three activities. Priority pair with Outage Management
   // — Main Break Response is the equivalent restoration flow, plus a
   // Treatment process for the quality-testing story.
-  const vsW = { id: P + 'node-vs-water', parentId: null, level: 'VALUE_STREAM' as const, name: 'Water Distribution & Quality', description: 'End-to-end delivery of safe potable water — treat, distribute, monitor, restore.', activityId: 'VS-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: marcus.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const procMainBreak = { id: P + 'node-proc-main-break', parentId: vsW.id, level: 'PROCESS' as const, name: 'Main Break Response', description: 'Detect and repair distribution main breaks before customer complaints escalate.', activityId: 'PRO-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const procTreatment = { id: P + 'node-proc-treatment', parentId: vsW.id, level: 'PROCESS' as const, name: 'Treatment Operations', description: 'Run treatment plants + monitor water quality against permit thresholds.', activityId: 'PRO-DEMO-W2', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: rafael.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const spBreakTriage = { id: P + 'node-sp-break-triage', parentId: procMainBreak.id, level: 'SUBPROCESS' as const, name: 'Break Triage', description: 'Confirm break, size the affected zone, dispatch the right crew.', activityId: 'SP-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actDetectBreak = { id: P + 'node-act-detect-break', parentId: spBreakTriage.id, level: 'ACTIVITY' as const, name: 'Detect main break', description: 'Acoustic sensors + pressure anomalies flag likely breaks.', activityId: 'ACT-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, responsibleRole: 'System Operator Lead — Water Treatment', responsiblePersonId: rafael.id, systemIds: [sysSCADA.id, sysHydraulic.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Break confirmed within 15 minutes of anomaly signal\n\nP95 15 min from anomaly to dispatch', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actDispatchWater = { id: P + 'node-act-dispatch-water', parentId: procMainBreak.id, level: 'ACTIVITY' as const, name: 'Dispatch repair crew', description: 'Match crew skill + equipment to the break location and severity.', activityId: 'ACT-DEMO-W2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, responsibleRole: 'Manager Water Distribution Control', systemIds: [sysGIS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actWaterQualityTest = { id: P + 'node-act-quality-test', parentId: procTreatment.id, level: 'ACTIVITY' as const, name: 'Water quality sample test', description: 'Draw + analyse the shift sample; log turbidity, chlorine residual, coliform.', activityId: 'ACT-DEMO-W3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: rafael.id, responsibleRole: 'Data Steward Water Operations', responsiblePersonId: sophie.id, systemIds: [sysLIMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 2, successMeasure: 'Every shift sample logged within 4 hours', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const vsW = { id: demoId('node-vs-water'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Water Distribution & Quality', description: 'End-to-end delivery of safe potable water — treat, distribute, monitor, restore.', activityId: 'VS-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: marcus.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procMainBreak = { id: demoId('node-proc-main-break'), parentId: vsW.id, level: 'PROCESS' as const, name: 'Main Break Response', description: 'Detect and repair distribution main breaks before customer complaints escalate.', activityId: 'PRO-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procTreatment = { id: demoId('node-proc-treatment'), parentId: vsW.id, level: 'PROCESS' as const, name: 'Treatment Operations', description: 'Run treatment plants + monitor water quality against permit thresholds.', activityId: 'PRO-DEMO-W2', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: rafael.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spBreakTriage = { id: demoId('node-sp-break-triage'), parentId: procMainBreak.id, level: 'SUBPROCESS' as const, name: 'Break Triage', description: 'Confirm break, size the affected zone, dispatch the right crew.', activityId: 'SP-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actDetectBreak = { id: demoId('node-act-detect-break'), parentId: spBreakTriage.id, level: 'ACTIVITY' as const, name: 'Detect main break', description: 'Acoustic sensors + pressure anomalies flag likely breaks.', activityId: 'ACT-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, responsibleRole: 'System Operator Lead — Water Treatment', responsiblePersonId: rafael.id, systemIds: [sysSCADA.id, sysHydraulic.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Break confirmed within 15 minutes of anomaly signal\n\nP95 15 min from anomaly to dispatch', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actDispatchWater = { id: demoId('node-act-dispatch-water'), parentId: procMainBreak.id, level: 'ACTIVITY' as const, name: 'Dispatch repair crew', description: 'Match crew skill + equipment to the break location and severity.', activityId: 'ACT-DEMO-W2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, responsibleRole: 'Manager Water Distribution Control', systemIds: [sysGIS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actWaterQualityTest = { id: demoId('node-act-quality-test'), parentId: procTreatment.id, level: 'ACTIVITY' as const, name: 'Water quality sample test', description: 'Draw + analyse the shift sample; log turbidity, chlorine residual, coliform.', activityId: 'ACT-DEMO-W3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: rafael.id, responsibleRole: 'Data Steward Water Operations', responsiblePersonId: sophie.id, systemIds: [sysLIMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 2, successMeasure: 'Every shift sample logged within 4 hours', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   await createAll(repos.processNodes, [vsW, procMainBreak, procTreatment, spBreakTriage, actDetectBreak, actDispatchWater, actWaterQualityTest]);
 
   // Water-side flow — Detect main break → Dispatch repair crew.
   // Mirrors the electric predecessor/successor story.
   await createAll(repos.flowRelationships, [
-    { id: P + 'flow-w1', fromNodeId: actDetectBreak.id, toNodeId: actDispatchWater.id, type: 'SEQUENCE' as const, label: 'break confirmed', createdAt: ts },
+    { id: demoId('flow-w1'), fromNodeId: actDetectBreak.id, toNodeId: actDispatchWater.id, type: 'SEQUENCE' as const, label: 'break confirmed', createdAt: ts },
   ]);
 
   // ── Mappings ──
   await createAll(repos.mappings, [
-    { id: P + 'map-1', orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetOutageLogs.id, linkType: 'INPUT', notes: 'Consumes raw outage records', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-2', orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Cross-references affected customers', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-3', orgId: orgElectric.id, processStepId: actNotify.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Pulls customer contact preferences', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-4', orgId: orgTidewater.id, processStepId: actDispatch.id, dataAssetId: assetMeterReads.id, linkType: 'INPUT', notes: 'Verifies restoration via meter reads', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-1'), orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetOutageLogs.id, linkType: 'INPUT', notes: 'Consumes raw outage records', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-2'), orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Cross-references affected customers', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-3'), orgId: orgElectric.id, processStepId: actNotify.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Pulls customer contact preferences', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-4'), orgId: orgTidewater.id, processStepId: actDispatch.id, dataAssetId: assetMeterReads.id, linkType: 'INPUT', notes: 'Verifies restoration via meter reads', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     // Water side mappings — parallel shape to electric's three.
-    { id: P + 'map-w1', orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetDistPressure.id, linkType: 'INPUT', notes: 'Reads pressure telemetry to confirm the break signal', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-w2', orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Identifies the customers in the affected zone', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-w3', orgId: orgWater.id, processStepId: actWaterQualityTest.id, dataAssetId: assetWaterQuality.id, linkType: 'OUTPUT', notes: 'Writes the shift sample result set', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-w1'), orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetDistPressure.id, linkType: 'INPUT', notes: 'Reads pressure telemetry to confirm the break signal', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-w2'), orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Identifies the customers in the affected zone', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-w3'), orgId: orgWater.id, processStepId: actWaterQualityTest.id, dataAssetId: assetWaterQuality.id, linkType: 'OUTPUT', notes: 'Writes the shift sample result set', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
   ]);
 
   // ── Governance tasks assigned to Susan (populates My Dashboard) ──
   await createAll(repos.governanceTasks, [
-    { id: P + 'task-1', orgId: orgTidewater.id, title: 'Approve Q3 data classification review', description: 'Review the AI-suggested sensitivity tags on Customer Master and Outage Logs and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: susan.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetCustomerMaster.id, automationMode: 'HUMAN' as any, createdBy: marisol.id, createdAt: ts, updatedAt: ts, completedAt: null },
-    { id: P + 'task-2', orgId: orgTidewater.id, title: 'Sign off on Regulatory Data domain scope', description: 'Lorraine has proposed expanding the Regulatory Data domain to cover new SDWA reporting fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: susan.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domRegulatory.id, automationMode: 'HUMAN' as any, createdBy: lorraine.id, createdAt: ts, updatedAt: ts, completedAt: null },
-    { id: P + 'task-3', orgId: orgTidewater.id, title: 'Retire Legacy Billing Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: susan.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyBilling.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-1'), orgId: orgTidewater.id, title: 'Approve Q3 data classification review', description: 'Review the AI-suggested sensitivity tags on Customer Master and Outage Logs and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: susan.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetCustomerMaster.id, automationMode: 'HUMAN' as any, createdBy: marisol.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-2'), orgId: orgTidewater.id, title: 'Sign off on Regulatory Data domain scope', description: 'Lorraine has proposed expanding the Regulatory Data domain to cover new SDWA reporting fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: susan.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domRegulatory.id, automationMode: 'HUMAN' as any, createdBy: lorraine.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-3'), orgId: orgTidewater.id, title: 'Retire Legacy Billing Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: susan.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyBilling.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
   ]);
 
   // ── One open governance issue assigned to Susan ──
   await repos.governanceIssues.create({
-    id: P + 'issue-1',
+    id: demoId('issue-1'),
     orgId: orgTidewater.id,
     title: 'Generation Output tier below Silver — critical process, ungoverned',
     description: 'Generation Output is BRONZE tier but the Detect & Assess process depends on it as an input. Recommend promoting to Silver with an SLA target.',
@@ -914,7 +930,7 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   //     under threshold. Same asset as the seeded governance issue,
   //     so the DQ tile and the issue tell one coherent story.
   const dqPassing = {
-    id: P + 'dq-rule-passing',
+    id: demoId('dq-rule-passing'),
     orgId: orgTidewater.id,
     dataAssetId: assetCustomerMaster.id,
     dimension: 'COMPLETENESS' as const,
@@ -931,7 +947,7 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     updatedAt: ts,
   };
   const dqFailing = {
-    id: P + 'dq-rule-failing',
+    id: demoId('dq-rule-failing'),
     orgId: orgElectric.id,
     dataAssetId: assetGeneration.id,
     dimension: 'TIMELINESS' as const,
@@ -962,7 +978,7 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
   const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const conn = {
-    id: P + 'conn-tidewater',
+    id: demoId('conn-tidewater'),
     orgId: orgTidewater.id,
     name: 'Tidewater Data Platform Connector',
     // sha256("demo-connector-token") — the plaintext isn't reachable
@@ -995,27 +1011,27 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // render so newest reads first.
   await createAll(repos.connectorEvents, [
     {
-      id: P + 'ce-paired', connectorId: conn.id, orgId: orgTidewater.id,
+      id: demoId('ce-paired'), connectorId: conn.id, orgId: orgTidewater.id,
       type: 'PAIRED', ts: connectorCreatedAt,
       data: { agentVersion: '1.2.0' },
     },
     {
-      id: P + 'ce-scan-start', connectorId: conn.id, orgId: orgTidewater.id,
+      id: demoId('ce-scan-start'), connectorId: conn.id, orgId: orgTidewater.id,
       type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       data: { targetSystemIds: [sysAMI.id, sysWarehouse.id] },
     },
     {
-      id: P + 'ce-scan-done', connectorId: conn.id, orgId: orgTidewater.id,
+      id: demoId('ce-scan-done'), connectorId: conn.id, orgId: orgTidewater.id,
       type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(),
       data: { durationMs: 40_120, assetsDiscovered: 1 },
     },
     {
-      id: P + 'ce-assets', connectorId: conn.id, orgId: orgTidewater.id,
+      id: demoId('ce-assets'), connectorId: conn.id, orgId: orgTidewater.id,
       type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(),
       data: { incoming: 1, created: 0, updated: 1 },
     },
     {
-      id: P + 'ce-hb', connectorId: conn.id, orgId: orgTidewater.id,
+      id: demoId('ce-hb'), connectorId: conn.id, orgId: orgTidewater.id,
       type: 'HEARTBEAT', ts: connectorHeartbeatAt,
       data: { agentVersion: '1.2.0' },
     },
@@ -1028,7 +1044,7 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // so a live claim from the CLI during the demo would actually
   // work if the presenter wanted to prove the round-trip.
   const pairingConn = {
-    id: P + 'conn-pairing',
+    id: demoId('conn-pairing'),
     orgId: orgTidewater.id,
     name: 'Water Plant SCADA Connector',
     tokenHash: null,
@@ -1052,7 +1068,7 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
   const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
   await repos.calendarEvents.create({
-    id: P + 'cal-dgc',
+    id: demoId('cal-dgc'),
     orgId: orgTidewater.id,
     name: 'Data Governance Committee weekly',
     description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
@@ -1247,18 +1263,18 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   await seedLineageAndTrends(repos, ts, {
     orgIds: [orgTidewater.id, orgElectric.id, orgWater.id],
     links: [
-      { id: P + 'lin-1', orgId: orgTidewater.id, sourceSystemId: sysAMI.id, targetSystemId: sysWarehouse.id, dataAssetId: assetMeterReads.id, description: 'AMI interval reads land in the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
-      { id: P + 'lin-2', orgId: orgTidewater.id, sourceSystemId: sysCIS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetCustomerMaster.id, description: 'Customer master syncs nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
-      { id: P + 'lin-3', orgId: orgElectric.id, sourceSystemId: sysSCADA.id, targetSystemId: sysOMS.id, dataAssetId: assetOutageLogs.id, description: 'SCADA events stream into the outage management system.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+      { id: demoId('lin-1'), orgId: orgTidewater.id, sourceSystemId: sysAMI.id, targetSystemId: sysWarehouse.id, dataAssetId: assetMeterReads.id, description: 'AMI interval reads land in the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: demoId('lin-2'), orgId: orgTidewater.id, sourceSystemId: sysCIS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetCustomerMaster.id, description: 'Customer master syncs nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-3'), orgId: orgElectric.id, sourceSystemId: sysSCADA.id, targetSystemId: sysOMS.id, dataAssetId: assetOutageLogs.id, description: 'SCADA events stream into the outage management system.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
     ],
     edges: [
-      { id: P + 'edge-1', orgId: orgTidewater.id, sourceAssetId: assetMeterReads.id, targetAssetId: assetCustomerMaster.id },
-      { id: P + 'edge-2', orgId: orgElectric.id, sourceAssetId: assetOutageLogs.id, targetAssetId: assetGeneration.id },
+      { id: demoId('edge-1'), orgId: orgTidewater.id, sourceAssetId: assetMeterReads.id, targetAssetId: assetCustomerMaster.id },
+      { id: demoId('edge-2'), orgId: orgElectric.id, sourceAssetId: assetOutageLogs.id, targetAssetId: assetGeneration.id },
     ],
   });
 
   // Agent operations — schedules + executions for a seeded agent.
-  await seedAgentOps(repos, ts, { orgId: orgTidewater.id, agentId: P + 'agent-compliance', agentName: 'Compliance Report Generator', activityId: actTriage.id, activityName: 'Outage triage', roleType: 'DATA_QUALITY_ANALYST', createdBy: susan.id, reviewerId: marisol.id });
+  await seedAgentOps(repos, ts, { orgId: orgTidewater.id, agentId: demoId('agent-compliance'), agentName: 'Compliance Report Generator', activityId: actTriage.id, activityName: 'Outage triage', roleType: 'DATA_QUALITY_ANALYST', createdBy: susan.id, reviewerId: marisol.id });
 
   // Collaboration + reporting + connections.
   await seedCollabAndReporting(repos, ts, { orgId: orgTidewater.id, assetId: assetCustomerMaster.id, systemId: sysCIS.id, personId: natalie.id, personName: 'Natalie Greer' });
@@ -1296,83 +1312,83 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
  */
 async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
   // ── Organizations (company → 3 divisions → 6 departments) ──
-  const orgMeridian = { id: P + 'org-meridian', parentId: null, name: 'Meridian Shipbuilding', type: 'company', industry: 'Defense & Shipbuilding', description: 'Naval + commercial shipyard demo tenant — new construction, sustainment, shared services.', headCount: 0, tenantSlug: 'meridian', brandDisplayName: 'Meridian Shipbuilding', brandGlyph: '⚓', ssoButtonLabel: 'Sign in with Meridian SSO', brandPrimaryColor: '#0f4f46', createdAt: ts, updatedAt: ts };
-  const orgNewCon = { id: P + 'org-newcon', parentId: orgMeridian.id, name: 'New Construction', type: 'division', industry: 'Defense & Shipbuilding', description: 'New-build ship construction', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgSustain = { id: P + 'org-sustain', parentId: orgMeridian.id, name: 'Fleet Sustainment', type: 'division', industry: 'Defense & Shipbuilding', description: 'Repair, overhaul, dry-dock availabilities', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgMShared = { id: P + 'org-mshared', parentId: orgMeridian.id, name: 'Shared Services', type: 'division', industry: 'Defense & Shipbuilding', description: 'IT / Quality / Regulatory / Supply Chain', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgHull = { id: P + 'org-hull', parentId: orgNewCon.id, name: 'Hull & Structure', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgOutfit = { id: P + 'org-outfit', parentId: orgNewCon.id, name: 'Outfitting & Assembly', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgDryDock = { id: P + 'org-drydock', parentId: orgSustain.id, name: 'Dry Dock Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgRepair = { id: P + 'org-repair', parentId: orgSustain.id, name: 'Repair Planning', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgMIT = { id: P + 'org-mit', parentId: orgMShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  const orgQuality = { id: P + 'org-quality', parentId: orgMShared.id, name: 'Quality & Compliance', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgMeridian = { id: demoId('org-meridian'), parentId: null, name: 'Meridian Shipbuilding', type: 'company', industry: 'Defense & Shipbuilding', description: 'Naval + commercial shipyard demo tenant — new construction, sustainment, shared services.', headCount: 0, tenantSlug: 'meridian', brandDisplayName: 'Meridian Shipbuilding', brandGlyph: '⚓', ssoButtonLabel: 'Sign in with Meridian SSO', brandPrimaryColor: '#0f4f46', createdAt: ts, updatedAt: ts };
+  const orgNewCon = { id: demoId('org-newcon'), parentId: orgMeridian.id, name: 'New Construction', type: 'division', industry: 'Defense & Shipbuilding', description: 'New-build ship construction', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgSustain = { id: demoId('org-sustain'), parentId: orgMeridian.id, name: 'Fleet Sustainment', type: 'division', industry: 'Defense & Shipbuilding', description: 'Repair, overhaul, dry-dock availabilities', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgMShared = { id: demoId('org-mshared'), parentId: orgMeridian.id, name: 'Shared Services', type: 'division', industry: 'Defense & Shipbuilding', description: 'IT / Quality / Regulatory / Supply Chain', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgHull = { id: demoId('org-hull'), parentId: orgNewCon.id, name: 'Hull & Structure', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgOutfit = { id: demoId('org-outfit'), parentId: orgNewCon.id, name: 'Outfitting & Assembly', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgDryDock = { id: demoId('org-drydock'), parentId: orgSustain.id, name: 'Dry Dock Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgRepair = { id: demoId('org-repair'), parentId: orgSustain.id, name: 'Repair Planning', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgMIT = { id: demoId('org-mit'), parentId: orgMShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgQuality = { id: demoId('org-quality'), parentId: orgMShared.id, name: 'Quality & Compliance', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
   await createAll(repos.organizations, [orgMeridian, orgNewCon, orgSustain, orgMShared, orgHull, orgOutfit, orgDryDock, orgRepair, orgMIT, orgQuality]);
 
   // ── People (24) — persona Elena Ruiz (CDO) ──
-  const elena = { id: P + 'person-elena-ruiz', orgIds: [orgMeridian.id], accessibleOrgIds: [orgMeridian.id, orgNewCon.id, orgSustain.id, orgMShared.id, orgHull.id, orgOutfit.id, orgDryDock.id, orgRepair.id, orgMIT.id, orgQuality.id], name: 'Elena Ruiz', email: 'elena.ruiz@meridian-shipbuilding.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const priyanka = { id: P + 'person-priyanka', orgIds: [orgMeridian.id], accessibleOrgIds: [orgMeridian.id], name: 'Priyanka Rao', email: 'priyanka.rao@meridian-shipbuilding.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const grant = { id: P + 'person-grant', orgIds: [orgNewCon.id], accessibleOrgIds: [orgNewCon.id], name: 'Grant Whitfield', email: 'grant.whitfield@meridian-shipbuilding.com', role: 'ORG_ADMIN', title: 'Data Owner New Construction', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const tomas = { id: P + 'person-tomas', orgIds: [orgHull.id], accessibleOrgIds: [orgHull.id, orgNewCon.id], name: 'Tomas Nogueira', email: 'tomas.nogueira@meridian-shipbuilding.com', role: 'EDITOR', title: 'Director Hull Construction', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const bianca = { id: P + 'person-bianca', orgIds: [orgHull.id], accessibleOrgIds: [orgHull.id], name: 'Bianca Ferro', email: 'bianca.ferro@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Welding Engineering Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const dmitri = { id: P + 'person-dmitri', orgIds: [orgHull.id], accessibleOrgIds: [orgHull.id], name: 'Dmitri Volkov', email: 'dmitri.volkov@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Data Steward Hull & Structure', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const aaliyah = { id: P + 'person-aaliyah', orgIds: [orgHull.id], accessibleOrgIds: [orgHull.id], name: 'Aaliyah Bright', email: 'aaliyah.bright@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Steel Fabrication Superintendent', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const corentin = { id: P + 'person-corentin', orgIds: [orgOutfit.id], accessibleOrgIds: [orgOutfit.id], name: 'Corentin Bahati', email: 'corentin.bahati@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Outfitting & Assembly', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const noor = { id: P + 'person-noor', orgIds: [orgOutfit.id], accessibleOrgIds: [orgOutfit.id], name: 'Noor Haddad', email: 'noor.haddad@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Data Steward Outfitting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const yusuf = { id: P + 'person-yusuf', orgIds: [orgOutfit.id], accessibleOrgIds: [orgOutfit.id], name: 'Yusuf Demir', email: 'yusuf.demir@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Pipefitting Superintendent', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const marco = { id: P + 'person-marco', orgIds: [orgSustain.id], accessibleOrgIds: [orgSustain.id], name: 'Marco Bellini', email: 'marco.bellini@meridian-shipbuilding.com', role: 'ORG_ADMIN', title: 'Data Owner Fleet Sustainment', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const reggie = { id: P + 'person-reggie', orgIds: [orgDryDock.id], accessibleOrgIds: [orgDryDock.id, orgSustain.id], name: 'Reggie Dawson', email: 'reggie.dawson@meridian-shipbuilding.com', role: 'EDITOR', title: 'Director Dry Dock Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const yuki = { id: P + 'person-yuki', orgIds: [orgDryDock.id], accessibleOrgIds: [orgDryDock.id], name: 'Yuki Tanaka', email: 'yuki.tanaka@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Dock Master', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const sofiam = { id: P + 'person-sofia-m', orgIds: [orgDryDock.id], accessibleOrgIds: [orgDryDock.id], name: 'Sofia Marchetti', email: 'sofia.marchetti@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Data Steward Dry Dock', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const hassan = { id: P + 'person-hassan', orgIds: [orgRepair.id], accessibleOrgIds: [orgRepair.id], name: 'Hassan Rahimi', email: 'hassan.rahimi@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Repair Planning', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const lena = { id: P + 'person-lena', orgIds: [orgRepair.id], accessibleOrgIds: [orgRepair.id], name: 'Lena Fischer', email: 'lena.fischer@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Planner / Estimator', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const ravi = { id: P + 'person-ravi', orgIds: [orgMIT.id], accessibleOrgIds: [orgMIT.id], name: 'Ravi Chandra', email: 'ravi.chandra@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const meghan = { id: P + 'person-meghan', orgIds: [orgMIT.id], accessibleOrgIds: [orgMIT.id], name: "Meghan O'Connell", email: 'meghan.oconnell@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const anders = { id: P + 'person-anders', orgIds: [orgMIT.id], accessibleOrgIds: [orgMIT.id], name: 'Anders Holm', email: 'anders.holm@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager OT / ICS Cybersecurity', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const gabriela = { id: P + 'person-gabriela', orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Gabriela Souza', email: 'gabriela.souza@meridian-shipbuilding.com', role: 'EDITOR', title: 'Director Quality & Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const warrick = { id: P + 'person-warrick', orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Warrick Blythe', email: 'warrick.blythe@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const chenwei = { id: P + 'person-chen-wei', orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Chen Wei', email: 'chen.wei@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'QA / QC Inspector Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const isadora = { id: P + 'person-isadora', orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Isadora Klein', email: 'isadora.klein@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Naval Regulatory Affairs', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  const felix = { id: P + 'person-felix', orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Felix Osborne', email: 'felix.osborne@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Non-Destructive Testing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const elena = { id: demoId('person-elena-ruiz'), orgIds: [orgMeridian.id], accessibleOrgIds: [orgMeridian.id, orgNewCon.id, orgSustain.id, orgMShared.id, orgHull.id, orgOutfit.id, orgDryDock.id, orgRepair.id, orgMIT.id, orgQuality.id], name: 'Elena Ruiz', email: 'elena.ruiz@meridian-shipbuilding.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const priyanka = { id: demoId('person-priyanka'), orgIds: [orgMeridian.id], accessibleOrgIds: [orgMeridian.id], name: 'Priyanka Rao', email: 'priyanka.rao@meridian-shipbuilding.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const grant = { id: demoId('person-grant'), orgIds: [orgNewCon.id], accessibleOrgIds: [orgNewCon.id], name: 'Grant Whitfield', email: 'grant.whitfield@meridian-shipbuilding.com', role: 'ORG_ADMIN', title: 'Data Owner New Construction', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const tomas = { id: demoId('person-tomas'), orgIds: [orgHull.id], accessibleOrgIds: [orgHull.id, orgNewCon.id], name: 'Tomas Nogueira', email: 'tomas.nogueira@meridian-shipbuilding.com', role: 'EDITOR', title: 'Director Hull Construction', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const bianca = { id: demoId('person-bianca'), orgIds: [orgHull.id], accessibleOrgIds: [orgHull.id], name: 'Bianca Ferro', email: 'bianca.ferro@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Welding Engineering Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const dmitri = { id: demoId('person-dmitri'), orgIds: [orgHull.id], accessibleOrgIds: [orgHull.id], name: 'Dmitri Volkov', email: 'dmitri.volkov@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Data Steward Hull & Structure', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const aaliyah = { id: demoId('person-aaliyah'), orgIds: [orgHull.id], accessibleOrgIds: [orgHull.id], name: 'Aaliyah Bright', email: 'aaliyah.bright@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Steel Fabrication Superintendent', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const corentin = { id: demoId('person-corentin'), orgIds: [orgOutfit.id], accessibleOrgIds: [orgOutfit.id], name: 'Corentin Bahati', email: 'corentin.bahati@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Outfitting & Assembly', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const noor = { id: demoId('person-noor'), orgIds: [orgOutfit.id], accessibleOrgIds: [orgOutfit.id], name: 'Noor Haddad', email: 'noor.haddad@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Data Steward Outfitting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const yusuf = { id: demoId('person-yusuf'), orgIds: [orgOutfit.id], accessibleOrgIds: [orgOutfit.id], name: 'Yusuf Demir', email: 'yusuf.demir@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Pipefitting Superintendent', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const marco = { id: demoId('person-marco'), orgIds: [orgSustain.id], accessibleOrgIds: [orgSustain.id], name: 'Marco Bellini', email: 'marco.bellini@meridian-shipbuilding.com', role: 'ORG_ADMIN', title: 'Data Owner Fleet Sustainment', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const reggie = { id: demoId('person-reggie'), orgIds: [orgDryDock.id], accessibleOrgIds: [orgDryDock.id, orgSustain.id], name: 'Reggie Dawson', email: 'reggie.dawson@meridian-shipbuilding.com', role: 'EDITOR', title: 'Director Dry Dock Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const yuki = { id: demoId('person-yuki'), orgIds: [orgDryDock.id], accessibleOrgIds: [orgDryDock.id], name: 'Yuki Tanaka', email: 'yuki.tanaka@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Dock Master', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sofiam = { id: demoId('person-sofia-m'), orgIds: [orgDryDock.id], accessibleOrgIds: [orgDryDock.id], name: 'Sofia Marchetti', email: 'sofia.marchetti@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Data Steward Dry Dock', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const hassan = { id: demoId('person-hassan'), orgIds: [orgRepair.id], accessibleOrgIds: [orgRepair.id], name: 'Hassan Rahimi', email: 'hassan.rahimi@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Repair Planning', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const lena = { id: demoId('person-lena'), orgIds: [orgRepair.id], accessibleOrgIds: [orgRepair.id], name: 'Lena Fischer', email: 'lena.fischer@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Planner / Estimator', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const ravi = { id: demoId('person-ravi'), orgIds: [orgMIT.id], accessibleOrgIds: [orgMIT.id], name: 'Ravi Chandra', email: 'ravi.chandra@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const meghan = { id: demoId('person-meghan'), orgIds: [orgMIT.id], accessibleOrgIds: [orgMIT.id], name: "Meghan O'Connell", email: 'meghan.oconnell@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const anders = { id: demoId('person-anders'), orgIds: [orgMIT.id], accessibleOrgIds: [orgMIT.id], name: 'Anders Holm', email: 'anders.holm@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager OT / ICS Cybersecurity', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gabriela = { id: demoId('person-gabriela'), orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Gabriela Souza', email: 'gabriela.souza@meridian-shipbuilding.com', role: 'EDITOR', title: 'Director Quality & Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const warrick = { id: demoId('person-warrick'), orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Warrick Blythe', email: 'warrick.blythe@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const chenwei = { id: demoId('person-chen-wei'), orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Chen Wei', email: 'chen.wei@meridian-shipbuilding.com', role: 'CONTRIBUTOR', title: 'QA / QC Inspector Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const isadora = { id: demoId('person-isadora'), orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Isadora Klein', email: 'isadora.klein@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Naval Regulatory Affairs', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const felix = { id: demoId('person-felix'), orgIds: [orgQuality.id], accessibleOrgIds: [orgQuality.id], name: 'Felix Osborne', email: 'felix.osborne@meridian-shipbuilding.com', role: 'EDITOR', title: 'Manager Non-Destructive Testing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   await createAll(repos.people, [elena, priyanka, grant, tomas, bianca, dmitri, aaliyah, corentin, noor, yusuf, marco, reggie, yuki, sofiam, hassan, lena, ravi, meghan, anders, gabriela, warrick, chenwei, isadora, felix]);
 
   // ── Systems (8) — PLM / ERP / MES / EAM / QMS / warehouse + OT ──
-  const sysPLM = { id: P + 'sys-plm', orgId: orgMeridian.id, name: 'PLM', description: 'Product Lifecycle Management — 3D product model, drawings, engineering BOM.', systemType: 'IT', vendorName: 'Siemens Teamcenter', ownerPersonId: ravi.id, stewardIds: [dmitri.id], createdAt: ts, updatedAt: ts };
-  const sysERP = { id: P + 'sys-erp', orgId: orgMeridian.id, name: 'ERP', description: 'Enterprise Resource Planning — materials, procurement, work orders, finance.', systemType: 'IT', vendorName: 'SAP S/4HANA', ownerPersonId: grant.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
-  const sysMES = { id: P + 'sys-mes', orgId: orgNewCon.id, name: 'MES', description: 'Manufacturing Execution System — shop-floor work order status, nesting, throughput.', systemType: 'OT', vendorName: 'Dassault Apriso', ownerPersonId: corentin.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
-  const sysEAM = { id: P + 'sys-eam', orgId: orgMeridian.id, name: 'EAM', description: 'Enterprise Asset Management — cranes, dry docks, yard equipment maintenance.', systemType: 'IT', vendorName: 'IBM Maximo', ownerPersonId: reggie.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
-  const sysQMS = { id: P + 'sys-qms', orgId: orgMeridian.id, name: 'QMS', description: 'Quality Management System — inspections, nonconformance reports, certifications.', systemType: 'IT', vendorName: 'ETQ Reliance', ownerPersonId: gabriela.id, stewardIds: [warrick.id], createdAt: ts, updatedAt: ts };
-  const sysWarehouse = { id: P + 'sys-warehouse', orgId: orgMeridian.id, name: 'Data Warehouse', description: 'Enterprise analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: ravi.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
-  const sysWeldHist = { id: P + 'sys-weldhist', orgId: orgNewCon.id, name: 'Weld Historian', description: 'Weld data historian — machine parameters (amperage, voltage, travel speed) per weld.', systemType: 'OT', vendorName: 'AVEVA PI', ownerPersonId: anders.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
-  const sysNDT = { id: P + 'sys-ndt', orgId: orgQuality.id, name: 'NDT Imaging', description: 'Non-destructive testing — digital radiography + ultrasonic weld inspection images.', systemType: 'OT', vendorName: 'GE Waygate', ownerPersonId: felix.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysPLM = { id: demoId('sys-plm'), orgId: orgMeridian.id, name: 'PLM', description: 'Product Lifecycle Management — 3D product model, drawings, engineering BOM.', systemType: 'IT', vendorName: 'Siemens Teamcenter', ownerPersonId: ravi.id, stewardIds: [dmitri.id], createdAt: ts, updatedAt: ts };
+  const sysERP = { id: demoId('sys-erp'), orgId: orgMeridian.id, name: 'ERP', description: 'Enterprise Resource Planning — materials, procurement, work orders, finance.', systemType: 'IT', vendorName: 'SAP S/4HANA', ownerPersonId: grant.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysMES = { id: demoId('sys-mes'), orgId: orgNewCon.id, name: 'MES', description: 'Manufacturing Execution System — shop-floor work order status, nesting, throughput.', systemType: 'OT', vendorName: 'Dassault Apriso', ownerPersonId: corentin.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysEAM = { id: demoId('sys-eam'), orgId: orgMeridian.id, name: 'EAM', description: 'Enterprise Asset Management — cranes, dry docks, yard equipment maintenance.', systemType: 'IT', vendorName: 'IBM Maximo', ownerPersonId: reggie.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysQMS = { id: demoId('sys-qms'), orgId: orgMeridian.id, name: 'QMS', description: 'Quality Management System — inspections, nonconformance reports, certifications.', systemType: 'IT', vendorName: 'ETQ Reliance', ownerPersonId: gabriela.id, stewardIds: [warrick.id], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgMeridian.id, name: 'Data Warehouse', description: 'Enterprise analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: ravi.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysWeldHist = { id: demoId('sys-weldhist'), orgId: orgNewCon.id, name: 'Weld Historian', description: 'Weld data historian — machine parameters (amperage, voltage, travel speed) per weld.', systemType: 'OT', vendorName: 'AVEVA PI', ownerPersonId: anders.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysNDT = { id: demoId('sys-ndt'), orgId: orgQuality.id, name: 'NDT Imaging', description: 'Non-destructive testing — digital radiography + ultrasonic weld inspection images.', systemType: 'OT', vendorName: 'GE Waygate', ownerPersonId: felix.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
   await createAll(repos.systems, [sysPLM, sysERP, sysMES, sysEAM, sysQMS, sysWarehouse, sysWeldHist, sysNDT]);
 
   // ── Agents (5 — one of each type) ──
   await createAll(repos.agents, [
-    { id: P + 'agent-weld-model', orgIds: [orgNewCon.id], name: 'Weld Defect Prediction Model', agentType: 'AI', description: 'Predicts weld defect probability from machine telemetry and radiography.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: meghan.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-    { id: P + 'agent-mat-pipeline', orgIds: [orgMeridian.id], name: 'Material Receipts Ingestion Pipeline', agentType: 'PIPELINE', description: 'Nightly ETL of ERP goods-receipt and inventory data into the warehouse.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: ravi.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-    { id: P + 'agent-schedule-bot', orgIds: [orgMeridian.id], name: 'Production Schedule Alert Bot', agentType: 'BOT', description: 'Alerts planners to schedule slips and block-erection blockers.', provider: 'Slack', status: 'ACTIVE', ownerPersonId: hassan.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-    { id: P + 'agent-hist-service', orgIds: [orgNewCon.id], name: 'Weld Historian Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract weld historian tags.', provider: 'AVEVA', status: 'ACTIVE', ownerPersonId: anders.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
-    { id: P + 'agent-cert-gen', orgIds: [orgMeridian.id], name: 'Naval Cert Package Generator', agentType: 'OTHER', description: 'Scheduled generator producing ABS + Naval certification evidence packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: isadora.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-weld-model'), orgIds: [orgNewCon.id], name: 'Weld Defect Prediction Model', agentType: 'AI', description: 'Predicts weld defect probability from machine telemetry and radiography.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: meghan.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-mat-pipeline'), orgIds: [orgMeridian.id], name: 'Material Receipts Ingestion Pipeline', agentType: 'PIPELINE', description: 'Nightly ETL of ERP goods-receipt and inventory data into the warehouse.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: ravi.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-schedule-bot'), orgIds: [orgMeridian.id], name: 'Production Schedule Alert Bot', agentType: 'BOT', description: 'Alerts planners to schedule slips and block-erection blockers.', provider: 'Slack', status: 'ACTIVE', ownerPersonId: hassan.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-hist-service'), orgIds: [orgNewCon.id], name: 'Weld Historian Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract weld historian tags.', provider: 'AVEVA', status: 'ACTIVE', ownerPersonId: anders.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-cert-gen'), orgIds: [orgMeridian.id], name: 'Naval Cert Package Generator', agentType: 'OTHER', description: 'Scheduled generator producing ABS + Naval certification evidence packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: isadora.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
   ]);
 
   // ── Data Domains (3) ──
-  const domDesign = { id: P + 'domain-design', orgId: orgMeridian.id, name: 'Design & Engineering Data', description: '3D product models, drawings, engineering BOMs, change orders.', ownerId: elena.id, stewardIds: [dmitri.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domProduction = { id: P + 'domain-production', orgId: orgMeridian.id, name: 'Production Data', description: 'Work orders, material receipts, weld telemetry — the shop-floor operational feeds.', ownerId: grant.id, stewardIds: [noor.id, aaliyah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domQuality = { id: P + 'domain-quality', orgId: orgMeridian.id, name: 'Quality & Compliance Data', description: 'Inspection records, nonconformance reports, certification evidence (ABS / Naval / OSHA).', ownerId: gabriela.id, stewardIds: [warrick.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domDesign = { id: demoId('domain-design'), orgId: orgMeridian.id, name: 'Design & Engineering Data', description: '3D product models, drawings, engineering BOMs, change orders.', ownerId: elena.id, stewardIds: [dmitri.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domProduction = { id: demoId('domain-production'), orgId: orgMeridian.id, name: 'Production Data', description: 'Work orders, material receipts, weld telemetry — the shop-floor operational feeds.', ownerId: grant.id, stewardIds: [noor.id, aaliyah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domQuality = { id: demoId('domain-quality'), orgId: orgMeridian.id, name: 'Quality & Compliance Data', description: 'Inspection records, nonconformance reports, certification evidence (ABS / Naval / OSHA).', ownerId: gabriela.id, stewardIds: [warrick.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   await createAll(repos.dataDomains, [domDesign, domProduction, domQuality]);
 
   // ── Data Assets (9) ──
-  const assetProductModel = { id: P + 'asset-product-model', orgId: orgMeridian.id, name: '3D Product Model', description: 'The master 3D CAD product model and released drawings.', systemId: sysPLM.id, owner: '', ownerPersonId: dmitri.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 90, createdAt: ts, updatedAt: ts };
-  const assetBOM = { id: P + 'asset-bom', orgId: orgMeridian.id, name: 'Bill of Materials', description: 'Engineering + manufacturing BOM — parts, quantities, cut lists.', systemId: sysPLM.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 86, createdAt: ts, updatedAt: ts };
-  const assetWeldRecords = { id: P + 'asset-weld-records', orgId: orgMeridian.id, name: 'Weld Inspection Records', description: 'Per-weld visual + NDT inspection results and weld maps.', systemId: sysQMS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 58, createdAt: ts, updatedAt: ts };
-  const assetWorkOrders = { id: P + 'asset-work-orders', orgId: orgNewCon.id, name: 'Work Order Status', description: 'Shop-floor work order state — planned, in-progress, complete by block.', systemId: sysMES.id, owner: '', ownerPersonId: corentin.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
-  const assetMaterialReceipts = { id: P + 'asset-material-receipts', orgId: orgMeridian.id, name: 'Material Receipts', description: 'ERP goods-receipt records — steel plate, pipe, valves, outfitting materials.', systemId: sysERP.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 88, createdAt: ts, updatedAt: ts };
-  const assetNCR = { id: P + 'asset-ncr', orgId: orgMeridian.id, name: 'Nonconformance Reports', description: 'Quality NCRs and their dispositions — the compliance evidence trail for ABS / Naval audits.', systemId: sysQMS.id, owner: '', ownerPersonId: gabriela.id, stewardIds: [warrick.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
-  const assetWeldTelemetry = { id: P + 'asset-weld-telemetry', orgId: orgNewCon.id, name: 'Weld Machine Telemetry', description: 'Historian tags — amperage, voltage, travel speed, heat input per weld pass.', systemId: sysWeldHist.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 80, createdAt: ts, updatedAt: ts };
+  const assetProductModel = { id: demoId('asset-product-model'), orgId: orgMeridian.id, name: '3D Product Model', description: 'The master 3D CAD product model and released drawings.', systemId: sysPLM.id, owner: '', ownerPersonId: dmitri.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 90, createdAt: ts, updatedAt: ts };
+  const assetBOM = { id: demoId('asset-bom'), orgId: orgMeridian.id, name: 'Bill of Materials', description: 'Engineering + manufacturing BOM — parts, quantities, cut lists.', systemId: sysPLM.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 86, createdAt: ts, updatedAt: ts };
+  const assetWeldRecords = { id: demoId('asset-weld-records'), orgId: orgMeridian.id, name: 'Weld Inspection Records', description: 'Per-weld visual + NDT inspection results and weld maps.', systemId: sysQMS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 58, createdAt: ts, updatedAt: ts };
+  const assetWorkOrders = { id: demoId('asset-work-orders'), orgId: orgNewCon.id, name: 'Work Order Status', description: 'Shop-floor work order state — planned, in-progress, complete by block.', systemId: sysMES.id, owner: '', ownerPersonId: corentin.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetMaterialReceipts = { id: demoId('asset-material-receipts'), orgId: orgMeridian.id, name: 'Material Receipts', description: 'ERP goods-receipt records — steel plate, pipe, valves, outfitting materials.', systemId: sysERP.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 88, createdAt: ts, updatedAt: ts };
+  const assetNCR = { id: demoId('asset-ncr'), orgId: orgMeridian.id, name: 'Nonconformance Reports', description: 'Quality NCRs and their dispositions — the compliance evidence trail for ABS / Naval audits.', systemId: sysQMS.id, owner: '', ownerPersonId: gabriela.id, stewardIds: [warrick.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
+  const assetWeldTelemetry = { id: demoId('asset-weld-telemetry'), orgId: orgNewCon.id, name: 'Weld Machine Telemetry', description: 'Historian tags — amperage, voltage, travel speed, heat input per weld pass.', systemId: sysWeldHist.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 80, createdAt: ts, updatedAt: ts };
   // Planted orphans — obviously-named so Ask AI's orphan-detection
   // returns a quotable answer.
-  const orphanLegacyDrawings = { id: P + 'asset-legacy-drawings', orgId: orgMeridian.id, name: 'Legacy Drawing Extract', description: 'Nightly dump from the retired 2D drawing system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
-  const orphanNestingCsv = { id: P + 'asset-nesting-csv', orgId: orgMeridian.id, name: 'Nesting CSV Dump', description: 'Ad-hoc CSV extract of cutting-table nest results for an old vendor. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanLegacyDrawings = { id: demoId('asset-legacy-drawings'), orgId: orgMeridian.id, name: 'Legacy Drawing Extract', description: 'Nightly dump from the retired 2D drawing system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanNestingCsv = { id: demoId('asset-nesting-csv'), orgId: orgMeridian.id, name: 'Nesting CSV Dump', description: 'Ad-hoc CSV extract of cutting-table nest results for an old vendor. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
   await createAll(repos.dataAssets, [assetProductModel, assetBOM, assetWeldRecords, assetWorkOrders, assetMaterialReceipts, assetNCR, assetWeldTelemetry, orphanLegacyDrawings, orphanNestingCsv]);
 
   // Domain → asset backrefs so the Domains page shows counts.
@@ -1381,57 +1397,57 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
   await repos.dataDomains.update(domQuality.id, { dataAssetIds: [assetWeldRecords.id, assetNCR.id] });
 
   // ── Process hierarchy — VS1 Ship Construction (New Construction) ──
-  const vsShip = { id: P + 'node-vs-ship', parentId: null, level: 'VALUE_STREAM' as const, name: 'Ship Construction', description: 'End-to-end new-build flow — fabricate blocks, erect, outfit, deliver.', activityId: 'VS-DEMO-S1', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: tomas.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const procBlock = { id: P + 'node-proc-block', parentId: vsShip.id, level: 'PROCESS' as const, name: 'Block Fabrication', description: 'Cut, weld, and assemble hull blocks from steel plate.', activityId: 'PRO-DEMO-S1', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: tomas.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const procErect = { id: P + 'node-proc-erect', parentId: vsShip.id, level: 'PROCESS' as const, name: 'Erection & Outfitting', description: 'Erect blocks on the ways and install outfitting.', activityId: 'PRO-DEMO-S2', status: 'ACTIVE', orderIndex: 1, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: corentin.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const spPanel = { id: P + 'node-sp-panel', parentId: procBlock.id, level: 'SUBPROCESS' as const, name: 'Panel Line', description: 'Automated panel fabrication — nest, cut, and weld flat panels.', activityId: 'SP-DEMO-S1', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: bianca.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actNest = { id: P + 'node-act-nest', parentId: spPanel.id, level: 'ACTIVITY' as const, name: 'Nest & cut steel', description: 'Nest parts onto plate and cut on the burning table per the BOM cut list.', activityId: 'ACT-DEMO-S1', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: bianca.id, responsibleRole: 'Steel Fabrication Superintendent', responsiblePersonId: aaliyah.id, systemIds: [sysMES.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actWeld = { id: P + 'node-act-weld', parentId: spPanel.id, level: 'ACTIVITY' as const, name: 'Weld panel', description: 'Weld the nested parts into a finished panel; log weld parameters and inspection.', activityId: 'ACT-DEMO-S2', status: 'ACTIVE', orderIndex: 1, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: bianca.id, responsibleRole: 'Welding Engineering Lead', responsiblePersonId: bianca.id, systemIds: [sysWeldHist.id, sysMES.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'First-pass weld yield ≥ 98% on Tier 1 joints\n\nP95 rework rate under 2%', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actErect = { id: P + 'node-act-erect', parentId: procErect.id, level: 'ACTIVITY' as const, name: 'Erect block', description: 'Lift and land the finished block onto the building ways in sequence.', activityId: 'ACT-DEMO-S3', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: corentin.id, responsibleRole: 'Manager Outfitting & Assembly', responsiblePersonId: corentin.id, systemIds: [sysEAM.id, sysMES.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actOutfit = { id: P + 'node-act-outfit', parentId: procErect.id, level: 'ACTIVITY' as const, name: 'Install outfitting', description: 'Install pipe, HVAC, cabling, and equipment per the 3D product model.', activityId: 'ACT-DEMO-S4', status: 'ACTIVE', orderIndex: 1, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: corentin.id, responsibleRole: 'Pipefitting Superintendent', responsiblePersonId: yusuf.id, systemIds: [sysPLM.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const vsShip = { id: demoId('node-vs-ship'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Ship Construction', description: 'End-to-end new-build flow — fabricate blocks, erect, outfit, deliver.', activityId: 'VS-DEMO-S1', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: tomas.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procBlock = { id: demoId('node-proc-block'), parentId: vsShip.id, level: 'PROCESS' as const, name: 'Block Fabrication', description: 'Cut, weld, and assemble hull blocks from steel plate.', activityId: 'PRO-DEMO-S1', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: tomas.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procErect = { id: demoId('node-proc-erect'), parentId: vsShip.id, level: 'PROCESS' as const, name: 'Erection & Outfitting', description: 'Erect blocks on the ways and install outfitting.', activityId: 'PRO-DEMO-S2', status: 'ACTIVE', orderIndex: 1, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: corentin.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spPanel = { id: demoId('node-sp-panel'), parentId: procBlock.id, level: 'SUBPROCESS' as const, name: 'Panel Line', description: 'Automated panel fabrication — nest, cut, and weld flat panels.', activityId: 'SP-DEMO-S1', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: bianca.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actNest = { id: demoId('node-act-nest'), parentId: spPanel.id, level: 'ACTIVITY' as const, name: 'Nest & cut steel', description: 'Nest parts onto plate and cut on the burning table per the BOM cut list.', activityId: 'ACT-DEMO-S1', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: bianca.id, responsibleRole: 'Steel Fabrication Superintendent', responsiblePersonId: aaliyah.id, systemIds: [sysMES.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actWeld = { id: demoId('node-act-weld'), parentId: spPanel.id, level: 'ACTIVITY' as const, name: 'Weld panel', description: 'Weld the nested parts into a finished panel; log weld parameters and inspection.', activityId: 'ACT-DEMO-S2', status: 'ACTIVE', orderIndex: 1, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: bianca.id, responsibleRole: 'Welding Engineering Lead', responsiblePersonId: bianca.id, systemIds: [sysWeldHist.id, sysMES.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'First-pass weld yield ≥ 98% on Tier 1 joints\n\nP95 rework rate under 2%', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actErect = { id: demoId('node-act-erect'), parentId: procErect.id, level: 'ACTIVITY' as const, name: 'Erect block', description: 'Lift and land the finished block onto the building ways in sequence.', activityId: 'ACT-DEMO-S3', status: 'ACTIVE', orderIndex: 0, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: corentin.id, responsibleRole: 'Manager Outfitting & Assembly', responsiblePersonId: corentin.id, systemIds: [sysEAM.id, sysMES.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actOutfit = { id: demoId('node-act-outfit'), parentId: procErect.id, level: 'ACTIVITY' as const, name: 'Install outfitting', description: 'Install pipe, HVAC, cabling, and equipment per the 3D product model.', activityId: 'ACT-DEMO-S4', status: 'ACTIVE', orderIndex: 1, orgId: orgNewCon.id, orgIds: [orgNewCon.id], ownerId: corentin.id, responsibleRole: 'Pipefitting Superintendent', responsiblePersonId: yusuf.id, systemIds: [sysPLM.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   await createAll(repos.processNodes, [vsShip, procBlock, procErect, spPanel, actNest, actWeld, actErect, actOutfit]);
 
   await createAll(repos.flowRelationships, [
-    { id: P + 'flow-s1', fromNodeId: actNest.id, toNodeId: actWeld.id, type: 'SEQUENCE' as const, label: 'parts cut', createdAt: ts },
-    { id: P + 'flow-s2', fromNodeId: actWeld.id, toNodeId: actErect.id, type: 'SEQUENCE' as const, label: 'panel welded', createdAt: ts },
-    { id: P + 'flow-s3', fromNodeId: actErect.id, toNodeId: actOutfit.id, type: 'SEQUENCE' as const, label: 'block erected', createdAt: ts },
+    { id: demoId('flow-s1'), fromNodeId: actNest.id, toNodeId: actWeld.id, type: 'SEQUENCE' as const, label: 'parts cut', createdAt: ts },
+    { id: demoId('flow-s2'), fromNodeId: actWeld.id, toNodeId: actErect.id, type: 'SEQUENCE' as const, label: 'panel welded', createdAt: ts },
+    { id: demoId('flow-s3'), fromNodeId: actErect.id, toNodeId: actOutfit.id, type: 'SEQUENCE' as const, label: 'block erected', createdAt: ts },
   ]);
 
   // ── Process hierarchy — VS2 Fleet Sustainment ──
-  const vsSustain = { id: P + 'node-vs-sustain', parentId: null, level: 'VALUE_STREAM' as const, name: 'Fleet Sustainment', description: 'Dock, survey, repair, and re-certify vessels during sustainment availabilities.', activityId: 'VS-DEMO-S2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: marco.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const procAvail = { id: P + 'node-proc-avail', parentId: vsSustain.id, level: 'PROCESS' as const, name: 'Dry Dock Availability', description: 'Bring a vessel into dock, survey condition, and execute the repair package.', activityId: 'PRO-DEMO-S3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: reggie.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const procQA = { id: P + 'node-proc-qa', parentId: vsSustain.id, level: 'PROCESS' as const, name: 'Quality Assurance & Test', description: 'Inspect, test, and re-certify repaired structure before undocking.', activityId: 'PRO-DEMO-S4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: gabriela.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const spDocking = { id: P + 'node-sp-docking', parentId: procAvail.id, level: 'SUBPROCESS' as const, name: 'Docking Prep', description: 'Survey the docked vessel and scope the repair package.', activityId: 'SP-DEMO-S2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: reggie.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actSurvey = { id: P + 'node-act-survey', parentId: spDocking.id, level: 'ACTIVITY' as const, name: 'Hull condition survey', description: 'Ultrasonic thickness + visual survey of the docked hull; log defects.', activityId: 'ACT-DEMO-S5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: reggie.id, responsibleRole: 'Dock Master', responsiblePersonId: yuki.id, systemIds: [sysNDT.id, sysEAM.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 6, successMeasure: 'Survey package complete within 48 hours of docking', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actRepairDispatch = { id: P + 'node-act-repair-dispatch', parentId: procAvail.id, level: 'ACTIVITY' as const, name: 'Dispatch repair team', description: 'Match trade crews and materials to the scoped repair package.', activityId: 'ACT-DEMO-S6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: hassan.id, responsibleRole: 'Manager Repair Planning', responsiblePersonId: hassan.id, systemIds: [sysERP.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actWeldQA = { id: P + 'node-act-weld-qa', parentId: procQA.id, level: 'ACTIVITY' as const, name: 'Weld QA & radiography sign-off', description: 'Radiograph the repair welds and sign off or raise an NCR.', activityId: 'ACT-DEMO-S7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: gabriela.id, responsibleRole: 'QA / QC Inspector Lead', responsiblePersonId: chenwei.id, systemIds: [sysNDT.id, sysQMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Every repair weld radiographed and dispositioned before undock', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const vsSustain = { id: demoId('node-vs-sustain'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Fleet Sustainment', description: 'Dock, survey, repair, and re-certify vessels during sustainment availabilities.', activityId: 'VS-DEMO-S2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: marco.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procAvail = { id: demoId('node-proc-avail'), parentId: vsSustain.id, level: 'PROCESS' as const, name: 'Dry Dock Availability', description: 'Bring a vessel into dock, survey condition, and execute the repair package.', activityId: 'PRO-DEMO-S3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: reggie.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procQA = { id: demoId('node-proc-qa'), parentId: vsSustain.id, level: 'PROCESS' as const, name: 'Quality Assurance & Test', description: 'Inspect, test, and re-certify repaired structure before undocking.', activityId: 'PRO-DEMO-S4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: gabriela.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spDocking = { id: demoId('node-sp-docking'), parentId: procAvail.id, level: 'SUBPROCESS' as const, name: 'Docking Prep', description: 'Survey the docked vessel and scope the repair package.', activityId: 'SP-DEMO-S2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: reggie.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actSurvey = { id: demoId('node-act-survey'), parentId: spDocking.id, level: 'ACTIVITY' as const, name: 'Hull condition survey', description: 'Ultrasonic thickness + visual survey of the docked hull; log defects.', activityId: 'ACT-DEMO-S5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: reggie.id, responsibleRole: 'Dock Master', responsiblePersonId: yuki.id, systemIds: [sysNDT.id, sysEAM.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 6, successMeasure: 'Survey package complete within 48 hours of docking', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actRepairDispatch = { id: demoId('node-act-repair-dispatch'), parentId: procAvail.id, level: 'ACTIVITY' as const, name: 'Dispatch repair team', description: 'Match trade crews and materials to the scoped repair package.', activityId: 'ACT-DEMO-S6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: hassan.id, responsibleRole: 'Manager Repair Planning', responsiblePersonId: hassan.id, systemIds: [sysERP.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actWeldQA = { id: demoId('node-act-weld-qa'), parentId: procQA.id, level: 'ACTIVITY' as const, name: 'Weld QA & radiography sign-off', description: 'Radiograph the repair welds and sign off or raise an NCR.', activityId: 'ACT-DEMO-S7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSustain.id, orgIds: [orgSustain.id], ownerId: gabriela.id, responsibleRole: 'QA / QC Inspector Lead', responsiblePersonId: chenwei.id, systemIds: [sysNDT.id, sysQMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Every repair weld radiographed and dispositioned before undock', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   await createAll(repos.processNodes, [vsSustain, procAvail, procQA, spDocking, actSurvey, actRepairDispatch, actWeldQA]);
 
   await createAll(repos.flowRelationships, [
-    { id: P + 'flow-s4', fromNodeId: actSurvey.id, toNodeId: actRepairDispatch.id, type: 'SEQUENCE' as const, label: 'defects scoped', createdAt: ts },
+    { id: demoId('flow-s4'), fromNodeId: actSurvey.id, toNodeId: actRepairDispatch.id, type: 'SEQUENCE' as const, label: 'defects scoped', createdAt: ts },
   ]);
 
   // ── Mappings (7) ──
   await createAll(repos.mappings, [
-    { id: P + 'map-s1', orgId: orgNewCon.id, processStepId: actNest.id, dataAssetId: assetBOM.id, linkType: 'INPUT', notes: 'Consumes the BOM cut list', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-s2', orgId: orgNewCon.id, processStepId: actWeld.id, dataAssetId: assetWeldTelemetry.id, linkType: 'INPUT', notes: 'Reads weld machine parameters from the historian', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-s3', orgId: orgNewCon.id, processStepId: actWeld.id, dataAssetId: assetWeldRecords.id, linkType: 'OUTPUT', notes: 'Writes the per-weld inspection record', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-s4', orgId: orgNewCon.id, processStepId: actErect.id, dataAssetId: assetWorkOrders.id, linkType: 'INPUT', notes: 'Checks block readiness via work order status', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-s5', orgId: orgNewCon.id, processStepId: actOutfit.id, dataAssetId: assetProductModel.id, linkType: 'INPUT', notes: 'Installs outfitting per the 3D product model', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-s6', orgId: orgSustain.id, processStepId: actSurvey.id, dataAssetId: assetNCR.id, linkType: 'INPUT', notes: 'Reviews prior nonconformance reports for the vessel', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
-    { id: P + 'map-s7', orgId: orgSustain.id, processStepId: actWeldQA.id, dataAssetId: assetNCR.id, linkType: 'OUTPUT', notes: 'Raises NCRs on failed radiography', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-s1'), orgId: orgNewCon.id, processStepId: actNest.id, dataAssetId: assetBOM.id, linkType: 'INPUT', notes: 'Consumes the BOM cut list', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-s2'), orgId: orgNewCon.id, processStepId: actWeld.id, dataAssetId: assetWeldTelemetry.id, linkType: 'INPUT', notes: 'Reads weld machine parameters from the historian', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-s3'), orgId: orgNewCon.id, processStepId: actWeld.id, dataAssetId: assetWeldRecords.id, linkType: 'OUTPUT', notes: 'Writes the per-weld inspection record', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-s4'), orgId: orgNewCon.id, processStepId: actErect.id, dataAssetId: assetWorkOrders.id, linkType: 'INPUT', notes: 'Checks block readiness via work order status', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-s5'), orgId: orgNewCon.id, processStepId: actOutfit.id, dataAssetId: assetProductModel.id, linkType: 'INPUT', notes: 'Installs outfitting per the 3D product model', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-s6'), orgId: orgSustain.id, processStepId: actSurvey.id, dataAssetId: assetNCR.id, linkType: 'INPUT', notes: 'Reviews prior nonconformance reports for the vessel', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-s7'), orgId: orgSustain.id, processStepId: actWeldQA.id, dataAssetId: assetNCR.id, linkType: 'OUTPUT', notes: 'Raises NCRs on failed radiography', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
   ]);
 
   // ── Governance tasks assigned to Elena (populates My Dashboard) ──
   await createAll(repos.governanceTasks, [
-    { id: P + 'task-s1', orgId: orgMeridian.id, title: 'Approve weld records classification review', description: 'Review the AI-suggested sensitivity tags on Weld Inspection Records and Nonconformance Reports and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: elena.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetWeldRecords.id, automationMode: 'HUMAN' as any, createdBy: priyanka.id, createdAt: ts, updatedAt: ts, completedAt: null },
-    { id: P + 'task-s2', orgId: orgMeridian.id, title: 'Sign off on Quality & Compliance domain scope', description: 'Gabriela has proposed expanding the Quality & Compliance domain to cover new ABS survey evidence fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: elena.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domQuality.id, automationMode: 'HUMAN' as any, createdBy: gabriela.id, createdAt: ts, updatedAt: ts, completedAt: null },
-    { id: P + 'task-s3', orgId: orgMeridian.id, title: 'Retire Legacy Drawing Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: elena.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyDrawings.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-s1'), orgId: orgMeridian.id, title: 'Approve weld records classification review', description: 'Review the AI-suggested sensitivity tags on Weld Inspection Records and Nonconformance Reports and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: elena.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetWeldRecords.id, automationMode: 'HUMAN' as any, createdBy: priyanka.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-s2'), orgId: orgMeridian.id, title: 'Sign off on Quality & Compliance domain scope', description: 'Gabriela has proposed expanding the Quality & Compliance domain to cover new ABS survey evidence fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: elena.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domQuality.id, automationMode: 'HUMAN' as any, createdBy: gabriela.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-s3'), orgId: orgMeridian.id, title: 'Retire Legacy Drawing Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: elena.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyDrawings.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
   ]);
 
   // ── One open governance issue assigned to Elena ──
   await repos.governanceIssues.create({
-    id: P + 'issue-s1',
+    id: demoId('issue-s1'),
     orgId: orgMeridian.id,
     title: 'Weld Inspection Records tier below Silver — critical process, ungoverned',
     description: 'Weld Inspection Records is BRONZE tier but the Block Fabrication process writes it as the primary weld-quality evidence. Recommend promoting to Silver with an SLA target.',
@@ -1452,14 +1468,14 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
   // ── Data Quality rules (2 — one passing, one failing) ──
   await createAll(repos.dataQualityRules, [
     {
-      id: P + 'dq-rule-passing', orgId: orgMeridian.id, dataAssetId: assetBOM.id,
+      id: demoId('dq-rule-passing'), orgId: orgMeridian.id, dataAssetId: assetBOM.id,
       dimension: 'COMPLETENESS' as const, name: 'Bill of Materials · part-number completeness',
       description: 'At least 95% of BOM lines must carry a resolved part number.',
       threshold: 95, currentScore: 97, weight: 1, status: 'PASSING' as const,
       lastMeasured: ts, scheduleFrequency: 'DAILY' as const, nextRunAt: daysFromNow(1), createdAt: ts, updatedAt: ts,
     },
     {
-      id: P + 'dq-rule-failing', orgId: orgMeridian.id, dataAssetId: assetWeldRecords.id,
+      id: demoId('dq-rule-failing'), orgId: orgMeridian.id, dataAssetId: assetWeldRecords.id,
       dimension: 'TIMELINESS' as const, name: 'Weld Inspection Records · submission latency',
       description: 'Weld inspection results should be logged within 4 hours of the weld. Rolling 24h.',
       threshold: 95, currentScore: 58, weight: 1, status: 'FAILING' as const,
@@ -1472,7 +1488,7 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
   const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
   const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const conn = {
-    id: P + 'conn-meridian', orgId: orgMeridian.id, name: 'Meridian Yard Data Connector',
+    id: demoId('conn-meridian'), orgId: orgMeridian.id, name: 'Meridian Yard Data Connector',
     tokenHash: '5f6d3c4f26f9c50a9c1a5a2f70c3f7f4a0b3d3c8b3f7d9c3a1e2f5b6c9d0e1f2',
     pairingCode: null, pairingCodeExpiresAt: null,
     systemIds: [sysMES.id, sysWarehouse.id],
@@ -1487,16 +1503,16 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
   } as any);
 
   await createAll(repos.connectorEvents, [
-    { id: P + 'ce-s-paired', connectorId: conn.id, orgId: orgMeridian.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
-    { id: P + 'ce-s-scan-start', connectorId: conn.id, orgId: orgMeridian.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysMES.id, sysWarehouse.id] } },
-    { id: P + 'ce-s-scan-done', connectorId: conn.id, orgId: orgMeridian.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 40_120, assetsDiscovered: 1 } },
-    { id: P + 'ce-s-assets', connectorId: conn.id, orgId: orgMeridian.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
-    { id: P + 'ce-s-hb', connectorId: conn.id, orgId: orgMeridian.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-s-paired'), connectorId: conn.id, orgId: orgMeridian.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-s-scan-start'), connectorId: conn.id, orgId: orgMeridian.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysMES.id, sysWarehouse.id] } },
+    { id: demoId('ce-s-scan-done'), connectorId: conn.id, orgId: orgMeridian.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 40_120, assetsDiscovered: 1 } },
+    { id: demoId('ce-s-assets'), connectorId: conn.id, orgId: orgMeridian.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
+    { id: demoId('ce-s-hb'), connectorId: conn.id, orgId: orgMeridian.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
   ]);
 
   // ── Second connector — PAIRING state ──
   const pairingConn = {
-    id: P + 'conn-s-pairing', orgId: orgMeridian.id, name: 'NDT Lab Connector',
+    id: demoId('conn-s-pairing'), orgId: orgMeridian.id, name: 'NDT Lab Connector',
     tokenHash: null, pairingCode: '48610273',
     pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     systemIds: [] as string[], lastHeartbeatAt: null, agentVersion: null, status: 'PAIRED' as const,
@@ -1509,7 +1525,7 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
   const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
   const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
   await repos.calendarEvents.create({
-    id: P + 'cal-s-dgc',
+    id: demoId('cal-s-dgc'),
     orgId: orgMeridian.id,
     name: 'Data Governance Council weekly',
     description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
@@ -1626,18 +1642,18 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
   await seedLineageAndTrends(repos, ts, {
     orgIds: [orgMeridian.id, orgNewCon.id, orgSustain.id],
     links: [
-      { id: P + 'lin-1', orgId: orgMeridian.id, sourceSystemId: sysERP.id, targetSystemId: sysWarehouse.id, dataAssetId: assetMaterialReceipts.id, description: 'ERP goods receipts sync nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
-      { id: P + 'lin-2', orgId: orgNewCon.id, sourceSystemId: sysMES.id, targetSystemId: sysWarehouse.id, dataAssetId: assetWorkOrders.id, description: 'Shop-floor work order status feeds the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
-      { id: P + 'lin-3', orgId: orgNewCon.id, sourceSystemId: sysWeldHist.id, targetSystemId: sysWarehouse.id, dataAssetId: assetWeldTelemetry.id, description: 'Weld historian tags stream into the warehouse.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+      { id: demoId('lin-1'), orgId: orgMeridian.id, sourceSystemId: sysERP.id, targetSystemId: sysWarehouse.id, dataAssetId: assetMaterialReceipts.id, description: 'ERP goods receipts sync nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-2'), orgId: orgNewCon.id, sourceSystemId: sysMES.id, targetSystemId: sysWarehouse.id, dataAssetId: assetWorkOrders.id, description: 'Shop-floor work order status feeds the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: demoId('lin-3'), orgId: orgNewCon.id, sourceSystemId: sysWeldHist.id, targetSystemId: sysWarehouse.id, dataAssetId: assetWeldTelemetry.id, description: 'Weld historian tags stream into the warehouse.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
     ],
     edges: [
-      { id: P + 'edge-1', orgId: orgMeridian.id, sourceAssetId: assetProductModel.id, targetAssetId: assetBOM.id },
-      { id: P + 'edge-2', orgId: orgNewCon.id, sourceAssetId: assetWeldTelemetry.id, targetAssetId: assetWeldRecords.id },
+      { id: demoId('edge-1'), orgId: orgMeridian.id, sourceAssetId: assetProductModel.id, targetAssetId: assetBOM.id },
+      { id: demoId('edge-2'), orgId: orgNewCon.id, sourceAssetId: assetWeldTelemetry.id, targetAssetId: assetWeldRecords.id },
     ],
   });
 
   // Agent operations — schedules + executions for a seeded agent.
-  await seedAgentOps(repos, ts, { orgId: orgMeridian.id, agentId: P + 'agent-cert-gen', agentName: 'Naval Cert Package Generator', activityId: actWeldQA.id, activityName: 'Weld QA & radiography sign-off', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: elena.id, reviewerId: priyanka.id });
+  await seedAgentOps(repos, ts, { orgId: orgMeridian.id, agentId: demoId('agent-cert-gen'), agentName: 'Naval Cert Package Generator', activityId: actWeldQA.id, activityName: 'Weld QA & radiography sign-off', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: elena.id, reviewerId: priyanka.id });
 
   // Collaboration + reporting + connections.
   await seedCollabAndReporting(repos, ts, { orgId: orgMeridian.id, assetId: assetProductModel.id, systemId: sysPLM.id, personId: dmitri.id, personName: 'Dmitri Volkov' });
