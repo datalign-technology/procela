@@ -17,6 +17,17 @@ import { people } from './people';
 import { auditService } from '../services/audit.service';
 import { createNotification } from './notifications';
 import { getAgentExecutionsRepository } from '../db/agent-executions.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getAttachmentsRepository } from '../db/attachments.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
+import { getAgentsRepository } from '../db/agents.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getSkillsRepository } from '../db/skills.repo';
+import { getOrganizationsRepository } from '../db/organizations.repo';
 import { hasDatabase } from '../db/prisma';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -60,17 +71,24 @@ export interface StoredAgentExecution {
   createdAt: string;
 }
 
+// Pre-built id→row maps for describeMapping, listed once per run.
+interface DescribeMappingMaps {
+  dataAssets: Map<string, (typeof dataAssets)[number]>;
+  policies: Map<string, (typeof governancePolicies)[number]>;
+  attachments: Map<string, (typeof attachments)[number]>;
+}
+
 // Resolve one mapping row to a human-readable line for the prompt.
-function describeMapping(m: { dataAssetId?: string; policyId?: string; attachmentId?: string; criticality?: string }): string {
+function describeMapping(m: { dataAssetId?: string; policyId?: string; attachmentId?: string; criticality?: string }, maps: DescribeMappingMaps): string {
   let label = 'Linked item (no longer exists)';
   if (m.dataAssetId) {
-    const a = dataAssets.find((x) => x.id === m.dataAssetId);
+    const a = maps.dataAssets.get(m.dataAssetId);
     label = a ? `Data asset "${a.name}" (${a.governanceTier} tier)` : 'Data asset (deleted)';
   } else if (m.policyId) {
-    const p = governancePolicies.find((x) => x.id === m.policyId);
+    const p = maps.policies.get(m.policyId);
     label = p ? `Governance document "${p.code} ${p.name}" (${p.documentType})` : 'Governance document (deleted)';
   } else if (m.attachmentId) {
-    const at = attachments.find((x) => x.id === m.attachmentId);
+    const at = maps.attachments.get(m.attachmentId);
     label = at ? `Reference "${at.name}"${at.url ? ` (${at.url})` : ''}` : 'Attachment (deleted)';
   }
   return m.criticality ? `${label} [${m.criticality}]` : label;
@@ -80,6 +98,32 @@ export const agentExecutions: StoredAgentExecution[] = loadStore<StoredAgentExec
 registerStore('agentExecutions', agentExecutions);
 
 const agentExecutionsRepo = getAgentExecutionsRepository(agentExecutions);
+
+// Foreign stores — lazy repos (cycle-safe). Each sibling module's in-memory
+// array is empty in Postgres mode, so reads must go through the repo, which
+// is the real source of truth.
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
+let _governancePoliciesRepo: ReturnType<typeof getGovernancePoliciesRepository> | null = null;
+const governancePoliciesRepo = () => (_governancePoliciesRepo ??= getGovernancePoliciesRepository(governancePolicies));
+let _attachmentsRepo: ReturnType<typeof getAttachmentsRepository> | null = null;
+const attachmentsRepo = () => (_attachmentsRepo ??= getAttachmentsRepository(attachments));
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _damaRolesRepo: ReturnType<typeof getDamaRolesRepository> | null = null;
+const damaRolesRepo = () => (_damaRolesRepo ??= getDamaRolesRepository(damaRoles));
+let _agentsRepo: ReturnType<typeof getAgentsRepository> | null = null;
+const agentsRepo = () => (_agentsRepo ??= getAgentsRepository(agents));
+let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
+const processNodesRepo = () => (_processNodesRepo ??= getProcessNodesRepository(processNodes));
+let _mappingsRepo: ReturnType<typeof getMappingsRepository> | null = null;
+const mappingsRepo = () => (_mappingsRepo ??= getMappingsRepository(mappings));
+let _systemsRepo: ReturnType<typeof getSystemsRepository> | null = null;
+const systemsRepo = () => (_systemsRepo ??= getSystemsRepository(systems));
+let _skillsRepo: ReturnType<typeof getSkillsRepository> | null = null;
+const skillsRepo = () => (_skillsRepo ??= getSkillsRepository(skills));
+let _organizationsRepo: ReturnType<typeof getOrganizationsRepository> | null = null;
+const organizationsRepo = () => (_organizationsRepo ??= getOrganizationsRepository(organizations));
 
 // One-time normalisation: existing records pre-date the promotedDocumentId
 // field. Treat undefined as null so the rest of the code can rely on the
@@ -133,12 +177,16 @@ router.get('/:id', async (req: Request, res: Response) => {
  * is reachable (in which case the notification is skipped — we don't
  * notify the agent itself).
  */
-function resolveResponsiblePerson(node: { responsiblePersonId?: string | null }, orgId: string, roleType: string | undefined): string | null {
-  if (node.responsiblePersonId && people.find((p) => p.id === node.responsiblePersonId)) {
-    return node.responsiblePersonId;
+async function resolveResponsiblePerson(node: { responsiblePersonId?: string | null }, orgId: string, roleType: string | undefined): Promise<string | null> {
+  if (node.responsiblePersonId) {
+    const allPeople = await peopleRepo().list();
+    if (allPeople.find((p) => p.id === node.responsiblePersonId)) {
+      return node.responsiblePersonId;
+    }
   }
   if (roleType) {
-    const r = damaRoles.find((d) => d.scopeId === orgId && d.roleType === roleType && d.personId);
+    const allRoles = await damaRolesRepo().list();
+    const r = allRoles.find((d) => d.scopeId === orgId && d.roleType === roleType && d.personId);
     if (r?.personId) return r.personId;
   }
   return null;
@@ -171,25 +219,46 @@ export async function runAgentExecution(params: {
   if (!agentId) throw Object.assign(new Error('agentId is required'), { status: 400 });
   if (!activityId) throw Object.assign(new Error('activityId is required'), { status: 400 });
 
-  const agent = agents.find((a) => a.id === agentId);
+  // List every sibling store once; the in-memory arrays are empty in
+  // Postgres mode, so all lookups go through the repos.
+  const [allAgents, allNodes, allMappings, allSystems, allSkills, allOrgs, allDataAssets, allPolicies, allAttachments] = await Promise.all([
+    agentsRepo().list(),
+    processNodesRepo().list(),
+    mappingsRepo().list(),
+    systemsRepo().list(),
+    skillsRepo().list(),
+    organizationsRepo().list(),
+    dataAssetsRepo().list(),
+    governancePoliciesRepo().list(),
+    attachmentsRepo().list(),
+  ]);
+
+  const agent = allAgents.find((a) => a.id === agentId);
   if (!agent) throw Object.assign(new Error('Agent not found'), { status: 404 });
 
-  const node = processNodes.find((n) => n.id === activityId);
+  const node = allNodes.find((n) => n.id === activityId);
   if (!node) throw Object.assign(new Error('Activity not found'), { status: 404 });
   if (node.level !== 'ACTIVITY') throw Object.assign(new Error('Agents can only perform Activity-level work.'), { status: 400 });
   if (!isGovernanceNode(node)) throw Object.assign(new Error('Agents can only perform activities in the Data Governance Management value stream.'), { status: 400 });
 
   // Assemble business context from linked items.
-  const nodeMappings = mappings.filter((m) => m.processStepId === node.id);
-  const inputs = nodeMappings.filter((m) => m.linkType !== 'produces').map(describeMapping);
-  const outputs = nodeMappings.filter((m) => m.linkType === 'produces').map(describeMapping);
+  const describeMaps: DescribeMappingMaps = {
+    dataAssets: new Map(allDataAssets.map((a) => [a.id, a])),
+    policies: new Map(allPolicies.map((p) => [p.id, p])),
+    attachments: new Map(allAttachments.map((at) => [at.id, at])),
+  };
+  const systemsById = new Map(allSystems.map((s) => [s.id, s]));
+  const skillsById = new Map(allSkills.map((s) => [s.id, s]));
+  const nodeMappings = allMappings.filter((m) => m.processStepId === node.id);
+  const inputs = nodeMappings.filter((m) => m.linkType !== 'produces').map((m) => describeMapping(m, describeMaps));
+  const outputs = nodeMappings.filter((m) => m.linkType === 'produces').map((m) => describeMapping(m, describeMaps));
   const systemNames = (node.systemIds || [])
-    .map((id) => systems.find((s) => s.id === id)?.name)
+    .map((id) => systemsById.get(id)?.name)
     .filter((n): n is string => !!n);
   const requiredSkills = (node.requiredSkillIds || [])
-    .map((id) => skills.find((s) => s.id === id)?.name)
+    .map((id) => skillsById.get(id)?.name)
     .filter((n): n is string => !!n);
-  const orgName = organizations.find((o) => o.id === orgId)?.name;
+  const orgName = allOrgs.find((o) => o.id === orgId)?.name;
 
   const run: GovernanceActivityRun = {
     agent: { name: agent.name, instructions: agent.instructions || '', description: agent.description, agentType: agent.agentType },
@@ -256,7 +325,7 @@ export async function runAgentExecution(params: {
   // Deep-link the notification to the specific activity so a click on
   // the bell row scrolls them straight to it instead of dumping them on
   // the catalog root.
-  const recipientId = resolveResponsiblePerson(node, orgId, roleType);
+  const recipientId = await resolveResponsiblePerson(node, orgId, roleType);
   if (recipientId) {
     const triggerCopy = triggeredBy === 'schedule' ? 'A scheduled agent run' : 'An agent run';
     const activityLink = `/processes?node=${encodeURIComponent(node.id)}`;
@@ -353,7 +422,7 @@ router.post('/:id/promote', async (req: Request, res: Response) => {
   // Capture the source activity's status at promotion time so any later
   // reviewer of the document can see whether the underlying activity was
   // still in design when the draft was produced.
-  const activityNode = processNodes.find((n) => n.id === exec.activityId);
+  const activityNode = await processNodesRepo().get(exec.activityId);
   const activityStatusAtPromote = activityNode?.status || 'unknown';
   const provenanceLine = `Promoted from agent draft for "${exec.activityName}" by ${exec.agentName}. Source activity status at promotion: ${activityStatusAtPromote}.`;
 
@@ -377,8 +446,7 @@ router.post('/:id/promote', async (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  governancePolicies.push(doc);
-  saveStore('governancePolicies', governancePolicies);
+  await governancePoliciesRepo().create(doc);
 
   // 2) Link it to the activity as an OUTPUT mapping (linkType 'produces').
   const mapping = {
@@ -394,8 +462,7 @@ router.post('/:id/promote', async (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  mappings.push(mapping as unknown as typeof mappings[number]);
-  saveStore('mappings', mappings);
+  await mappingsRepo().create(mapping as unknown as typeof mappings[number]);
 
   // 3) Stamp the execution as APPROVED + record the back-link.
   exec.reviewStatus = 'APPROVED';

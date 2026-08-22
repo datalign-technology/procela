@@ -81,6 +81,8 @@ import { getSettingRepository } from '../db/settings.repo';
 import express from 'express';
 import type { AddressInfo } from 'net';
 import govProgramRouter from '../routes/governance-program';
+import savedViewsRouter from '../routes/saved-views';
+import tagsRouter from '../routes/tags';
 
 // Lazy-require the Prisma client so this file doesn't blow up
 // module-load when Prisma hasn't been generated (local dev without
@@ -962,6 +964,51 @@ suite('live-db business flows', () => {
       assert.strictEqual(st.data.phases.phase1.completed, true);
       assert.ok(st.data.phases.phase2.progress > 0);
       assert.ok(st.data.overallProgress > 0);
+    } finally {
+      await new Promise((r) => server.close(() => r(null)));
+    }
+  });
+
+  it('saved-views + tags routes: list/get/delete read the seeded rows from Postgres, not the empty array', async () => {
+    const { orgId, personId } = await seedFixture();
+    const now = new Date().toISOString();
+
+    const views = prismaRepo(prismaSavedViewsRepository);
+    const viewId = randomUUID();
+    await views.create({
+      id: viewId, orgId, ownerId: personId, ownerName: 'Live-DB person',
+      pageKey: 'processes', name: 'My View',
+      filters: { columns: ['name'] }, createdAt: now, updatedAt: now,
+    });
+    const tags = prismaRepo(prismaTagsRepository);
+    const tagId = randomUUID();
+    await tags.create({
+      id: tagId, orgId, entityType: 'DataAsset', entityId: randomUUID(),
+      tag: 'pii', createdBy: personId, createdAt: now,
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.use('/saved-views', savedViewsRouter);
+    app.use('/tags', tagsRouter);
+    const server = app.listen(0);
+    await new Promise((r) => server.once('listening', () => r(null)));
+    const port = (server.address() as AddressInfo).port;
+    const base = `http://127.0.0.1:${port}`;
+    try {
+      // List returns the seeded view (would be empty if the handler still
+      // read the in-memory array in Postgres mode).
+      const list = (await (await fetch(`${base}/saved-views?orgId=${orgId}&pageKey=processes`)).json()) as any;
+      assert.ok(list.data.some((v: any) => v.id === viewId), 'seeded saved view is listed');
+
+      // Delete resolves the row via the repo — a 2xx, not the 404 the old
+      // handler returned by looking the id up in the empty in-memory array.
+      const del = await fetch(`${base}/saved-views/${viewId}`, { method: 'DELETE' });
+      assert.ok(del.status >= 200 && del.status < 300, `delete finds the seeded view (got ${del.status})`);
+
+      // Tag delete likewise resolves via the repo.
+      const tagDel = await fetch(`${base}/tags/${tagId}`, { method: 'DELETE' });
+      assert.ok(tagDel.status >= 200 && tagDel.status < 300, `delete finds the seeded tag (got ${tagDel.status})`);
     } finally {
       await new Promise((r) => server.close(() => r(null)));
     }

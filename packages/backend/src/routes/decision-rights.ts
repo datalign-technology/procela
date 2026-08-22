@@ -5,6 +5,7 @@ import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
 import { getDecisionRightsRepository } from '../db/decision-rights.repo';
+import { getPeopleRepository } from '../db/people.repo';
 
 export type DecisionCategory =
   | 'POLICY'
@@ -37,6 +38,15 @@ registerStore('decisionRights', decisionRights);
 
 const decisionRightsRepo = getDecisionRightsRepository(decisionRights);
 
+// Foreign store for decider-name enrichment — lazy repo (cycle-safe). The
+// in-memory `people` array is empty in Postgres mode, so read via the repo.
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+async function loadPeopleById(): Promise<Map<string, (typeof people)[number]>> {
+  const all = await peopleRepo().list();
+  return new Map(all.map((p) => [p.id, p]));
+}
+
 const VALID_CATEGORIES: DecisionCategory[] = [
   'POLICY', 'EXCEPTION', 'ISSUE', 'CLASSIFICATION', 'ACCESS', 'SCOPE', 'ROLE', 'OTHER',
 ];
@@ -66,10 +76,10 @@ const STANDARD_DECISIONS: StandardDecisionSeed[] = [
   { decision: 'Approve governance framework change', category: 'OTHER', description: 'Material change to the governance operating model, structure, or charter.', deciderRole: 'CDO', recommendsRoles: ['DATA_GOVERNANCE_LEAD'], approvesRoles: ['CDO'], informedRoles: ['DATA_OWNER'] },
 ];
 
-function enrichWithDeciderName(row: StoredDecisionRight): StoredDecisionRight & { deciderName: string | null } {
+function enrichWithDeciderName(row: StoredDecisionRight, peopleById: Map<string, (typeof people)[number]>): StoredDecisionRight & { deciderName: string | null } {
   let deciderName: string | null = null;
   if (row.deciderType === 'PERSON' && row.decider) {
-    const person = people.find((p) => p.id === row.decider);
+    const person = peopleById.get(row.decider);
     deciderName = person?.name || null;
   }
   return { ...row, deciderName };
@@ -85,7 +95,8 @@ router.get('/', async (req: Request, res: Response) => {
   );
   if (category) filtered = filtered.filter((r) => r.category === category);
 
-  const enriched = filtered.map(enrichWithDeciderName);
+  const peopleById = await loadPeopleById();
+  const enriched = filtered.map((r) => enrichWithDeciderName(r, peopleById));
   res.json({ success: true, data: enriched });
 });
 
@@ -93,7 +104,8 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const row = await decisionRightsRepo.get(String(req.params.id));
   if (!row) { res.status(404).json({ success: false, error: 'Decision right not found' }); return; }
-  res.json({ success: true, data: enrichWithDeciderName(row) });
+  const peopleById = await loadPeopleById();
+  res.json({ success: true, data: enrichWithDeciderName(row, peopleById) });
 });
 
 /** POST /api/v1/decision-rights — create */
@@ -137,7 +149,8 @@ router.post('/', async (req: Request, res: Response) => {
   await decisionRightsRepo.create(row);
   auditService.log(row.orgId, null, 'DecisionRight', row.id, 'CREATE', null, row);
   logger.info({ decisionRightId: row.id, decision: row.decision }, 'Created decision right');
-  res.status(201).json({ success: true, data: enrichWithDeciderName(row) });
+  const peopleById = await loadPeopleById();
+  res.status(201).json({ success: true, data: enrichWithDeciderName(row, peopleById) });
 });
 
 /** PUT /api/v1/decision-rights/:id — update */
@@ -176,7 +189,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   row.updatedAt = new Date().toISOString();
   await decisionRightsRepo.update(row.id, row);
   auditService.log(row.orgId, null, 'DecisionRight', row.id, 'UPDATE', before, row);
-  res.json({ success: true, data: enrichWithDeciderName(row) });
+  const peopleById = await loadPeopleById();
+  res.json({ success: true, data: enrichWithDeciderName(row, peopleById) });
 });
 
 /** DELETE /api/v1/decision-rights/:id — delete */
@@ -231,9 +245,10 @@ router.post('/seed', async (req: Request, res: Response) => {
 
   logger.info({ orgId, created: created.length, skipped }, 'Seeded standard decision rights');
 
+  const peopleById = await loadPeopleById();
   res.status(201).json({
     success: true,
-    data: created.map(enrichWithDeciderName),
+    data: created.map((r) => enrichWithDeciderName(r, peopleById)),
     created: created.length,
     skipped,
   });

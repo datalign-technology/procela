@@ -46,37 +46,37 @@ useStoreIsolation(
 );
 
 describe('personCoverage', () => {
-  it('reports full coverage when the person has every required skill', () => {
+  it('reports full coverage when the person has every required skill', async () => {
     const cov = personCoverage(['a', 'b', 'c'], ['a', 'b']);
     assert.deepStrictEqual(cov.matched.sort(), ['a', 'b']);
     assert.deepStrictEqual(cov.missing, []);
     assert.strictEqual(cov.ratio, 1);
   });
 
-  it('reports partial coverage with the missing skills', () => {
+  it('reports partial coverage with the missing skills', async () => {
     const cov = personCoverage(['a'], ['a', 'b', 'c']);
     assert.deepStrictEqual(cov.matched, ['a']);
     assert.deepStrictEqual(cov.missing.sort(), ['b', 'c']);
     assert.strictEqual(cov.ratio, 1 / 3);
   });
 
-  it('vacuously qualifies when no skills are required', () => {
+  it('vacuously qualifies when no skills are required', async () => {
     const cov = personCoverage([], []);
     assert.strictEqual(cov.ratio, 1, 'no requirements = qualified');
   });
 });
 
 describe('listUnqualifiedAssignments', () => {
-  it('returns nothing when every responsible person is qualified', () => {
+  it('returns nothing when every responsible person is qualified', async () => {
     people.push(person('p1', 'Alice', ['s1', 's2']) as any);
     skills.push(skill('s1', 'Skill One'), skill('s2', 'Skill Two'));
     processNodes.push(node('n1', 'Activity 1', { responsiblePersonId: 'p1', requiredSkillIds: ['s1', 's2'] }));
 
-    const result = listUnqualifiedAssignments(ORG);
+    const result = await listUnqualifiedAssignments(ORG);
     assert.strictEqual(result.size, 0);
   });
 
-  it('flags exactly the nodes where the responsible person is missing skills', () => {
+  it('flags exactly the nodes where the responsible person is missing skills', async () => {
     people.push(person('p1', 'Alice', ['s1']) as any);
     skills.push(skill('s1', 'Skill One'), skill('s2', 'Skill Two'), skill('s3', 'Skill Three'));
     processNodes.push(
@@ -85,7 +85,7 @@ describe('listUnqualifiedAssignments', () => {
       node('n3', 'Activity 3', { responsiblePersonId: 'p1', requiredSkillIds: ['s2', 's3'] }), // 2 missing
     );
 
-    const result = listUnqualifiedAssignments(ORG);
+    const result = await listUnqualifiedAssignments(ORG);
     assert.ok(result.has('p1'));
     const list = result.get('p1')!;
     assert.strictEqual(list.length, 2, 'only the 2 unqualified nodes show up');
@@ -95,29 +95,29 @@ describe('listUnqualifiedAssignments', () => {
     assert.deepStrictEqual(n3.missingSkillNames.sort(), ['Skill Three', 'Skill Two']);
   });
 
-  it('skips nodes with no responsible person or no required skills', () => {
+  it('skips nodes with no responsible person or no required skills', async () => {
     people.push(person('p1', 'Alice', []) as any);
     processNodes.push(
       node('n1', 'Activity 1', { requiredSkillIds: ['s1'] }),         // no person
       node('n2', 'Activity 2', { responsiblePersonId: 'p1' }),         // no required skills
     );
-    assert.strictEqual(listUnqualifiedAssignments(ORG).size, 0);
+    assert.strictEqual((await listUnqualifiedAssignments(ORG)).size, 0);
   });
 
-  it('scopes results to the requested org', () => {
+  it('scopes results to the requested org', async () => {
     people.push(person('p1', 'Alice', [], [OTHER_ORG]) as any);
     skills.push(skill('s1', 'Skill One', 'GOVERNANCE', OTHER_ORG));
     processNodes.push(node('n1', 'Other Org Activity', {
       responsiblePersonId: 'p1', requiredSkillIds: ['s1'], orgId: OTHER_ORG,
     }));
     // ORG has no people / nodes — the OTHER_ORG fixture must not bleed in.
-    assert.strictEqual(listUnqualifiedAssignments(ORG).size, 0);
-    assert.strictEqual(listUnqualifiedAssignments(OTHER_ORG).size, 1);
+    assert.strictEqual((await listUnqualifiedAssignments(ORG)).size, 0);
+    assert.strictEqual((await listUnqualifiedAssignments(OTHER_ORG)).size, 1);
   });
 });
 
 describe('unqualifiedSummaryByPerson', () => {
-  it('produces a per-person count + up-to-3 sample names', () => {
+  it('produces a per-person count + up-to-3 sample names', async () => {
     people.push(person('p1', 'Alice', []) as any);
     skills.push(skill('s1', 'Skill One'));
     for (let i = 1; i <= 5; i++) {
@@ -125,7 +125,7 @@ describe('unqualifiedSummaryByPerson', () => {
         responsiblePersonId: 'p1', requiredSkillIds: ['s1'],
       }));
     }
-    const summary = unqualifiedSummaryByPerson(ORG);
+    const summary = await unqualifiedSummaryByPerson(ORG);
     const entry = summary.get('p1')!;
     assert.strictEqual(entry.unqualifiedCount, 5);
     assert.strictEqual(entry.sample.length, 3, 'sample caps at 3 names');
@@ -133,13 +133,13 @@ describe('unqualifiedSummaryByPerson', () => {
 });
 
 describe('rankPeopleByRoleSkills', () => {
-  it('returns empty when no required skills are passed', () => {
+  it('returns empty when no required skills are passed', async () => {
     people.push(person('p1', 'Alice', ['s1']) as any);
     skills.push(skill('s1', 'Stakeholder Management'));
-    assert.deepStrictEqual(rankPeopleByRoleSkills(ORG, []), []);
+    assert.deepStrictEqual(await rankPeopleByRoleSkills(ORG, []), []);
   });
 
-  it('ranks people by name-keyed overlap, descending', () => {
+  it('ranks people by name-keyed overlap, descending', async () => {
     people.push(
       person('p1', 'Alice', ['s1', 's2', 's3']) as any,    // 3/3 — perfect
       person('p2', 'Bob',   ['s1', 's2']) as any,           // 2/3
@@ -153,7 +153,7 @@ describe('rankPeopleByRoleSkills', () => {
       skill('s4', 'Unrelated Skill'),
     );
 
-    const ranked = rankPeopleByRoleSkills(ORG, ['Stakeholder Management', 'Compliance Monitoring', 'Executive Reporting']);
+    const ranked = await rankPeopleByRoleSkills(ORG, ['Stakeholder Management', 'Compliance Monitoring', 'Executive Reporting']);
     assert.strictEqual(ranked.length, 3, 'zero-overlap dropped');
     assert.strictEqual(ranked[0].personId, 'p1');
     assert.strictEqual(ranked[0].ratio, 1);
@@ -161,31 +161,31 @@ describe('rankPeopleByRoleSkills', () => {
     assert.strictEqual(ranked[2].personId, 'p3');
   });
 
-  it('is case-insensitive on skill-name match', () => {
+  it('is case-insensitive on skill-name match', async () => {
     people.push(person('p1', 'Alice', ['s1']) as any);
     skills.push(skill('s1', 'Stakeholder Management'));
-    const ranked = rankPeopleByRoleSkills(ORG, ['STAKEHOLDER MANAGEMENT']);
+    const ranked = await rankPeopleByRoleSkills(ORG, ['STAKEHOLDER MANAGEMENT']);
     assert.strictEqual(ranked.length, 1);
   });
 
-  it('honours the limit parameter', () => {
+  it('honours the limit parameter', async () => {
     for (let i = 0; i < 10; i++) {
       people.push(person(`p${i}`, `Person ${i}`, ['s1']) as any);
     }
     skills.push(skill('s1', 'Skill One'));
-    const ranked = rankPeopleByRoleSkills(ORG, ['Skill One'], 3);
+    const ranked = await rankPeopleByRoleSkills(ORG, ['Skill One'], 3);
     assert.strictEqual(ranked.length, 3);
   });
 
-  it('only counts people assigned to the org', () => {
+  it('only counts people assigned to the org', async () => {
     people.push(person('p1', 'Other-org person', ['s1'], [OTHER_ORG]) as any);
     skills.push(skill('s1', 'Skill One'));
-    assert.deepStrictEqual(rankPeopleByRoleSkills(ORG, ['Skill One']), []);
+    assert.deepStrictEqual(await rankPeopleByRoleSkills(ORG, ['Skill One']), []);
   });
 });
 
 describe('orgSkillGapReport', () => {
-  it('lists each required-or-held skill with counts', () => {
+  it('lists each required-or-held skill with counts', async () => {
     skills.push(
       skill('s1', 'Data Profiling'),
       skill('s2', 'Anomaly Detection'),
@@ -201,7 +201,7 @@ describe('orgSkillGapReport', () => {
       node('n3', 'Activity 3', { requiredSkillIds: ['s2'] }),
     );
 
-    const report = orgSkillGapReport(ORG);
+    const report = await orgSkillGapReport(ORG);
     // s3 dropped — neither required nor held.
     assert.strictEqual(report.length, 2);
     const s1 = report.find((r) => r.skillId === 's1')!;
@@ -212,7 +212,7 @@ describe('orgSkillGapReport', () => {
     assert.strictEqual(s2.heldByPeople, 1);
   });
 
-  it('sorts highest gap score first', () => {
+  it('sorts highest gap score first', async () => {
     skills.push(
       skill('s1', 'Well-staffed'),  // 1 required, 5 held — gap 0.2
       skill('s2', 'Painful gap'),    // 5 required, 1 held — gap 5
@@ -226,7 +226,7 @@ describe('orgSkillGapReport', () => {
     for (let i = 0; i < 5; i++) processNodes.push(node(`n-s2-${i}`, `N s2-${i}`, { requiredSkillIds: ['s2'] }));
     for (let i = 0; i < 3; i++) processNodes.push(node(`n-s3-${i}`, `N s3-${i}`, { requiredSkillIds: ['s3'] }));
 
-    const report = orgSkillGapReport(ORG);
+    const report = await orgSkillGapReport(ORG);
     assert.strictEqual(report[0].skillName, 'Painful gap',   'highest gap-score first');
     assert.strictEqual(report[1].skillName, 'Critical gap');
     assert.strictEqual(report[2].skillName, 'Well-staffed');

@@ -1,6 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { auditService } from '../services/audit.service';
 import { processNodes, NODE_LEVELS } from './process-catalog';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+
+// Lazy repo accessor: the raw `processNodes` array is empty in Postgres
+// mode, so reads go through the repository (source of truth in DB mode,
+// and the same in-memory array in JSON mode).
+let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
+const processNodesRepo = () => (_processNodesRepo ??= getProcessNodesRepository(processNodes));
 
 const router = Router();
 
@@ -49,13 +56,14 @@ router.get('/activity', async (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/trends/status — count of process nodes by status (current snapshot) */
-router.get('/status', (req: Request, res: Response) => {
+router.get('/status', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
+  const allNodes = await processNodesRepo().list();
   const filteredNodes = oid
-    ? processNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid)
-    : processNodes;
+    ? allNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid)
+    : allNodes;
 
   const statusCounts: Record<string, number> = {};
   for (const node of filteredNodes) {

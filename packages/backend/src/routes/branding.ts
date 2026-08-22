@@ -1,8 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { organizations } from './organizations';
+import { getOrganizationsRepository } from '../db/organizations.repo';
 import { settingsRepo } from '../stores/app-settings';
 import logger from '../lib/logger';
+
+// Lazy repo accessor: the raw `organizations` array is empty in Postgres
+// mode, so the tenant lookup reads through the repository instead.
+let _orgRepo: ReturnType<typeof getOrganizationsRepository> | null = null;
+const orgRepo = () => (_orgRepo ??= getOrganizationsRepository(organizations));
 
 // ──────────────────────────────────────────────────────────────────────────
 // Branding — per-deployment theming (company name, logo, colors). A single
@@ -155,8 +161,8 @@ function resolveTenantSlug(req: Request): string | null {
   return first;
 }
 
-function tenantBrandingFor(slug: string | null) {
-  const org = slug ? organizations.find((o) => o.tenantSlug === slug) : null;
+async function tenantBrandingFor(slug: string | null) {
+  const org = slug ? (await orgRepo().list()).find((o) => o.tenantSlug === slug) : null;
   return {
     tenantSlug: org?.tenantSlug || null,
     displayName: org?.brandDisplayName || org?.name || current.companyName,
@@ -168,11 +174,11 @@ function tenantBrandingFor(slug: string | null) {
   };
 }
 
-router.get('/tenant', (req: Request, res: Response) => {
-  res.json({ success: true, data: tenantBrandingFor(resolveTenantSlug(req)) });
+router.get('/tenant', async (req: Request, res: Response) => {
+  res.json({ success: true, data: await tenantBrandingFor(resolveTenantSlug(req)) });
 });
-router.get('/tenant/:slug', (req: Request, res: Response) => {
-  res.json({ success: true, data: tenantBrandingFor(resolveTenantSlug(req)) });
+router.get('/tenant/:slug', async (req: Request, res: Response) => {
+  res.json({ success: true, data: await tenantBrandingFor(resolveTenantSlug(req)) });
 });
 
 export { resolveTenantSlug, tenantBrandingFor };

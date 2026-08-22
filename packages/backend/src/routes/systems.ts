@@ -720,28 +720,26 @@ router.delete('/:id', async (req: Request, res: Response) => {
   // catalogued, e.g. as an orphan to reassign) but the dangling ref is
   // gone — otherwise analysis pivots and gap reports keep counting a
   // ghost system through the asset's stale id.
-  let assetRefsCleared = 0;
-  for (const a of dataAssets) {
+  const allAssetsForCascade = await dataAssetsRepo().list();
+  for (const a of allAssetsForCascade) {
     if (a.systemId === removed.id) {
       a.systemId = '';
-      assetRefsCleared++;
+      await dataAssetsRepo().update(a.id, a);
     }
   }
-  if (assetRefsCleared > 0) saveStore('dataAssets', dataAssets);
   // Cascade: drop the removed system from any process node's systemIds
-  // list. Lazy-require to avoid the systems ↔ process-catalog cycle.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
-  let nodesTouched = 0;
-  for (const n of processNodes) {
+  // list. Routed through the process-nodes repo (source of truth in
+  // Postgres mode); the accessor lazy-requires to avoid the
+  // systems ↔ process-catalog cycle.
+  const allNodesForCascade = await processNodesRepo().list();
+  for (const n of allNodesForCascade) {
     if (!n.systemIds || n.systemIds.length === 0) continue;
     const kept = n.systemIds.filter((sid) => sid !== removed.id);
     if (kept.length !== n.systemIds.length) {
       n.systemIds = kept.length > 0 ? kept : undefined;
-      nodesTouched++;
+      await processNodesRepo().update(n.id, n);
     }
   }
-  if (nodesTouched > 0) saveStore('processNodes', processNodes);
   res.status(204).send();
 });
 

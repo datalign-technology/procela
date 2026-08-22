@@ -177,9 +177,15 @@ function maskCredentials(creds: ConnectionProfile['credentials']): ConnectionPro
  *  shape adds `systemIds` (resolved from the join table) so callers
  *  don't need a second round-trip to discover the connection's system
  *  links. The legacy single `systemId` is preserved for backward
- *  compatibility but `systemIds` is the source of truth. */
-function toPublic(profile: ConnectionProfile) {
-  const systemIds = systemIdsForConnection(profile.id);
+ *  compatibility but `systemIds` is the source of truth.
+ *
+ *  The caller passes the full set of connection↔system links (fetched
+ *  once per handler from the repo) so this stays synchronous and works
+ *  in Postgres mode where the in-memory array is empty. */
+function toPublic(profile: ConnectionProfile, links: ConnectionSystemLink[]) {
+  const systemIds = links
+    .filter((l) => l.connectionId === profile.id)
+    .map((l) => l.systemId);
   // `systemIds` (from the join table) is the sole source of truth. The
   // legacy single `systemId` is retired; strip it via a raw cast so a
   // pre-migration JSON row that still carries the key can't leak it.
@@ -199,12 +205,14 @@ const router = Router();
 
 /** DELETE /api/v1/connections/all — delete all connection profiles */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = connections.length;
-  const removedIds = connections.map((c) => c.id);
+  const allConnections = await connectionsRepo.list();
+  const count = allConnections.length;
+  const removedIds = allConnections.map((c) => c.id);
   for (const id of removedIds) await connectionsRepo.delete(id);
   // Cascade: drop every system link too.
-  const removedLinks = connectionSystemLinks.length;
-  const linkIds = connectionSystemLinks.map((l) => l.id);
+  const allLinks = await connectionSystemLinksRepo.list();
+  const removedLinks = allLinks.length;
+  const linkIds = allLinks.map((l) => l.id);
   for (const lid of linkIds) await connectionSystemLinksRepo.delete(lid);
   auditService.log(DEV_ORG_ID, null, 'ConnectionProfile', '*', 'DELETE_ALL', null, { count, removedLinks });
   // Clean up every connection's upload dir alongside its profile.
@@ -213,7 +221,7 @@ router.delete('/all', async (_req: Request, res: Response) => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { purgeBindingsForConnection } = require('./data-assets') as typeof import('./data-assets');
   let removedBindings = 0;
-  for (const id of removedIds) removedBindings += purgeBindingsForConnection(id);
+  for (const id of removedIds) removedBindings += await purgeBindingsForConnection(id);
   logger.info({ count, removedBindings, removedLinks }, 'Deleted all connection profiles');
   res.json({ success: true, deleted: count });
 });
@@ -221,15 +229,18 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/connections — list all (supports ?orgId= and ?systemId= filters) */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, systemId } = req.query;
-  let filtered = connections;
+  const allLinks = await connectionSystemLinksRepo.list();
+  let filtered = await connectionsRepo.list();
   if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
   if (systemId) {
-    const linkedIds = new Set(connectionsForSystem(systemId as string));
+    const linkedIds = new Set(
+      allLinks.filter((l) => l.systemId === (systemId as string)).map((l) => l.connectionId),
+    );
     filtered = filtered.filter((c) => linkedIds.has(c.id));
   }
   res.json({
     success: true,
-    data: filtered.map(toPublic),
+    data: filtered.map((c) => toPublic(c, allLinks)),
     connectionTypes: CONNECTION_TYPES,
     dbTypes: DB_TYPES,
     storageTypes: STORAGE_TYPES,
@@ -240,9 +251,10 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/connections/:id — single profile (masked credentials) */
 router.get('/:id', async (req: Request, res: Response) => {
-  const conn = connections.find((c) => c.id === req.params.id);
+  const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
-  res.json({ success: true, data: toPublic(conn) });
+  const links = await connectionSystemLinksRepo.list();
+  res.json({ success: true, data: toPublic(conn, links) });
 });
 
 /** POST /api/v1/connections — create connection profile */
@@ -286,17 +298,19 @@ router.post('/', async (req: Request, res: Response) => {
     });
   }
 
-  auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'CREATE', null, toPublic(conn));
+  const links = await connectionSystemLinksRepo.list();
+  auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'CREATE', null, toPublic(conn, links));
   logger.info({ id: conn.id, name: conn.name, type: conn.connectionType, systemIds: requestedSystemIds }, 'Created connection profile');
-  res.status(201).json({ success: true, data: toPublic(conn) });
+  res.status(201).json({ success: true, data: toPublic(conn, links) });
 });
 
 /** PUT /api/v1/connections/:id — update connection profile */
 router.put('/:id', async (req: Request, res: Response) => {
-  const conn = connections.find((c) => c.id === req.params.id);
+  const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
 
-  const before = toPublic({ ...conn });
+  const linksBefore = await connectionSystemLinksRepo.list();
+  const before = toPublic({ ...conn }, linksBefore);
   const { name, systemId, systemIds, connectionType, config, credentials } = req.body;
 
   if (name !== undefined) conn.name = name;
@@ -307,7 +321,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (Array.isArray(systemIds)) {
     const next = systemIds.filter((s) => typeof s === 'string' && s.trim());
     // Drop existing links for this connection; reinsert the new set.
-    const toRemove = connectionSystemLinks.filter((l) => l.connectionId === conn.id).map((l) => l.id);
+    const toRemove = linksBefore.filter((l) => l.connectionId === conn.id).map((l) => l.id);
     for (const lid of toRemove) await connectionSystemLinksRepo.delete(lid);
     const now = new Date().toISOString();
     for (const sid of next) {
@@ -317,7 +331,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     // Legacy single-system semantics: empty string means "unlink all";
     // otherwise replace any existing single link with this one. To match
     // historical behavior the picker uses, this REPLACES rather than ADDS.
-    const toRemove = connectionSystemLinks.filter((l) => l.connectionId === conn.id).map((l) => l.id);
+    const toRemove = linksBefore.filter((l) => l.connectionId === conn.id).map((l) => l.id);
     for (const lid of toRemove) await connectionSystemLinksRepo.delete(lid);
     if (systemId) {
       await connectionSystemLinksRepo.create({
@@ -353,18 +367,20 @@ router.put('/:id', async (req: Request, res: Response) => {
     credentials: conn.credentials,
     updatedAt: conn.updatedAt,
   });
-  auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'UPDATE', before, toPublic(conn));
-  res.json({ success: true, data: toPublic(conn) });
+  const linksAfter = await connectionSystemLinksRepo.list();
+  auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'UPDATE', before, toPublic(conn, linksAfter));
+  res.json({ success: true, data: toPublic(conn, linksAfter) });
 });
 
 /** DELETE /api/v1/connections/:id — delete */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = connections.find((c) => c.id === req.params.id);
+  const removed = await connectionsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
-  auditService.log(removed.orgId, null, 'ConnectionProfile', removed.id, 'DELETE', toPublic(removed), null);
+  const links = await connectionSystemLinksRepo.list();
+  auditService.log(removed.orgId, null, 'ConnectionProfile', removed.id, 'DELETE', toPublic(removed, links), null);
   await connectionsRepo.delete(removed.id);
   // Cascade: drop any system links for the deleted connection.
-  const toRemove = connectionSystemLinks.filter((l) => l.connectionId === removed.id).map((l) => l.id);
+  const toRemove = links.filter((l) => l.connectionId === removed.id).map((l) => l.id);
   for (const lid of toRemove) await connectionSystemLinksRepo.delete(lid);
   const removedLinks = toRemove.length;
   // Clean up any locally-uploaded file for this connection.
@@ -373,7 +389,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   // orphaned — unlink them so the asset falls back to "not linked".
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { purgeBindingsForConnection } = require('./data-assets') as typeof import('./data-assets');
-  const removedBindings = purgeBindingsForConnection(removed.id);
+  const removedBindings = await purgeBindingsForConnection(removed.id);
   if (removedBindings > 0 || removedLinks > 0) {
     logger.info({ connectionId: removed.id, removedBindings, removedLinks }, 'Cascaded cleanup for deleted connection');
   }
@@ -399,7 +415,7 @@ router.post('/test', async (req: Request, res: Response) => {
 
   const mergedCreds: ConnectionProfile['credentials'] = { ...(credentials || {}) };
   if (id) {
-    const saved = connections.find((c) => c.id === id);
+    const saved = await connectionsRepo.get(String(id));
     if (saved) {
       const isMasked = (v: unknown) => typeof v === 'string' && (v === '' || v.endsWith('***'));
       if (isMasked(mergedCreds.password)) mergedCreds.password = saved.credentials.password;
@@ -478,7 +494,7 @@ router.post(
 
 /** POST /api/v1/connections/:id/test — test connection */
 router.post('/:id/test', async (req: Request, res: Response) => {
-  const conn = connections.find((c) => c.id === req.params.id);
+  const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
 
   try {
@@ -495,7 +511,8 @@ router.post('/:id/test', async (req: Request, res: Response) => {
       message: result.message,
       latencyMs: result.latencyMs,
     });
-    res.json({ success: true, data: { ...result, profile: toPublic(conn) } });
+    const links = await connectionSystemLinksRepo.list();
+    res.json({ success: true, data: { ...result, profile: toPublic(conn, links) } });
   } catch (err) {
     const now = new Date().toISOString();
     await connectionsRepo.update(conn.id, {
@@ -516,7 +533,7 @@ router.post('/:id/test', async (req: Request, res: Response) => {
 
 /** POST /api/v1/connections/:id/discover — discover available assets */
 router.post('/:id/discover', async (req: Request, res: Response) => {
-  const conn = connections.find((c) => c.id === req.params.id);
+  const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
 
   try {
@@ -545,7 +562,7 @@ router.post(
   '/:id/upload',
   raw({ type: '*/*', limit: '50mb' }),
   async (req: Request, res: Response) => {
-    const conn = connections.find((c) => c.id === req.params.id);
+    const conn = await connectionsRepo.get(String(req.params.id));
     if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
 
     if (conn.connectionType !== 'FILE_STORAGE' || conn.config.storageType !== 'LOCAL') {
@@ -624,10 +641,11 @@ router.post(
     });
     logger.info({ id: conn.id, file: safeName, size: body.length, rowCount, parseError }, 'Uploaded connection file');
 
+    const links = await connectionSystemLinksRepo.list();
     res.json({
       success: true,
       data: {
-        profile: toPublic(conn),
+        profile: toPublic(conn, links),
         parseError: parseError || null,
       },
     });
@@ -645,14 +663,15 @@ router.post(
  * with a 200 instead of duplicating.
  */
 router.post('/:id/systems', async (req: Request, res: Response) => {
-  const conn = connections.find((c) => c.id === req.params.id);
+  const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
   const { systemId } = req.body || {};
   if (typeof systemId !== 'string' || !systemId.trim()) {
     res.status(400).json({ success: false, error: 'systemId is required' });
     return;
   }
-  const existing = connectionSystemLinks.find((l) => l.connectionId === conn.id && l.systemId === systemId);
+  const allLinks = await connectionSystemLinksRepo.list();
+  const existing = allLinks.find((l) => l.connectionId === conn.id && l.systemId === systemId);
   if (existing) {
     res.json({ success: true, data: existing, alreadyLinked: true });
     return;
@@ -668,10 +687,11 @@ router.post('/:id/systems', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/connections/:id/systems/:systemId — remove a single link */
 router.delete('/:id/systems/:systemId', async (req: Request, res: Response) => {
-  const conn = connections.find((c) => c.id === req.params.id);
+  const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
   const { systemId } = req.params;
-  const link = connectionSystemLinks.find((l) => l.connectionId === conn.id && l.systemId === systemId);
+  const allLinks = await connectionSystemLinksRepo.list();
+  const link = allLinks.find((l) => l.connectionId === conn.id && l.systemId === systemId);
   if (!link) { res.status(404).json({ success: false, error: 'Link not found' }); return; }
   await connectionSystemLinksRepo.delete(link.id);
   auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'UNLINK_SYSTEM', { systemId }, null);
@@ -680,11 +700,12 @@ router.delete('/:id/systems/:systemId', async (req: Request, res: Response) => {
 
 /** GET /api/v1/connections/:id/systems — the system links for this connection */
 router.get('/:id/systems', async (req: Request, res: Response) => {
-  const conn = connections.find((c) => c.id === req.params.id);
+  const conn = await connectionsRepo.get(String(req.params.id));
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  const allLinks = await connectionSystemLinksRepo.list();
   res.json({
     success: true,
-    data: connectionSystemLinks.filter((l) => l.connectionId === conn.id),
+    data: allLinks.filter((l) => l.connectionId === conn.id),
   });
 });
 

@@ -8,10 +8,16 @@ import { organizations } from './organizations';
 import { getOrganizationsRepository } from '../db/organizations.repo';
 import { getCachedOrgList } from '../lib/org-scope';
 import { damaRoles, DAMA_ROLE_TYPES } from './dama-roles';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
 import { governanceGroups } from './governance-groups';
+import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
 import { processNodes } from './process-catalog';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { dataAssets } from './data-assets';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { dataDomains } from './data-domains';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getAgentsRepository } from '../db/agents.repo';
 import logger from '../lib/logger';
 
 const ROLES = [
@@ -333,6 +339,38 @@ const peopleRepo = getPeopleRepository(people);
 // boot-state under Postgres.
 const organizationsRepo = getOrganizationsRepository(organizations);
 
+// ── Foreign-store repositories (Postgres cutover) ──
+//
+// The raw arrays imported from sibling route modules (damaRoles,
+// governanceGroups, processNodes, dataAssets, dataDomains, agents) are
+// EMPTY boot-state under Postgres — the Prisma repo is the source of
+// truth there. Read them through their repositories so the 360 /
+// impact / enrichment views populate in DB mode. Lazy singletons so we
+// don't rebuild a repo per request; agents is require()'d inside its
+// accessor because routes/agents imports people.ts (circular).
+let _damaRolesRepo: ReturnType<typeof getDamaRolesRepository> | null = null;
+const damaRolesRepo = () => (_damaRolesRepo ??= getDamaRolesRepository(damaRoles));
+
+let _governanceGroupsRepo: ReturnType<typeof getGovernanceGroupsRepository> | null = null;
+const governanceGroupsRepo = () => (_governanceGroupsRepo ??= getGovernanceGroupsRepository(governanceGroups));
+
+let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
+const processNodesRepo = () => (_processNodesRepo ??= getProcessNodesRepository(processNodes));
+
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
+
+let _dataDomainsRepo: ReturnType<typeof getDataDomainsRepository> | null = null;
+const dataDomainsRepo = () => (_dataDomainsRepo ??= getDataDomainsRepository(dataDomains));
+
+let _agentsRepo: ReturnType<typeof getAgentsRepository> | null = null;
+const agentsRepo = () => {
+  if (_agentsRepo) return _agentsRepo;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { agents } = require('./agents') as typeof import('./agents');
+  return (_agentsRepo = getAgentsRepository(agents));
+};
+
 // ── People source (Postgres cutover, PR 9b.11) ──
 //
 // The exported access-control helpers below (getVisibleOrgIds / canAccessOrg)
@@ -424,6 +462,11 @@ router.get('/', async (req: Request, res: Response) => {
   const allPeople = await peopleRepo.list();
   let filtered = orgId ? allPeople.filter((p) => p.orgIds.includes(orgId as string)) : allPeople;
   if (!includeDeactivated) filtered = filtered.filter(isActive);
+  // Resolve orgs from the repository (Postgres source of truth; the raw
+  // `organizations` boot array is empty in DB mode) and index by id for
+  // the path/name walks below.
+  const allOrgs = await organizationsRepo.list();
+  const orgById = new Map(allOrgs.map((o) => [o.id, o]));
   // Build "Root / Parent / Child" for a single org id by walking up
   // parentId. Cached per request via the closure so a person assigned
   // to many siblings doesn't re-walk the same ancestry repeatedly.
@@ -431,13 +474,13 @@ router.get('/', async (req: Request, res: Response) => {
   const orgPathFor = (oid: string): string | null => {
     if (pathCache.has(oid)) return pathCache.get(oid)!;
     const segments: string[] = [];
-    let current = organizations.find((o) => o.id === oid);
+    let current = orgById.get(oid);
     if (!current) return null;
     const seen = new Set<string>();
     while (current && !seen.has(current.id)) {
       seen.add(current.id);
       segments.unshift(current.name);
-      current = current.parentId ? organizations.find((o) => o.id === current!.parentId) : undefined;
+      current = current.parentId ? orgById.get(current.parentId) : undefined;
     }
     const joined = segments.join(' / ');
     pathCache.set(oid, joined);
@@ -450,7 +493,7 @@ router.get('/', async (req: Request, res: Response) => {
   const enriched = filtered.map((p) => ({
     ...publicPerson(p),
     orgNames: p.orgIds
-      .map((oid) => organizations.find((o) => o.id === oid)?.name)
+      .map((oid) => orgById.get(oid)?.name)
       .filter((n): n is string => !!n),
     orgPaths: p.orgIds
       .map(orgPathFor)
@@ -464,29 +507,43 @@ router.get('/:id/360', async (req: Request, res: Response) => {
   const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
 
+  // Read every foreign store through its repository (Postgres source of
+  // truth; the raw boot arrays are empty in DB mode), listing each once
+  // and filtering/finding in memory below.
+  const [allOrgs, allDamaRoles, allGroups2, allProcessNodes, allDataAssets, allDataDomains] = await Promise.all([
+    organizationsRepo.list(),
+    damaRolesRepo().list(),
+    governanceGroupsRepo().list(),
+    processNodesRepo().list(),
+    dataAssetsRepo().list(),
+    dataDomainsRepo().list(),
+  ]);
+  const orgById = new Map(allOrgs.map((o) => [o.id, o]));
+  const domainById = new Map(allDataDomains.map((d) => [d.id, d]));
+
   // Org assignments with resolved names
   const orgAssignments = person.orgIds
-    .map((oid) => organizations.find((o) => o.id === oid))
+    .map((oid) => orgById.get(oid))
     .filter(Boolean)
     .map((o) => ({ id: o!.id, name: o!.name, type: o!.type }));
 
   // DAMA roles
-  const personDamaRoles = damaRoles
+  const personDamaRoles = allDamaRoles
     .filter((r) => r.personId === person.id)
     .map((r) => {
       let scopeName = r.scopeId;
       if (r.scopeType === 'ORG') {
-        const org = organizations.find((o) => o.id === r.scopeId);
+        const org = orgById.get(r.scopeId);
         if (org) scopeName = org.name;
       } else if (r.scopeType === 'DOMAIN') {
-        const dom = dataDomains.find((d) => d.id === r.scopeId);
+        const dom = domainById.get(r.scopeId);
         if (dom) scopeName = dom.name;
       }
       return { ...r, scopeName };
     });
 
   // Governance group memberships
-  const personGroups = governanceGroups
+  const personGroups = allGroups2
     .filter((g) => g.members.some((m) => m.personId === person.id))
     .map((g) => {
       const membership = g.members.find((m) => m.personId === person.id)!;
@@ -494,15 +551,15 @@ router.get('/:id/360', async (req: Request, res: Response) => {
     });
 
   // Process nodes owned
-  const ownedProcessNodes = processNodes
+  const ownedProcessNodes = allProcessNodes
     .filter((n) => n.ownerId === person.id)
     .map((n) => ({ id: n.id, name: n.name, level: n.level, status: n.status }));
 
   // Data assets owned or stewarded
-  const ownedDataAssets = dataAssets
+  const ownedDataAssets = allDataAssets
     .filter((a) => a.owner === person.id || a.owner === person.name)
     .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, relation: 'owner' as const }));
-  const stewardedDataAssets = dataAssets
+  const stewardedDataAssets = allDataAssets
     .filter((a) => (a.stewardIds || []).includes(person.id) && a.owner !== person.id)
     .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, relation: 'steward' as const }));
 
@@ -510,7 +567,7 @@ router.get('/:id/360', async (req: Request, res: Response) => {
   // name+type to avoid showing multiple "Data Governance Council" entries
   // that may exist if templates were generated more than once.
   const personOrgSet = new Set(person.orgIds || []);
-  const orgScopedGroups = governanceGroups.filter((g) => personOrgSet.size === 0 || personOrgSet.has(g.orgId));
+  const orgScopedGroups = allGroups2.filter((g) => personOrgSet.size === 0 || personOrgSet.has(g.orgId));
   const seenGroupKeys = new Set<string>();
   const allGroups = orgScopedGroups
     .filter((g) => {
@@ -522,7 +579,7 @@ router.get('/:id/360', async (req: Request, res: Response) => {
     .map((g) => ({ id: g.id, name: g.name, type: g.type }));
 
   // All data domains (for checkbox UI) — scoped to person's orgs
-  const allDomains = dataDomains
+  const allDomains = allDataDomains
     .filter((d) => personOrgSet.size === 0 || personOrgSet.has(d.orgId))
     .map((d) => ({ id: d.id, name: d.name, ownerId: d.ownerId, stewardIds: d.stewardIds }));
 
@@ -617,16 +674,22 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
   const person = await peopleRepo.get(id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
 
-  const ownedProcesses = processNodes.filter((n) => n.ownerId === id).length;
-  const govGroups = governanceGroups.filter((g) => g.members.some((m) => m.personId === id)).length;
-  const damaRoleCount = damaRoles.filter((r) => r.personId === id).length;
-  const domainOwner = dataDomains.filter((d) => d.ownerId === id).length;
-  const domainSteward = dataDomains.filter((d) => d.stewardIds.includes(id)).length;
-  // Lazy require to avoid pulling agents at module load — impact is
-  // rarely called at boot, and agents.ts imports people.ts already.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { agents } = require('./agents') as typeof import('./agents');
-  const activeAgents = agents.filter((a) => a.ownerPersonId === id && a.status === 'ACTIVE').length;
+  // Read foreign stores through their repositories (Postgres source of
+  // truth; the raw boot arrays are empty in DB mode). List each once,
+  // then count in memory.
+  const [allProcessNodes, allGroups, allDamaRoles, allDataDomains, allAgents] = await Promise.all([
+    processNodesRepo().list(),
+    governanceGroupsRepo().list(),
+    damaRolesRepo().list(),
+    dataDomainsRepo().list(),
+    agentsRepo().list(),
+  ]);
+  const ownedProcesses = allProcessNodes.filter((n) => n.ownerId === id).length;
+  const govGroups = allGroups.filter((g) => g.members.some((m) => m.personId === id)).length;
+  const damaRoleCount = allDamaRoles.filter((r) => r.personId === id).length;
+  const domainOwner = allDataDomains.filter((d) => d.ownerId === id).length;
+  const domainSteward = allDataDomains.filter((d) => d.stewardIds.includes(id)).length;
+  const activeAgents = allAgents.filter((a) => a.ownerPersonId === id && a.status === 'ACTIVE').length;
 
   res.json({
     success: true,
@@ -827,7 +890,11 @@ router.post('/import', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Organization level is required for import' });
       return;
     }
-    const org = organizations.find((o) => o.id === orgId);
+    // Resolve orgs from the repository (Postgres source of truth; the
+    // raw `organizations` boot array is empty in DB mode). Listed once
+    // and threaded into resolveOrgForRow below.
+    const allOrgs = await organizationsRepo.list();
+    const org = allOrgs.find((o) => o.id === orgId);
     if (!org) {
       res.status(400).json({ success: false, error: 'Selected organization level does not exist' });
       return;
@@ -893,9 +960,9 @@ router.post('/import', async (req: Request, res: Response) => {
       if (path.includes('>')) {
         const segments = path.split('>').map((s) => s.trim()).filter(Boolean);
         let parentId: string | null = null;
-        let current: typeof organizations[number] | undefined;
+        let current: typeof allOrgs[number] | undefined;
         for (const seg of segments) {
-          current = organizations.find((o) => o.parentId === parentId && lc(o.name) === lc(seg));
+          current = allOrgs.find((o) => o.parentId === parentId && lc(o.name) === lc(seg));
           if (!current) {
             warnings.push(`"${rowLabel}": no org matching path "${path}" — fell back to ${org.name}`);
             return orgId;
@@ -908,7 +975,7 @@ router.post('/import', async (req: Request, res: Response) => {
       // Single-name shortcut. Unambiguous match required; if two orgs
       // share the name (e.g. two "Customer Service" departments) we
       // refuse to guess and fall back.
-      const matches = organizations.filter((o) => lc(o.name) === lc(path));
+      const matches = allOrgs.filter((o) => lc(o.name) === lc(path));
       if (matches.length === 1) return matches[0].id;
       if (matches.length === 0) {
         warnings.push(`"${rowLabel}": no org named "${path}" — fell back to ${org.name}`);
