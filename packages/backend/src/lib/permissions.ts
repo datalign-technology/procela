@@ -20,22 +20,24 @@ import { AppError } from '../middleware/errorHandler';
 const BASE_READS = [
   'process:read', 'system:read', 'data-asset:read', 'mapping:read',
   'org:read', 'people:read', 'governance:read', 'collaboration:read',
-  'connection:read',
+  'connection:read', 'skill:read',
 ];
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: ['*'],
   ORG_ADMIN: [
     'org:*', 'process:*', 'system:*', 'data-asset:*', 'mapping:*', 'people:*',
-    'governance:*', 'connection:*', 'agent:*', 'collaboration:*', 'audit:*', 'admin:*',
+    'governance:*', 'connection:*', 'agent:*', 'collaboration:*', 'skill:*',
+    'audit:*', 'admin:*',
   ],
   // EDITOR is the merged former PROCESS_OWNER + DATA_STEWARD: full
   // write over the process catalog and the data/system registry,
-  // plus connections. No governance/people/org writes (admin only).
+  // plus connections and the skills catalog. No governance/people/org
+  // writes (admin only).
   EDITOR: [
     ...BASE_READS,
     'process:write', 'system:write', 'data-asset:write', 'mapping:write',
-    'connection:write', 'collaboration:write',
+    'connection:write', 'collaboration:write', 'skill:write',
   ],
   // CONTRIBUTOR authors processes and collaborates, but does not
   // write the data/system registry, mappings, or governance.

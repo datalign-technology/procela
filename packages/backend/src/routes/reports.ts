@@ -91,6 +91,14 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const report = await reportsRepo.get(String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
+  // Owner-scoped: a report (including a shared 'org'-visibility one) may only
+  // be edited by the person who owns it. Any-authenticated at the router level,
+  // so this per-record check is what stops one user editing another's report.
+  const editorId = (req as { user?: { sub?: string } }).user?.sub || null;
+  if (report.ownerId && editorId && report.ownerId !== editorId) {
+    res.status(403).json({ success: false, error: 'Only the owner can modify this report' });
+    return;
+  }
   const { name, description, ownerId, visibility, definition } = req.body || {};
   const patch: Partial<StoredReport> = {};
   if (definition !== undefined) {
@@ -112,8 +120,14 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/reports/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = await reportsRepo.delete(String(req.params.id));
-  if (!removed) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
+  const report = await reportsRepo.get(String(req.params.id));
+  if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
+  const editorId = (req as { user?: { sub?: string } }).user?.sub || null;
+  if (report.ownerId && editorId && report.ownerId !== editorId) {
+    res.status(403).json({ success: false, error: 'Only the owner can delete this report' });
+    return;
+  }
+  await reportsRepo.delete(report.id);
   res.status(204).send();
 });
 

@@ -322,7 +322,11 @@ app.use('/api/v1/enterprise-view', authenticateToken, enterpriseViewRouter);
 app.use('/api/v1/analysis', authenticateToken, analysisRouter);
 app.use('/api/v1/analysis-reports', authenticateToken, analysisReportsRouter);
 app.use('/api/v1/gap-detection', authenticateToken, gapDetectionRouter);
-app.use('/api/v1/skills', authenticateToken, skillsRouter);
+// Skills is a SHARED org catalog (not a per-user surface), so its writes are
+// role-gated like the rest of the operational catalog — EDITOR+ (see the
+// `skill` bucket in lib/permissions.ts). Reads stay open to any authenticated
+// user via skill:read in BASE_READS.
+app.use('/api/v1/skills', authenticateToken, requireResource('skill'), skillsRouter);
 app.use('/api/v1/data-model', authenticateToken, dataModelRouter);
 app.use('/api/v1/reports', authenticateToken, reportsRouter);
 
