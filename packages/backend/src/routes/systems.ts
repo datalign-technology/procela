@@ -110,6 +110,10 @@ export interface StoredSystem {
    *  process; EXTERNAL is vendor-managed with no API. Used by gap
    *  detection so a missing connection on a MANUAL system isn't a gap. */
   connectivity?: 'INTEGRATED' | 'MANUAL' | 'EXTERNAL';
+  // Data-sync tracking — set by the sync engine when this row was created or
+  // updated from a SyncConnection source. Soft reference; absent when unsynced.
+  syncConnectionId?: string | null;
+  syncStatus?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -130,6 +130,13 @@ model Organization {
   // FlowRelationship no longer carries an orgId — see the comment on
   // that model. Its org scope resolves via its fromNode / toNode.
 
+  // Data-sync tracking — soft reference to a SyncConnection (no FK), plus the
+  // per-row sync status ('ACTIVE' | 'MISSING_FROM_SOURCE'). Set by the sync
+  // engine so a run can update its own prior rows and flag ones dropped from
+  // the source. Plain string, not @db.Uuid — a soft reference only compared as text.
+  syncConnectionId String?
+  syncStatus       String?
+
   @@index([parentId])
   @@map("organizations")
 }
@@ -194,6 +201,10 @@ model Person {
   dataAssetStewards   DataAssetSteward[]  @relation("DataAssetStewardM2M")
   assignedTasks       GovernanceTask[]    @relation("GovernanceTaskAssignee")
   assignedIssues      GovernanceIssue[]   @relation("GovernanceIssueAssignee")
+
+  // Data-sync tracking (soft reference to SyncConnection; see Organization).
+  syncConnectionId String?
+  syncStatus       String?
 
   @@map("people")
 }
@@ -373,6 +384,10 @@ model System {
   custodians   SystemCustodian[]
   dataAssets   DataAsset[]
   processNodes ProcessNodeSystem[]
+
+  // Data-sync tracking (soft reference to SyncConnection; see Organization).
+  syncConnectionId String?
+  syncStatus       String?
 
   @@index([orgId])
   @@index([orgId, systemType])
@@ -1057,6 +1072,10 @@ model GlossaryTerm {
   sourceOfTruth String   @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // Data-sync tracking (soft reference to SyncConnection; see Organization).
+  syncConnectionId String?
+  syncStatus       String?
 
   @@index([orgId])
   @@index([orgId, category])

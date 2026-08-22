@@ -63,6 +63,8 @@ type PrismaOrgRow = {
   brandGlyph: string | null;
   ssoButtonLabel: string | null;
   brandPrimaryColor: string | null;
+  syncConnectionId?: string | null;
+  syncStatus?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -85,6 +87,8 @@ function fromPrisma(r: PrismaOrgRow): StoredOrg {
     ...(r.brandGlyph ? { brandGlyph: r.brandGlyph } : {}),
     ...(r.ssoButtonLabel ? { ssoButtonLabel: r.ssoButtonLabel } : {}),
     ...(r.brandPrimaryColor ? { brandPrimaryColor: r.brandPrimaryColor } : {}),
+    syncConnectionId: r.syncConnectionId ?? null,
+    syncStatus: r.syncStatus ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -119,6 +123,10 @@ function toPrismaData(row: StoredOrg): Record<string, unknown> {
     brandGlyph: row.brandGlyph ?? null,
     ssoButtonLabel: row.ssoButtonLabel ?? null,
     brandPrimaryColor: row.brandPrimaryColor ?? null,
+    // Data-sync tracking — presence-guarded so a partial update that doesn't
+    // mention them preserves the stored value (only the sync engine sets them).
+    ...(row.syncConnectionId !== undefined ? { syncConnectionId: row.syncConnectionId } : {}),
+    ...(row.syncStatus !== undefined ? { syncStatus: row.syncStatus } : {}),
     // createdAt / updatedAt are Prisma-managed via @default(now()) /
     // @updatedAt on create, but we still forward incoming timestamps
     // (e.g., during a JSON-imported bulk migration) so the audit
