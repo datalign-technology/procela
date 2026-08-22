@@ -11,6 +11,7 @@ import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getMappingsRepository } from '../db/mappings.repo';
 import { backgroundTimersDisabled } from '../lib/background-timer';
+import { isSchedulerLeader } from '../lib/scheduler-leadership';
 
 // ──────────────────────────────────────────────────────────────────────────
 // scheduler.service — self-driving background loops that turn
@@ -92,6 +93,12 @@ async function shouldFireWeeklyDigest(nowMs: number): Promise<boolean> {
 }
 
 async function tick(): Promise<void> {
+  // Single-owner guard: only the elected leader does the shared work
+  // (overdue sweep + weekly digest). Checked per-tick so leadership can move
+  // between replicas without a restart. Always true in single-instance / JSON
+  // mode. The __test__.tick export bypasses the timer, not this guard — tests
+  // that drive tick() directly run with no DB, so isSchedulerLeader() is true.
+  if (!isSchedulerLeader()) return;
   try {
     const overdue = await sweepOverdueTasks();
     if (overdue.fired.length > 0) {

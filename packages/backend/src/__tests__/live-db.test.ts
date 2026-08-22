@@ -129,6 +129,7 @@ async function truncateAll(): Promise<void> {
     'agent_executions', 'agent_schedules', 'agents',
     'maturity_snapshots', 'gap_snapshots',
     'app_settings',
+    'scheduler_leases',
     'organizations',
   ];
   for (const table of tables) {
@@ -894,6 +895,36 @@ suite('live-db business flows', () => {
     assert.ok(fromDivision, 'division scope should be non-null');
     assert.ok(fromDivision!.has(divisionId), 'division sees itself');
     assert.ok(fromDivision!.has(companyId), 'division sees its parent (walk up)');
+  });
+
+  it('scheduler leadership: one owner at a time, with failover when the lease expires', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { __test__ } = require('../lib/scheduler-leadership') as typeof import('../lib/scheduler-leadership');
+    const client = loadPrisma();
+    await client.$executeRawUnsafe(`DELETE FROM scheduler_leases WHERE id = 'scheduler'`);
+
+    // This process claims the empty lease → leader.
+    assert.strictEqual(await __test__.acquireOrRenew(), true);
+    // Re-claiming our own valid lease keeps us leader.
+    assert.strictEqual(await __test__.acquireOrRenew(), true);
+
+    // A different live holder owns the lease → we are NOT leader.
+    await client.$executeRawUnsafe(
+      `UPDATE scheduler_leases SET holder = 'other-instance', "expiresAt" = now() + interval '90 seconds' WHERE id = 'scheduler'`,
+    );
+    assert.strictEqual(await __test__.acquireOrRenew(), false);
+
+    // Once that holder's lease expires, we take over (failover).
+    await client.$executeRawUnsafe(
+      `UPDATE scheduler_leases SET "expiresAt" = now() - interval '1 second' WHERE id = 'scheduler'`,
+    );
+    assert.strictEqual(await __test__.acquireOrRenew(), true);
+
+    // Only ever one lease row.
+    const rows = await (client as unknown as {
+      $queryRawUnsafe: (s: string) => Promise<Array<{ n: number }>>;
+    }).$queryRawUnsafe(`SELECT count(*)::int AS n FROM scheduler_leases`);
+    assert.strictEqual(rows[0].n, 1);
   });
 
   it('settings: AppSetting set → get round-trips a JSON value through Postgres', async () => {

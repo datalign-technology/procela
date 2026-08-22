@@ -618,6 +618,6 @@ async function tickScheduler(): Promise<void> {
     }
   }
 }
-startBackgroundSweep(() => { void tickScheduler(); }, SCHEDULER_TICK_MS);
+startBackgroundSweep(() => { void tickScheduler(); }, SCHEDULER_TICK_MS, { leaderOnly: true });
 
 export default router;

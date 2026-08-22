@@ -1553,3 +1553,18 @@ model OidcProvider {
 
   @@map("oidc_providers")
 }
+
+// Scheduler leader election. A single row ("scheduler") holds the current
+// owner of the background timer work (overdue sweep, weekly digest, agent
+// runs, DQ + dbt polling). One process claims the lease via an atomic
+// conditional upsert and renews it on a heartbeat; if it dies the lease
+// expires and another replica takes over. Ensures shared/costly timers run
+// once across a horizontally-scaled deployment. See lib/scheduler-leadership.ts.
+model SchedulerLease {
+  id        String   @id
+  holder    String
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+
+  @@map("scheduler_leases")
+}

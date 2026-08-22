@@ -314,6 +314,6 @@ async function tickPollScheduler(): Promise<void> {
   }
 }
 import { startBackgroundSweep } from '../lib/background-timer';
-startBackgroundSweep(() => { void tickPollScheduler(); }, POLL_TICK_MS);
+startBackgroundSweep(() => { void tickPollScheduler(); }, POLL_TICK_MS, { leaderOnly: true });
 
 export default router;
