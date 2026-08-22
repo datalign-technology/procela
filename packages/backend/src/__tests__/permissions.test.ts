@@ -115,6 +115,17 @@ describe('read/write catalog invariants', () => {
     }
   });
 
+  it('skills catalog: read open to all, write is EDITOR+ (not VIEWER/CONTRIBUTOR)', () => {
+    for (const role of ['VIEWER', 'CONTRIBUTOR', 'EDITOR', 'ORG_ADMIN', 'SUPER_ADMIN']) {
+      assert.strictEqual(hasPermission(role, 'skill:read'), true, `${role} should read skills`);
+    }
+    assert.strictEqual(hasPermission('VIEWER', 'skill:write'), false);
+    assert.strictEqual(hasPermission('CONTRIBUTOR', 'skill:write'), false);
+    assert.strictEqual(hasPermission('EDITOR', 'skill:write'), true);
+    assert.strictEqual(hasPermission('ORG_ADMIN', 'skill:write'), true);
+    assert.strictEqual(hasPermission('SUPER_ADMIN', 'skill:write'), true);
+  });
+
   it('sensitive buckets (agent/audit/admin/backup) are ORG_ADMIN+ only', () => {
     for (const perm of ['agent:read', 'agent:write', 'audit:read', 'admin:write']) {
       assert.strictEqual(hasPermission('VIEWER', perm), false);
@@ -178,5 +189,13 @@ describe('requireResource middleware', () => {
     const err: any = run('EDITOR', 'GET', 'agent');
     assert.strictEqual(err?.statusCode, 403);
     assert.strictEqual(run('ORG_ADMIN', 'GET', 'agent'), null);
+  });
+
+  it('skills catalog: VIEWER reads but 403s writes; EDITOR writes; CONTRIBUTOR 403s writes', () => {
+    assert.strictEqual(run('VIEWER', 'GET', 'skill'), null);
+    assert.strictEqual((run('VIEWER', 'POST', 'skill') as any)?.statusCode, 403);
+    assert.strictEqual((run('CONTRIBUTOR', 'DELETE', 'skill') as any)?.statusCode, 403);
+    assert.strictEqual(run('EDITOR', 'POST', 'skill'), null);
+    assert.strictEqual(run('EDITOR', 'DELETE', 'skill'), null);
   });
 });

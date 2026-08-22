@@ -47,6 +47,7 @@ Legend: **W** = read + write · **R** = read only · **—** = no access
 | `data-asset` | data-assets, data-domains, data-lineage, data-quality, business-glossary | R | R | **W** | W | W |
 | `system` | systems | R | R | **W** | W | W |
 | `mapping` | mappings | R | R | **W** | W | W |
+| `skill` | skills (shared competency catalog) | R | R | **W** | W | W |
 | `connection` | connections, sync-connections, dbt-cloud-connections | R | R | **W** | W | W |
 | `governance` | governance-{groups,policies,controls,tasks,issues,program,calendar}, dama-roles, decision-rights, control-tower | R | R | R | **W** | W |
 | `collaboration` | comments, tags, attachments | R | **W** | W | W | W |
@@ -66,7 +67,15 @@ where every write is scoped to the caller's own records:
 `dashboard`, `ai`, `chat`, `search`, `exports`, `digest`,
 `notifications`, `saved-views`, `trends`, `maturity-trends`,
 `enterprise-view`, `analysis`, `analysis-reports`, `gap-detection`,
-`skills`, `data-model`, `reports`.
+`data-model`, `reports`.
+
+> `skills` used to be here, but it is a **shared org catalog**, not a
+> per-user surface — a Viewer could edit competency definitions used
+> across process staffing and DAMA roles. It now has its own `skill`
+> bucket (writes require EDITOR+). `reports` and `analysis-reports`
+> stay any-authenticated but enforce **owner-scoping** on edit/delete
+> (layer 2): only the report's owner may change it, so a Viewer can
+> create and manage their own reports without touching anyone else's.
 
 ### Self-authenticating (own scheme, untouched)
 

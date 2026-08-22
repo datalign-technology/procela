@@ -264,13 +264,20 @@ mechanical labelling pass.
     (rate-limit, OIDC/SAML/WebAuthn/MFA caches) are intentionally left to run
     on every replica. Single-instance / JSON mode is always the owner (no
     election). Live-Postgres test covers one-owner + failover.
-- **RBAC not enforced on domain writes.** The `authorize(...roles)`
-  middleware exists but is applied to only **9 endpoints (all
-  auth/admin/backup)**. No core domain router (process nodes, data assets,
-  systems, the entire governance suite) gates writes by role — so the
-  six-role model (incl. **Viewer**) isn't enforced; a Viewer's token can
-  create/edit/delete catalog entities. Enforce role-based writes before
-  GA.
+- **RBAC not enforced on domain writes.** ~~The `authorize(...roles)`
+  middleware exists but is applied to only 9 endpoints…~~
+  - **§G RBAC outcome — done.** A mount-level `requireResource('<bucket>')`
+    guard (`lib/permissions.ts`, wired once per router in `index.ts`) now
+    role-gates writes across every catalog / governance / org / connection /
+    agent / collaboration router: reads stay open to any authenticated user,
+    mutating verbs require the bucket's `:write` permission, so a **VIEWER**
+    can no longer create/edit/delete catalog entities. The mount table in
+    `index.ts` is the reviewable policy surface; the full bucket→role matrix
+    is in `docs/RBAC_PERMISSION_MATRIX.md`. Two shared surfaces that had
+    slipped into the any-authenticated bucket were closed: the **skills**
+    catalog now has its own `skill` bucket (writes EDITOR+), and **reports**
+    now owner-scope edit/delete (only the owner may change a report, matching
+    analysis-reports). Covered by permission + route tests.
 - **Config surface has undocumented knobs.** The backend reads **60
   distinct env vars** but `.env.example` documents **49** (~11
   undiscoverable without grepping source). Only 6 are `PROD-REQUIRED`
