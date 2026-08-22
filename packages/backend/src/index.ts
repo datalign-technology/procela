@@ -377,6 +377,7 @@ import { skills } from './routes/skills';
 import { agentExecutions } from './routes/agent-executions';
 import { connectors, connectorEvents, scanForOfflineConnectors } from './routes/connectors';
 import { startScheduler, stopScheduler } from './services/scheduler.service';
+import { startSchedulerLeadership, stopSchedulerLeadership, isSchedulerLeader } from './lib/scheduler-leadership';
 
 const stores = {
   processNodes: () => processNodes,
@@ -447,10 +448,19 @@ const autoSaveHandle = hasDatabase() ? null : startAutoSave(stores);
 // gives admins reasonably prompt notice without spamming on minute
 // boundaries. Disabled in tests by NODE_ENV=test so the suite
 // doesn't fight a background timer.
+// Elect a single owner for the shared background timers so a horizontally
+// scaled deployment runs them once, not once per replica. Starts before the
+// timers below; each leader-gated tick then checks isSchedulerLeader().
+startSchedulerLeadership();
+
 const OFFLINE_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 const offlineScanHandle = config.nodeEnv === 'test'
   ? null
   : setInterval(() => {
+      // Shared work (writes status + one notification per transition) — only
+      // the elected scheduler leader runs it, so a multi-replica deployment
+      // doesn't emit duplicate offline notifications.
+      if (!isSchedulerLeader()) return;
       void (async () => {
       try {
         const { transitioned } = await scanForOfflineConnectors();
@@ -651,6 +661,7 @@ function shutdown(signal: string): void {
   if (autoSaveHandle) clearInterval(autoSaveHandle);
   if (offlineScanHandle) clearInterval(offlineScanHandle);
   stopScheduler();
+  stopSchedulerLeadership();
   // Only flush JSON stores in JSON mode. In Postgres mode the arrays are
   // stale boot-state and flushing them would clobber the JSON files.
   if (!hasDatabase()) flushStores(stores);

@@ -226,7 +226,7 @@ async function tickAgentSchedules(): Promise<void> {
 }
 
 import { startBackgroundSweep } from '../lib/background-timer';
-startBackgroundSweep(tickAgentSchedules, SCHEDULER_TICK_MS);
+startBackgroundSweep(tickAgentSchedules, SCHEDULER_TICK_MS, { leaderOnly: true });
 
 // Exported for tests that want to deterministically trigger the loop.
 export { tickAgentSchedules };

@@ -254,6 +254,16 @@ mechanical labelling pass.
   causing duplicated AI spend, duplicate user notifications, and races on
   `nextRunAt`. Fix: a `SCHEDULER_ENABLED` role flag, a Postgres advisory
   lock, or an external scheduler.
+  - **§G scheduler outcome — done.** A Postgres-backed leader election
+    (`lib/scheduler-leadership.ts` + the `scheduler_leases` table) now elects
+    exactly one owner across identical replicas via an atomic conditional
+    lease upsert, renewed on a heartbeat and failing over on TTL expiry.
+    The shared/costly timers (overdue sweep + weekly digest, the
+    agent-schedule ticker, DQ runs, dbt polling, offline-connector scan) gate
+    their tick on `isSchedulerLeader()`; per-instance in-memory cache sweeps
+    (rate-limit, OIDC/SAML/WebAuthn/MFA caches) are intentionally left to run
+    on every replica. Single-instance / JSON mode is always the owner (no
+    election). Live-Postgres test covers one-owner + failover.
 - **RBAC not enforced on domain writes.** The `authorize(...roles)`
   middleware exists but is applied to only **9 endpoints (all
   auth/admin/backup)**. No core domain router (process nodes, data assets,

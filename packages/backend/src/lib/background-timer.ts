@@ -22,9 +22,28 @@ export function backgroundTimersDisabled(): boolean {
     || process.env.PROCELA_DISABLE_SCHEDULERS === '1';
 }
 
-export function startBackgroundSweep(fn: () => void, intervalMs: number): NodeJS.Timeout | null {
+export interface BackgroundSweepOptions {
+  // Gate the tick on scheduler leadership: run only on the one instance that
+  // owns the background work. Use for SHARED / costly sweeps (DB writes,
+  // external calls, notifications, `nextRunAt` advances) that must fire once
+  // cluster-wide. Leave off for per-instance work (in-memory cache TTL sweeps),
+  // which must run on every replica. See lib/scheduler-leadership.ts.
+  leaderOnly?: boolean;
+}
+
+export function startBackgroundSweep(
+  fn: () => void,
+  intervalMs: number,
+  opts: BackgroundSweepOptions = {},
+): NodeJS.Timeout | null {
   if (backgroundTimersDisabled()) return null;
-  const handle = setInterval(fn, intervalMs);
+  const tick = opts.leaderOnly
+    // Lazy require breaks the import cycle (scheduler-leadership imports
+    // backgroundTimersDisabled from this module).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    ? () => { if ((require('./scheduler-leadership') as typeof import('./scheduler-leadership')).isSchedulerLeader()) fn(); }
+    : fn;
+  const handle = setInterval(tick, intervalMs);
   if (typeof handle.unref === 'function') handle.unref();
   return handle;
 }
