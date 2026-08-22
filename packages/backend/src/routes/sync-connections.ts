@@ -414,6 +414,146 @@ async function applyRow(
   return 'created';
 }
 
+// In-flight guard — ids of sync connections a run is currently executing for.
+// Both the manual /run route and the auto-runner tick check this so a slow run
+// never overlaps itself (the tick fires every minute; a run touching many rows
+// can outlast one tick).
+const runningSyncIds = new Set<string>();
+
+// ---------------------------------------------------------------------------
+// Run engine — shared by the manual POST /:id/run route and the background
+// auto-runner tick. Fetches source rows, upserts each through the target
+// repository, marks rows dropped from the source, and persists the run
+// metadata (lastSyncResult / schedule.lastRunAt / nextRunAt / status) back
+// onto the sync connection. Returns a discriminated outcome the caller maps
+// to an HTTP response or a log line.
+// ---------------------------------------------------------------------------
+
+interface SyncRunResult {
+  timestamp: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  missingFromSource: number;
+  errors: number;
+  errorMessages: string[];
+}
+
+type RunSyncOutcome =
+  | { status: 'ok'; result: SyncRunResult; simulated: boolean }
+  | { status: 'fetch-error'; result: SyncRunResult; error: string }
+  | { status: 'config-error'; error: string };
+
+async function runSync(sc: SyncConnection): Promise<RunSyncOutcome> {
+  const repo = getEntityRepo(sc.targetEntity);
+  if (!repo) {
+    return { status: 'config-error', error: `Unknown target entity: ${sc.targetEntity}` };
+  }
+
+  // Working set: the entity's current rows from the repository (Postgres in DB
+  // mode, the in-memory array in JSON mode). applyRow matches against this and
+  // pushes newly-created rows into it so later rows in the batch can match.
+  const all = await repo.list();
+
+  const result: SyncRunResult = {
+    timestamp: new Date().toISOString(),
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    missingFromSource: 0,
+    errors: 0,
+    errorMessages: [],
+  };
+  const syncedRecordIds = new Set<string>();
+
+  let rows: Record<string, string>[] = [];
+  let simulated = false;
+
+  try {
+    if (sc.sourceType === 'DATABASE') {
+      // Cannot connect to real databases in the prototype — simulate
+      rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
+      simulated = true;
+    } else {
+      // CSV_URL or JSON_URL — attempt real fetch
+      rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown fetch error';
+    result.errors = 1;
+    result.errorMessages.push(`Source fetch failed: ${msg}`);
+    sc.status = 'ERROR';
+    sc.lastSyncResult = result;
+    // Advance the schedule even on failure so a broken source doesn't get
+    // retried every tick — it waits for its normal interval.
+    sc.schedule.lastRunAt = result.timestamp;
+    if (sc.schedule.enabled) {
+      sc.schedule.nextRunAt = computeNextRunAt(sc.schedule.intervalMinutes);
+    }
+    sc.updatedAt = new Date().toISOString();
+    await syncConnectionsRepo.update(sc.id, {
+      status: sc.status,
+      lastSyncResult: sc.lastSyncResult,
+      schedule: sc.schedule,
+      updatedAt: sc.updatedAt,
+    });
+    logger.error({ err, id: sc.id }, 'Sync connection fetch failed');
+    return { status: 'fetch-error', result, error: msg };
+  }
+
+  // Apply each row (create/update persists through the repo inside applyRow).
+  for (const row of rows) {
+    try {
+      const action = await applyRow(all, repo, sc.targetEntity, sc.fieldMapping, sc.matchKey, row, sc.orgId, sc.id, syncedRecordIds);
+      if (action === 'created') result.created++;
+      else if (action === 'updated') result.updated++;
+      else result.skipped++;
+    } catch (err) {
+      result.errors++;
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      result.errorMessages.push(msg);
+    }
+  }
+
+  // Mark records previously synced by this connection but missing from this
+  // batch, persisting each transition through the repo.
+  for (const item of all) {
+    if ((item as any).syncConnectionId === sc.id && !syncedRecordIds.has(item.id)) {
+      if ((item as any).syncStatus !== 'MISSING_FROM_SOURCE') {
+        (item as any).syncStatus = 'MISSING_FROM_SOURCE';
+        (item as any).updatedAt = new Date().toISOString();
+        await repo.update(item.id, item);
+        result.missingFromSource++;
+      }
+    }
+  }
+
+  // Update sync connection metadata
+  sc.lastSyncResult = result;
+  sc.schedule.lastRunAt = result.timestamp;
+  if (sc.schedule.enabled) {
+    sc.schedule.nextRunAt = computeNextRunAt(sc.schedule.intervalMinutes);
+  }
+  if (result.errors > 0 && result.created === 0 && result.updated === 0) {
+    sc.status = 'ERROR';
+  } else {
+    sc.status = 'ACTIVE';
+  }
+  sc.updatedAt = new Date().toISOString();
+  await syncConnectionsRepo.update(sc.id, {
+    lastSyncResult: sc.lastSyncResult,
+    schedule: sc.schedule,
+    status: sc.status,
+    updatedAt: sc.updatedAt,
+  });
+
+  logger.info(
+    { id: sc.id, created: result.created, updated: result.updated, skipped: result.skipped, missingFromSource: result.missingFromSource, errors: result.errors, simulated },
+    'Sync connection run completed',
+  );
+  return { status: 'ok', result, simulated };
+}
+
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -585,107 +725,30 @@ router.post('/:id/run', async (req: Request, res: Response) => {
     return;
   }
 
-  const repo = getEntityRepo(sc.targetEntity);
-  if (!repo) {
-    res.status(500).json({ success: false, error: `Unknown target entity: ${sc.targetEntity}` });
+  // A manual run against a connection the auto-runner is mid-flight on would
+  // race the same repo writes; refuse rather than double-run.
+  if (runningSyncIds.has(sc.id)) {
+    res.status(409).json({ success: false, error: 'Sync is already running' });
     return;
   }
-  // Working set: the entity's current rows from the repository (Postgres in DB
-  // mode, the in-memory array in JSON mode). applyRow matches against this and
-  // pushes newly-created rows into it so later rows in the batch can match.
-  const all = await repo.list();
 
-  const result = {
-    timestamp: new Date().toISOString(),
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    missingFromSource: 0,
-    errors: 0,
-    errorMessages: [] as string[],
-  };
-  const syncedRecordIds = new Set<string>();
-
-  let rows: Record<string, string>[] = [];
-  let simulated = false;
-
+  runningSyncIds.add(sc.id);
+  let outcome: RunSyncOutcome;
   try {
-    if (sc.sourceType === 'DATABASE') {
-      // Cannot connect to real databases in the prototype — simulate
-      rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
-      simulated = true;
-    } else {
-      // CSV_URL or JSON_URL — attempt real fetch
-      rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown fetch error';
-    result.errors = 1;
-    result.errorMessages.push(`Source fetch failed: ${msg}`);
-    sc.status = 'ERROR';
-    sc.lastSyncResult = result;
-    sc.updatedAt = new Date().toISOString();
-    await syncConnectionsRepo.update(sc.id, {
-      status: sc.status,
-      lastSyncResult: sc.lastSyncResult,
-      updatedAt: sc.updatedAt,
-    });
-    logger.error({ err, id: sc.id }, 'Sync connection fetch failed');
-    res.json({ success: false, data: result, error: msg });
+    outcome = await runSync(sc);
+  } finally {
+    runningSyncIds.delete(sc.id);
+  }
+
+  if (outcome.status === 'config-error') {
+    res.status(500).json({ success: false, error: outcome.error });
     return;
   }
-
-  // Apply each row (create/update persists through the repo inside applyRow).
-  for (const row of rows) {
-    try {
-      const action = await applyRow(all, repo, sc.targetEntity, sc.fieldMapping, sc.matchKey, row, sc.orgId, sc.id, syncedRecordIds);
-      if (action === 'created') result.created++;
-      else if (action === 'updated') result.updated++;
-      else result.skipped++;
-    } catch (err) {
-      result.errors++;
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      result.errorMessages.push(msg);
-    }
+  if (outcome.status === 'fetch-error') {
+    res.json({ success: false, data: outcome.result, error: outcome.error });
+    return;
   }
-
-  // Mark records previously synced by this connection but missing from this
-  // batch, persisting each transition through the repo.
-  for (const item of all) {
-    if ((item as any).syncConnectionId === sc.id && !syncedRecordIds.has(item.id)) {
-      if ((item as any).syncStatus !== 'MISSING_FROM_SOURCE') {
-        (item as any).syncStatus = 'MISSING_FROM_SOURCE';
-        (item as any).updatedAt = new Date().toISOString();
-        await repo.update(item.id, item);
-        result.missingFromSource++;
-      }
-    }
-  }
-
-  // Update sync connection metadata
-  sc.lastSyncResult = result;
-  sc.schedule.lastRunAt = result.timestamp;
-  if (sc.schedule.enabled) {
-    sc.schedule.nextRunAt = computeNextRunAt(sc.schedule.intervalMinutes);
-  }
-  if (result.errors > 0 && result.created === 0 && result.updated === 0) {
-    sc.status = 'ERROR';
-  } else {
-    sc.status = 'ACTIVE';
-  }
-  sc.updatedAt = new Date().toISOString();
-  await syncConnectionsRepo.update(sc.id, {
-    lastSyncResult: sc.lastSyncResult,
-    schedule: sc.schedule,
-    status: sc.status,
-    updatedAt: sc.updatedAt,
-  });
-
-  logger.info(
-    { id: sc.id, created: result.created, updated: result.updated, skipped: result.skipped, missingFromSource: result.missingFromSource, errors: result.errors, simulated },
-    'Sync connection run completed',
-  );
-  res.json({ success: true, data: result, simulated });
+  res.json({ success: true, data: outcome.result, simulated: outcome.simulated });
 });
 
 /** GET /api/v1/sync-connections/:id/preview — dry run showing first 10 rows */
@@ -773,5 +836,54 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
     simulated,
   });
 });
+
+// ---------------------------------------------------------------------------
+// Auto-runner — a leader-gated tick that runs enabled sync connections when
+// their schedule is due. Mirrors the agent-schedules / data-quality tickers:
+// fires once a minute, and (via startBackgroundSweep's leaderOnly option) only
+// the elected scheduler leader executes it, so a due sync runs on exactly one
+// server with failover. Missed ticks are not caught up — a sync due while the
+// process was down fires once on the next tick, not once per missed interval.
+// ---------------------------------------------------------------------------
+
+const SYNC_TICK_MS = 60 * 1000;
+
+async function tickSyncScheduler(): Promise<void> {
+  const now = Date.now();
+  let list: SyncConnection[];
+  try {
+    list = await syncConnectionsRepo.list();
+  } catch (err) {
+    logger.error({ err }, 'Sync auto-runner: failed to list sync connections');
+    return;
+  }
+
+  for (const sc of list) {
+    if (!sc.schedule?.enabled) continue;
+    if (sc.status === 'PAUSED') continue;
+    if (!sc.schedule.nextRunAt) continue;
+    if (new Date(sc.schedule.nextRunAt).getTime() > now) continue;
+    // Skip if a run (manual or a previous tick's) is still in flight.
+    if (runningSyncIds.has(sc.id)) continue;
+
+    runningSyncIds.add(sc.id);
+    // Fire-and-forget so one slow sync doesn't block the others in this tick.
+    // runSync persists its own metadata (including the nextRunAt advance), so
+    // the guard set is the only shared state to release here.
+    void runSync(sc)
+      .catch((err) => {
+        logger.error({ err, id: sc.id }, 'Sync auto-runner: run threw');
+      })
+      .finally(() => {
+        runningSyncIds.delete(sc.id);
+      });
+  }
+}
+
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => { void tickSyncScheduler(); }, SYNC_TICK_MS, { leaderOnly: true });
+
+// Exported for tests that want to deterministically trigger the loop.
+export { tickSyncScheduler, runSync };
 
 export default router;
