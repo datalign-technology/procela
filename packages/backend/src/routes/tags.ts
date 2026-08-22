@@ -72,7 +72,7 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   // Check for duplicate
-  const existing = tags.find(
+  const existing = (await tagsRepo.list()).find(
     (t) => t.entityType === entityType && t.entityId === entityId && t.tag === tagName
   );
   if (existing) {
@@ -100,7 +100,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/tags/:id — remove a tag */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = tags.find((t) => t.id === req.params.id);
+  const removed = await tagsRepo.get(String(req.params.id));
   if (!removed) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;

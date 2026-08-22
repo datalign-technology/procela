@@ -10,6 +10,11 @@ import { people } from './people';
 import { governancePolicies } from './governance-policies';
 import { attachments } from './attachments';
 import { getMappingsRepository } from '../db/mappings.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getAttachmentsRepository } from '../db/attachments.repo';
 
 // ── Types ──
 
@@ -54,21 +59,64 @@ registerStore('mappings', mappings);
 
 const mappingsRepo = getMappingsRepository(mappings);
 
+// Lazy accessors for the foreign stores enrichment reads. In Postgres mode
+// the in-memory arrays are empty and the Prisma repos are the source of
+// truth, so enrichment lists through them once per request (see
+// buildEnrichContext) and looks up by id from the resulting Maps.
+let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
+const processNodesRepo = () => (_processNodesRepo ??= getProcessNodesRepository(processNodes));
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _governancePoliciesRepo: ReturnType<typeof getGovernancePoliciesRepository> | null = null;
+const governancePoliciesRepo = () => (_governancePoliciesRepo ??= getGovernancePoliciesRepository(governancePolicies));
+let _attachmentsRepo: ReturnType<typeof getAttachmentsRepository> | null = null;
+const attachmentsRepo = () => (_attachmentsRepo ??= getAttachmentsRepository(attachments));
+
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const VALID_LINK_TYPES = ['consumes', 'produces', 'transforms', 'references'];
 
 // ── Helpers ──
 
-function findStepInfo(stepId: string) {
-  const node = processNodes.find((n) => n.id === stepId);
+// Pre-listed lookup Maps built once per handler and threaded through
+// enrichMapping, so a response enriching N mappings issues a fixed set of
+// list() calls instead of one find() per store per row.
+interface EnrichContext {
+  nodesById: Map<string, typeof processNodes[number]>;
+  assetsById: Map<string, typeof dataAssets[number]>;
+  peopleById: Map<string, typeof people[number]>;
+  policiesById: Map<string, typeof governancePolicies[number]>;
+  attachmentsById: Map<string, typeof attachments[number]>;
+}
+
+async function buildEnrichContext(): Promise<EnrichContext> {
+  const [nodes, assets, ppl, policies, atts] = await Promise.all([
+    processNodesRepo().list(),
+    dataAssetsRepo().list(),
+    peopleRepo().list(),
+    governancePoliciesRepo().list(),
+    attachmentsRepo().list(),
+  ]);
+  return {
+    nodesById: new Map(nodes.map((n) => [n.id, n])),
+    assetsById: new Map(assets.map((a) => [a.id, a])),
+    peopleById: new Map(ppl.map((p) => [p.id, p])),
+    policiesById: new Map(policies.map((p) => [p.id, p])),
+    attachmentsById: new Map(atts.map((a) => [a.id, a])),
+  };
+}
+
+function findStepInfo(stepId: string, ctx: EnrichContext) {
+  const node = ctx.nodesById.get(stepId);
   if (!node) return null;
 
   // Build ancestry path
   const path: string[] = [node.name];
   let current = node;
   while (current.parentId) {
-    const parent = processNodes.find((n) => n.id === current.parentId);
+    const parent = ctx.nodesById.get(current.parentId);
     if (!parent) break;
     path.unshift(parent.name);
     current = parent;
@@ -83,14 +131,14 @@ function findStepInfo(stepId: string) {
   };
 }
 
-function findAssetInfo(assetId: string | undefined) {
+function findAssetInfo(assetId: string | undefined, ctx: EnrichContext) {
   if (!assetId) return null;
-  const asset = dataAssets.find((a) => a.id === assetId);
+  const asset = ctx.assetsById.get(assetId);
   if (!asset) return null;
-  const owner = asset.owner ? people.find((p) => p.id === asset.owner) : null;
+  const owner = asset.owner ? ctx.peopleById.get(asset.owner) : null;
   const stewardIds = asset.stewardIds || [];
   const stewardName = stewardIds
-    .map((sid) => people.find((p) => p.id === sid)?.name)
+    .map((sid) => ctx.peopleById.get(sid)?.name)
     .filter(Boolean)
     .join(', ') || null;
   return {
@@ -104,9 +152,9 @@ function findAssetInfo(assetId: string | undefined) {
   };
 }
 
-function findPolicyInfo(policyId: string | undefined) {
+function findPolicyInfo(policyId: string | undefined, ctx: EnrichContext) {
   if (!policyId) return null;
-  const policy = governancePolicies.find((p) => p.id === policyId);
+  const policy = ctx.policiesById.get(policyId);
   if (!policy) return null;
   return {
     policyId: policy.id,
@@ -117,9 +165,9 @@ function findPolicyInfo(policyId: string | undefined) {
   };
 }
 
-function findAttachmentInfo(attachmentId: string | undefined) {
+function findAttachmentInfo(attachmentId: string | undefined, ctx: EnrichContext) {
   if (!attachmentId) return null;
-  const att = attachments.find((a) => a.id === attachmentId);
+  const att = ctx.attachmentsById.get(attachmentId);
   if (!att) return null;
   return {
     attachmentId: att.id,
@@ -132,13 +180,13 @@ function findAttachmentInfo(attachmentId: string | undefined) {
   };
 }
 
-function enrichMapping(m: StoredMapping) {
+function enrichMapping(m: StoredMapping, ctx: EnrichContext) {
   return {
     ...m,
-    stepInfo: findStepInfo(m.processStepId),
-    assetInfo: findAssetInfo(m.dataAssetId),
-    policyInfo: findPolicyInfo(m.policyId),
-    attachmentInfo: findAttachmentInfo(m.attachmentId),
+    stepInfo: findStepInfo(m.processStepId, ctx),
+    assetInfo: findAssetInfo(m.dataAssetId, ctx),
+    policyInfo: findPolicyInfo(m.policyId, ctx),
+    attachmentInfo: findAttachmentInfo(m.attachmentId, ctx),
   };
 }
 
@@ -146,7 +194,7 @@ const router = Router();
 
 /** DELETE /api/v1/mappings/all — delete all mappings. */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const ids = mappings.map((m) => m.id);
+  const ids = (await mappingsRepo.list()).map((m) => m.id);
   const count = ids.length;
   for (const id of ids) {
     await mappingsRepo.delete(id);
@@ -159,21 +207,24 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/mappings */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(mappings, orgId as string | undefined);
-  const enriched = filtered.map(enrichMapping);
+  const filtered = filterByOrgScope(await mappingsRepo.list(), orgId as string | undefined);
+  const ctx = await buildEnrichContext();
+  const enriched = filtered.map((m) => enrichMapping(m, ctx));
   res.json({ success: true, data: enriched });
 });
 
 /** GET /api/v1/mappings/by-step/:stepId */
 router.get('/by-step/:stepId', async (req: Request, res: Response) => {
-  const filtered = mappings.filter((m) => m.processStepId === req.params.stepId);
-  res.json({ success: true, data: filtered.map(enrichMapping) });
+  const filtered = (await mappingsRepo.list()).filter((m) => m.processStepId === req.params.stepId);
+  const ctx = await buildEnrichContext();
+  res.json({ success: true, data: filtered.map((m) => enrichMapping(m, ctx)) });
 });
 
 /** GET /api/v1/mappings/by-asset/:assetId */
 router.get('/by-asset/:assetId', async (req: Request, res: Response) => {
-  const filtered = mappings.filter((m) => m.dataAssetId === req.params.assetId);
-  res.json({ success: true, data: filtered.map(enrichMapping) });
+  const filtered = (await mappingsRepo.list()).filter((m) => m.dataAssetId === req.params.assetId);
+  const ctx = await buildEnrichContext();
+  res.json({ success: true, data: filtered.map((m) => enrichMapping(m, ctx)) });
 });
 
 /** POST /api/v1/mappings */
@@ -225,12 +276,12 @@ router.post('/', async (req: Request, res: Response) => {
     updatedAt: now,
   };
   await mappingsRepo.create(mapping);
-  res.status(201).json({ success: true, data: enrichMapping(mapping) });
+  res.status(201).json({ success: true, data: enrichMapping(mapping, await buildEnrichContext()) });
 });
 
 /** PUT /api/v1/mappings/:id */
 router.put('/:id', async (req: Request, res: Response) => {
-  const mapping = mappings.find((m) => m.id === req.params.id);
+  const mapping = (await mappingsRepo.list()).find((m) => m.id === req.params.id);
   if (!mapping) {
     res.status(404).json({ success: false, error: 'Mapping not found' });
     return;
@@ -262,7 +313,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
   mapping.updatedAt = new Date().toISOString();
   await mappingsRepo.update(mapping.id, mapping);
-  res.json({ success: true, data: enrichMapping(mapping) });
+  res.json({ success: true, data: enrichMapping(mapping, await buildEnrichContext()) });
 });
 
 /** DELETE /api/v1/mappings/:id */

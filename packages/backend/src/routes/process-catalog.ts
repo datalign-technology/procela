@@ -13,6 +13,7 @@ import { getSystemsRepository } from '../db/systems.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getMappingsRepository } from '../db/mappings.repo';
 import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { hasDatabase } from '../db/prisma';
 import { getVisibleOrgScope, getAncestorOrgIds, getCachedOrgList } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
@@ -292,6 +293,8 @@ let _governanceControlsRepo: ReturnType<typeof getGovernanceControlsRepository> 
 const governanceControlsRepo = () =>
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   (_governanceControlsRepo ??= getGovernanceControlsRepository(require('./governance-controls').governanceControls));
+let _dataDomainsRepo: ReturnType<typeof getDataDomainsRepository> | null = null;
+const dataDomainsRepo = () => (_dataDomainsRepo ??= getDataDomainsRepository(dataDomains));
 
 // ── processNodes source cache (Postgres cutover) ──
 // process-catalog reads processNodes synchronously through findNode /
@@ -543,21 +546,15 @@ function validateProcessIntegrity(vsId: string): { valid: boolean; errors: strin
 // the rest of the codebase uses for the same situation. Without this,
 // deleting a value stream leaves orphaned mappings that still show up on
 // the Process Data Mappings page with a null step.
-function cascadeDeleteMappings(stepIds: Set<string>): number {
+async function cascadeDeleteMappings(stepIds: Set<string>): Promise<number> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require('./mappings');
-    const mappings: Array<{ processStepId: string }> = mod.mappings;
-    if (!Array.isArray(mappings)) return 0;
-    let removed = 0;
-    for (let i = mappings.length - 1; i >= 0; i--) {
-      if (stepIds.has(mappings[i].processStepId)) {
-        mappings.splice(i, 1);
-        removed++;
-      }
-    }
-    if (removed > 0) saveStore('mappings', mappings);
-    return removed;
+    // Route through the mappings repo (source of truth in Postgres mode);
+    // the accessor lazy-requires to avoid the process-catalog ↔ mappings
+    // import cycle.
+    const all = await mappingsRepo().list();
+    const victims = all.filter((m) => stepIds.has(m.processStepId));
+    for (const m of victims) await mappingsRepo().delete(m.id);
+    return victims.length;
   } catch {
     return 0;
   }
@@ -630,7 +627,7 @@ router.delete('/all', async (_req: Request, res: Response) => {
     await processNodesRepo.delete(id);
   }
   if (hasDatabase()) await refreshProcessNodesCache();
-  const mappingsRemoved = cascadeDeleteMappings(allStepIds);
+  const mappingsRemoved = await cascadeDeleteMappings(allStepIds);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', '*', 'DELETE_ALL', null, { count, flowCount, mappingsRemoved });
   logger.info({ count, flowCount, mappingsRemoved }, 'Deleted all process nodes and flow relationships');
   res.json({ success: true, deleted: count + flowCount });
@@ -1212,7 +1209,7 @@ router.delete('/nodes/:id', async (req: Request, res: Response) => {
   }
 
   // Cascade: drop data mappings that referenced any deleted step.
-  const mappingsRemoved = cascadeDeleteMappings(idsToRemove);
+  const mappingsRemoved = await cascadeDeleteMappings(idsToRemove);
 
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', nodeId, 'DELETE', node, null);
   logger.info({ id: nodeId, level: node.level, descendantsRemoved: descendants.length, mappingsRemoved }, 'Deleted process node');
@@ -1327,7 +1324,8 @@ router.get('/data-graph', async (req: Request, res: Response) => {
   // Which data domain each asset rolls up to (a domain lists its member
   // asset ids). First domain wins if an asset is somehow in more than one.
   const domainByAssetId = new Map<string, { id: string; name: string }>();
-  for (const d of dataDomains) {
+  const allDomains = await dataDomainsRepo().list();
+  for (const d of allDomains) {
     for (const aid of (d.dataAssetIds || [])) {
       if (!domainByAssetId.has(aid)) domainByAssetId.set(aid, { id: d.id, name: d.name });
     }
@@ -1875,8 +1873,11 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
   // also cleans up the old assets for orgs that ran the previous
   // template.
   try {
-    const { governancePolicies } = require('./governance-policies');
     const policiesRepo = getGovernancePoliciesRepo();
+    // Single source-of-truth read; raw governancePolicies array is empty
+    // in Postgres mode. Derive org scoping, dedupe-by-name, and per-type
+    // sequence counters from this one snapshot.
+    const allPolicies = await policiesRepo.list();
 
     const docDefs: Array<{ name: string; description: string; documentType: 'CHARTER' | 'FRAMEWORK' | 'STANDARD' | 'POLICY'; category: string }> = [
       { name: 'Data Governance Charter', description: 'Mission, vision, principles, decision rights, and scope of the governance program', documentType: 'CHARTER', category: 'GOVERNANCE' },
@@ -1884,13 +1885,19 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
       { name: 'Data Standards',          description: 'Naming conventions, data type standards, formatting rules, and reference data',       documentType: 'STANDARD', category: 'GOVERNANCE' },
       { name: 'Access Control Policies', description: 'Role-based access matrix, approval workflows, and access request procedures',         documentType: 'POLICY',   category: 'ACCESS' },
     ];
-    const orgPolicies = governancePolicies.filter((p: any) => p.orgId === templateOrgId);
+    const orgPolicies = allPolicies.filter((p: any) => p.orgId === templateOrgId);
     const existingByName = new Map<string, any>(orgPolicies.map((p: any) => [p.name.toLowerCase(), p]));
     const codePrefix: Record<string, string> = { CHARTER: 'CHA', FRAMEWORK: 'FRW', STANDARD: 'STD', POLICY: 'POL' };
+    // Per-type sequence counters seeded from the snapshot, then bumped
+    // locally as we create so two defs of the same documentType (e.g. the
+    // two POLICY rows) still get distinct codes without re-reading.
+    const seqByType: Record<string, number> = {};
+    for (const p of allPolicies) seqByType[(p as any).documentType] = (seqByType[(p as any).documentType] ?? 0) + 1;
     let createdDocs = 0;
     for (const def of docDefs) {
       if (existingByName.has(def.name.toLowerCase())) continue;
-      const seq = governancePolicies.filter((p: any) => p.documentType === def.documentType).length + 1;
+      const seq = (seqByType[def.documentType] ?? 0) + 1;
+      seqByType[def.documentType] = seq;
       await policiesRepo.create({
         id: uuid(),
         orgId: templateOrgId,

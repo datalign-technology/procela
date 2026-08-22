@@ -68,7 +68,7 @@ const router = Router();
 /** GET /api/v1/agent-schedules — list, optionally filtered. */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, activityId, agentId } = req.query;
-  let filtered = [...agentSchedules];
+  let filtered = await agentSchedulesRepo.list();
   if (orgId) filtered = filtered.filter((s) => s.orgId === orgId);
   if (activityId) filtered = filtered.filter((s) => s.activityId === activityId);
   if (agentId) filtered = filtered.filter((s) => s.agentId === agentId);
@@ -129,7 +129,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PATCH /api/v1/agent-schedules/:id — update status (pause / resume), frequency, or startAt. */
 router.patch('/:id', async (req: Request, res: Response) => {
-  const sched = agentSchedules.find((s) => s.id === req.params.id);
+  const sched = await agentSchedulesRepo.get(String(req.params.id));
   if (!sched) { res.status(404).json({ success: false, error: 'Schedule not found' }); return; }
   const before = { status: sched.status, frequency: sched.frequency, nextRunAt: sched.nextRunAt };
   const { status, frequency, startAt } = req.body;
@@ -158,7 +158,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/agent-schedules/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = agentSchedules.find((s) => s.id === req.params.id);
+  const removed = await agentSchedulesRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Schedule not found' }); return; }
   await agentSchedulesRepo.delete(removed.id);
   const userId = (req as Request & { user?: { id?: string } }).user?.id || null;
@@ -214,9 +214,9 @@ async function runScheduleNow(sched: StoredAgentSchedule): Promise<void> {
   });
 }
 
-function tickAgentSchedules(): void {
+async function tickAgentSchedules(): Promise<void> {
   const now = new Date();
-  for (const sched of agentSchedules) {
+  for (const sched of await agentSchedulesRepo.list()) {
     if (sched.status !== 'ACTIVE') continue;
     if (new Date(sched.nextRunAt) > now) continue;
     runScheduleNow(sched).catch((err) => {

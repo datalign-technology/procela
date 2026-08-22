@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { saveStore } from '../lib/persistence';
 import { filterByOrgScope, isOwnershipLevel, getVisibleOrgScope, OWNERSHIP_LEVELS } from '../lib/org-scope';
 import logger from '../lib/logger';
 import { getSkillsRepository } from '../db/skills.repo';
@@ -97,7 +96,7 @@ const SEED_SKILLS: Array<{ name: string; category: SkillCategory; description: s
  *  visibility pattern for data assets, systems, and process nodes. */
 router.get('/', async (req: Request, res: Response) => {
   const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : undefined;
-  const filtered = filterByOrgScope(skills, orgId);
+  const filtered = filterByOrgScope(await skillsRepo.list(), orgId);
   res.json({
     success: true,
     data: filtered,
@@ -107,7 +106,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/skills/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const skill = skills.find((s) => s.id === req.params.id);
+  const skill = await skillsRepo.get(String(req.params.id));
   if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
   res.json({ success: true, data: skill });
 });
@@ -133,7 +132,8 @@ router.post('/', async (req: Request, res: Response) => {
   // collide, and an inherited "Data Profiling" from the company
   // level blocks a division from creating another.
   const visibleScope = getVisibleOrgScope(orgId);
-  const clash = skills.find((s) => (visibleScope?.has(s.orgId) ?? s.orgId === orgId) && s.name.toLowerCase() === trimmedName.toLowerCase());
+  const allSkills = await skillsRepo.list();
+  const clash = allSkills.find((s) => (visibleScope?.has(s.orgId) ?? s.orgId === orgId) && s.name.toLowerCase() === trimmedName.toLowerCase());
   if (clash) {
     res.status(409).json({ success: false, error: `A skill named "${clash.name}" already exists in this organization.` });
     return;
@@ -167,8 +167,9 @@ router.post('/seed', async (req: Request, res: Response) => {
   const visibleScope = getVisibleOrgScope(orgId);
   const now = new Date().toISOString();
   const created: StoredSkill[] = [];
+  const existing = await skillsRepo.list();
   for (const seed of SEED_SKILLS) {
-    if (skills.find((s) => (visibleScope?.has(s.orgId) ?? s.orgId === orgId) && s.name === seed.name)) continue;
+    if (existing.find((s) => (visibleScope?.has(s.orgId) ?? s.orgId === orgId) && s.name === seed.name)) continue;
     const skill: StoredSkill = {
       id: uuid(),
       orgId,
@@ -180,6 +181,7 @@ router.post('/seed', async (req: Request, res: Response) => {
     };
     await skillsRepo.create(skill);
     created.push(skill);
+    existing.push(skill);
   }
   logger.info({ created: created.length, orgId }, 'Seeded DAMA skills');
   res.status(201).json({ success: true, data: created, message: `Seeded ${created.length} skills` });
@@ -187,7 +189,7 @@ router.post('/seed', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/skills/:id — update a skill */
 router.put('/:id', async (req: Request, res: Response) => {
-  const skill = skills.find((s) => s.id === req.params.id);
+  const skill = await skillsRepo.get(String(req.params.id));
   if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
   const { name, category, description } = req.body;
   if (name !== undefined) {
@@ -201,7 +203,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     // descendants) gets 409. Own-row match is fine (a no-op rename
     // or a case change).
     const visibleScope = getVisibleOrgScope(skill.orgId);
-    const clash = skills.find((s) => s.id !== skill.id && (visibleScope?.has(s.orgId) ?? s.orgId === skill.orgId) && s.name.toLowerCase() === trimmedName.toLowerCase());
+    const allSkills = await skillsRepo.list();
+    const clash = allSkills.find((s) => s.id !== skill.id && (visibleScope?.has(s.orgId) ?? s.orgId === skill.orgId) && s.name.toLowerCase() === trimmedName.toLowerCase());
     if (clash) {
       res.status(409).json({ success: false, error: `A skill named "${clash.name}" already exists in this organization.` });
       return;
@@ -229,58 +232,70 @@ router.put('/:id', async (req: Request, res: Response) => {
  *  meaningful blast-radius summary.
  */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = skills.find((s) => s.id === req.params.id);
+  const removed = await skillsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
   await skillsRepo.delete(removed.id);
 
-  // Cascade off people, agents, and process nodes. Lazy requires
-  // break any lingering import-graph cycle at boot; each store is a
-  // simple in-memory array that just needs the id filtered out.
+  // Cascade off people, agents, and process nodes. Lazy requires break
+  // any lingering import-graph cycle at boot; each cascade lists through
+  // the store's repository and persists each cleared row via repo.update
+  // so the sweep reaches Postgres too (a bare saveStore only wrote JSON).
   let peopleTouched = 0;
   let agentsTouched = 0;
   let nodesTouched = 0;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { people } = require('./people') as typeof import('./people');
-    for (const p of people) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getPeopleRepository } = require('../db/people.repo') as typeof import('../db/people.repo');
+    const peopleRepo = getPeopleRepository(people);
+    for (const p of await peopleRepo.list()) {
       if (!Array.isArray(p.skillIds) || p.skillIds.length === 0) continue;
       const next = p.skillIds.filter((id) => id !== removed.id);
       if (next.length !== p.skillIds.length) {
         p.skillIds = next;
+        await peopleRepo.update(p.id, p);
         peopleTouched++;
       }
     }
-    if (peopleTouched > 0) saveStore('people', people);
   } catch (err) {
     logger.warn({ err, skillId: removed.id }, 'Failed to cascade skill delete to people');
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { agents } = require('./agents') as typeof import('./agents');
-    for (const a of agents) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getAgentsRepository } = require('../db/agents.repo') as typeof import('../db/agents.repo');
+    const agentsRepo = getAgentsRepository(agents);
+    for (const a of await agentsRepo.list()) {
       if (!Array.isArray(a.skillIds) || a.skillIds.length === 0) continue;
       const next = a.skillIds.filter((id) => id !== removed.id);
       if (next.length !== a.skillIds.length) {
         a.skillIds = next;
+        await agentsRepo.update(a.id, a);
         agentsTouched++;
       }
     }
-    if (agentsTouched > 0) saveStore('agents', agents);
   } catch (err) {
     logger.warn({ err, skillId: removed.id }, 'Failed to cascade skill delete to agents');
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
-    for (const n of processNodes) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getProcessNodesRepository } = require('../db/process-nodes.repo') as typeof import('../db/process-nodes.repo');
+    const processNodesRepo = getProcessNodesRepository(processNodes);
+    for (const n of await processNodesRepo.list()) {
       if (!Array.isArray(n.requiredSkillIds) || n.requiredSkillIds.length === 0) continue;
       const next = n.requiredSkillIds.filter((id) => id !== removed.id);
       if (next.length !== n.requiredSkillIds.length) {
-        n.requiredSkillIds = next.length > 0 ? next : undefined;
+        // Pass the (possibly empty) array, not undefined — the repo skips an
+        // undefined M2M field, which would leave the deleted id in Postgres.
+        n.requiredSkillIds = next;
+        await processNodesRepo.update(n.id, n);
         nodesTouched++;
       }
     }
-    if (nodesTouched > 0) saveStore('processNodes', processNodes);
   } catch (err) {
     logger.warn({ err, skillId: removed.id }, 'Failed to cascade skill delete to process nodes');
   }
@@ -310,11 +325,11 @@ router.get('/coverage', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'orgId is required' });
     return;
   }
-  const byPersonMap = unqualifiedSummaryByPerson(orgId);
+  const byPersonMap = await unqualifiedSummaryByPerson(orgId);
   const byPerson: Record<string, { unqualifiedCount: number; sample: string[] }> = {};
   for (const [pid, summary] of byPersonMap) byPerson[pid] = summary;
 
-  const unqualifiedMap = listUnqualifiedAssignments(orgId);
+  const unqualifiedMap = await listUnqualifiedAssignments(orgId);
   const byNode: Record<string, { personId: string; missingSkillNames: string[] }> = {};
   for (const [pid, list] of unqualifiedMap) {
     for (const entry of list) {
@@ -341,7 +356,7 @@ router.get('/recommend-for-role', async (req: Request, res: Response) => {
   const raw = String(req.query.skills || '');
   const requiredNames = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
   const limit = parseInt(String(req.query.limit || '5'), 10) || 5;
-  res.json({ success: true, data: rankPeopleByRoleSkills(orgId, requiredNames, limit) });
+  res.json({ success: true, data: await rankPeopleByRoleSkills(orgId, requiredNames, limit) });
 });
 
 /** GET /api/v1/skills/gap-report?orgId=…
@@ -354,7 +369,7 @@ router.get('/gap-report', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'orgId is required' });
     return;
   }
-  res.json({ success: true, data: orgSkillGapReport(orgId) });
+  res.json({ success: true, data: await orgSkillGapReport(orgId) });
 });
 
 export default router;

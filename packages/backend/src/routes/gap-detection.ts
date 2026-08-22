@@ -3,7 +3,8 @@ import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { dataDomains } from './data-domains';
 import { people } from './people';
-import { connections, systemIdsForConnection } from './connections';
+import { connections, connectionSystemLinks } from './connections';
+import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
 import { systems } from './systems';
 import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
 // Gap detection is a read aggregator across 7 stores; each is read through
@@ -26,6 +27,7 @@ const peopleRepo = getPeopleRepository(people);
 const connectionsRepo = getConnectionsRepository(connections);
 const systemsRepo = getSystemsRepository(systems);
 const mappingsRepo = getMappingsRepository(mappings);
+const connectionSystemLinksRepo = getConnectionSystemLinksRepository(connectionSystemLinks);
 
 const router = Router();
 
@@ -180,8 +182,12 @@ router.get('/', async (req: Request, res: Response) => {
   const orgScopedConnections = orgId
     ? filterByOrgScope(connections, orgId as string)
     : connections;
+  // Which connections have at least one linked system — read the link
+  // table through its repository (the raw array is empty in Postgres mode).
+  const allLinks = await connectionSystemLinksRepo.list();
+  const connectionsWithSystems = new Set(allLinks.map((l) => l.connectionId));
   const unassignedConnections = orgScopedConnections
-    .filter((c) => systemIdsForConnection(c.id).length === 0)
+    .filter((c) => !connectionsWithSystems.has(c.id))
     .map((c) => ({ id: c.id, name: c.name, connectionType: c.connectionType, status: c.status }));
 
   // 10. Ownerless systems — INTEGRATED systems with no business owner

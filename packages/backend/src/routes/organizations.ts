@@ -195,6 +195,18 @@ function buildTree(orgs: StoredOrg[]): any[] {
   return roots;
 }
 
+// ── Lazy repos for the two foreign stores the status-mode migration
+// mutates. require() at call time (not a top-level import) preserves
+// this file's documented circular-import avoidance: importing
+// process-catalog eagerly would pull in people → organizations while
+// this module is still mid-evaluation.
+let _processNodesRepo: Repository<any> | null = null;
+const processNodesRepo = (): Repository<any> =>
+  (_processNodesRepo ??= require('../db/process-nodes.repo').getProcessNodesRepository(require('./process-catalog').processNodes));
+let _dataDomainsRepo: Repository<any> | null = null;
+const dataDomainsRepo = (): Repository<any> =>
+  (_dataDomainsRepo ??= require('../db/data-domains.repo').getDataDomainsRepository(require('./data-domains').dataDomains));
+
 const router = Router();
 
 /** DELETE /api/v1/organizations/all — delete all organizations */
@@ -204,7 +216,7 @@ router.delete('/all', async (req: AuthenticatedRequest, res: Response) => {
     res.status(403).json({ success: false, error: 'Only super admins can delete all organizations' });
     return;
   }
-  const ids = organizations.map((o) => o.id);
+  const ids = (await orgRepo.list()).map((o) => o.id);
   const count = ids.length;
   for (const id of ids) {
     await orgRepo.delete(id);
@@ -310,7 +322,7 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
 
 /** PUT /api/v1/organizations/:id */
 router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
-  const org = organizations.find((o) => o.id === req.params.id);
+  const org = await orgRepo.get(req.params.id as string);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
   const { canAccessOrg } = accessHelpers();
   if (!canAccessOrg(req.user, org.id)) {
@@ -343,7 +355,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       res.status(400).json({ success: false, error: 'tenantSlug must be 3-64 lowercase letters, digits, or hyphens (no leading/trailing hyphen).' });
       return;
     } else {
-      const clash = organizations.find((o) => o.id !== org.id && o.tenantSlug === cleaned);
+      const clash = (await orgRepo.list()).find((o) => o.id !== org.id && o.tenantSlug === cleaned);
       if (clash) {
         res.status(409).json({ success: false, error: `Tenant slug "${cleaned}" is already in use.` });
         return;
@@ -847,7 +859,7 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
  * - simple → advanced: no migration needed (simple statuses are a subset)
  */
 router.post('/:id/status-mode', async (req: AuthenticatedRequest, res: Response) => {
-  const org = organizations.find((o) => o.id === req.params.id);
+  const org = await orgRepo.get(req.params.id as string);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
 
   const { mode } = req.body;
@@ -873,8 +885,19 @@ router.post('/:id/status-mode', async (req: AuthenticatedRequest, res: Response)
   let migrated = 0;
   const needsMigration = mode === 'simple' || mode === 'review';
   if (needsMigration) {
-    const { getDescendantOrgIds } = accessHelpers();
-    const scopeIds = new Set([org.id, ...getDescendantOrgIds(org.id)]);
+    // Compute the scope subtree from the repo-loaded org list, not the
+    // stale module array (people.getDescendantOrgIds reads that array,
+    // so it returns [] in Postgres mode and the migration would only
+    // touch the root org).
+    const allOrgs = await orgRepo.list();
+    const descendantsOf = (parentId: string): string[] => {
+      const out: string[] = [];
+      for (const child of allOrgs.filter((o) => o.parentId === parentId)) {
+        out.push(child.id, ...descendantsOf(child.id));
+      }
+      return out;
+    };
+    const scopeIds = new Set([org.id, ...descendantsOf(org.id)]);
     // Statuses that exist in advanced but neither simple nor review.
     // review understands PENDING_REVIEW natively, so leave those alone
     // when moving simple → review or vice versa. simple recognises
@@ -883,26 +906,26 @@ router.post('/:id/status-mode', async (req: AuthenticatedRequest, res: Response)
       ? new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'PENDING_REVIEW'])
       : new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED']);
 
-    // Lazy-require to avoid circular deps
-    const { processNodes } = require('./process-catalog');
-    const { saveStore: save } = require('../lib/persistence');
-    for (const node of processNodes) {
+    // Read + write through the foreign repos so the migration lands in
+    // Postgres in DB mode (a bare saveStore only rewrites the JSON store
+    // and would silently drop these updates under Postgres).
+    const nodes = await processNodesRepo().list();
+    for (const node of nodes) {
       if ((scopeIds.has(node.orgId) || (node.orgIds || []).some((id: string) => scopeIds.has(id))) && legacyStatuses.has(node.status)) {
-        node.status = 'DRAFT';
+        await processNodesRepo().update(node.id, { status: 'DRAFT' });
         migrated++;
       }
     }
-    if (migrated > 0) save('processNodes', processNodes);
 
-    const { dataDomains } = require('./data-domains');
+    const domains = await dataDomainsRepo().list();
     let domainsMigrated = 0;
-    for (const d of dataDomains) {
+    for (const d of domains) {
       if (scopeIds.has(d.orgId) && legacyStatuses.has(d.status)) {
-        d.status = 'DRAFT';
+        await dataDomainsRepo().update(d.id, { status: 'DRAFT' });
         domainsMigrated++;
       }
     }
-    if (domainsMigrated > 0) { save('dataDomains', dataDomains); migrated += domainsMigrated; }
+    if (domainsMigrated > 0) { migrated += domainsMigrated; }
   }
 
   logger.info({ orgId: org.id, oldMode, newMode: mode, migrated }, 'Status mode switched');
@@ -947,8 +970,11 @@ router.post('/import', async (req: AuthenticatedRequest, res: Response) => {
       }
     }
 
+    // Snapshot existing orgs once; reused for the name map, the
+    // pre-existing-id set, and the dedup scan below.
+    const allOrgs = await orgRepo.list();
     // Build map of existing orgs by name
-    for (const existing of organizations) {
+    for (const existing of allOrgs) {
       nameToId.set(existing.name.toLowerCase(), existing.id);
     }
 
@@ -1000,7 +1026,7 @@ router.post('/import', async (req: AuthenticatedRequest, res: Response) => {
 
     // Track which orgs existed before this import so dedup only checks
     // pre-existing records, not ones created in this batch.
-    const preExistingIds = new Set(organizations.map((o) => o.id));
+    const preExistingIds = new Set(allOrgs.map((o) => o.id));
     const newlyCreated = new Set<string>();
     const skipped: string[] = [];
 
@@ -1015,7 +1041,7 @@ router.post('/import', async (req: AuthenticatedRequest, res: Response) => {
 
       // Skip duplicates — same name + same parent, but only check
       // orgs that existed BEFORE this import (not ones created in this batch)
-      const existingDup = organizations.find(
+      const existingDup = allOrgs.find(
         (o) => preExistingIds.has(o.id) && o.name.toLowerCase() === row.name.toLowerCase() && o.parentId === pid,
       );
       if (existingDup) {
@@ -1053,7 +1079,7 @@ router.post('/import', async (req: AuthenticatedRequest, res: Response) => {
     res.status(201).json({
       success: true,
       data: created,
-      tree: buildTree(organizations),
+      tree: buildTree([...allOrgs, ...created]),
       skipped: skipped.length,
       skippedNames: skipped,
       message: skipped.length > 0

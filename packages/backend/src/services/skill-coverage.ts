@@ -1,6 +1,20 @@
 import { skills } from '../stores/skills';
 import { people } from '../routes/people';
 import { processNodes } from '../routes/process-catalog';
+import { getSkillsRepository } from '../db/skills.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+
+// Lazy repositories — read Postgres when DATABASE_URL is set, else the
+// in-memory JSON arrays. The raw imported arrays are empty in Postgres
+// mode, so every read here goes through the repo. Each helper lists
+// once and builds id-keyed Maps for the per-row lookups.
+let _skillsRepo: ReturnType<typeof getSkillsRepository> | null = null;
+const skillsRepo = () => (_skillsRepo ??= getSkillsRepository(skills));
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
+const processNodesRepo = () => (_processNodesRepo ??= getProcessNodesRepository(processNodes));
 
 // ──────────────────────────────────────────────────────────────────────────
 // skill-coverage — shared helpers for the four "value loop" surfaces
@@ -61,18 +75,23 @@ export interface UnqualifiedAssignment {
  *    - The skill-coverage column on the People table (group by personId)
  *    - The warning chip on the node panel (lookup by nodeId)
  */
-export function listUnqualifiedAssignments(orgId: string): Map<string, UnqualifiedAssignment[]> {
+export async function listUnqualifiedAssignments(orgId: string): Promise<Map<string, UnqualifiedAssignment[]>> {
+  const [allNodes, allPeople, allSkills] = await Promise.all([
+    processNodesRepo().list(), peopleRepo().list(), skillsRepo().list(),
+  ]);
+  const personById = new Map(allPeople.map((p) => [p.id, p]));
+  const skillById = new Map(allSkills.map((s) => [s.id, s]));
   const out = new Map<string, UnqualifiedAssignment[]>();
-  for (const node of processNodes) {
+  for (const node of allNodes) {
     if (node.orgId !== orgId) continue;
     if (!node.responsiblePersonId) continue;
     if (!node.requiredSkillIds || node.requiredSkillIds.length === 0) continue;
-    const person = people.find((p) => p.id === node.responsiblePersonId);
+    const person = personById.get(node.responsiblePersonId);
     if (!person) continue;
     const cov = personCoverage(person.skillIds || [], node.requiredSkillIds);
     if (cov.missing.length === 0) continue;
     const missingSkillNames = cov.missing
-      .map((id) => skills.find((s) => s.id === id)?.name || id)
+      .map((id) => skillById.get(id)?.name || id)
       .filter(Boolean);
     const entry: UnqualifiedAssignment = {
       nodeId: node.id, nodeName: node.name, level: node.level || '',
@@ -90,8 +109,8 @@ export function listUnqualifiedAssignments(orgId: string): Map<string, Unqualifi
  *  rendering the sample as a tooltip on hover so the operator gets
  *  a glanceable "5 activities — Customer onboarding, Bills payable, …"
  *  without an extra round trip. */
-export function unqualifiedSummaryByPerson(orgId: string): Map<string, { unqualifiedCount: number; sample: string[] }> {
-  const map = listUnqualifiedAssignments(orgId);
+export async function unqualifiedSummaryByPerson(orgId: string): Promise<Map<string, { unqualifiedCount: number; sample: string[] }>> {
+  const map = await listUnqualifiedAssignments(orgId);
   const out = new Map<string, { unqualifiedCount: number; sample: string[] }>();
   for (const [pid, list] of map) {
     out.set(pid, {
@@ -116,18 +135,22 @@ export interface RoleRecommendation {
  *  ratio is 0 — they'd just be noise in the recommendation panel.
  *  Returns up to `limit` people, ties broken by name for stable
  *  rendering. */
-export function rankPeopleByRoleSkills(
+export async function rankPeopleByRoleSkills(
   orgId: string,
   requiredSkillNames: string[],
   limit: number = 5,
-): RoleRecommendation[] {
+): Promise<RoleRecommendation[]> {
   if (requiredSkillNames.length === 0) return [];
+  const [allPeople, allSkills] = await Promise.all([
+    peopleRepo().list(), skillsRepo().list(),
+  ]);
+  const skillById = new Map(allSkills.map((s) => [s.id, s]));
   const requiredLower = new Set(requiredSkillNames.map((n) => n.toLowerCase()));
   const out: RoleRecommendation[] = [];
-  const orgPeople = people.filter((p) => p.orgIds?.includes(orgId));
+  const orgPeople = allPeople.filter((p) => p.orgIds?.includes(orgId));
   for (const p of orgPeople) {
     const personSkillNames = (p.skillIds || [])
-      .map((id) => skills.find((s) => s.id === id)?.name)
+      .map((id) => skillById.get(id)?.name)
       .filter((n): n is string => !!n);
     const matched = personSkillNames.filter((n) => requiredLower.has(n.toLowerCase()));
     if (matched.length === 0) continue;
@@ -162,10 +185,13 @@ export interface SkillGap {
  *  the most-painful gaps first. Skills with zero required-by count
  *  AND zero held-by count are dropped — they're noise in the
  *  catalog from neither side. */
-export function orgSkillGapReport(orgId: string): SkillGap[] {
-  const orgSkills = skills.filter((s) => s.orgId === orgId);
-  const orgPeople = people.filter((p) => p.orgIds?.includes(orgId));
-  const orgNodes = processNodes.filter((n) => n.orgId === orgId);
+export async function orgSkillGapReport(orgId: string): Promise<SkillGap[]> {
+  const [allSkills, allPeople, allNodes] = await Promise.all([
+    skillsRepo().list(), peopleRepo().list(), processNodesRepo().list(),
+  ]);
+  const orgSkills = allSkills.filter((s) => s.orgId === orgId);
+  const orgPeople = allPeople.filter((p) => p.orgIds?.includes(orgId));
+  const orgNodes = allNodes.filter((n) => n.orgId === orgId);
 
   // Counters keyed by skill id.
   const requiredCount = new Map<string, number>();

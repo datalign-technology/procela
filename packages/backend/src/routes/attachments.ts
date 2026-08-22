@@ -256,7 +256,7 @@ router.post(
 
 /** PUT /api/v1/attachments/:id — update name/description */
 router.put('/:id', async (req: Request, res: Response) => {
-  const a = attachments.find((x) => x.id === req.params.id);
+  const a = await attachmentsRepo.get(req.params.id as string);
   if (!a) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
 
   // Layer-2: a CONTRIBUTOR may only edit attachments they uploaded.
@@ -273,7 +273,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/attachments/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = attachments.find((a) => a.id === req.params.id);
+  const removed = await attachmentsRepo.get(req.params.id as string);
   if (!removed) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
 
   // Layer-2: a CONTRIBUTOR may only delete attachments they uploaded.

@@ -10,7 +10,14 @@ import { glossaryTerms } from './business-glossary';
 import { connections } from './connections';
 import logger from '../lib/logger';
 import { getSyncConnectionsRepository } from '../db/sync-connections.repo';
+import { getConnectionsRepository } from '../db/connections.repo';
 import { hasDatabase } from '../db/prisma';
+
+// Lazy repo for the saved Connection profiles — the imported `connections`
+// array is empty in Postgres mode, so resolving a connectionId must go
+// through the repository.
+let _connectionsRepo: ReturnType<typeof getConnectionsRepository> | null = null;
+const connectionsRepo = () => (_connectionsRepo ??= getConnectionsRepository(connections));
 
 // ---------------------------------------------------------------------------
 // Types
@@ -168,9 +175,9 @@ if (!hasDatabase()) {
  * credentials (apiKey or token) when the sync didn't already set one.
  * Returns the original config unchanged if the connection ref is dead.
  */
-function resolveEffectiveConfig(sc: SyncConnection): SyncConnection['config'] {
+async function resolveEffectiveConfig(sc: SyncConnection): Promise<SyncConnection['config']> {
   if (!sc.connectionId) return sc.config;
-  const conn = connections.find((c) => c.id === sc.connectionId);
+  const conn = await connectionsRepo().get(sc.connectionId);
   if (!conn) return sc.config;
 
   const merged: SyncConnection['config'] = { ...sc.config };
@@ -200,6 +207,15 @@ function isConnectionCompatible(conn: { connectionType: string }, sourceType: st
   return conn.connectionType === 'API' || conn.connectionType === 'FILE_STORAGE';
 }
 
+// NOTE: the target-entity write path below (getEntityStore → applyRow → the
+// /run and /preview handlers) is deliberately NOT repo-converted. It relies on
+// per-row sync-tracking fields (syncConnectionId / syncStatus) that have no
+// Postgres columns, so writing entities through their repos would silently drop
+// that tracking. This is the aspirational "finish it" half of the sync surface
+// (see docs/GA_TIGHTENING_AUDIT.md §F) — it needs schema work + a real driver
+// before it persists in Postgres, not just a read-path swap. The connection-
+// profile lookups (resolveEffectiveConfig, create/update validation) ARE
+// repo-backed above, since those are correct and independent of that gap.
 function getEntityStore(targetEntity: string): any[] | null {
   switch (targetEntity) {
     case 'organizations': return organizations;
@@ -435,7 +451,7 @@ router.post('/', async (req: Request, res: Response) => {
   const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, orgId, connectionId } = parsed.data;
 
   if (connectionId) {
-    const conn = connections.find((c) => c.id === connectionId);
+    const conn = await connectionsRepo().get(connectionId);
     if (!conn) {
       res.status(400).json({ success: false, error: `connectionId ${connectionId} not found` });
       return;
@@ -499,7 +515,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (connectionId === null || connectionId === '') {
       sc.connectionId = null;
     } else {
-      const conn = connections.find((c) => c.id === connectionId);
+      const conn = await connectionsRepo().get(connectionId);
       if (!conn) {
         res.status(400).json({ success: false, error: `connectionId ${connectionId} not found` });
         return;
@@ -588,7 +604,7 @@ router.post('/:id/run', async (req: Request, res: Response) => {
       simulated = true;
     } else {
       // CSV_URL or JSON_URL — attempt real fetch
-      rows = await fetchUrlRows(sc.sourceType, resolveEffectiveConfig(sc));
+      rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown fetch error';
@@ -686,7 +702,7 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
       rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
       simulated = true;
     } else {
-      rows = await fetchUrlRows(sc.sourceType, resolveEffectiveConfig(sc));
+      rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown fetch error';

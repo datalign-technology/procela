@@ -188,7 +188,7 @@ describe('skills — uniqueness + delete cascade', () => {
       assert.strictEqual(del.body.cascade.nodesTouched, 0);
     });
 
-    it('sets requiredSkillIds to undefined when the last required skill goes', async () => {
+    it('clears requiredSkillIds when the last required skill goes', async () => {
       const created = await request(port, 'POST', '/skills', { orgId: orgA, name: 'Only Skill' });
       const skillId = created.body.data.id;
       const now = new Date().toISOString();
@@ -201,7 +201,10 @@ describe('skills — uniqueness + delete cascade', () => {
       });
       await request(port, 'DELETE', `/skills/${skillId}`);
       const n = processNodes.find((x: any) => x.id === nodeId);
-      assert.strictEqual(n.requiredSkillIds, undefined);
+      // The deleted id is swept; the node ends with no required skills. The
+      // cascade now writes an empty array (not undefined) so the same code
+      // path clears the M2M in Postgres mode too.
+      assert.deepStrictEqual(n.requiredSkillIds, []);
     });
   });
 });

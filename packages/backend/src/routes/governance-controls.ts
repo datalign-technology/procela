@@ -1,13 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import { governancePolicies } from './governance-policies';
 import { people } from './people';
 import logger from '../lib/logger';
 import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
 
 export interface StoredGovernanceControl {
   id: string;
@@ -35,6 +36,17 @@ let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
 const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
 let _policiesRepo: ReturnType<typeof getGovernancePoliciesRepository> | null = null;
 const policiesRepo = () => (_policiesRepo ??= getGovernancePoliciesRepository(governancePolicies));
+// processNodes store is lazy-required (breaks the controls ↔ catalog import
+// cycle, matching how the delete cascade already pulled the array).
+let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
+const processNodesRepo = () => {
+  if (!_processNodesRepo) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
+    _processNodesRepo = getProcessNodesRepository(processNodes);
+  }
+  return _processNodesRepo;
+};
 
 async function generateCode(): Promise<string> {
   const seq = (await governanceControlsRepo.list()).length + 1;
@@ -179,17 +191,16 @@ router.delete('/:id', async (req: Request, res: Response) => {
   // graph (catalog already lazy-requires controls the other way).
   let processNodesTouched = 0;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
-    for (const n of processNodes) {
+    const all = await processNodesRepo().list();
+    for (const n of all) {
       if (!n.controlIds || n.controlIds.length === 0) continue;
       const next = n.controlIds.filter((id) => id !== removed.id);
       if (next.length !== n.controlIds.length) {
         n.controlIds = next.length > 0 ? next : undefined;
+        await processNodesRepo().update(n.id, n);
         processNodesTouched++;
       }
     }
-    if (processNodesTouched > 0) saveStore('processNodes', processNodes);
   } catch (err) {
     logger.warn({ err, controlId: removed.id }, 'Failed to cascade control delete to activities');
   }

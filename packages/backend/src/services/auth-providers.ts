@@ -10,6 +10,13 @@ import { resolveEnvSecretSync, encryptSecret, decryptSecret, isEncrypted } from 
 import { loadStore } from '../lib/persistence';
 import { settingsRepo } from '../stores/app-settings';
 import { getOidcProvidersRepository } from '../db/oidc-providers.repo';
+import { getPeopleRepository } from '../db/people.repo';
+
+// Lazy people repository — reads Postgres when DATABASE_URL is set,
+// else the in-memory JSON array. The raw `people` array is empty in
+// Postgres mode, so credential lookups must go through the repo.
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
 
 // ---------------------------------------------------------------------------
 // Auth Provider Abstraction
@@ -102,7 +109,9 @@ export class LocalAuthProvider implements AuthProvider {
       return { success: false, error: 'Email and password are required' };
     }
 
-    const person = people.find((p) => p.email.toLowerCase() === email.toLowerCase());
+    const person = (await peopleRepo().list()).find(
+      (p) => p.email.toLowerCase() === email.toLowerCase(),
+    );
 
     // Deactivated users can't sign in even with a valid password.
     // Treat as "invalid credentials" so an attacker can't distinguish

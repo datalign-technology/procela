@@ -113,8 +113,8 @@ describe('DataAssetBinding routes', () => {
     assert.strictEqual(res.body.data[0].isPrimary, true);
   });
 
-  it('getPrimaryBinding returns the active binding', () => {
-    const b = getPrimaryBinding(seededAssetId);
+  it('getPrimaryBinding returns the active binding', async () => {
+    const b = await getPrimaryBinding(seededAssetId);
     assert.ok(b);
     assert.strictEqual(b.connectionId, seededConnId);
   });

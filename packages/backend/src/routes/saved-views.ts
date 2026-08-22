@@ -54,7 +54,7 @@ router.get('/', async (req: Request, res: Response) => {
     return;
   }
   const effectiveOrgId = orgId || DEV_ORG_ID;
-  const list = savedViews
+  const list = (await savedViewsRepo.list())
     .filter((v) => v.orgId === effectiveOrgId && v.pageKey === pageKey)
     // Stable order: newest first so the most recently saved view is at the top.
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -76,7 +76,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   // Soft uniqueness: a user can't have two views with the same name on
   // the same page. This stops typos producing accidental duplicates.
-  const collision = savedViews.find((v) =>
+  const collision = (await savedViewsRepo.list()).find((v) =>
     v.orgId === effectiveOrgId && v.pageKey === pageKey && v.ownerId === ownerId && v.name.trim().toLowerCase() === name.trim().toLowerCase()
   );
   if (collision) {
@@ -104,7 +104,7 @@ router.post('/', async (req: Request, res: Response) => {
 /** PATCH /api/v1/saved-views/:id — rename and/or update filters. Only the
  *  owner can modify their view. */
 router.patch('/:id', async (req: Request, res: Response) => {
-  const v = savedViews.find((v) => v.id === req.params.id);
+  const v = await savedViewsRepo.get(String(req.params.id));
   if (!v) { res.status(404).json({ success: false, error: 'Saved view not found' }); return; }
   const editorId = (req as any).user?.sub || null;
   if (v.ownerId && editorId && v.ownerId !== editorId) {
@@ -125,7 +125,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/saved-views/:id — only the owner can delete. */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const v = savedViews.find((v) => v.id === req.params.id);
+  const v = await savedViewsRepo.get(String(req.params.id));
   if (!v) { res.status(404).json({ success: false, error: 'Saved view not found' }); return; }
   const editorId = (req as any).user?.sub || null;
   if (v.ownerId && editorId && v.ownerId !== editorId) {

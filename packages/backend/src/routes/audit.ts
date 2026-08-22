@@ -6,6 +6,27 @@ import { systems } from './systems';
 import { dataAssets } from './data-assets';
 import { processNodes } from './process-catalog';
 import { comments } from './comments';
+import { getPeopleRepository } from '../db/people.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getCommentsRepository } from '../db/comments.repo';
+
+// Lazy repo accessors — the raw imported arrays above are empty in
+// Postgres mode, so the name-resolution helpers must read through the
+// repositories instead. Each handler pre-lists the stores it needs into
+// id→row Maps (see buildNameMaps) and passes them into the helpers, so a
+// helper called per-row never touches the repos in a loop.
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _systemsRepo: ReturnType<typeof getSystemsRepository> | null = null;
+const systemsRepo = () => (_systemsRepo ??= getSystemsRepository(systems));
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
+let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
+const processNodesRepo = () => (_processNodesRepo ??= getProcessNodesRepository(processNodes));
+let _commentsRepo: ReturnType<typeof getCommentsRepository> | null = null;
+const commentsRepo = () => (_commentsRepo ??= getCommentsRepository(comments));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AUDIT LOG ROUTE
@@ -22,30 +43,60 @@ import { comments } from './comments';
 
 const router = Router();
 
+/** Id→row lookup maps for the stores the name resolvers need. Built once
+ *  per request from the repositories so name resolution is correct in
+ *  Postgres mode (where the raw arrays are empty) without a per-row read. */
+interface NameMaps {
+  systems: Map<string, { name?: string }>;
+  dataAssets: Map<string, { name?: string }>;
+  people: Map<string, { name?: string }>;
+  processNodes: Map<string, { name?: string }>;
+  comments: Map<string, { entityType: string; entityId: string }>;
+}
+
+/** Pre-list the stores the audit feed enriches against into id→row Maps.
+ *  Called once per handler; the Maps are passed into the per-row helpers. */
+async function buildNameMaps(): Promise<NameMaps> {
+  const [allSystems, allDataAssets, allPeople, allProcessNodes, allComments] = await Promise.all([
+    systemsRepo().list(),
+    dataAssetsRepo().list(),
+    peopleRepo().list(),
+    processNodesRepo().list(),
+    commentsRepo().list(),
+  ]);
+  return {
+    systems: new Map(allSystems.map((s) => [s.id, s])),
+    dataAssets: new Map(allDataAssets.map((a) => [a.id, a])),
+    people: new Map(allPeople.map((p) => [p.id, p])),
+    processNodes: new Map(allProcessNodes.map((n) => [n.id, n])),
+    comments: new Map(allComments.map((c) => [c.id, c])),
+  };
+}
+
 /** Resolve a display name for an audited entity. Returns null if we
  *  can't find a record (e.g. the entity was deleted, or the type is
  *  one we don't have a dedicated store for). */
-function entityName(entityType: string, entityId: string): string | null {
+function entityName(entityType: string, entityId: string, maps: NameMaps): string | null {
   switch (entityType.toLowerCase()) {
-    case 'system':         return systems.find((s) => s.id === entityId)?.name ?? null;
-    case 'dataasset':      return dataAssets.find((a) => a.id === entityId)?.name ?? null;
-    case 'person':         return people.find((p) => p.id === entityId)?.name ?? null;
-    case 'processnode':    return processNodes.find((n) => n.id === entityId)?.name ?? null;
+    case 'system':         return maps.systems.get(entityId)?.name ?? null;
+    case 'dataasset':      return maps.dataAssets.get(entityId)?.name ?? null;
+    case 'person':         return maps.people.get(entityId)?.name ?? null;
+    case 'processnode':    return maps.processNodes.get(entityId)?.name ?? null;
     case 'comment': {
       // For comment events, return the parent entity's name so the feed
       // shows what was discussed, not the comment id.
-      const c = comments.find((c) => c.id === entityId);
+      const c = maps.comments.get(entityId);
       if (!c) return null;
-      const parentName = entityName(c.entityType, c.entityId);
+      const parentName = entityName(c.entityType, c.entityId, maps);
       return parentName ? `comment on ${parentName}` : `comment on ${c.entityType}`;
     }
     default:               return null;
   }
 }
 
-function userName(userId: string | null): string | null {
+function userName(userId: string | null, peopleMap: NameMaps['people']): string | null {
   if (!userId) return null;
-  return people.find((p) => p.id === userId)?.name ?? null;
+  return peopleMap.get(userId)?.name ?? null;
 }
 
 /** GET /api/v1/audit — list audit entries with optional filters
@@ -79,10 +130,11 @@ router.get('/', async (req: Request, res: Response) => {
     .slice(0, max);
 
   // Enrich with display names so the client doesn't need per-row joins.
+  const maps = await buildNameMaps();
   const enriched = entries.map((e) => ({
     ...e,
-    entityName: entityName(e.entityType, e.entityId),
-    userName: userName(e.userId),
+    entityName: entityName(e.entityType, e.entityId, maps),
+    userName: userName(e.userId, maps.people),
   }));
 
   res.json({ success: true, data: enriched });
@@ -113,15 +165,16 @@ router.get('/export.csv', async (req: Request, res: Response) => {
     if (Number.isFinite(n)) entries = entries.slice(0, n);
   }
 
+  const maps = await buildNameMaps();
   const headers = ['timestamp', 'orgId', 'userId', 'userName', 'entityType', 'entityId', 'entityName', 'action', 'entryHash'];
   const rows = entries.map((e) => [
     e.timestamp,
     e.orgId || '',
     e.userId || '',
-    userName(e.userId) || '',
+    userName(e.userId, maps.people) || '',
     e.entityType,
     e.entityId,
-    entityName(e.entityType, e.entityId) || '',
+    entityName(e.entityType, e.entityId, maps) || '',
     e.action,
     (e as any).entryHash || '',
   ]);

@@ -42,9 +42,10 @@ router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
+  const all = await maturitySnapshotsRepo.list();
   let results = oid
-    ? maturitySnapshots.filter((s) => s.orgId === oid)
-    : [...maturitySnapshots];
+    ? all.filter((s) => s.orgId === oid)
+    : all;
 
   // Sort by timestamp ascending (oldest first, so charts read left-to-right)
   results.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
@@ -84,15 +85,16 @@ router.delete('/all', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
+  const all = await maturitySnapshotsRepo.list();
   if (oid) {
     // Remove only snapshots for this org
-    const victims = maturitySnapshots.filter((s) => s.orgId === oid).map((s) => s.id);
+    const victims = all.filter((s) => s.orgId === oid).map((s) => s.id);
     for (const id of victims) {
       await maturitySnapshotsRepo.delete(id);
     }
     res.json({ success: true, removed: victims.length });
   } else {
-    const ids = maturitySnapshots.map((s) => s.id);
+    const ids = all.map((s) => s.id);
     for (const id of ids) {
       await maturitySnapshotsRepo.delete(id);
     }
