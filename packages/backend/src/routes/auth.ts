@@ -19,6 +19,7 @@ import {
 } from '../services/login-challenge';
 import { mintPendingMfa } from '../services/pending-mfa';
 import { encryptSecret } from '../services/crypto.service';
+import { resolveProvisioningTarget, effectiveSsoRole, primaryOrgId } from '../lib/provisioning';
 import {
   getAuthProvider,
   getAuthConfig,
@@ -574,14 +575,20 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     let provisioned = false;
     if (!person) {
+      // Where does a brand-new federated user land? Resolve the org + default
+      // role from the SSO provisioning config (email-domain map → primary org),
+      // and let a real IdP-emitted role win over the default. Previously this
+      // was hardcoded to the phantom dev org + VIEWER, so every SSO user piled
+      // into the wrong tenant at least privilege.
+      const target = resolveProvisioningTarget(user.email);
       const now = new Date().toISOString();
       person = {
         id: uuid(),
-        orgIds: [DEV_ORG_ID],
-        accessibleOrgIds: [DEV_ORG_ID],
+        orgIds: [target.orgId],
+        accessibleOrgIds: [target.orgId],
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: effectiveSsoRole(user.role, target.role),
         title: '',
         skillIds: [],
         createdAt: now,
@@ -591,7 +598,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       provisioned = true;
     }
 
-    const orgId = person.orgIds[0] || DEV_ORG_ID;
+    const orgId = person.orgIds[0] || primaryOrgId();
     const role = getRoleForOrg(person, orgId) || user.role;
     // Capture the OIDC providerId + id_token on the refresh-token
     // entry so /auth/logout can drive RP-initiated logout. The
@@ -678,14 +685,20 @@ router.post('/saml/acs', async (req: Request, res: Response) => {
     }
     let provisioned = false;
     if (!person) {
+      // Where does a brand-new federated user land? Resolve the org + default
+      // role from the SSO provisioning config (email-domain map → primary org),
+      // and let a real IdP-emitted role win over the default. Previously this
+      // was hardcoded to the phantom dev org + VIEWER, so every SSO user piled
+      // into the wrong tenant at least privilege.
+      const target = resolveProvisioningTarget(user.email);
       const now = new Date().toISOString();
       person = {
         id: uuid(),
-        orgIds: [DEV_ORG_ID],
-        accessibleOrgIds: [DEV_ORG_ID],
+        orgIds: [target.orgId],
+        accessibleOrgIds: [target.orgId],
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: effectiveSsoRole(user.role, target.role),
         title: '',
         skillIds: [],
         createdAt: now,
@@ -695,7 +708,7 @@ router.post('/saml/acs', async (req: Request, res: Response) => {
       provisioned = true;
     }
 
-    const orgId = person.orgIds[0] || DEV_ORG_ID;
+    const orgId = person.orgIds[0] || primaryOrgId();
     const role = getRoleForOrg(person, orgId) || user.role;
     const refresh = await createRefreshToken(person.id, {
       samlNameID: nameID,

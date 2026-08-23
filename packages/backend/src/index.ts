@@ -43,6 +43,7 @@ import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import { initAuthProviders, assertAuthSafeForProduction } from './services/auth-providers';
 import { initOrgScope } from './lib/org-scope';
+import { runBootstrap } from './services/bootstrap.service';
 import scimRouter from './routes/scim';
 import aiRouter from './routes/ai';
 import { enforceAiBudget } from './middleware/ai-budget';
@@ -513,13 +514,21 @@ const server = app.listen(PORT, () => {
       logger.error({ err: err.message }, 'FATAL: unsafe auth configuration — refusing to serve traffic');
       process.exit(1);
     });
-  // Hydrate the org-scope cache from the repo so visibility filtering is
-  // correct in Postgres mode (PR 4). No-op in JSON mode.
-  initOrgScope().catch((err) => logger.error({ err }, 'initOrgScope failed'));
-  // Hydrate the people cache so the sync access-control helpers
-  // (getVisibleOrgIds / canAccessOrg) see PG people in Postgres mode
-  // (PR 9b.11). No-op in JSON mode.
-  initPeopleCache().catch((err) => logger.error({ err }, 'initPeopleCache failed'));
+  // First-run bootstrap (no-op unless BOOTSTRAP_SUPER_ADMIN_EMAIL is set):
+  // ensure the primary org + Super Admin exist on a clean database. Runs
+  // BEFORE the org-scope / people caches hydrate so those caches pick up the
+  // bootstrapped rows in Postgres mode.
+  runBootstrap()
+    .catch((err) => logger.error({ err }, 'runBootstrap failed'))
+    .finally(() => {
+      // Hydrate the org-scope cache from the repo so visibility filtering is
+      // correct in Postgres mode (PR 4). No-op in JSON mode.
+      initOrgScope().catch((err) => logger.error({ err }, 'initOrgScope failed'));
+      // Hydrate the people cache so the sync access-control helpers
+      // (getVisibleOrgIds / canAccessOrg) see PG people in Postgres mode
+      // (PR 9b.11). No-op in JSON mode.
+      initPeopleCache().catch((err) => logger.error({ err }, 'initPeopleCache failed'));
+    });
   // Hydrate the process-catalog node cache + ID counters so the synchronous
   // tree helpers (findNode / getChildren / getDescendants) see PG nodes in
   // Postgres mode (PR 9b.19). No-op in JSON mode.
