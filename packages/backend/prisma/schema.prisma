@@ -1328,6 +1328,8 @@ model SyncConnection {
   targetEntity   String
   sourceType     String
   connectionId   String?  @db.Uuid
+  executionMode  String   @default("DIRECT")
+  connectorId    String?  @db.Uuid
   config         Json     @default("{}")
   fieldMapping   Json     @default("{}")
   matchKey       String
@@ -1338,6 +1340,7 @@ model SyncConnection {
   updatedAt      DateTime @updatedAt
 
   @@index([orgId])
+  @@index([connectorId])
   @@map("sync_connections")
 }
 

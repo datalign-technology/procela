@@ -164,3 +164,49 @@ export interface ReportResponse {
   };
   error?: string;
 }
+
+// ── Agent-push row sync ──────────────────────────────────────────────────
+// The backend defines AGENT-mode syncs and hands the connector a job spec;
+// the connector runs the query against a local source and pushes the rows
+// back. Only catalog/table coordinates + the mapping cross the wire inbound;
+// row values only ever flow outbound to Procela.
+
+export interface AgentSyncJob {
+  /** SyncConnection id — the push target. */
+  id: string;
+  name: string;
+  /** organizations | people | systems | business-glossary. */
+  targetEntity: string;
+  matchKey: string;
+  fieldMapping: Record<string, string>;
+  dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
+  schema?: string;
+  table?: string;
+  /** Raw SELECT override; when set, table/schema/limit are ignored. */
+  query?: string;
+  limit?: number;
+  /** Which configured source (by `name`) to run against. When absent the
+   *  agent uses its first source whose engine matches `dbType`. */
+  sourceName?: string;
+  intervalMinutes: number;
+  nextRunAt: string | null;
+}
+
+export interface SyncJobsResponse {
+  success: boolean;
+  data?: AgentSyncJob[];
+  error?: string;
+}
+
+export interface SyncPushResponse {
+  success: boolean;
+  data?: {
+    created: number;
+    updated: number;
+    skipped: number;
+    missingFromSource: number;
+    errors: number;
+    errorMessages: string[];
+  };
+  error?: string;
+}

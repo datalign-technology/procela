@@ -270,9 +270,24 @@ source records a failed run and flips to `ERROR` — no silent mock fallback.
 Simulation is now an **explicit** opt-in (`config.sampleData = true`), surfaced
 in the wizard as a "use sample data" toggle, so seeded demos still work. Pure
 SQL/normalization unit tests plus a live-Postgres end-to-end (real table →
-real rows) and a fail-loud test cover it. Still deferred: the on-prem
-**agent-push** path for firewalled DBs (row extraction through
-`packages/connector`) and the Oracle engine.
+real rows) and a fail-loud test cover it.
+
+**§F agent-push outcome — done.** The on-prem connector can now sync **row
+data**, not just discovery metadata. A sync's `executionMode` is `DIRECT`
+(cloud pulls) or `AGENT` (connector pushes); an `AGENT` sync binds to a
+connector. The connector polls `GET /connectors/sync-jobs` (its due jobs,
+scheduled server-side), runs each query against its LOCAL source
+(`packages/connector/src/sync.ts`, reusing its `pg`/`mysql2`/`mssql`
+drivers), and `POST`s the rows to `/connectors/sync-jobs/:id/push` over
+outbound HTTPS — no inbound access to the customer network. The push reuses
+the same `applySyncRows` (upsert + missing-from-source + schedule advance) as a
+direct run, so an agent sync behaves identically once rows arrive. Auth is the
+existing connector token (`requireConnectorToken`); a connector can only fetch
+and push its own org's assigned syncs. The direct auto-runner skips `AGENT`
+syncs. The wizard offers the direct-vs-connector choice with a connector
+picker. Covered by connector unit tests and live-Postgres tests (job fetch,
+push persistence, token auth, cross-connector isolation, auto-runner skip).
+Still deferred: the **Oracle** engine (both direct and agent paths).
 
 ---
 

@@ -16,7 +16,7 @@
 
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 
 import { hasDatabase } from '../db/prisma';
 import { prismaOrganizationsRepository } from '../db/organizations.repo';
@@ -84,6 +84,7 @@ import govProgramRouter from '../routes/governance-program';
 import savedViewsRouter from '../routes/saved-views';
 import tagsRouter from '../routes/tags';
 import syncConnectionsRouter, { tickSyncScheduler } from '../routes/sync-connections';
+import connectorSyncRouter from '../routes/connector-sync';
 
 // Lazy-require the Prisma client so this file doesn't blow up
 // module-load when Prisma hasn't been generated (local dev without
@@ -1149,6 +1150,135 @@ suite('live-db business flows', () => {
     } finally {
       await new Promise((r) => server.close(() => r(null)));
     }
+  });
+
+  it('sync agent-push: a connector fetches its due job and pushes rows that persist, with auth + ownership enforced', async () => {
+    const { orgId } = await seedFixture();
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+
+    // A paired connector with a known token (backend stores only the hash).
+    const token = 'pct_' + 'a'.repeat(96);
+    const connectors = prismaRepo(prismaConnectorsRepository);
+    const connectorId = randomUUID();
+    await connectors.create({
+      id: connectorId, orgId, name: 'On-prem agent', tokenHash: createHash('sha256').update(token).digest('hex'),
+      pairingCode: null, pairingCodeExpiresAt: null, systemIds: [], lastHeartbeatAt: null,
+      agentVersion: 'test/1.0', status: 'ONLINE', createdAt: nowIso, updatedAt: nowIso,
+    } as never);
+
+    // A second connector (its own token) to prove ownership isolation.
+    const otherToken = 'pct_' + 'b'.repeat(96);
+    await connectors.create({
+      id: randomUUID(), orgId, name: 'Other agent', tokenHash: createHash('sha256').update(otherToken).digest('hex'),
+      pairingCode: null, pairingCodeExpiresAt: null, systemIds: [], lastHeartbeatAt: null,
+      agentVersion: 'test/1.0', status: 'ONLINE', createdAt: nowIso, updatedAt: nowIso,
+    } as never);
+
+    // An AGENT-mode sync bound to the first connector, due now.
+    const sync = prismaRepo(prismaSyncConnectionsRepository);
+    const scId = randomUUID();
+    await sync.create({
+      id: scId, orgId, name: 'Agent systems sync', targetEntity: 'systems',
+      sourceType: 'DATABASE', connectionId: null,
+      executionMode: 'AGENT', connectorId,
+      config: { dbType: 'POSTGRESQL', schema: 'public', table: 'hr_systems' },
+      fieldMapping: { name: 'sys_name', description: 'sys_desc' }, matchKey: 'name',
+      schedule: { enabled: true, intervalMinutes: 60, lastRunAt: null, nextRunAt: new Date(now - 60_000).toISOString() },
+      status: 'ACTIVE', lastSyncResult: null, createdAt: nowIso, updatedAt: nowIso,
+    } as never);
+
+    const app = express();
+    app.use(express.json());
+    app.use('/connectors', connectorSyncRouter);
+    const server = app.listen(0);
+    await new Promise((r) => server.once('listening', () => r(null)));
+    const port = (server.address() as AddressInfo).port;
+    const base = `http://127.0.0.1:${port}/connectors`;
+    const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+    try {
+      // No token / bad token → 401.
+      assert.strictEqual((await fetch(`${base}/sync-jobs`)).status, 401);
+      assert.strictEqual((await fetch(`${base}/sync-jobs`, { headers: auth('pct_wrong') })).status, 401);
+
+      // The connector sees exactly its due job.
+      const jobsRes = await fetch(`${base}/sync-jobs`, { headers: auth(token) });
+      assert.strictEqual(jobsRes.status, 200);
+      const jobs = (await jobsRes.json()) as any;
+      assert.strictEqual(jobs.data.length, 1);
+      assert.strictEqual(jobs.data[0].id, scId);
+      assert.strictEqual(jobs.data[0].table, 'hr_systems');
+      assert.strictEqual(jobs.data[0].targetEntity, 'systems');
+
+      // The other connector sees no jobs (isolation).
+      const otherJobs = (await (await fetch(`${base}/sync-jobs`, { headers: auth(otherToken) })).json()) as any;
+      assert.strictEqual(otherJobs.data.length, 0);
+
+      // The other connector may NOT push to a sync it doesn't own → 403.
+      const forbidden = await fetch(`${base}/sync-jobs/${scId}/push`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...auth(otherToken) },
+        body: JSON.stringify({ rows: [{ sys_name: 'X', sys_desc: 'y' }] }),
+      });
+      assert.strictEqual(forbidden.status, 403);
+
+      // The owning connector pushes rows it read locally → they persist.
+      const pushRes = await fetch(`${base}/sync-jobs/${scId}/push`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...auth(token) },
+        body: JSON.stringify({ rows: [
+          { sys_name: 'Grid GIS', sys_desc: 'network map' },
+          { sys_name: 'Meter Data', sys_desc: 'AMI readings' },
+        ] }),
+      });
+      assert.strictEqual(pushRes.status, 200);
+      const push = (await pushRes.json()) as any;
+      assert.strictEqual(push.success, true);
+      assert.strictEqual(push.data.created, 2);
+      assert.strictEqual(push.data.errors, 0);
+
+      const systemsRepo = prismaRepo(prismaSystemsRepository);
+      const names = (await systemsRepo.list({ orgId }))
+        .filter((s: any) => s.syncConnectionId === scId).map((s: any) => s.name).sort();
+      assert.deepStrictEqual(names, ['Grid GIS', 'Meter Data']);
+
+      // The push advanced the schedule (server-authoritative scheduling).
+      const after = await sync.get(scId);
+      assert.ok(after?.schedule?.lastRunAt, 'lastRunAt set by push');
+      assert.ok(new Date(after!.schedule.nextRunAt!).getTime() > now, 'nextRunAt advanced');
+
+      // Now that nextRunAt is in the future, the job is no longer "due".
+      const jobsAfter = (await (await fetch(`${base}/sync-jobs`, { headers: auth(token) })).json()) as any;
+      assert.strictEqual(jobsAfter.data.length, 0, 'job not due after push advanced its schedule');
+    } finally {
+      await new Promise((r) => server.close(() => r(null)));
+    }
+  });
+
+  it('sync auto-runner: AGENT syncs are skipped by the direct tick (agent drives them)', async () => {
+    const { orgId } = await seedFixture();
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+
+    // A due AGENT sync with a deliberately unreachable direct config: if the
+    // tick wrongly direct-ran it, the fail-loud path would flip it to ERROR.
+    const sync = prismaRepo(prismaSyncConnectionsRepository);
+    const scId = randomUUID();
+    await sync.create({
+      id: scId, orgId, name: 'Agent-only sync', targetEntity: 'systems',
+      sourceType: 'DATABASE', connectionId: null,
+      executionMode: 'AGENT', connectorId: randomUUID(),
+      config: { dbType: 'POSTGRESQL', host: '127.0.0.1', port: 1, database: 'nope', table: 't' },
+      fieldMapping: { name: 'n' }, matchKey: 'name',
+      schedule: { enabled: true, intervalMinutes: 60, lastRunAt: null, nextRunAt: new Date(now - 60_000).toISOString() },
+      status: 'ACTIVE', lastSyncResult: null, createdAt: nowIso, updatedAt: nowIso,
+    } as never);
+
+    await tickSyncScheduler();
+    // Give any (erroneously dispatched) run a moment to record its failure.
+    await new Promise((r) => setTimeout(r, 200));
+
+    const after = await sync.get(scId);
+    assert.strictEqual(after?.status, 'ACTIVE', 'AGENT sync was not direct-run (still ACTIVE, not ERROR)');
+    assert.strictEqual(after?.schedule?.lastRunAt, null, 'AGENT sync was not run by the tick');
   });
 
   it('settings: AppSetting set → get round-trips a JSON value through Postgres', async () => {

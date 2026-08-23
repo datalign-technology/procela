@@ -22,6 +22,8 @@ type PrismaSyncConnectionRow = {
   targetEntity: string;
   sourceType: string;
   connectionId: string | null;
+  executionMode?: string | null;
+  connectorId?: string | null;
   config: unknown;
   fieldMapping: unknown;
   matchKey: string;
@@ -48,6 +50,8 @@ function fromPrisma(r: PrismaSyncConnectionRow): SyncConnection {
     targetEntity: r.targetEntity as SyncConnection['targetEntity'],
     sourceType: r.sourceType as SyncConnection['sourceType'],
     connectionId: r.connectionId,
+    executionMode: (r.executionMode ?? 'DIRECT') as SyncConnection['executionMode'],
+    connectorId: r.connectorId ?? null,
     config: (r.config ?? {}) as SyncConnection['config'],
     fieldMapping: (r.fieldMapping ?? {}) as SyncConnection['fieldMapping'],
     matchKey: r.matchKey,
@@ -69,6 +73,8 @@ function toPrismaData(row: Partial<SyncConnection>): Record<string, unknown> {
   if (row.targetEntity !== undefined) d.targetEntity = row.targetEntity;
   if (row.sourceType !== undefined) d.sourceType = row.sourceType;
   if (row.connectionId !== undefined) d.connectionId = row.connectionId;
+  if (row.executionMode !== undefined) d.executionMode = row.executionMode;
+  if (row.connectorId !== undefined) d.connectorId = row.connectorId;
   if (row.config !== undefined) d.config = row.config;
   if (row.fieldMapping !== undefined) d.fieldMapping = row.fieldMapping;
   if (row.matchKey !== undefined) d.matchKey = row.matchKey;
