@@ -477,3 +477,46 @@ variable "github_oidc_provider_arn" {
   description = "ARN of an EXISTING GitHub OIDC provider in this account (token.actions.githubusercontent.com). Leave empty to have this module create it — but an account may only have one, so set this if it already exists."
   default     = ""
 }
+
+# ── ECS service autoscaling ─────────────────────────────────────────────────
+# Opt-in. Registers the backend service with Application Auto Scaling and scales
+# the task count on load (target tracking). Off by default: enabling it forces
+# at least autoscaling_min_tasks running, and the max should be sized against
+# the RDS connection budget (more tasks = more Prisma pools = more DB
+# connections) — see the runbook.
+
+variable "enable_autoscaling" {
+  type        = bool
+  description = "Autoscale the ECS backend service on CPU (and, optionally, ALB requests-per-target)."
+  default     = false
+}
+
+variable "autoscaling_min_tasks" {
+  type        = number
+  description = "Minimum backend tasks when autoscaling. 2 keeps a task in each AZ for HA."
+  default     = 2
+}
+
+variable "autoscaling_max_tasks" {
+  type        = number
+  description = "Maximum backend tasks. Size against RDS max_connections: max_tasks x Prisma-pool must stay under it (consider RDS Proxy for high fan-out)."
+  default     = 6
+}
+
+variable "autoscaling_cpu_target" {
+  type        = number
+  description = "Target average ECS CPU utilization (%) the scaler holds by adding/removing tasks."
+  default     = 60
+}
+
+variable "autoscaling_enable_request_scaling" {
+  type        = bool
+  description = "Also scale on ALB request-count-per-target (better for I/O-bound load than CPU alone). Uses autoscaling_request_target."
+  default     = true
+}
+
+variable "autoscaling_request_target" {
+  type        = number
+  description = "Target ALB requests per task per minute before adding tasks. Only used when autoscaling_enable_request_scaling = true."
+  default     = 1000
+}

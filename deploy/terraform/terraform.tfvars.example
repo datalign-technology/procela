@@ -111,6 +111,17 @@ mail_from   = "Procela <noreply@procela.io>"
 # redis_num_nodes          = 2
 # redis_transit_encryption = true
 #
+# --- ECS autoscaling — OPT-IN. Scales backend tasks on CPU (+ optional ALB
+#     requests/target). Size max_tasks against RDS max_connections: max_tasks x
+#     the Prisma pool must stay under it (or front RDS with RDS Proxy). Turning
+#     this on forces at least autoscaling_min_tasks running.
+# enable_autoscaling                 = true
+# autoscaling_min_tasks              = 2
+# autoscaling_max_tasks              = 6
+# autoscaling_cpu_target             = 60
+# autoscaling_enable_request_scaling = true
+# autoscaling_request_target         = 1000   # ALB requests / task / minute
+#
 # --- DB secret rotation — OPT-IN (deploy the AWS SAR Postgres rotation Lambda first)
 # enable_db_secret_rotation = true
 # db_rotation_lambda_arn    = "arn:aws:lambda:us-east-1:123456789012:function:SecretsManagerRDSPostgreSQLRotation"
