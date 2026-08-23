@@ -25,6 +25,10 @@ export interface StoredGlossaryTerm {
   exampleValues: string;
   businessRules: string;
   sourceOfTruth: string;
+  // Data-sync tracking — set by the sync engine when this row was created or
+  // updated from a SyncConnection source. Soft reference; absent when unsynced.
+  syncConnectionId?: string | null;
+  syncStatus?: string | null;
   createdAt: string;
   updatedAt: string;
 }

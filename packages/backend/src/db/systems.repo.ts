@@ -39,6 +39,8 @@ type PrismaSystemRow = {
   connectivity: string | null;
   ownerPersonId: string | null;
   deputyOwnerId: string | null;
+  syncConnectionId?: string | null;
+  syncStatus?: string | null;
   createdAt: Date;
   updatedAt: Date;
   custodians?: Array<{ personId: string }>;
@@ -81,6 +83,8 @@ function fromPrisma(r: PrismaSystemRow): StoredSystem {
     ...(r.custodians && r.custodians.length > 0
       ? { custodianIds: r.custodians.map((c) => c.personId) }
       : {}),
+    syncConnectionId: r.syncConnectionId ?? null,
+    syncStatus: r.syncStatus ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -100,6 +104,8 @@ function toPrismaData(row: Partial<StoredSystem>): Record<string, unknown> {
   if (row.connectivity !== undefined) data.connectivity = row.connectivity ?? null;
   if (row.ownerPersonId !== undefined) data.ownerPersonId = row.ownerPersonId ?? null;
   if (row.deputyOwnerId !== undefined) data.deputyOwnerId = row.deputyOwnerId ?? null;
+  if (row.syncConnectionId !== undefined) data.syncConnectionId = row.syncConnectionId;
+  if (row.syncStatus !== undefined) data.syncStatus = row.syncStatus;
   if (row.createdAt !== undefined) data.createdAt = new Date(row.createdAt);
   // updatedAt is Prisma-managed via @updatedAt. custodianIds is
   // handled by the join-table rewrite in update(), not here.

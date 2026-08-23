@@ -11,6 +11,11 @@ import { connections } from './connections';
 import logger from '../lib/logger';
 import { getSyncConnectionsRepository } from '../db/sync-connections.repo';
 import { getConnectionsRepository } from '../db/connections.repo';
+import { getOrganizationsRepository } from '../db/organizations.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
+import type { Repository } from '../db/repository';
 import { hasDatabase } from '../db/prisma';
 
 // Lazy repo for the saved Connection profiles — the imported `connections`
@@ -207,21 +212,17 @@ function isConnectionCompatible(conn: { connectionType: string }, sourceType: st
   return conn.connectionType === 'API' || conn.connectionType === 'FILE_STORAGE';
 }
 
-// NOTE: the target-entity write path below (getEntityStore → applyRow → the
-// /run and /preview handlers) is deliberately NOT repo-converted. It relies on
-// per-row sync-tracking fields (syncConnectionId / syncStatus) that have no
-// Postgres columns, so writing entities through their repos would silently drop
-// that tracking. This is the aspirational "finish it" half of the sync surface
-// (see docs/GA_TIGHTENING_AUDIT.md §F) — it needs schema work + a real driver
-// before it persists in Postgres, not just a read-path swap. The connection-
-// profile lookups (resolveEffectiveConfig, create/update validation) ARE
-// repo-backed above, since those are correct and independent of that gap.
-function getEntityStore(targetEntity: string): any[] | null {
+// The sync engine writes target entities through their repositories, so a run
+// persists in Postgres as well as JSON mode. The per-row sync-tracking fields
+// (syncConnectionId / syncStatus) now have real columns on each target model,
+// so a run can update its own prior rows and mark those dropped from the
+// source. Returns the repository for the target entity, or null if unknown.
+function getEntityRepo(targetEntity: string): Repository<Record<string, unknown> & { id: string }> | null {
   switch (targetEntity) {
-    case 'organizations': return organizations;
-    case 'people': return people;
-    case 'systems': return systems;
-    case 'business-glossary': return glossaryTerms;
+    case 'organizations': return getOrganizationsRepository(organizations) as unknown as Repository<Record<string, unknown> & { id: string }>;
+    case 'people': return getPeopleRepository(people) as unknown as Repository<Record<string, unknown> & { id: string }>;
+    case 'systems': return getSystemsRepository(systems) as unknown as Repository<Record<string, unknown> & { id: string }>;
+    case 'business-glossary': return getGlossaryTermsRepository(glossaryTerms) as unknown as Repository<Record<string, unknown> & { id: string }>;
     default: return null;
   }
 }
@@ -291,11 +292,14 @@ function generateMockRows(
 }
 
 /**
- * Apply a single source row against the target entity store.
+ * Apply a single source row against the target entity, persisting through its
+ * repository. `all` is the working set (the repo's current list, kept in sync
+ * so later rows in the same batch can match freshly-created rows).
  * Returns 'created' | 'updated' | 'skipped'.
  */
-function applyRow(
-  store: any[],
+async function applyRow(
+  all: any[],
+  repo: Repository<Record<string, unknown> & { id: string }>,
   targetEntity: string,
   fieldMapping: Record<string, string>,
   matchKey: string,
@@ -303,7 +307,7 @@ function applyRow(
   orgId: string,
   syncConnectionId?: string,
   syncedRecordIds?: Set<string>,
-): 'created' | 'updated' | 'skipped' {
+): Promise<'created' | 'updated' | 'skipped'> {
   // Resolve the source column for the match key
   const matchSourceColumn = fieldMapping[matchKey];
   if (!matchSourceColumn) return 'skipped';
@@ -312,7 +316,7 @@ function applyRow(
   if (!matchValue) return 'skipped';
 
   // Find existing record by matchKey value
-  const existing = store.find((item: any) => {
+  const existing = all.find((item: any) => {
     const targetValue = item[matchKey];
     return targetValue !== undefined && String(targetValue).toLowerCase() === String(matchValue).toLowerCase();
   });
@@ -339,6 +343,7 @@ function applyRow(
     }
     if (changed) {
       existing.updatedAt = new Date().toISOString();
+      await repo.update(existing.id, existing);
       return 'updated';
     }
     return 'skipped';
@@ -402,8 +407,151 @@ function applyRow(
     if (!newRecord.sourceOfTruth) newRecord.sourceOfTruth = '';
   }
 
-  store.push(newRecord);
+  // Keep the working set current so later rows in this batch can match the
+  // row we just created, then persist it through the repository.
+  all.push(newRecord);
+  await repo.create(newRecord);
   return 'created';
+}
+
+// In-flight guard — ids of sync connections a run is currently executing for.
+// Both the manual /run route and the auto-runner tick check this so a slow run
+// never overlaps itself (the tick fires every minute; a run touching many rows
+// can outlast one tick).
+const runningSyncIds = new Set<string>();
+
+// ---------------------------------------------------------------------------
+// Run engine — shared by the manual POST /:id/run route and the background
+// auto-runner tick. Fetches source rows, upserts each through the target
+// repository, marks rows dropped from the source, and persists the run
+// metadata (lastSyncResult / schedule.lastRunAt / nextRunAt / status) back
+// onto the sync connection. Returns a discriminated outcome the caller maps
+// to an HTTP response or a log line.
+// ---------------------------------------------------------------------------
+
+interface SyncRunResult {
+  timestamp: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  missingFromSource: number;
+  errors: number;
+  errorMessages: string[];
+}
+
+type RunSyncOutcome =
+  | { status: 'ok'; result: SyncRunResult; simulated: boolean }
+  | { status: 'fetch-error'; result: SyncRunResult; error: string }
+  | { status: 'config-error'; error: string };
+
+async function runSync(sc: SyncConnection): Promise<RunSyncOutcome> {
+  const repo = getEntityRepo(sc.targetEntity);
+  if (!repo) {
+    return { status: 'config-error', error: `Unknown target entity: ${sc.targetEntity}` };
+  }
+
+  // Working set: the entity's current rows from the repository (Postgres in DB
+  // mode, the in-memory array in JSON mode). applyRow matches against this and
+  // pushes newly-created rows into it so later rows in the batch can match.
+  const all = await repo.list();
+
+  const result: SyncRunResult = {
+    timestamp: new Date().toISOString(),
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    missingFromSource: 0,
+    errors: 0,
+    errorMessages: [],
+  };
+  const syncedRecordIds = new Set<string>();
+
+  let rows: Record<string, string>[] = [];
+  let simulated = false;
+
+  try {
+    if (sc.sourceType === 'DATABASE') {
+      // Cannot connect to real databases in the prototype — simulate
+      rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
+      simulated = true;
+    } else {
+      // CSV_URL or JSON_URL — attempt real fetch
+      rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown fetch error';
+    result.errors = 1;
+    result.errorMessages.push(`Source fetch failed: ${msg}`);
+    sc.status = 'ERROR';
+    sc.lastSyncResult = result;
+    // Advance the schedule even on failure so a broken source doesn't get
+    // retried every tick — it waits for its normal interval.
+    sc.schedule.lastRunAt = result.timestamp;
+    if (sc.schedule.enabled) {
+      sc.schedule.nextRunAt = computeNextRunAt(sc.schedule.intervalMinutes);
+    }
+    sc.updatedAt = new Date().toISOString();
+    await syncConnectionsRepo.update(sc.id, {
+      status: sc.status,
+      lastSyncResult: sc.lastSyncResult,
+      schedule: sc.schedule,
+      updatedAt: sc.updatedAt,
+    });
+    logger.error({ err, id: sc.id }, 'Sync connection fetch failed');
+    return { status: 'fetch-error', result, error: msg };
+  }
+
+  // Apply each row (create/update persists through the repo inside applyRow).
+  for (const row of rows) {
+    try {
+      const action = await applyRow(all, repo, sc.targetEntity, sc.fieldMapping, sc.matchKey, row, sc.orgId, sc.id, syncedRecordIds);
+      if (action === 'created') result.created++;
+      else if (action === 'updated') result.updated++;
+      else result.skipped++;
+    } catch (err) {
+      result.errors++;
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      result.errorMessages.push(msg);
+    }
+  }
+
+  // Mark records previously synced by this connection but missing from this
+  // batch, persisting each transition through the repo.
+  for (const item of all) {
+    if ((item as any).syncConnectionId === sc.id && !syncedRecordIds.has(item.id)) {
+      if ((item as any).syncStatus !== 'MISSING_FROM_SOURCE') {
+        (item as any).syncStatus = 'MISSING_FROM_SOURCE';
+        (item as any).updatedAt = new Date().toISOString();
+        await repo.update(item.id, item);
+        result.missingFromSource++;
+      }
+    }
+  }
+
+  // Update sync connection metadata
+  sc.lastSyncResult = result;
+  sc.schedule.lastRunAt = result.timestamp;
+  if (sc.schedule.enabled) {
+    sc.schedule.nextRunAt = computeNextRunAt(sc.schedule.intervalMinutes);
+  }
+  if (result.errors > 0 && result.created === 0 && result.updated === 0) {
+    sc.status = 'ERROR';
+  } else {
+    sc.status = 'ACTIVE';
+  }
+  sc.updatedAt = new Date().toISOString();
+  await syncConnectionsRepo.update(sc.id, {
+    lastSyncResult: sc.lastSyncResult,
+    schedule: sc.schedule,
+    status: sc.status,
+    updatedAt: sc.updatedAt,
+  });
+
+  logger.info(
+    { id: sc.id, created: result.created, updated: result.updated, skipped: result.skipped, missingFromSource: result.missingFromSource, errors: result.errors, simulated },
+    'Sync connection run completed',
+  );
+  return { status: 'ok', result, simulated };
 }
 
 // ---------------------------------------------------------------------------
@@ -577,107 +725,30 @@ router.post('/:id/run', async (req: Request, res: Response) => {
     return;
   }
 
-  const store = getEntityStore(sc.targetEntity);
-  if (!store) {
-    res.status(500).json({ success: false, error: `Unknown target entity: ${sc.targetEntity}` });
+  // A manual run against a connection the auto-runner is mid-flight on would
+  // race the same repo writes; refuse rather than double-run.
+  if (runningSyncIds.has(sc.id)) {
+    res.status(409).json({ success: false, error: 'Sync is already running' });
     return;
   }
 
-  const result = {
-    timestamp: new Date().toISOString(),
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    missingFromSource: 0,
-    errors: 0,
-    errorMessages: [] as string[],
-  };
-  const syncedRecordIds = new Set<string>();
-
-  let rows: Record<string, string>[] = [];
-  let simulated = false;
-
+  runningSyncIds.add(sc.id);
+  let outcome: RunSyncOutcome;
   try {
-    if (sc.sourceType === 'DATABASE') {
-      // Cannot connect to real databases in the prototype — simulate
-      rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
-      simulated = true;
-    } else {
-      // CSV_URL or JSON_URL — attempt real fetch
-      rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown fetch error';
-    result.errors = 1;
-    result.errorMessages.push(`Source fetch failed: ${msg}`);
-    sc.status = 'ERROR';
-    sc.lastSyncResult = result;
-    sc.updatedAt = new Date().toISOString();
-    await syncConnectionsRepo.update(sc.id, {
-      status: sc.status,
-      lastSyncResult: sc.lastSyncResult,
-      updatedAt: sc.updatedAt,
-    });
-    logger.error({ err, id: sc.id }, 'Sync connection fetch failed');
-    res.json({ success: false, data: result, error: msg });
+    outcome = await runSync(sc);
+  } finally {
+    runningSyncIds.delete(sc.id);
+  }
+
+  if (outcome.status === 'config-error') {
+    res.status(500).json({ success: false, error: outcome.error });
     return;
   }
-
-  // Apply each row
-  for (const row of rows) {
-    try {
-      const action = applyRow(store, sc.targetEntity, sc.fieldMapping, sc.matchKey, row, sc.orgId, sc.id, syncedRecordIds);
-      if (action === 'created') result.created++;
-      else if (action === 'updated') result.updated++;
-      else result.skipped++;
-    } catch (err) {
-      result.errors++;
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      result.errorMessages.push(msg);
-    }
+  if (outcome.status === 'fetch-error') {
+    res.json({ success: false, data: outcome.result, error: outcome.error });
+    return;
   }
-
-  // Mark records previously synced by this connection but missing from this batch
-  for (const item of store) {
-    if ((item as any).syncConnectionId === sc.id && !syncedRecordIds.has(item.id)) {
-      if ((item as any).syncStatus !== 'MISSING_FROM_SOURCE') {
-        (item as any).syncStatus = 'MISSING_FROM_SOURCE';
-        (item as any).updatedAt = new Date().toISOString();
-        result.missingFromSource++;
-      }
-    }
-  }
-
-  // Persist the target entity store. Most targets share their key name
-  // with the persistence file ("organizations", "people", "systems"), but
-  // glossary lives under "glossaryTerms" so map explicitly when needed.
-  const STORE_KEY_FOR_ENTITY: Record<string, string> = { 'business-glossary': 'glossaryTerms' };
-  saveStore(STORE_KEY_FOR_ENTITY[sc.targetEntity] || sc.targetEntity, store);
-
-  // Update sync connection metadata
-  sc.lastSyncResult = result;
-  sc.schedule.lastRunAt = result.timestamp;
-  if (sc.schedule.enabled) {
-    sc.schedule.nextRunAt = computeNextRunAt(sc.schedule.intervalMinutes);
-  }
-  if (result.errors > 0 && result.created === 0 && result.updated === 0) {
-    sc.status = 'ERROR';
-  } else {
-    sc.status = 'ACTIVE';
-  }
-  sc.updatedAt = new Date().toISOString();
-  await syncConnectionsRepo.update(sc.id, {
-    lastSyncResult: sc.lastSyncResult,
-    schedule: sc.schedule,
-    status: sc.status,
-    updatedAt: sc.updatedAt,
-  });
-
-  logger.info(
-    { id: sc.id, created: result.created, updated: result.updated, skipped: result.skipped, missingFromSource: result.missingFromSource, errors: result.errors, simulated },
-    'Sync connection run completed',
-  );
-  res.json({ success: true, data: result, simulated });
+  res.json({ success: true, data: outcome.result, simulated: outcome.simulated });
 });
 
 /** GET /api/v1/sync-connections/:id/preview — dry run showing first 10 rows */
@@ -688,8 +759,8 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
     return;
   }
 
-  const store = getEntityStore(sc.targetEntity);
-  if (!store) {
+  const repo = getEntityRepo(sc.targetEntity);
+  if (!repo) {
     res.status(500).json({ success: false, error: `Unknown target entity: ${sc.targetEntity}` });
     return;
   }
@@ -714,6 +785,9 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
     return;
   }
 
+  // Current rows for the create/update/skip classification below.
+  const all = await repo.list();
+
   // Preview at most 10 rows
   const previewRows = rows.slice(0, 10);
   const matchSourceColumn = sc.fieldMapping[sc.matchKey];
@@ -723,7 +797,7 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
     let action: 'create' | 'update' | 'skip' = 'create';
 
     if (matchValue) {
-      const existing = store.find((item: any) => {
+      const existing = all.find((item: any) => {
         const targetValue = item[sc.matchKey];
         return targetValue !== undefined && String(targetValue).toLowerCase() === String(matchValue).toLowerCase();
       });
@@ -762,5 +836,54 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
     simulated,
   });
 });
+
+// ---------------------------------------------------------------------------
+// Auto-runner — a leader-gated tick that runs enabled sync connections when
+// their schedule is due. Mirrors the agent-schedules / data-quality tickers:
+// fires once a minute, and (via startBackgroundSweep's leaderOnly option) only
+// the elected scheduler leader executes it, so a due sync runs on exactly one
+// server with failover. Missed ticks are not caught up — a sync due while the
+// process was down fires once on the next tick, not once per missed interval.
+// ---------------------------------------------------------------------------
+
+const SYNC_TICK_MS = 60 * 1000;
+
+async function tickSyncScheduler(): Promise<void> {
+  const now = Date.now();
+  let list: SyncConnection[];
+  try {
+    list = await syncConnectionsRepo.list();
+  } catch (err) {
+    logger.error({ err }, 'Sync auto-runner: failed to list sync connections');
+    return;
+  }
+
+  for (const sc of list) {
+    if (!sc.schedule?.enabled) continue;
+    if (sc.status === 'PAUSED') continue;
+    if (!sc.schedule.nextRunAt) continue;
+    if (new Date(sc.schedule.nextRunAt).getTime() > now) continue;
+    // Skip if a run (manual or a previous tick's) is still in flight.
+    if (runningSyncIds.has(sc.id)) continue;
+
+    runningSyncIds.add(sc.id);
+    // Fire-and-forget so one slow sync doesn't block the others in this tick.
+    // runSync persists its own metadata (including the nextRunAt advance), so
+    // the guard set is the only shared state to release here.
+    void runSync(sc)
+      .catch((err) => {
+        logger.error({ err, id: sc.id }, 'Sync auto-runner: run threw');
+      })
+      .finally(() => {
+        runningSyncIds.delete(sc.id);
+      });
+  }
+}
+
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => { void tickSyncScheduler(); }, SYNC_TICK_MS, { leaderOnly: true });
+
+// Exported for tests that want to deterministically trigger the loop.
+export { tickSyncScheduler, runSync };
 
 export default router;

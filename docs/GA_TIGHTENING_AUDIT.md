@@ -241,6 +241,16 @@ discovery drivers and building the background schedule runner. These are the
 "finish it" half of §F and belong on the post-cutover roadmap, not this
 mechanical labelling pass.
 
+**§F sync-persistence outcome — done.** The sync engine now persists its
+target entities through their repositories, so a run writes to Postgres (not
+just the JSON file). This required real `syncConnectionId` / `syncStatus`
+columns on the four target models (Organization, Person, System,
+GlossaryTerm) — added via migration and mapped in each repo — so a run can
+update its own prior rows and flag those dropped from the source. A
+live-Postgres test covers create + idempotent re-run. Still on the roadmap:
+live database-discovery drivers and the background auto-runner (only manual
+`/run` and `/preview` exist today).
+
 ---
 
 ## G. Deploy / manage / stability (the operational half of "tight")

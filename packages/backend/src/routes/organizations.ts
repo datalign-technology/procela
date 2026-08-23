@@ -50,6 +50,10 @@ export interface StoredOrg {
   /** Hex color (with leading #) used for the SSO button + accent.
    *  Falls back to Procela primary when unset. */
   brandPrimaryColor?: string;
+  // Data-sync tracking — set by the sync engine when this row was created or
+  // updated from a SyncConnection source. Soft reference; absent when unsynced.
+  syncConnectionId?: string | null;
+  syncStatus?: string | null;
   createdAt: string;
   updatedAt: string;
 }

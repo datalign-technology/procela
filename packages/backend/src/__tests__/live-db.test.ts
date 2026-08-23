@@ -83,6 +83,7 @@ import type { AddressInfo } from 'net';
 import govProgramRouter from '../routes/governance-program';
 import savedViewsRouter from '../routes/saved-views';
 import tagsRouter from '../routes/tags';
+import syncConnectionsRouter, { tickSyncScheduler } from '../routes/sync-connections';
 
 // Lazy-require the Prisma client so this file doesn't blow up
 // module-load when Prisma hasn't been generated (local dev without
@@ -925,6 +926,108 @@ suite('live-db business flows', () => {
       $queryRawUnsafe: (s: string) => Promise<Array<{ n: number }>>;
     }).$queryRawUnsafe(`SELECT count(*)::int AS n FROM scheduler_leases`);
     assert.strictEqual(rows[0].n, 1);
+  });
+
+  it('sync-connections: a run persists target entities to Postgres with sync tracking, and re-runs are idempotent', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+
+    // A DATABASE-source sync uses simulated mock rows (5), so no external URL
+    // is needed; the point is that applyRow writes through the systems repo.
+    const sync = prismaRepo(prismaSyncConnectionsRepository);
+    const scId = randomUUID();
+    await sync.create({
+      id: scId, orgId, name: 'Mock systems sync', targetEntity: 'systems',
+      sourceType: 'DATABASE', connectionId: null,
+      config: { dbType: 'POSTGRESQL', table: 't' },
+      fieldMapping: { name: 'sys_name', description: 'sys_desc' }, matchKey: 'name',
+      schedule: { enabled: false, intervalMinutes: 60, lastRunAt: null, nextRunAt: null },
+      status: 'ACTIVE', lastSyncResult: null, createdAt: now, updatedAt: now,
+    } as never);
+
+    const app = express();
+    app.use(express.json());
+    app.use('/sync-connections', syncConnectionsRouter);
+    const server = app.listen(0);
+    await new Promise((r) => server.once('listening', () => r(null)));
+    const port = (server.address() as AddressInfo).port;
+    const base = `http://127.0.0.1:${port}/sync-connections`;
+    try {
+      const run1 = (await (await fetch(`${base}/${scId}/run`, { method: 'POST' })).json()) as any;
+      assert.strictEqual(run1.data.created, 5, 'first run creates the 5 mock rows');
+      assert.strictEqual(run1.data.errors, 0);
+
+      // The rows exist in Postgres with the sync-tracking columns set — they
+      // would NOT if applyRow still wrote to a dead in-memory array + saveStore.
+      const systemsRepo = prismaRepo(prismaSystemsRepository);
+      const synced = (await systemsRepo.list({ orgId })).filter((s: any) => s.syncConnectionId === scId);
+      assert.strictEqual(synced.length, 5, 'entities persisted with syncConnectionId');
+      assert.ok(synced.every((s: any) => s.syncStatus === 'ACTIVE'), 'syncStatus persisted');
+
+      const run2 = (await (await fetch(`${base}/${scId}/run`, { method: 'POST' })).json()) as any;
+      assert.strictEqual(run2.data.created, 0, 'second run creates nothing');
+      assert.strictEqual(run2.data.skipped, 5, 'second run matches the existing rows');
+    } finally {
+      await new Promise((r) => server.close(() => r(null)));
+    }
+  });
+
+  it('sync auto-runner: a due enabled sync fires on tick, persists rows, and advances nextRunAt', async () => {
+    const { orgId } = await seedFixture();
+    const now = Date.now();
+
+    // Enabled sync whose nextRunAt is in the past → the tick should pick it up.
+    // DATABASE source uses the 5 simulated mock rows, so no network is needed.
+    const sync = prismaRepo(prismaSyncConnectionsRepository);
+    const scId = randomUUID();
+    const pastNextRun = new Date(now - 60_000).toISOString();
+    await sync.create({
+      id: scId, orgId, name: 'Auto systems sync', targetEntity: 'systems',
+      sourceType: 'DATABASE', connectionId: null,
+      config: { dbType: 'POSTGRESQL', table: 't' },
+      fieldMapping: { name: 'sys_name', description: 'sys_desc' }, matchKey: 'name',
+      schedule: { enabled: true, intervalMinutes: 60, lastRunAt: null, nextRunAt: pastNextRun },
+      status: 'ACTIVE', lastSyncResult: null,
+      createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString(),
+    } as never);
+
+    // Also seed a due-but-DISABLED sync — the tick must skip it entirely.
+    const disabledId = randomUUID();
+    await sync.create({
+      id: disabledId, orgId, name: 'Disabled sync', targetEntity: 'systems',
+      sourceType: 'DATABASE', connectionId: null,
+      config: { dbType: 'POSTGRESQL', table: 't' },
+      fieldMapping: { name: 'off_name' }, matchKey: 'name',
+      schedule: { enabled: false, intervalMinutes: 60, lastRunAt: null, nextRunAt: pastNextRun },
+      status: 'ACTIVE', lastSyncResult: null,
+      createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString(),
+    } as never);
+
+    // Drive the tick directly (bypasses the leader gate, which lives in
+    // startBackgroundSweep). runSync is dispatched fire-and-forget, so poll
+    // until the run has recorded its result on the connection.
+    await tickSyncScheduler();
+    let ran: any = null;
+    for (let i = 0; i < 100; i++) {
+      ran = await sync.get(scId);
+      if (ran?.schedule?.lastRunAt) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.ok(ran?.schedule?.lastRunAt, 'the due sync ran within the poll window');
+    assert.ok(
+      new Date(ran.schedule.nextRunAt).getTime() > now,
+      'nextRunAt advanced into the future',
+    );
+    assert.strictEqual(ran.lastSyncResult?.created, 5, 'the run created the 5 mock rows');
+
+    // Rows landed in Postgres tagged to this sync.
+    const systemsRepo = prismaRepo(prismaSystemsRepository);
+    const synced = (await systemsRepo.list({ orgId })).filter((s: any) => s.syncConnectionId === scId);
+    assert.strictEqual(synced.length, 5, 'auto-run persisted the entities');
+
+    // The disabled sync never fired.
+    const off = await sync.get(disabledId);
+    assert.strictEqual(off?.schedule?.lastRunAt, null, 'disabled sync was skipped');
   });
 
   it('settings: AppSetting set → get round-trips a JSON value through Postgres', async () => {

@@ -54,6 +54,8 @@ type PrismaPersonRow = {
   accessibleOrgIds: string[];
   active: boolean | null;
   deactivatedAt: Date | null;
+  syncConnectionId?: string | null;
+  syncStatus?: string | null;
   createdAt: Date;
   updatedAt: Date;
   orgLinks?: Array<{ orgId: string }>;
@@ -99,6 +101,8 @@ function fromPrisma(r: PrismaPersonRow): StoredPerson {
       : {}),
     ...(r.active != null ? { active: r.active } : {}),
     ...(r.deactivatedAt ? { deactivatedAt: r.deactivatedAt.toISOString() } : {}),
+    syncConnectionId: r.syncConnectionId ?? null,
+    syncStatus: r.syncStatus ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -136,6 +140,8 @@ function toPrismaData(row: Partial<StoredPerson>): Record<string, unknown> {
   if (row.deactivatedAt !== undefined) {
     data.deactivatedAt = row.deactivatedAt ? new Date(row.deactivatedAt) : null;
   }
+  if (row.syncConnectionId !== undefined) data.syncConnectionId = row.syncConnectionId;
+  if (row.syncStatus !== undefined) data.syncStatus = row.syncStatus;
   if (row.createdAt !== undefined) data.createdAt = new Date(row.createdAt);
   return data;
 }
