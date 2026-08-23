@@ -139,7 +139,9 @@ real variables in
 - `db_instance_class`, `db_allocated_storage_gb`
 - `db_backup_retention_days` (raise this — see Phase 5)
 - `log_retention_days` (e.g. 90+ for prod)
-- `enable_redis = true` (real rate-limiting needs shared Redis)
+- `enable_redis` (default **on**) provisions ElastiCache and wires `REDIS_URL`
+  automatically — no manual cluster or secret to populate. Size with
+  `redis_node_type` / `redis_num_nodes`.
 - Auth: `auth_provider` + the matching `enable_oidc`/`enable_saml`/
   `enable_scim` and issuer/client vars for your identity provider.
 

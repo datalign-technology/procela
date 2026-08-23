@@ -74,6 +74,12 @@ async function getRedisClient(): Promise<RedisClientType | null> {
     redisClient = createClient({
       url,
       socket: {
+        // Explicitly enable TLS for a rediss:// URL. node-redis derives this
+        // from the scheme, but we also pass a custom `socket` object, and being
+        // explicit guarantees TLS is on regardless of how the URL-derived and
+        // user-supplied socket options merge — ElastiCache in-transit
+        // encryption presents a valid cert for its endpoint hostname.
+        tls: url.startsWith('rediss://') ? true : undefined,
         // Cap the initial connect attempt. Without this Windows in
         // particular sits on the TCP SYN retry budget (~20–30s) when
         // Redis isn't listening — the request hangs for that long
