@@ -214,10 +214,15 @@ module toggle:
   `restrict_alb_to_cloudfront` locks ingress to CloudFront IPs, which
   covers the common case without the VPC-origin plumbing.
 - **Shipping application logs** to OpenSearch/Datadog beyond CloudWatch.
-- **A CI/CD pipeline** that builds/pushes the backend image and syncs
-  the frontend on merge to main.
 - **Per-environment stacks** (dev / staging / prod) with separate
   state files and separate AWS accounts.
+
+The **CI/CD pipeline** is now included: set `enable_cicd_deploy_role = true`
+(and `github_repo`) and this module creates the GitHub OIDC deploy role;
+`.github/workflows/deploy.yml` then builds/pushes the image to the ECR repo
+(`ecr.tf`), runs migrations, rolls the ECS service, and syncs the frontend on
+merge to the default branch. See the workflow header for the repo-variable
+setup.
 
 None of these are hard to bolt on — the module is deliberately kept
 small so the delta from "reference" to "hardened" is auditable rather

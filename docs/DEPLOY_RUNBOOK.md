@@ -201,6 +201,32 @@ later `put-secret-value` (or a rotation) is **not** reverted by the next
 
 HTTPS terminates at the ALB — attach an ACM cert (checklist #12).
 
+### 3a. Automated deploys (GitHub Actions → ECS)
+
+The manual `docker build/push` + `update-service` above can be handed to CI.
+`.github/workflows/deploy.yml` builds and pushes the backend image to ECR, runs
+migrations as a one-off task, rolls the ECS service onto the new image, then
+syncs the frontend to S3 and invalidates CloudFront — authenticating with a
+short-lived **GitHub OIDC** role (no static AWS keys).
+
+One-time setup:
+
+1. Apply Terraform with `enable_cicd_deploy_role = true` and
+   `github_repo = "owner/repo"`. The module creates the ECR repo (`ecr.tf`),
+   the GitHub OIDC provider (unless you pass an existing
+   `github_oidc_provider_arn`), and the scoped deploy role (`cicd.tf`).
+2. Point `app_image` at the ECR repo (`terraform output ecr_repository_url`) —
+   for the very first apply, any tag works; the service can't pull until the
+   pipeline pushes the first image, which is expected.
+3. Copy the outputs into GitHub **repository variables** (the `deploy.yml`
+   header lists the var ← output map and a `gh variable set` one-liner).
+
+Then every merge to the default branch (or a manual **Run workflow**) deploys.
+The job self-skips until `AWS_DEPLOY_ROLE_ARN` is set, and a failed migration
+aborts the deploy *before* the service is rolled. `ignore_changes =
+[task_definition]` on the service means Terraform and the pipeline don't fight
+over the running image.
+
 ---
 
 ## 4. Deploy on-prem (Helm / Kubernetes)

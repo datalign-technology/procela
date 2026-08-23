@@ -92,3 +92,42 @@ output "secret_arns" {
     saml_idp_cert      = aws_secretsmanager_secret.saml_idp_cert.arn
   }
 }
+
+# ── CI/CD deploy pipeline outputs ───────────────────────────────────────────
+# Set these as GitHub Actions repository variables so .github/workflows/deploy.yml
+# can find the stack (see the workflow header for the var → output mapping).
+
+output "ecr_repository_url" {
+  description = "ECR repo the deploy pipeline pushes the backend image to. Point var.app_image at <this>:<tag>."
+  value       = aws_ecr_repository.backend.repository_url
+}
+
+output "ecs_task_family" {
+  description = "Backend task-definition family. The pipeline registers new revisions of this and rolls the service onto them."
+  value       = aws_ecs_task_definition.app.family
+}
+
+output "migrate_task_family" {
+  description = "Migrate task-definition family (one-off `prisma migrate deploy` task)."
+  value       = aws_ecs_task_definition.migrate.family
+}
+
+output "region" {
+  description = "AWS region — pass to the deploy pipeline as AWS_REGION."
+  value       = var.region
+}
+
+output "cicd_deploy_role_arn" {
+  description = "ARN of the GitHub Actions OIDC deploy role (null unless enable_cicd_deploy_role = true)."
+  value       = var.enable_cicd_deploy_role ? aws_iam_role.cicd_deploy[0].arn : null
+}
+
+output "private_subnet_ids" {
+  description = "Comma-separated private subnet ids — the deploy pipeline's migrate run-task network config (ECS_SUBNET_IDS)."
+  value       = join(",", aws_subnet.private[*].id)
+}
+
+output "ecs_security_group_id" {
+  description = "ECS task security-group id — the deploy pipeline's migrate run-task network config (ECS_SECURITY_GROUP_ID)."
+  value       = aws_security_group.ecs_tasks.id
+}
