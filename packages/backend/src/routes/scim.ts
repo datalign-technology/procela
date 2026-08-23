@@ -4,6 +4,7 @@ import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { people, isActive, type StoredPerson } from './people';
 import { getPeopleRepository } from '../db/people.repo';
+import { resolveProvisioningTarget } from '../lib/provisioning';
 import {
   listGroups,
   findGroup,
@@ -390,13 +391,18 @@ router.post('/Users', async (req: Request, res: Response) => {
     || [body.name?.givenName, body.name?.familyName].filter(Boolean).join(' ')
     || body.displayName
     || userName;
+  // Route the provisioned user to the right tenant + role from the SSO
+  // provisioning config (email-domain map → primary org), rather than the old
+  // hardcoded phantom-org VIEWER. SCIM carries no role claim, so the target's
+  // default role applies.
+  const target = resolveProvisioningTarget(email);
   const person: StoredPerson = {
     id: uuid(),
-    orgIds: [DEV_ORG_ID],
-    accessibleOrgIds: [DEV_ORG_ID],
+    orgIds: [target.orgId],
+    accessibleOrgIds: [target.orgId],
     name,
     email,
-    role: 'VIEWER',
+    role: target.role,
     title: '',
     skillIds: [],
     createdAt: now,

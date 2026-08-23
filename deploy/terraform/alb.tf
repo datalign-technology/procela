@@ -33,7 +33,11 @@ resource "aws_lb_target_group" "app" {
   vpc_id      = aws_vpc.main.id
 
   health_check {
-    path                = "/health"
+    # The API serves its liveness probe at /api/v1/health (the router is
+    # mounted under the /api/v1 prefix); an unprefixed /health 404s and the
+    # target never registers healthy. Matches the container healthcheck in
+    # ecs.tf.
+    path                = "/api/v1/health"
     port                = "traffic-port"
     protocol            = "HTTP"
     matcher             = "200-299"

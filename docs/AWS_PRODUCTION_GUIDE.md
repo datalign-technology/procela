@@ -160,9 +160,12 @@ each one:
   the runbook shows how to generate them).
 - The **DB password** and `jwt_secret` are auto-generated; `DATABASE_URL`
   is composed on apply — no action needed.
-- **Apply migrations once per environment:**
-  `npx prisma migrate deploy` from `packages/backend/`
-  (Go-live checklist item #2).
+- **Apply migrations once per environment** using the one-off Fargate task the
+  module ships (runs in-VPC against RDS — no bastion needed):
+  `terraform output -raw migrate_run_task_command | bash`
+  (or `npx prisma migrate deploy` from a machine with DB reach).
+  See `docs/CUSTOMER_ONBOARDING.md` for the full tenant-onboarding runbook,
+  including the first-Super-Admin bootstrap. (Go-live checklist item #2.)
 - **Restart the ECS service** so tasks pick up the secret values
   (they cache on startup).
 

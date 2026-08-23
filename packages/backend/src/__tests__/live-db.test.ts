@@ -85,6 +85,7 @@ import savedViewsRouter from '../routes/saved-views';
 import tagsRouter from '../routes/tags';
 import syncConnectionsRouter, { tickSyncScheduler } from '../routes/sync-connections';
 import connectorSyncRouter from '../routes/connector-sync';
+import { runBootstrap } from '../services/bootstrap.service';
 
 // Lazy-require the Prisma client so this file doesn't blow up
 // module-load when Prisma hasn't been generated (local dev without
@@ -1316,6 +1317,45 @@ suite('live-db business flows', () => {
     const after = await sync.get(scId);
     assert.strictEqual(after?.status, 'ACTIVE', 'AGENT sync was not direct-run (still ACTIVE, not ERROR)');
     assert.strictEqual(after?.schedule?.lastRunAt, null, 'AGENT sync was not run by the tick');
+  });
+
+  it('bootstrap: creates the primary org + SUPER_ADMIN on a clean DB, idempotently, and promotes an existing user', async () => {
+    // Clean DB (beforeEach truncated). No seedFixture — bootstrap must stand up
+    // the org itself.
+    const orgId = randomUUID();
+    const orgs = prismaRepo(prismaOrganizationsRepository);
+    const people = prismaRepo(prismaPeopleRepository);
+
+    // First run: creates both.
+    const r1 = await runBootstrap({ superAdminEmail: 'admin@acme.test', superAdminName: 'Acme Admin', orgName: 'Acme Corp', orgIndustry: 'utilities', orgId });
+    assert.strictEqual(r1.skipped, false);
+    assert.strictEqual(r1.createdOrg, true);
+    assert.strictEqual(r1.createdAdmin, true);
+
+    const org = await orgs.get(orgId);
+    assert.strictEqual(org?.name, 'Acme Corp');
+    assert.strictEqual((org as any)?.industry, 'utilities');
+
+    const admin = (await people.list()).find((p: any) => p.email === 'admin@acme.test');
+    assert.ok(admin, 'super admin created');
+    assert.strictEqual(admin!.role, 'SUPER_ADMIN');
+    assert.deepStrictEqual(admin!.orgIds, [orgId]);
+
+    // Second run: fully idempotent — nothing created, no duplicate person.
+    const r2 = await runBootstrap({ superAdminEmail: 'admin@acme.test', orgName: 'Acme Corp', orgId });
+    assert.strictEqual(r2.createdOrg, undefined);
+    assert.strictEqual(r2.createdAdmin, undefined);
+    assert.strictEqual((await people.list()).filter((p: any) => p.email === 'admin@acme.test').length, 1);
+
+    // Promotion path: a demoted admin is restored to SUPER_ADMIN on next boot.
+    await people.update(admin!.id, { role: 'VIEWER' });
+    const r3 = await runBootstrap({ superAdminEmail: 'admin@acme.test', orgId });
+    assert.strictEqual(r3.promotedAdmin, true);
+    assert.strictEqual((await people.get(admin!.id))!.role, 'SUPER_ADMIN');
+
+    // No email configured → no-op.
+    const r4 = await runBootstrap({ superAdminEmail: '' });
+    assert.strictEqual(r4.skipped, true);
   });
 
   it('settings: AppSetting set → get round-trips a JSON value through Postgres', async () => {

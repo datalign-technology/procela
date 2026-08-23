@@ -84,6 +84,25 @@ export const config = {
   // that slips past .env parsing must not poison the To address.
   supportEmail: (process.env.SUPPORT_EMAIL || 'support@procela.ai').replace(/\s+#.*$/, '').trim(),
 
+  // First-run bootstrap — how the very first Super Admin and the primary
+  // organization come into existence on a clean database. Everything here is
+  // a no-op unless BOOTSTRAP_SUPER_ADMIN_EMAIL is set, and it's applied
+  // idempotently at boot, so it's safe to leave configured across restarts.
+  bootstrapSuperAdminEmail: (process.env.BOOTSTRAP_SUPER_ADMIN_EMAIL || '').trim().toLowerCase(),
+  bootstrapSuperAdminName: process.env.BOOTSTRAP_SUPER_ADMIN_NAME || 'Platform Administrator',
+  bootstrapOrgName: process.env.BOOTSTRAP_ORG_NAME || 'Procela',
+  bootstrapOrgIndustry: process.env.BOOTSTRAP_ORG_INDUSTRY || '',
+
+  // SSO provisioning — where federated (OIDC / SCIM) users land the first
+  // time they appear. Default org is the primary org (the bootstrap org);
+  // SSO_DOMAIN_ORG_MAP is optional JSON routing specific email domains to
+  // specific orgs (and optionally a role), e.g.
+  //   {"acme.com":"<orgId>","beta.io":{"orgId":"<orgId>","role":"CONTRIBUTOR"}}
+  // SSO_DEFAULT_ROLE applies when the IdP emits no known role claim.
+  ssoDefaultOrgId: process.env.SSO_DEFAULT_ORG_ID || '',
+  ssoDefaultRole: (process.env.SSO_DEFAULT_ROLE || 'VIEWER').toUpperCase(),
+  ssoDomainOrgMap: process.env.SSO_DOMAIN_ORG_MAP || '',
+
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
 } as const;
