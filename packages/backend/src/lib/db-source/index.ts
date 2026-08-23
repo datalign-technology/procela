@@ -11,6 +11,7 @@ import { SUPPORTED_DB_SOURCE_TYPES } from './types';
 import { fetchPostgresRows } from './postgres';
 import { fetchMysqlRows } from './mysql';
 import { fetchSqlServerRows } from './sqlserver';
+import { fetchOracleRows } from './oracle';
 
 export async function fetchDbRows(req: DbSourceRequest): Promise<SourceRow[]> {
   if (!SUPPORTED_DB_SOURCE_TYPES.includes(req.dbType)) {
@@ -32,6 +33,7 @@ export async function fetchDbRows(req: DbSourceRequest): Promise<SourceRow[]> {
     case 'POSTGRESQL': return fetchPostgresRows(req, sql);
     case 'MYSQL': return fetchMysqlRows(req, sql);
     case 'SQLSERVER': return fetchSqlServerRows(req, sql);
+    case 'ORACLE': return fetchOracleRows(req, sql);
   }
 }
 

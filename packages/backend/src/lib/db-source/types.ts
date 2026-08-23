@@ -4,11 +4,11 @@
 // and a batch of source rows the sync engine upserts.
 
 /** The engines the direct-connect sync driver supports. The Connection
- *  profile also models ORACLE / MONGODB, but those are not wired for
- *  direct row sync — resolveDbSource rejects them with a clear error. */
-export type DbSourceType = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
+ *  profile also models MONGODB, which is not wired for direct row sync —
+ *  resolveDbSource rejects it with a clear error. */
+export type DbSourceType = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE';
 
-export const SUPPORTED_DB_SOURCE_TYPES: DbSourceType[] = ['POSTGRESQL', 'MYSQL', 'SQLSERVER'];
+export const SUPPORTED_DB_SOURCE_TYPES: DbSourceType[] = ['POSTGRESQL', 'MYSQL', 'SQLSERVER', 'ORACLE'];
 
 /** Everything a driver needs to open a connection and read one table
  *  (or run one query). Assembled by resolveDbSource() from the sync's

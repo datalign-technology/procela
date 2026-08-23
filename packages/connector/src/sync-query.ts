@@ -4,7 +4,7 @@
 // same identifier validation closes the injection boundary, the same LIMIT vs
 // SQL Server TOP dialect, and the same string coercion of cell values.
 
-export type SyncEngine = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
+export type SyncEngine = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE';
 
 export const DEFAULT_ROW_LIMIT = 1000;
 export const MAX_ROW_LIMIT = 50_000;
@@ -28,6 +28,10 @@ function quoteIdent(engine: SyncEngine, ident: string): string {
     case 'POSTGRESQL': return `"${ident}"`;
     case 'MYSQL': return `\`${ident}\``;
     case 'SQLSERVER': return `[${ident}]`;
+    // Oracle folds unquoted identifiers to upper case; emit the validated
+    // identifier bare so a lower-case config name still matches the stored
+    // upper-case object. The identifier charset already blocks injection.
+    case 'ORACLE': return ident;
   }
 }
 
@@ -58,6 +62,7 @@ export function buildSelectSql(engine: SyncEngine, spec: SelectSpec): string {
   const target = qualifiedName(engine, spec.schema, spec.table.trim());
   const n = clampLimit(spec.limit);
   if (engine === 'SQLSERVER') return `SELECT TOP (${n}) * FROM ${target}`;
+  if (engine === 'ORACLE') return `SELECT * FROM ${target} FETCH FIRST ${n} ROWS ONLY`;
   return `SELECT * FROM ${target} LIMIT ${n}`;
 }
 

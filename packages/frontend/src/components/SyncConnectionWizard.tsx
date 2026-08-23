@@ -17,7 +17,7 @@ interface SyncConnectionWizardProps {
 }
 
 type SourceType = 'DATABASE' | 'CSV_URL' | 'JSON_URL';
-type DbType = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
+type DbType = 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE';
 
 const TARGET_FIELDS: Record<string, { key: string; label: string; required?: boolean }[]> = {
   organizations: [
@@ -476,6 +476,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
                   <option value="POSTGRESQL">PostgreSQL</option>
                   <option value="MYSQL">MySQL</option>
                   <option value="SQLSERVER">SQL Server</option>
+                  <option value="ORACLE">Oracle</option>
                 </select>
               </div>
               <div>
@@ -566,6 +567,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
                 <option value="POSTGRESQL">PostgreSQL</option>
                 <option value="MYSQL">MySQL</option>
                 <option value="SQLSERVER">SQL Server</option>
+                  <option value="ORACLE">Oracle</option>
               </select>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>

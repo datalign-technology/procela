@@ -61,7 +61,7 @@ export interface SyncConnection {
   connectorId?: string | null;
   config: {
     // DATABASE
-    dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
+    dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE';
     host?: string;
     port?: number;
     database?: string;
@@ -112,7 +112,7 @@ export interface SyncConnection {
 
 const SOURCE_TYPES = ['DATABASE', 'CSV_URL', 'JSON_URL'] as const;
 const TARGET_ENTITIES = ['organizations', 'people', 'systems', 'business-glossary'] as const;
-const DB_TYPES = ['POSTGRESQL', 'MYSQL', 'SQLSERVER'] as const;
+const DB_TYPES = ['POSTGRESQL', 'MYSQL', 'SQLSERVER', 'ORACLE'] as const;
 
 const TARGET_FIELD_MAP: Record<string, string[]> = {
   organizations: ['name', 'type', 'industry', 'description'],
@@ -1065,7 +1065,7 @@ export interface AgentSyncJob {
   targetEntity: SyncConnection['targetEntity'];
   matchKey: string;
   fieldMapping: Record<string, string>;
-  dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
+  dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE';
   schema?: string;
   table?: string;
   query?: string;

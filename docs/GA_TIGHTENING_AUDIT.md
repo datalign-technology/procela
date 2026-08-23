@@ -287,7 +287,19 @@ and push its own org's assigned syncs. The direct auto-runner skips `AGENT`
 syncs. The wizard offers the direct-vs-connector choice with a connector
 picker. Covered by connector unit tests and live-Postgres tests (job fetch,
 push persistence, token auth, cross-connector isolation, auto-runner skip).
-Still deferred: the **Oracle** engine (both direct and agent paths).
+
+**§F Oracle-engine outcome — done.** `ORACLE` is now a first-class sync engine
+on **both** paths. The backend gains an `oracledb` (thin-mode) direct-connect
+driver (`lib/db-source/oracle.ts`) and the connector runs Oracle jobs with the
+`oracledb` driver it already carries for discovery. The SELECT builder emits
+Oracle's dialect — bare (validated) identifiers so upper-case folding matches
+the stored object, and `FETCH FIRST n ROWS ONLY` instead of `LIMIT`. `ORACLE`
+joins the supported-engine set, the `dbType` unions/enums, and the wizard
+dropdowns. Unit tests cover the Oracle dialect + injection rejection; a
+live-Postgres test proves an `ORACLE` sync reaches a real connection attempt
+(rather than the unsupported-engine guard). With this, **every §F sync item is
+closed** — direct-connect and agent-push both cover Postgres, MySQL, SQL
+Server, and Oracle.
 
 ---
 

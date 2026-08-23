@@ -9,12 +9,14 @@
 import { Client } from 'pg';
 import mysql from 'mysql2/promise';
 import mssql from 'mssql';
+import oracledb from 'oracledb';
 import type { ConnectorConfig, Source, AgentSyncJob } from './types';
 import { getSyncJobs, pushSyncRows } from './api';
 import { resolveSourceSecrets, type SecretResolvers } from './secrets';
 import { withRetry } from './retry';
 import { buildSelectSql, normalizeRow, type SyncEngine } from './sync-query';
 import { buildMssqlConfig } from './sqlserver';
+import { parseOracleConnectionString } from './oracle';
 
 type LogFn = (msg: string, extra?: Record<string, unknown>) => void;
 
@@ -22,12 +24,14 @@ const SOURCE_TYPE_TO_ENGINE: Partial<Record<Source['type'], SyncEngine>> = {
   postgres: 'POSTGRESQL',
   mysql: 'MYSQL',
   sqlserver: 'SQLSERVER',
+  oracle: 'ORACLE',
 };
 
 const ENGINE_TO_SOURCE_TYPE: Record<SyncEngine, Source['type']> = {
   POSTGRESQL: 'postgres',
   MYSQL: 'mysql',
   SQLSERVER: 'sqlserver',
+  ORACLE: 'oracle',
 };
 
 /**
@@ -79,6 +83,16 @@ export async function fetchJobRows(source: Source, job: AgentSyncJob): Promise<R
       return Array.isArray(rows) ? (rows as Record<string, unknown>[]).map(normalizeRow) : [];
     } finally {
       await conn.end();
+    }
+  }
+  if (source.type === 'oracle') {
+    const { user, password, connectString } = parseOracleConnectionString(source.connectionString);
+    const conn = await oracledb.getConnection({ user, password, connectString });
+    try {
+      const res = await conn.execute(sql, [], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+      return ((res.rows ?? []) as Record<string, unknown>[]).map(normalizeRow);
+    } finally {
+      await conn.close();
     }
   }
   if (source.type !== 'sqlserver') {

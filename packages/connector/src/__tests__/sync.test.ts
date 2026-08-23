@@ -12,6 +12,7 @@ test('buildSelectSql: per-engine dialect matches the backend', () => {
   assert.equal(buildSelectSql('POSTGRESQL', { schema: 'public', table: 'people', limit: 100 }), 'SELECT * FROM "public"."people" LIMIT 100');
   assert.equal(buildSelectSql('MYSQL', { schema: 'app', table: 'people', limit: 50 }), 'SELECT * FROM `app`.`people` LIMIT 50');
   assert.equal(buildSelectSql('SQLSERVER', { schema: 'dbo', table: 'org', limit: 25 }), 'SELECT TOP (25) * FROM [dbo].[org]');
+  assert.equal(buildSelectSql('ORACLE', { schema: 'HR', table: 'EMPLOYEES', limit: 40 }), 'SELECT * FROM HR.EMPLOYEES FETCH FIRST 40 ROWS ONLY');
   assert.equal(buildSelectSql('POSTGRESQL', { table: 't' }), `SELECT * FROM "t" LIMIT ${DEFAULT_ROW_LIMIT}`);
 });
 
@@ -38,7 +39,8 @@ test('clampLimit + normalizeRow behave like the backend', () => {
 
 const pg: Source = { type: 'postgres', name: 'primary-pg', connectionString: 'postgres://x' };
 const my: Source = { type: 'mysql', name: 'hr-mysql', connectionString: 'mysql://x' };
-const sources: Source[] = [pg, my];
+const ora: Source = { type: 'oracle', name: 'erp-oracle', connectionString: 'oracle://u:p@h:1521/ORCLPDB1' };
+const sources: Source[] = [pg, my, ora];
 
 function job(overrides: Partial<AgentSyncJob>): AgentSyncJob {
   return { id: 'j', name: 'job', targetEntity: 'people', matchKey: 'name', fieldMapping: {}, intervalMinutes: 60, nextRunAt: null, ...overrides };
@@ -52,6 +54,7 @@ test('selectSourceForJob: explicit sourceName wins', () => {
 test('selectSourceForJob: falls back to first source matching dbType', () => {
   assert.equal(selectSourceForJob(sources, job({ dbType: 'POSTGRESQL' })), pg);
   assert.equal(selectSourceForJob(sources, job({ dbType: 'MYSQL' })), my);
+  assert.equal(selectSourceForJob(sources, job({ dbType: 'ORACLE' })), ora);
   assert.equal(selectSourceForJob(sources, job({ dbType: 'SQLSERVER' })), null);
 });
 
