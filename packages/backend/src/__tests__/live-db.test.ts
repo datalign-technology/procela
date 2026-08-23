@@ -939,7 +939,7 @@ suite('live-db business flows', () => {
     await sync.create({
       id: scId, orgId, name: 'Mock systems sync', targetEntity: 'systems',
       sourceType: 'DATABASE', connectionId: null,
-      config: { dbType: 'POSTGRESQL', table: 't' },
+      config: { dbType: 'POSTGRESQL', table: 't', sampleData: true },
       fieldMapping: { name: 'sys_name', description: 'sys_desc' }, matchKey: 'name',
       schedule: { enabled: false, intervalMinutes: 60, lastRunAt: null, nextRunAt: null },
       status: 'ACTIVE', lastSyncResult: null, createdAt: now, updatedAt: now,
@@ -984,7 +984,7 @@ suite('live-db business flows', () => {
     await sync.create({
       id: scId, orgId, name: 'Auto systems sync', targetEntity: 'systems',
       sourceType: 'DATABASE', connectionId: null,
-      config: { dbType: 'POSTGRESQL', table: 't' },
+      config: { dbType: 'POSTGRESQL', table: 't', sampleData: true },
       fieldMapping: { name: 'sys_name', description: 'sys_desc' }, matchKey: 'name',
       schedule: { enabled: true, intervalMinutes: 60, lastRunAt: null, nextRunAt: pastNextRun },
       status: 'ACTIVE', lastSyncResult: null,
@@ -996,7 +996,7 @@ suite('live-db business flows', () => {
     await sync.create({
       id: disabledId, orgId, name: 'Disabled sync', targetEntity: 'systems',
       sourceType: 'DATABASE', connectionId: null,
-      config: { dbType: 'POSTGRESQL', table: 't' },
+      config: { dbType: 'POSTGRESQL', table: 't', sampleData: true },
       fieldMapping: { name: 'off_name' }, matchKey: 'name',
       schedule: { enabled: false, intervalMinutes: 60, lastRunAt: null, nextRunAt: pastNextRun },
       status: 'ACTIVE', lastSyncResult: null,
@@ -1028,6 +1028,127 @@ suite('live-db business flows', () => {
     // The disabled sync never fired.
     const off = await sync.get(disabledId);
     assert.strictEqual(off?.schedule?.lastRunAt, null, 'disabled sync was skipped');
+  });
+
+  it('sync live driver: a DATABASE sync reads REAL rows from Postgres via a credentialed connection', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+    const client = loadPrisma();
+
+    // Parse the live-DB URL the suite already connects with, and reuse it as
+    // the sync *source* — pointing the Postgres driver back at this same
+    // database is the cleanest way to exercise a real connection in CI.
+    const url = new URL(process.env.DATABASE_URL as string);
+    const source = {
+      host: url.hostname,
+      port: Number(url.port || 5432),
+      database: url.pathname.replace(/^\//, ''),
+      username: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+    };
+
+    // A real source table with distinctive values mock rows could never
+    // produce (generateMockRows only emits "mock_<col>_<n>").
+    await client.$executeRawUnsafe('DROP TABLE IF EXISTS sync_src');
+    await client.$executeRawUnsafe(
+      'CREATE TABLE sync_src (sys_name text, sys_desc text)',
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO sync_src (sys_name, sys_desc) VALUES
+         ('Acme Billing', 'invoicing platform'),
+         ('Acme CRM', 'customer records'),
+         ('Acme GIS', 'network mapping')`,
+    );
+
+    try {
+      // Credentials live on the Connection profile; the sync references it.
+      const connections = prismaRepo(prismaConnectionsRepository);
+      const connId = randomUUID();
+      await connections.create({
+        id: connId, orgId, name: 'Live Postgres source', connectionType: 'DATABASE',
+        config: { dbType: 'POSTGRESQL', host: source.host, port: source.port, database: source.database },
+        credentials: { username: source.username, password: source.password },
+        status: 'CONNECTED', lastTestedAt: null, lastTestResult: null,
+        createdAt: now, updatedAt: now,
+      });
+
+      const sync = prismaRepo(prismaSyncConnectionsRepository);
+      const scId = randomUUID();
+      await sync.create({
+        id: scId, orgId, name: 'Live systems sync', targetEntity: 'systems',
+        sourceType: 'DATABASE', connectionId: connId,
+        // No sampleData → the live driver path. schema+table drive the SELECT.
+        config: { schema: 'public', table: 'sync_src' },
+        fieldMapping: { name: 'sys_name', description: 'sys_desc' }, matchKey: 'name',
+        schedule: { enabled: false, intervalMinutes: 60, lastRunAt: null, nextRunAt: null },
+        status: 'ACTIVE', lastSyncResult: null, createdAt: now, updatedAt: now,
+      } as never);
+
+      const app = express();
+      app.use(express.json());
+      app.use('/sync-connections', syncConnectionsRouter);
+      const server = app.listen(0);
+      await new Promise((r) => server.once('listening', () => r(null)));
+      const port = (server.address() as AddressInfo).port;
+      const base = `http://127.0.0.1:${port}/sync-connections`;
+      try {
+        const run = (await (await fetch(`${base}/${scId}/run`, { method: 'POST' })).json()) as any;
+        assert.strictEqual(run.success, true, 'live run succeeded');
+        assert.strictEqual(run.data.created, 3, 'created a row per real source row');
+        assert.strictEqual(run.data.errors, 0);
+        assert.notStrictEqual(run.simulated, true, 'this was a REAL connection, not simulated');
+
+        // The persisted systems carry the real source values — proof the
+        // driver read the table, not generateMockRows.
+        const systemsRepo = prismaRepo(prismaSystemsRepository);
+        const names = (await systemsRepo.list({ orgId }))
+          .filter((s: any) => s.syncConnectionId === scId)
+          .map((s: any) => s.name)
+          .sort();
+        assert.deepStrictEqual(names, ['Acme Billing', 'Acme CRM', 'Acme GIS']);
+      } finally {
+        await new Promise((r) => server.close(() => r(null)));
+      }
+    } finally {
+      await client.$executeRawUnsafe('DROP TABLE IF EXISTS sync_src');
+    }
+  });
+
+  it('sync live driver: a DATABASE sync with an unreachable source FAILS LOUDLY (no silent mock fallback)', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+
+    // No sampleData, no reachable host → the run must error, not fake success.
+    const sync = prismaRepo(prismaSyncConnectionsRepository);
+    const scId = randomUUID();
+    await sync.create({
+      id: scId, orgId, name: 'Broken source', targetEntity: 'systems',
+      sourceType: 'DATABASE', connectionId: null,
+      config: { dbType: 'POSTGRESQL', host: '127.0.0.1', port: 1, database: 'nope', table: 'whatever' },
+      fieldMapping: { name: 'n' }, matchKey: 'name',
+      schedule: { enabled: false, intervalMinutes: 60, lastRunAt: null, nextRunAt: null },
+      status: 'ACTIVE', lastSyncResult: null, createdAt: now, updatedAt: now,
+    } as never);
+
+    const app = express();
+    app.use(express.json());
+    app.use('/sync-connections', syncConnectionsRouter);
+    const server = app.listen(0);
+    await new Promise((r) => server.once('listening', () => r(null)));
+    const port = (server.address() as AddressInfo).port;
+    const base = `http://127.0.0.1:${port}/sync-connections`;
+    try {
+      const run = (await (await fetch(`${base}/${scId}/run`, { method: 'POST' })).json()) as any;
+      assert.strictEqual(run.success, false, 'unreachable source fails the run');
+      assert.ok(run.error, 'an error message is returned');
+      assert.strictEqual(run.data.created, 0, 'nothing was created');
+
+      // The connection is marked ERROR — not silently ACTIVE.
+      const after = await sync.get(scId);
+      assert.strictEqual(after?.status, 'ERROR');
+    } finally {
+      await new Promise((r) => server.close(() => r(null)));
+    }
   });
 
   it('settings: AppSetting set → get round-trips a JSON value through Postgres', async () => {
