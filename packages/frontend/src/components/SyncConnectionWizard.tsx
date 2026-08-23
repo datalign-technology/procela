@@ -134,6 +134,12 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
   const [authHeader, setAuthHeader] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  // DATABASE only: opt in to labelled sample rows instead of a live query.
+  // When on, no real connection is attempted, so the source fields aren't
+  // required. Off by default — a DATABASE sync connects for real.
+  const [sampleData, setSampleData] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -186,6 +192,8 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
   const canAdvance = (): boolean => {
     if (step === 0) return name.trim().length > 0 && targetOrgId.length > 0;
     if (step === 1) {
+      // Sample-data DATABASE syncs need no real connection at all.
+      if (sourceType === 'DATABASE' && sampleData) return true;
       if (connectionMode === 'saved') {
         // A saved connection covers host/port/credentials. We still need
         // the source-specific fields the connection profile doesn't
@@ -210,7 +218,13 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
       const config: Record<string, any> = {};
       let connectionId: string | null = null;
 
-      if (connectionMode === 'saved') {
+      if (sourceType === 'DATABASE' && sampleData) {
+        // Explicit sample source — no live connection is attempted; the
+        // backend returns labelled representative rows.
+        config.sampleData = true;
+        if (table.trim()) config.table = table;
+        if (query.trim()) config.query = query;
+      } else if (connectionMode === 'saved') {
         connectionId = savedConnectionId;
         // Sync still owns table/query (DB) or any URL fragment that the
         // saved baseUrl doesn't cover. Everything else comes from the
@@ -236,9 +250,12 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           if (authHeader.trim()) config.authHeader = authHeader;
         }
 
-        if (saveAsConnection) {
-          // Promote the inline definition to a reusable Connection profile
-          // before creating the sync, so future syncs can pick it up.
+        // Credentials only live on a Connection profile — the sync row never
+        // stores them. So promote the inline definition to a profile when the
+        // user asked to save it, OR whenever DB credentials were entered
+        // (there's nowhere else to keep them); the sync then references it.
+        const hasDbCreds = sourceType === 'DATABASE' && (username.trim() !== '' || password.trim() !== '');
+        if (saveAsConnection || hasDbCreds) {
           try {
             const saved = await apiClient.post<{ success: boolean; data: { id: string } }>('/connections', {
               orgId: targetOrgId,
@@ -247,12 +264,14 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
               config: sourceType === 'DATABASE'
                 ? { dbType, host, port: Number(port) || 5432, database, schema: schema || 'public' }
                 : { baseUrl: url },
-              credentials: {},
+              credentials: sourceType === 'DATABASE'
+                ? { username: username.trim() || undefined, password: password.trim() || undefined }
+                : {},
             });
             if (saved?.data?.id) connectionId = saved.data.id;
           } catch {
             // Non-fatal: fall through and create the sync inline only.
-            addToast('error', 'Could not save inline connection — sync will use inline credentials only.');
+            addToast('error', 'Could not save connection — sync will use inline settings only.');
           }
         }
       }
@@ -343,7 +362,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             </div>
             <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 8 }}>Source Type</label>
             {([
-              { type: 'DATABASE' as SourceType, label: 'Database Table (simulated)', desc: 'Direct database drivers are not wired up yet — this source returns representative sample rows, not a live query. CSV/JSON URLs fetch real data.' },
+              { type: 'DATABASE' as SourceType, label: 'Database Table', desc: 'Connect directly to a PostgreSQL, MySQL, or SQL Server database and pull rows on a schedule. Enable "sample data" below to preview with representative rows instead of a live query.' },
               { type: 'CSV_URL' as SourceType, label: 'CSV URL', desc: 'Poll a CSV file from a URL on a schedule' },
               { type: 'JSON_URL' as SourceType, label: 'JSON URL', desc: 'Poll a JSON endpoint on a schedule' },
             ]).map((opt) => (
@@ -364,7 +383,25 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
         )}
 
         {/* Step 2: Connection Details */}
-        {step === 1 && (
+        {step === 1 && sourceType === 'DATABASE' && (
+          <label style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', marginBottom: 12,
+            background: sampleData ? '#eff6ff' : 'var(--color-bg)',
+            border: `1px solid ${sampleData ? '#93c5fd' : 'var(--color-border)'}`,
+            borderRadius: 'var(--radius-md)', cursor: 'pointer',
+          }}>
+            <input type="checkbox" checked={sampleData} onChange={(e) => setSampleData(e.target.checked)} style={{ marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>Use sample data (no live connection)</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Preview the sync with representative rows instead of connecting to a real database.
+                Turn off to configure a live PostgreSQL, MySQL, or SQL Server connection.
+              </div>
+            </div>
+          </label>
+        )}
+
+        {step === 1 && !(sourceType === 'DATABASE' && sampleData) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
             <div style={{ display: 'flex', gap: 6, padding: 4, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
               <button
@@ -422,7 +459,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           </div>
         )}
 
-        {step === 1 && sourceType === 'DATABASE' && connectionMode === 'inline' && (
+        {step === 1 && sourceType === 'DATABASE' && connectionMode === 'inline' && !sampleData && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Database Type</label>
@@ -452,6 +489,19 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
                 <input aria-label="Schema" style={inputStyle} value={schema} onChange={(e) => setSchema(e.target.value)} placeholder="public" />
               </div>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Username</label>
+                <input aria-label="Username" style={inputStyle} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="read-only DB user" autoComplete="off" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Password</label>
+                <input aria-label="Password" type="password" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
+              </div>
+            </div>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: -6 }}>
+              Credentials are stored on a reusable connection profile, never on the sync itself. Leave blank for trust / IAM auth.
+            </span>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Table *</label>
               <input aria-label="Table" style={inputStyle} value={table} onChange={(e) => setTable(e.target.value)} placeholder="e.g. employees, org_units" />
@@ -557,7 +607,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
               <input type="checkbox" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>Enable scheduled polling</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Records the interval on the connection. Note: an automatic background runner is not active yet, so scheduled syncs do not fire on their own — trigger a run from the connection until then.</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>A background runner executes enabled syncs automatically when the interval is due. You can still trigger a run manually at any time.</div>
               </div>
             </label>
             {scheduleEnabled && (

@@ -226,13 +226,14 @@ before the real drivers land.
   `false` for real LOCAL file parsing). The Connections page Discover modal
   renders a warning banner when `simulated` is true, so sample metadata is
   never mistaken for a live read.
-- **`SyncConnection` DATABASE source** — the wizard's source-type option is
-  relabelled "Database Table (simulated)" with copy explaining that drivers
-  aren't wired yet and CSV/JSON URLs fetch real data. (Backend `/preview`
-  and `/run` responses already returned `simulated`; no backend change.)
-- **`SyncConnection.schedule` auto-run** — the wizard's scheduled-polling
-  toggle now states plainly that no background runner is active yet and that
-  scheduled syncs must be triggered manually until one lands.
+- **`SyncConnection` DATABASE source** — _(interim; superseded — see the
+  §F live-driver outcome below.)_ Was relabelled "Database Table (simulated)"
+  while drivers were unwired; the source now connects for real (Postgres /
+  MySQL / SQL Server) with simulation demoted to an explicit `sampleData` opt-in.
+- **`SyncConnection.schedule` auto-run** — _(interim; superseded — see the
+  §F auto-runner outcome below.)_ The scheduled-polling toggle used to note
+  that no background runner was active; a leader-gated runner now consumes
+  `enabled`/`nextRunAt`.
 - **Secrets at rest** — done earlier in §F via the KMS/crypto layer (dbt
   Cloud token + OIDC client secret now encrypted; see the secrets PR).
 
@@ -247,9 +248,31 @@ just the JSON file). This required real `syncConnectionId` / `syncStatus`
 columns on the four target models (Organization, Person, System,
 GlossaryTerm) — added via migration and mapped in each repo — so a run can
 update its own prior rows and flag those dropped from the source. A
-live-Postgres test covers create + idempotent re-run. Still on the roadmap:
-live database-discovery drivers and the background auto-runner (only manual
-`/run` and `/preview` exist today).
+live-Postgres test covers create + idempotent re-run.
+
+**§F auto-runner outcome — done.** The `schedule.enabled` / `nextRunAt`
+fields are now consumed by a real background runner. The `/run` body was
+extracted into a reusable `runSync(sc)`; a leader-gated `tickSyncScheduler`
+(registered via `startBackgroundSweep(..., { leaderOnly: true })`, the same
+leader-election path as the agent-schedule / DQ tickers) runs enabled syncs
+whose `nextRunAt` is due, on exactly one replica with failover. An in-flight
+guard stops a slow run overlapping the next tick. Live-Postgres tests cover a
+due sync firing + advancing `nextRunAt`, and a disabled sync being skipped.
+
+**§F live-driver outcome — done (direct-connect).** The DATABASE source is no
+longer simulated by default. A driver layer (`lib/db-source/`) connects
+directly to **PostgreSQL, MySQL, and SQL Server** (`pg` / `mysql2` / `mssql`),
+builds an engine-appropriate `SELECT` (identifier-validated to close the
+injection boundary; `LIMIT` vs SQL Server `TOP`), and returns real rows the
+sync upserts. Credentials resolve from the referenced Connection profile, never
+the sync row. Behaviour is **fail-loud**: a DATABASE sync that can't reach its
+source records a failed run and flips to `ERROR` — no silent mock fallback.
+Simulation is now an **explicit** opt-in (`config.sampleData = true`), surfaced
+in the wizard as a "use sample data" toggle, so seeded demos still work. Pure
+SQL/normalization unit tests plus a live-Postgres end-to-end (real table →
+real rows) and a fail-loud test cover it. Still deferred: the on-prem
+**agent-push** path for firewalled DBs (row extraction through
+`packages/connector`) and the Oracle engine.
 
 ---
 

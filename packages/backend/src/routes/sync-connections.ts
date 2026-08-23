@@ -17,6 +17,8 @@ import { getSystemsRepository } from '../db/systems.repo';
 import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
 import type { Repository } from '../db/repository';
 import { hasDatabase } from '../db/prisma';
+import { fetchDbRows, SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
+import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 
 // Lazy repo for the saved Connection profiles — the imported `connections`
 // array is empty in Postgres mode, so resolving a connectionId must go
@@ -52,6 +54,15 @@ export interface SyncConnection {
     // URL-based
     url?: string;
     authHeader?: string;
+    // Shared
+    /** Row cap for a DATABASE table-scan. A raw `query` owns its own
+     *  limiting and ignores this. */
+    limit?: number;
+    /** Explicit opt-in to simulated sample rows for a DATABASE source.
+     *  Demos and seeds set this so they run without a live database; when
+     *  false/absent a DATABASE sync attempts a real direct connection and
+     *  fails loudly if it can't reach the source. */
+    sampleData?: boolean;
   };
   fieldMapping: Record<string, string>;
   matchKey: string;
@@ -112,6 +123,8 @@ const syncConfigSchema = z.object({
   query: z.string().optional(),
   url: z.string().optional(),
   authHeader: z.string().optional(),
+  limit: z.number().optional(),
+  sampleData: z.boolean().optional(),
 });
 const syncScheduleSchema = z.object({
   enabled: z.boolean().optional(),
@@ -205,6 +218,51 @@ async function resolveEffectiveConfig(sc: SyncConnection): Promise<SyncConnectio
     }
   }
   return merged;
+}
+
+/**
+ * Assemble the DbSourceRequest a live DATABASE sync connects with. Starts
+ * from the sync's own config and overlays a saved Connection profile's
+ * host/port/database/schema and credentials when a connectionId is set
+ * (sync-owned fields win, matching resolveEffectiveConfig). Throws when the
+ * effective dbType isn't one the direct-connect drivers support — the sync
+ * then records a failed run rather than silently doing nothing.
+ */
+async function resolveDbSource(sc: SyncConnection): Promise<DbSourceRequest> {
+  const cfg: SyncConnection['config'] = { ...sc.config };
+  let creds: { username?: string; password?: string } = {};
+
+  if (sc.connectionId) {
+    const conn = await connectionsRepo().get(sc.connectionId);
+    if (conn) {
+      if (conn.config.dbType && !cfg.dbType) cfg.dbType = conn.config.dbType as SyncConnection['config']['dbType'];
+      if (conn.config.host && !cfg.host) cfg.host = conn.config.host;
+      if (conn.config.port && !cfg.port) cfg.port = conn.config.port;
+      if (conn.config.database && !cfg.database) cfg.database = conn.config.database;
+      if (conn.config.schema && !cfg.schema) cfg.schema = conn.config.schema;
+      creds = { username: conn.credentials?.username, password: conn.credentials?.password };
+    }
+  }
+
+  const dbType = cfg.dbType;
+  if (!dbType || !SUPPORTED_DB_SOURCE_TYPES.includes(dbType as DbSourceType)) {
+    throw new Error(
+      `Live database sync supports ${SUPPORTED_DB_SOURCE_TYPES.join(', ')}; got ${dbType ?? 'none'}`,
+    );
+  }
+
+  return {
+    dbType: dbType as DbSourceType,
+    host: cfg.host ?? '',
+    port: cfg.port,
+    database: cfg.database ?? '',
+    schema: cfg.schema,
+    table: cfg.table,
+    query: cfg.query,
+    username: creds.username,
+    password: creds.password,
+    limit: cfg.limit,
+  };
 }
 
 function isConnectionCompatible(conn: { connectionType: string }, sourceType: string): boolean {
@@ -471,9 +529,16 @@ async function runSync(sc: SyncConnection): Promise<RunSyncOutcome> {
 
   try {
     if (sc.sourceType === 'DATABASE') {
-      // Cannot connect to real databases in the prototype — simulate
-      rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
-      simulated = true;
+      if (sc.config.sampleData) {
+        // Explicit sample source — labelled simulated rows for demos/seeds.
+        rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
+        simulated = true;
+      } else {
+        // Live direct-connect: read real rows from the source database. Any
+        // failure (unreachable host, auth, missing table) throws and the run
+        // is recorded as failed — no silent fallback to mock data.
+        rows = await fetchDbRows(await resolveDbSource(sc));
+      }
     } else {
       // CSV_URL or JSON_URL — attempt real fetch
       rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
@@ -770,8 +835,12 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
 
   try {
     if (sc.sourceType === 'DATABASE') {
-      rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
-      simulated = true;
+      if (sc.config.sampleData) {
+        rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
+        simulated = true;
+      } else {
+        rows = await fetchDbRows(await resolveDbSource(sc));
+      }
     } else {
       rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
     }
