@@ -4,8 +4,14 @@ This module provisions the AWS surface described in `CLAUDE.md`
 (section "Infrastructure — AWS Prototype") as a single, reviewable
 Terraform stack. It exists so a procurement checklist can be answered
 with "here is how it deploys" rather than "here is `docker compose
-up`". Out of the box it is a **reference** deployment, not a hardened
-one — but every hardening item ships as an opt-in toggle; see
+up`". Out of the box it now deploys a **hardened** stack: the safety and
+hardening toggles default **on** (Multi-AZ RDS with deletion protection,
+customer-managed KMS keys, a provisioned ElastiCache Redis, VPC endpoints,
+per-AZ NAT, WAF, ALB-restricted-to-CloudFront, access logs, and alarms). For a
+cheap dev stack, turn the cost-bearing ones off (see the block in
+`terraform.tfvars.example`). The account-level security services (CloudTrail /
+GuardDuty / Security Hub / Config) remain **opt-in** — they're commonly
+org-managed and conflict-prone. See
 [Production hardening toggles](#production-hardening-toggles) below.
 
 ## What you get
@@ -143,15 +149,16 @@ a small bootstrap module or by hand.
 
 ## Production hardening toggles
 
-The base module above is the **reference deployment** — it deploys as
-described with every hardening toggle off, so it stays small and
-auditable. The production-hardening items from
+The production-hardening items from
 [`docs/AWS_PRODUCTION_GUIDE.md` §5](../../docs/AWS_PRODUCTION_GUIDE.md)
-are implemented here as **opt-in variables that all default to
-`false`/empty**. With none of them set, `terraform plan` produces
-exactly the reference resources; flipping one only *adds* or
-reconfigures infrastructure — none of it changes application
-behaviour.
+are implemented here as variables, and the stack-level ones now **default
+`true`** so a bare apply is production-hardened. To get the small/cheap
+reference stack instead, set the cost-bearing ones `false` (there's a
+ready-to-paste block in `terraform.tfvars.example`). The **account-level
+security services** — CloudTrail, GuardDuty, Security Hub, Config — stay
+`false` by default: they're commonly org-managed, and AWS Config in particular
+allows only one configuration recorder per region, so defaulting it on would
+fail the apply on any account that already has Config.
 
 > Enable them individually or all at once. Several force resource
 > replacement or re-encryption (KMS, NAT restructure), so **always

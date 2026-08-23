@@ -93,8 +93,8 @@ variable "db_allocated_storage_gb" {
 
 variable "db_backup_retention_days" {
   type        = number
-  description = "Automated backup retention period, in days. 7 is the reference default; production typically wants 14-35."
-  default     = 7
+  description = "Automated backup retention period, in days. 14 is the production default; 7 is fine for a dev stack, up to 35 for stricter RPO."
+  default     = 14
 }
 
 variable "db_name" {
@@ -123,8 +123,32 @@ variable "log_retention_days" {
 
 variable "enable_redis" {
   type        = bool
-  description = "Inject REDIS_URL for the shared rate limiter. Populate the redis_url secret first."
-  default     = false
+  description = "Provision an ElastiCache (Redis) replication group for the shared rate limiter and wire its endpoint into REDIS_URL automatically (see redis.tf). Off = no cache; the limiter degrades to per-task in-memory."
+  default     = true
+}
+
+variable "redis_node_type" {
+  type        = string
+  description = "ElastiCache node type. cache.t4g.micro is a small, cheap default; size up for real load."
+  default     = "cache.t4g.micro"
+}
+
+variable "redis_num_nodes" {
+  type        = number
+  description = "Number of cache nodes in the replication group. 2 = primary + replica with automatic cross-AZ failover; 1 = single node (cheaper, no HA)."
+  default     = 2
+}
+
+variable "redis_engine_version" {
+  type        = string
+  description = "ElastiCache Redis engine version."
+  default     = "7.1"
+}
+
+variable "redis_transit_encryption" {
+  type        = bool
+  description = "Encrypt Redis in transit (TLS) and require an AUTH token. The app connects with rediss:// and the token embedded in REDIS_URL. Turn off only if a client can't do TLS."
+  default     = true
 }
 
 variable "enable_smtp" {
@@ -269,8 +293,8 @@ variable "mail_from" {
 
 variable "rds_multi_az" {
   type        = bool
-  description = "Run RDS as Multi-AZ: a synchronous standby in the second AZ fails over automatically. Roughly doubles DB cost."
-  default     = false
+  description = "Run RDS as Multi-AZ: a synchronous standby in the second AZ fails over automatically. Roughly doubles DB cost. Default on (production posture); set false for a cheap single-AZ dev stack."
+  default     = true
 }
 
 variable "rds_deletion_protection" {
@@ -281,13 +305,13 @@ variable "rds_deletion_protection" {
     a final snapshot is taken on delete (skip_final_snapshot = false), and
     automated backups are retained. Leave false for throwaway/reference stacks.
   EOT
-  default     = false
+  default     = true
 }
 
 variable "rds_performance_insights" {
   type        = bool
   description = "Enable RDS Performance Insights for query-level diagnostics. Uses the RDS KMS CMK when enable_kms_cmk is also true, otherwise the AWS-managed key."
-  default     = false
+  default     = true
 }
 
 variable "rds_performance_insights_retention_days" {
@@ -305,9 +329,11 @@ variable "enable_kms_cmk" {
     storage, Secrets Manager entries, the CloudWatch log group, and the
     frontend S3 bucket at them instead of AWS-owned keys. Enabling this on an
     EXISTING stack re-encrypts those resources (RDS storage change, secret
-    re-wrap) — review the plan carefully.
+    re-wrap) — review the plan carefully. Default on (production posture); on a
+    pre-existing stack that applied with AWS-owned keys, set false to avoid the
+    re-encryption, or plan the migration deliberately.
   EOT
-  default     = false
+  default     = true
 }
 
 variable "kms_deletion_window_days" {
@@ -321,25 +347,25 @@ variable "kms_deletion_window_days" {
 variable "enable_vpc_endpoints" {
   type        = bool
   description = "Create VPC endpoints (S3 gateway + ECR/Secrets Manager/CloudWatch Logs interface) so tasks reach those services privately instead of over the NAT gateway."
-  default     = false
+  default     = true
 }
 
 variable "enable_nat_per_az" {
   type        = bool
-  description = "Deploy one NAT gateway per AZ (with its own EIP and private route table) so a single-AZ outage does not sever egress for the healthy AZ. Off = one shared NAT (cheaper). Toggling on an existing stack re-indexes the NAT/EIP/route-table resources."
-  default     = false
+  description = "Deploy one NAT gateway per AZ (with its own EIP and private route table) so a single-AZ outage does not sever egress for the healthy AZ. Default on (production posture); set false for one shared NAT (cheaper dev stack). Toggling on an existing stack re-indexes the NAT/EIP/route-table resources."
+  default     = true
 }
 
 variable "restrict_alb_to_cloudfront" {
   type        = bool
   description = "Restrict the ALB security group's 80/443 ingress to AWS's managed CloudFront origin-facing prefix list instead of 0.0.0.0/0, so the ALB is only reachable through CloudFront."
-  default     = false
+  default     = true
 }
 
 variable "alb_drop_invalid_header_fields" {
   type        = bool
   description = "Have the ALB drop HTTP headers with invalid fields before forwarding to the backend (recommended for production)."
-  default     = false
+  default     = true
 }
 
 # 5.4 Edge protection — WAF ──────────────────────────────────────────────────
@@ -347,7 +373,7 @@ variable "alb_drop_invalid_header_fields" {
 variable "enable_waf" {
   type        = bool
   description = "Create a WAFv2 web ACL (CLOUDFRONT scope, us-east-1) with AWS managed rule groups + a rate limit, and attach it to the CloudFront distribution."
-  default     = false
+  default     = true
 }
 
 variable "waf_rate_limit" {
@@ -381,13 +407,13 @@ variable "db_rotation_days" {
 variable "enable_access_logs" {
   type        = bool
   description = "Create locked-down S3 buckets and enable access logging on the ALB and the CloudFront distribution."
-  default     = false
+  default     = true
 }
 
 variable "enable_monitoring_alarms" {
   type        = bool
-  description = "Create an SNS topic and CloudWatch alarms for the essentials (ALB 5xx + unhealthy hosts, ECS CPU/memory, RDS CPU/storage/connections)."
-  default     = false
+  description = "Create an SNS topic and CloudWatch alarms for the essentials (ALB 5xx + unhealthy hosts, ECS CPU/memory, RDS CPU/storage/connections). Set alarm_email to receive them."
+  default     = true
 }
 
 variable "alarm_email" {

@@ -205,7 +205,11 @@ resource "aws_secretsmanager_secret" "redis_url" {
   kms_key_id              = local.kms_secrets_arn
 }
 
+# Placeholder only when Redis isn't provisioned by this module. When
+# enable_redis is true, redis.tf writes the real endpoint URL into this secret
+# instead (see aws_secretsmanager_secret_version.redis_url_provisioned).
 resource "aws_secretsmanager_secret_version" "redis_url_placeholder" {
+  count         = var.enable_redis ? 0 : 1
   secret_id     = aws_secretsmanager_secret.redis_url.id
   secret_string = "REPLACE_ME_WITH_REDIS_URL"
 
