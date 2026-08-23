@@ -4,7 +4,14 @@
 // itself never calls). We use native fetch (Node 20+) so the
 // container image stays light — no axios, no node-fetch.
 
-import type { ConnectorConfig, PairClaimResponse, ReportResponse, ReportedAsset } from './types';
+import type {
+  ConnectorConfig,
+  PairClaimResponse,
+  ReportResponse,
+  ReportedAsset,
+  SyncJobsResponse,
+  SyncPushResponse,
+} from './types';
 
 function url(cfg: ConnectorConfig, path: string): string {
   const base = cfg.procelaUrl.replace(/\/$/, '');
@@ -45,5 +52,34 @@ export async function report(cfg: ConnectorConfig, assets: ReportedAsset[]): Pro
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
     body: JSON.stringify({ assets }),
   });
+  return res.json();
+}
+
+/** Fetch the AGENT-mode syncs this connector is due to run. Returns the
+ *  jobs the backend deems due now (schedule-driven, server-side). */
+export async function getSyncJobs(cfg: ConnectorConfig): Promise<SyncJobsResponse> {
+  if (!cfg.token) return { success: false, error: 'no token' };
+  const res = await fetch(url(cfg, '/connectors/sync-jobs'), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${cfg.token}` },
+  });
+  if (!res.ok) throw new Error(`sync-jobs HTTP ${res.status}`);
+  return res.json();
+}
+
+/** Push the rows read for one sync job. The backend upserts them into the
+ *  target entity and advances the sync's schedule. */
+export async function pushSyncRows(
+  cfg: ConnectorConfig,
+  jobId: string,
+  rows: Record<string, string>[],
+): Promise<SyncPushResponse> {
+  if (!cfg.token) return { success: false, error: 'no token' };
+  const res = await fetch(url(cfg, `/connectors/sync-jobs/${encodeURIComponent(jobId)}/push`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+    body: JSON.stringify({ rows }),
+  });
+  if (!res.ok) throw new Error(`sync push HTTP ${res.status}`);
   return res.json();
 }

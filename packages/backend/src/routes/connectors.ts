@@ -86,7 +86,7 @@ export interface StoredConnectorEvent {
   id: string;
   connectorId: string;
   orgId: string;
-  type: 'PAIRED' | 'HEARTBEAT' | 'SCAN_STARTED' | 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'ASSETS_REPORTED';
+  type: 'PAIRED' | 'HEARTBEAT' | 'SCAN_STARTED' | 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'ASSETS_REPORTED' | 'SYNC_JOBS_FETCHED' | 'SYNC_PUSHED';
   ts: string;
   /** Optional payload — counts, durations, error text. Keep small. */
   data: Record<string, any>;
@@ -155,7 +155,7 @@ function freshnessFor(row: StoredConnector): StoredConnector['status'] {
 // Connector-token middleware — used by the agent-side endpoints.
 // The admin-side endpoints continue to use the standard authenticateToken
 // from index.ts and are mounted under the same /connectors prefix.
-async function requireConnectorToken(req: Request, res: Response, next: () => void): Promise<void> {
+export async function requireConnectorToken(req: Request, res: Response, next: () => void): Promise<void> {
   const header = req.header('authorization') || '';
   const m = header.match(/^Bearer\s+(\S+)$/i);
   if (!m) { res.status(401).json({ success: false, error: 'connector token required' }); return; }
@@ -166,6 +166,23 @@ async function requireConnectorToken(req: Request, res: Response, next: () => vo
   if (!row) { res.status(401).json({ success: false, error: 'invalid or revoked connector token' }); return; }
   (req as any).connector = row;
   next();
+}
+
+/** Append a connector activity event. Exported so the agent-push sync
+ *  endpoints (routes/connector-sync.ts) record job fetches / pushes in the
+ *  same per-connector activity stream as scans. Best-effort — a failed event
+ *  write never fails the request. */
+export async function recordConnectorEvent(
+  connectorId: string,
+  orgId: string,
+  type: StoredConnectorEvent['type'],
+  data: Record<string, any> = {},
+): Promise<void> {
+  try {
+    await connectorEventsRepo.create({ id: uuid(), connectorId, orgId, type, ts: nowIso(), data });
+  } catch (err) {
+    logger.warn({ err, connectorId, type }, 'Failed to record connector event');
+  }
 }
 
 // ── Admin-side: registry CRUD ────────────────────────────────────────────

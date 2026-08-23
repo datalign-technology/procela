@@ -140,6 +140,12 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
   // When on, no real connection is attempted, so the source fields aren't
   // required. Off by default — a DATABASE sync connects for real.
   const [sampleData, setSampleData] = useState(false);
+  // DATABASE only: DIRECT = the cloud connects and pulls; AGENT = an on-prem
+  // connector runs the query inside the customer network and pushes rows.
+  const [executionMode, setExecutionMode] = useState<'DIRECT' | 'AGENT'>('DIRECT');
+  const [connectorId, setConnectorId] = useState('');
+  const [agentSourceName, setAgentSourceName] = useState('');
+  const [connectorOptions, setConnectorOptions] = useState<{ id: string; name: string; status: string }[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -147,6 +153,10 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
       .get<{ success: boolean; data: ConnectionOption[] }>(`/connections${orgId ? `?orgId=${orgId}` : ''}`)
       .then((res) => setAllConnections(res.data || []))
       .catch(() => setAllConnections([]));
+    apiClient
+      .get<{ success: boolean; data: { id: string; name: string; status: string }[] }>(`/connectors${orgId ? `?orgId=${orgId}` : ''}`)
+      .then((res) => setConnectorOptions(res.data || []))
+      .catch(() => setConnectorOptions([]));
   }, [open, orgId]);
 
   // If switching source types makes the previously selected connection
@@ -192,6 +202,11 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
   const canAdvance = (): boolean => {
     if (step === 0) return name.trim().length > 0 && targetOrgId.length > 0;
     if (step === 1) {
+      // Agent-push: needs a connector + a table/query; the connector owns the
+      // connection string, so no host/credentials here.
+      if (sourceType === 'DATABASE' && executionMode === 'AGENT') {
+        return connectorId.length > 0 && table.trim().length > 0;
+      }
       // Sample-data DATABASE syncs need no real connection at all.
       if (sourceType === 'DATABASE' && sampleData) return true;
       if (connectionMode === 'saved') {
@@ -218,7 +233,17 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
       const config: Record<string, any> = {};
       let connectionId: string | null = null;
 
-      if (sourceType === 'DATABASE' && sampleData) {
+      const isAgent = sourceType === 'DATABASE' && executionMode === 'AGENT';
+
+      if (isAgent) {
+        // Agent-push: the on-prem connector holds the connection string, so the
+        // sync only carries what to read + how to map it. No host/credentials.
+        config.dbType = dbType;
+        if (schema.trim()) config.schema = schema.trim();
+        if (table.trim()) config.table = table.trim();
+        if (query.trim()) config.query = query.trim();
+        if (agentSourceName.trim()) config.agentSourceName = agentSourceName.trim();
+      } else if (sourceType === 'DATABASE' && sampleData) {
         // Explicit sample source — no live connection is attempted; the
         // backend returns labelled representative rows.
         config.sampleData = true;
@@ -282,6 +307,8 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
         targetEntity,
         sourceType,
         connectionId,
+        executionMode: isAgent ? 'AGENT' : 'DIRECT',
+        connectorId: isAgent ? connectorId : null,
         config,
         fieldMapping,
         matchKey,
@@ -293,7 +320,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
 
       addToast('success', `Sync connection "${name}" created`);
 
-      if (runImmediately && res.data?.id) {
+      if (runImmediately && !isAgent && res.data?.id) {
         try {
           const runRes = await apiClient.post<{ success: boolean; data: { created: number; updated: number; skipped: number; missingFromSource: number; errors: number; simulated?: boolean } }>(`/sync-connections/${res.data.id}/run`);
           const r = runRes.data;
@@ -384,6 +411,29 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
 
         {/* Step 2: Connection Details */}
         {step === 1 && sourceType === 'DATABASE' && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>How does Procela reach the database?</label>
+            {([
+              { mode: 'DIRECT' as const, label: 'Direct connect (cloud pulls)', desc: 'Procela connects to the database and reads rows. Best for cloud-reachable databases (RDS, Cloud SQL) or when you allowlist Procela.' },
+              { mode: 'AGENT' as const, label: 'On-prem connector (agent pushes)', desc: 'An on-prem connector runs the query inside your network and pushes rows out over HTTPS. Best for firewalled databases — no inbound access needed.' },
+            ]).map((opt) => (
+              <label key={opt.mode} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', marginBottom: 6,
+                background: executionMode === opt.mode ? '#eff6ff' : 'var(--color-bg)',
+                border: `1px solid ${executionMode === opt.mode ? '#93c5fd' : 'var(--color-border)'}`,
+                borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              }}>
+                <input type="radio" name="executionMode" checked={executionMode === opt.mode} onChange={() => setExecutionMode(opt.mode)} style={{ marginTop: 2 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{opt.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{opt.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {step === 1 && sourceType === 'DATABASE' && executionMode === 'DIRECT' && (
           <label style={{
             display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', marginBottom: 12,
             background: sampleData ? '#eff6ff' : 'var(--color-bg)',
@@ -401,7 +451,56 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           </label>
         )}
 
-        {step === 1 && !(sourceType === 'DATABASE' && sampleData) && (
+        {/* Agent-push sub-form: connector + what to read. The connector holds
+            the connection string, so no host/credentials here. */}
+        {step === 1 && sourceType === 'DATABASE' && executionMode === 'AGENT' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>On-prem connector *</label>
+              <select aria-label="Connector" style={selectStyle} value={connectorId} onChange={(e) => setConnectorId(e.target.value)}>
+                <option value="">-- Select a paired connector --</option>
+                {connectorOptions.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
+                ))}
+              </select>
+              {connectorOptions.length === 0 && (
+                <span style={{ fontSize: 10, color: 'var(--color-warning)', display: 'block', marginTop: 4 }}>
+                  No connectors paired yet — pair one on the Connectors page first.
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Database Type</label>
+                <select aria-label="Agent Database Type" style={selectStyle} value={dbType} onChange={(e) => setDbType(e.target.value as DbType)}>
+                  <option value="POSTGRESQL">PostgreSQL</option>
+                  <option value="MYSQL">MySQL</option>
+                  <option value="SQLSERVER">SQL Server</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Schema</label>
+                <input aria-label="Agent Schema" style={inputStyle} value={schema} onChange={(e) => setSchema(e.target.value)} placeholder="public" />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Table *</label>
+              <input aria-label="Agent Table" style={inputStyle} value={table} onChange={(e) => setTable(e.target.value)} placeholder="e.g. employees, org_units" />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Custom Query (optional)</label>
+              <textarea aria-label="Agent Custom Query" style={{ ...inputStyle, minHeight: 50, fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SELECT * FROM employees WHERE active = true" />
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Overrides the table setting. Runs on the connector, against its own database credentials.</span>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connector source name (optional)</label>
+              <input aria-label="Agent Source Name" style={inputStyle} value={agentSourceName} onChange={(e) => setAgentSourceName(e.target.value)} placeholder="matches a source in the connector's config" />
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>When the connector has several sources, name which one to run against. Otherwise its first {dbType} source is used.</span>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && !(sourceType === 'DATABASE' && (sampleData || executionMode === 'AGENT')) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
             <div style={{ display: 'flex', gap: 6, padding: 4, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
               <button
@@ -459,7 +558,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           </div>
         )}
 
-        {step === 1 && sourceType === 'DATABASE' && connectionMode === 'inline' && !sampleData && (
+        {step === 1 && sourceType === 'DATABASE' && connectionMode === 'inline' && !sampleData && executionMode === 'DIRECT' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Database Type</label>

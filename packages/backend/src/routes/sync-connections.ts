@@ -8,9 +8,11 @@ import { people } from './people';
 import { systems } from './systems';
 import { glossaryTerms } from './business-glossary';
 import { connections } from './connections';
+import { connectors } from './connectors';
 import logger from '../lib/logger';
 import { getSyncConnectionsRepository } from '../db/sync-connections.repo';
 import { getConnectionsRepository } from '../db/connections.repo';
+import { getConnectorsRepository } from '../db/connectors.repo';
 import { getOrganizationsRepository } from '../db/organizations.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getSystemsRepository } from '../db/systems.repo';
@@ -25,6 +27,12 @@ import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 // through the repository.
 let _connectionsRepo: ReturnType<typeof getConnectionsRepository> | null = null;
 const connectionsRepo = () => (_connectionsRepo ??= getConnectionsRepository(connections));
+
+// Lazy repo for on-prem connectors — same rationale as connectionsRepo, and
+// lazy so importing the `connectors` array never runs at module-init time
+// (keeps the connectors.ts ↔ sync-connections.ts boundary one-directional).
+let _connectorsRepo: ReturnType<typeof getConnectorsRepository> | null = null;
+const connectorsRepo = () => (_connectorsRepo ??= getConnectorsRepository(connectors));
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +50,15 @@ export interface SyncConnection {
    *  specific overrides (table, query, URL path suffix, etc.). When
    *  null, the sync owns its config inline. */
   connectionId: string | null;
+  /** How a DATABASE sync executes:
+   *   - DIRECT (default): the backend connects to the source and pulls rows.
+   *   - AGENT: an on-prem connector runs the query inside the customer network
+   *     and pushes rows to the backend. Used when the source DB isn't reachable
+   *     from the cloud. AGENT syncs are skipped by the direct auto-runner. */
+  executionMode?: 'DIRECT' | 'AGENT';
+  /** For AGENT execution: the connector responsible for running this sync.
+   *  null for DIRECT syncs. */
+  connectorId?: string | null;
   config: {
     // DATABASE
     dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
@@ -63,6 +80,10 @@ export interface SyncConnection {
      *  false/absent a DATABASE sync attempts a real direct connection and
      *  fails loudly if it can't reach the source. */
     sampleData?: boolean;
+    /** AGENT execution only: the name of the connector's configured source
+     *  to run this sync against. When unset the agent uses its first source
+     *  whose engine matches `dbType`. */
+    agentSourceName?: string;
   };
   fieldMapping: Record<string, string>;
   matchKey: string;
@@ -125,6 +146,7 @@ const syncConfigSchema = z.object({
   authHeader: z.string().optional(),
   limit: z.number().optional(),
   sampleData: z.boolean().optional(),
+  agentSourceName: z.string().optional(),
 });
 const syncScheduleSchema = z.object({
   enabled: z.boolean().optional(),
@@ -144,6 +166,8 @@ const createSyncConnectionBodySchema = z.object({
   schedule: syncScheduleSchema.optional(),
   orgId: z.string().optional(),
   connectionId: z.string().nullable().optional(),
+  executionMode: z.enum(['DIRECT', 'AGENT']).optional(),
+  connectorId: z.string().nullable().optional(),
 });
 const updateSyncConnectionBodySchema = z.object({
   name: z.string().optional(),
@@ -159,6 +183,8 @@ const updateSyncConnectionBodySchema = z.object({
   schedule: syncScheduleSchema.optional(),
   status: z.enum(['ACTIVE', 'PAUSED', 'ERROR']).optional(),
   connectionId: z.string().nullable().optional(),
+  executionMode: z.enum(['DIRECT', 'AGENT']).optional(),
+  connectorId: z.string().nullable().optional(),
 });
 
 // Backfill connectionId on legacy rows so consumers can rely on the
@@ -502,12 +528,19 @@ type RunSyncOutcome =
   | { status: 'fetch-error'; result: SyncRunResult; error: string }
   | { status: 'config-error'; error: string };
 
-async function runSync(sc: SyncConnection): Promise<RunSyncOutcome> {
-  const repo = getEntityRepo(sc.targetEntity);
-  if (!repo) {
-    return { status: 'config-error', error: `Unknown target entity: ${sc.targetEntity}` };
-  }
-
+/**
+ * Apply an already-fetched batch of source rows to the sync's target entity:
+ * upsert each row through the repo, flag rows previously synced by this
+ * connection but absent from this batch, then persist the run metadata
+ * (lastSyncResult / schedule.lastRunAt / nextRunAt / status) back onto the
+ * connection. Shared by the direct-connect `runSync` and the agent-push
+ * ingest path — both differ only in where the rows come from.
+ */
+async function applySyncRows(
+  sc: SyncConnection,
+  repo: Repository<Record<string, unknown> & { id: string }>,
+  rows: Record<string, string>[],
+): Promise<SyncRunResult> {
   // Working set: the entity's current rows from the repository (Postgres in DB
   // mode, the in-memory array in JSON mode). applyRow matches against this and
   // pushes newly-created rows into it so later rows in the batch can match.
@@ -523,48 +556,6 @@ async function runSync(sc: SyncConnection): Promise<RunSyncOutcome> {
     errorMessages: [],
   };
   const syncedRecordIds = new Set<string>();
-
-  let rows: Record<string, string>[] = [];
-  let simulated = false;
-
-  try {
-    if (sc.sourceType === 'DATABASE') {
-      if (sc.config.sampleData) {
-        // Explicit sample source — labelled simulated rows for demos/seeds.
-        rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
-        simulated = true;
-      } else {
-        // Live direct-connect: read real rows from the source database. Any
-        // failure (unreachable host, auth, missing table) throws and the run
-        // is recorded as failed — no silent fallback to mock data.
-        rows = await fetchDbRows(await resolveDbSource(sc));
-      }
-    } else {
-      // CSV_URL or JSON_URL — attempt real fetch
-      rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown fetch error';
-    result.errors = 1;
-    result.errorMessages.push(`Source fetch failed: ${msg}`);
-    sc.status = 'ERROR';
-    sc.lastSyncResult = result;
-    // Advance the schedule even on failure so a broken source doesn't get
-    // retried every tick — it waits for its normal interval.
-    sc.schedule.lastRunAt = result.timestamp;
-    if (sc.schedule.enabled) {
-      sc.schedule.nextRunAt = computeNextRunAt(sc.schedule.intervalMinutes);
-    }
-    sc.updatedAt = new Date().toISOString();
-    await syncConnectionsRepo.update(sc.id, {
-      status: sc.status,
-      lastSyncResult: sc.lastSyncResult,
-      schedule: sc.schedule,
-      updatedAt: sc.updatedAt,
-    });
-    logger.error({ err, id: sc.id }, 'Sync connection fetch failed');
-    return { status: 'fetch-error', result, error: msg };
-  }
 
   // Apply each row (create/update persists through the repo inside applyRow).
   for (const row of rows) {
@@ -611,7 +602,61 @@ async function runSync(sc: SyncConnection): Promise<RunSyncOutcome> {
     status: sc.status,
     updatedAt: sc.updatedAt,
   });
+  return result;
+}
 
+async function runSync(sc: SyncConnection): Promise<RunSyncOutcome> {
+  const repo = getEntityRepo(sc.targetEntity);
+  if (!repo) {
+    return { status: 'config-error', error: `Unknown target entity: ${sc.targetEntity}` };
+  }
+
+  let rows: Record<string, string>[] = [];
+  let simulated = false;
+
+  try {
+    if (sc.sourceType === 'DATABASE') {
+      if (sc.config.sampleData) {
+        // Explicit sample source — labelled simulated rows for demos/seeds.
+        rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
+        simulated = true;
+      } else {
+        // Live direct-connect: read real rows from the source database. Any
+        // failure (unreachable host, auth, missing table) throws and the run
+        // is recorded as failed — no silent fallback to mock data.
+        rows = await fetchDbRows(await resolveDbSource(sc));
+      }
+    } else {
+      // CSV_URL or JSON_URL — attempt real fetch
+      rows = await fetchUrlRows(sc.sourceType, await resolveEffectiveConfig(sc));
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown fetch error';
+    const result: SyncRunResult = {
+      timestamp: new Date().toISOString(),
+      created: 0, updated: 0, skipped: 0, missingFromSource: 0,
+      errors: 1, errorMessages: [`Source fetch failed: ${msg}`],
+    };
+    sc.status = 'ERROR';
+    sc.lastSyncResult = result;
+    // Advance the schedule even on failure so a broken source doesn't get
+    // retried every tick — it waits for its normal interval.
+    sc.schedule.lastRunAt = result.timestamp;
+    if (sc.schedule.enabled) {
+      sc.schedule.nextRunAt = computeNextRunAt(sc.schedule.intervalMinutes);
+    }
+    sc.updatedAt = new Date().toISOString();
+    await syncConnectionsRepo.update(sc.id, {
+      status: sc.status,
+      lastSyncResult: sc.lastSyncResult,
+      schedule: sc.schedule,
+      updatedAt: sc.updatedAt,
+    });
+    logger.error({ err, id: sc.id }, 'Sync connection fetch failed');
+    return { status: 'fetch-error', result, error: msg };
+  }
+
+  const result = await applySyncRows(sc, repo, rows);
   logger.info(
     { id: sc.id, created: result.created, updated: result.updated, skipped: result.skipped, missingFromSource: result.missingFromSource, errors: result.errors, simulated },
     'Sync connection run completed',
@@ -661,7 +706,7 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, orgId, connectionId } = parsed.data;
+  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, orgId, connectionId, executionMode, connectorId } = parsed.data;
 
   if (connectionId) {
     const conn = await connectionsRepo().get(connectionId);
@@ -671,6 +716,25 @@ router.post('/', async (req: Request, res: Response) => {
     }
     if (!isConnectionCompatible(conn, sourceType)) {
       res.status(400).json({ success: false, error: `connection type ${conn.connectionType} is not compatible with sourceType ${sourceType}` });
+      return;
+    }
+  }
+
+  const mode = executionMode || 'DIRECT';
+  if (mode === 'AGENT') {
+    // Agent-push only makes sense for a database source the connector reaches
+    // locally; it needs a connector to run the query and push rows.
+    if (sourceType !== 'DATABASE') {
+      res.status(400).json({ success: false, error: 'AGENT execution is only valid for a DATABASE source' });
+      return;
+    }
+    if (!connectorId) {
+      res.status(400).json({ success: false, error: 'AGENT execution requires a connectorId' });
+      return;
+    }
+    const connector = await connectorsRepo().get(connectorId);
+    if (!connector) {
+      res.status(400).json({ success: false, error: `connectorId ${connectorId} not found` });
       return;
     }
   }
@@ -685,6 +749,8 @@ router.post('/', async (req: Request, res: Response) => {
     targetEntity,
     sourceType,
     connectionId: connectionId || null,
+    executionMode: mode,
+    connectorId: mode === 'AGENT' ? connectorId! : null,
     config: config || {},
     fieldMapping: fieldMapping || {},
     matchKey,
@@ -719,7 +785,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, status, connectionId } = parsed.data;
+  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, status, connectionId, executionMode, connectorId } = parsed.data;
 
   if (name !== undefined) sc.name = name;
   if (targetEntity !== undefined) sc.targetEntity = targetEntity;
@@ -738,6 +804,25 @@ router.put('/:id', async (req: Request, res: Response) => {
         return;
       }
       sc.connectionId = connectionId;
+    }
+  }
+  if (executionMode !== undefined) sc.executionMode = executionMode;
+  if (connectorId !== undefined) sc.connectorId = (connectorId === null || connectorId === '') ? null : connectorId;
+  // Validate the resulting AGENT invariants (source must be DATABASE, a real
+  // connector must be assigned) whenever the sync ends up in AGENT mode.
+  if ((sc.executionMode || 'DIRECT') === 'AGENT') {
+    if (sc.sourceType !== 'DATABASE') {
+      res.status(400).json({ success: false, error: 'AGENT execution is only valid for a DATABASE source' });
+      return;
+    }
+    if (!sc.connectorId) {
+      res.status(400).json({ success: false, error: 'AGENT execution requires a connectorId' });
+      return;
+    }
+    const connector = await connectorsRepo().get(sc.connectorId);
+    if (!connector) {
+      res.status(400).json({ success: false, error: `connectorId ${sc.connectorId} not found` });
+      return;
     }
   }
   if (config !== undefined) sc.config = { ...sc.config, ...config };
@@ -760,6 +845,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     targetEntity: sc.targetEntity,
     sourceType: sc.sourceType,
     connectionId: sc.connectionId,
+    executionMode: sc.executionMode,
+    connectorId: sc.connectorId,
     config: sc.config,
     fieldMapping: sc.fieldMapping,
     matchKey: sc.matchKey,
@@ -787,6 +874,14 @@ router.post('/:id/run', async (req: Request, res: Response) => {
   const sc = await syncConnectionsRepo.get(String(req.params.id));
   if (!sc) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
+    return;
+  }
+
+  // AGENT syncs execute inside the customer network via the on-prem connector,
+  // which pushes rows to the ingest endpoint — the backend can't reach the
+  // source to pull. Refuse a direct run rather than fail confusingly.
+  if ((sc.executionMode || 'DIRECT') === 'AGENT') {
+    res.status(400).json({ success: false, error: 'This sync runs on an on-prem connector; it is triggered by the agent, not a direct run.' });
     return;
   }
 
@@ -930,6 +1025,9 @@ async function tickSyncScheduler(): Promise<void> {
   for (const sc of list) {
     if (!sc.schedule?.enabled) continue;
     if (sc.status === 'PAUSED') continue;
+    // AGENT syncs are driven by the on-prem connector, not the backend tick —
+    // the connector pulls due jobs and pushes rows. Never direct-run them here.
+    if ((sc.executionMode || 'DIRECT') === 'AGENT') continue;
     if (!sc.schedule.nextRunAt) continue;
     if (new Date(sc.schedule.nextRunAt).getTime() > now) continue;
     // Skip if a run (manual or a previous tick's) is still in flight.
@@ -946,6 +1044,111 @@ async function tickSyncScheduler(): Promise<void> {
       .finally(() => {
         runningSyncIds.delete(sc.id);
       });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Agent-push surface — consumed by the connector-token endpoints in
+// routes/connector-sync.ts. An on-prem connector pulls the sync jobs it owns,
+// runs the query locally, and pushes the resulting rows back. The push reuses
+// applySyncRows (the same upsert + missing-from-source + metadata path a
+// direct run uses), so an agent sync behaves identically to a direct one once
+// the rows arrive.
+// ---------------------------------------------------------------------------
+
+/** A job spec handed to the connector: what to read and how to map it. The
+ *  connector already holds the DB connection string (in its local config); the
+ *  job only names the table/query and the mapping. */
+export interface AgentSyncJob {
+  id: string;
+  name: string;
+  targetEntity: SyncConnection['targetEntity'];
+  matchKey: string;
+  fieldMapping: Record<string, string>;
+  dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
+  schema?: string;
+  table?: string;
+  query?: string;
+  limit?: number;
+  /** Which of the connector's configured sources to run against (by name). */
+  sourceName?: string;
+  intervalMinutes: number;
+  nextRunAt: string | null;
+}
+
+export type AgentPushOutcome =
+  | { status: 'ok'; result: SyncRunResult }
+  | { status: 'not-found' }
+  | { status: 'forbidden'; error: string }
+  | { status: 'busy' }
+  | { status: 'config-error'; error: string };
+
+/** List the AGENT-mode syncs a connector is responsible for. With
+ *  `onlyDue`, restricts to those whose schedule is due now (what the agent
+ *  polls each cycle); without it, returns all assigned jobs (admin/debug). */
+export async function listAgentSyncJobs(
+  connector: { id: string; orgId: string },
+  opts: { onlyDue?: boolean } = {},
+): Promise<AgentSyncJob[]> {
+  const now = Date.now();
+  const all = await syncConnectionsRepo.list({ orgId: connector.orgId });
+  return all
+    .filter((sc) => (sc.executionMode || 'DIRECT') === 'AGENT' && sc.connectorId === connector.id)
+    .filter((sc) => sc.schedule?.enabled && sc.status !== 'PAUSED')
+    .filter((sc) => {
+      if (!opts.onlyDue) return true;
+      // A never-scheduled job (nextRunAt null) is due immediately.
+      if (!sc.schedule.nextRunAt) return true;
+      return new Date(sc.schedule.nextRunAt).getTime() <= now;
+    })
+    .map((sc) => ({
+      id: sc.id,
+      name: sc.name,
+      targetEntity: sc.targetEntity,
+      matchKey: sc.matchKey,
+      fieldMapping: sc.fieldMapping,
+      dbType: sc.config.dbType,
+      schema: sc.config.schema,
+      table: sc.config.table,
+      query: sc.config.query,
+      limit: sc.config.limit,
+      sourceName: sc.config.agentSourceName,
+      intervalMinutes: sc.schedule.intervalMinutes,
+      nextRunAt: sc.schedule.nextRunAt,
+    }));
+}
+
+/** Apply rows a connector pushed for one of its AGENT syncs. Enforces that
+ *  the sync is AGENT-mode, in the connector's org, and assigned to this
+ *  connector before touching anything, then runs the shared applySyncRows. */
+export async function applyAgentSyncPush(
+  syncId: string,
+  connector: { id: string; orgId: string },
+  rows: Record<string, string>[],
+): Promise<AgentPushOutcome> {
+  const sc = await syncConnectionsRepo.get(syncId);
+  if (!sc) return { status: 'not-found' };
+  if (sc.orgId !== connector.orgId) {
+    return { status: 'forbidden', error: 'sync belongs to another org' };
+  }
+  if ((sc.executionMode || 'DIRECT') !== 'AGENT' || sc.connectorId !== connector.id) {
+    return { status: 'forbidden', error: 'sync is not assigned to this connector' };
+  }
+
+  const repo = getEntityRepo(sc.targetEntity);
+  if (!repo) return { status: 'config-error', error: `Unknown target entity: ${sc.targetEntity}` };
+
+  if (runningSyncIds.has(sc.id)) return { status: 'busy' };
+  runningSyncIds.add(sc.id);
+  try {
+    const result = await applySyncRows(sc, repo, rows);
+    logger.info(
+      { id: sc.id, connectorId: connector.id, created: result.created, updated: result.updated, skipped: result.skipped, missingFromSource: result.missingFromSource, errors: result.errors },
+      'Agent-push sync applied',
+    );
+    return { status: 'ok', result };
+  } finally {
+    runningSyncIds.delete(sc.id);
   }
 }
 

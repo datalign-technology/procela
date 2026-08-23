@@ -36,6 +36,7 @@ import { scanMysql } from './mysql';
 import { scanDbt } from './dbt';
 import { scanOracle } from './oracle';
 import { withRetry } from './retry';
+import { runSyncJobs } from './sync';
 import { configureProxy } from './proxy';
 
 // Resolvers for ${ENV_VAR} / ${file:/path} references in source
@@ -212,6 +213,11 @@ async function main(): Promise<void> {
     // the backend. A wedged loop lets it go stale and the container's
     // --healthcheck probe restarts the agent.
     writeLiveness(cfg.livenessFile!, Date.now());
+
+    // Poll for due agent-push sync jobs every loop (heartbeat cadence). The
+    // backend only returns jobs whose schedule is due, so most iterations are
+    // a cheap no-op GET; scheduling stays authoritative server-side.
+    await runSyncJobs(cfg, log, secretResolvers).catch((err) => log('sync-jobs iteration threw', { err: err?.message || String(err) }));
 
     const now = Date.now();
     if (now - lastScanAt > cfg.scanSeconds * 1000) {
