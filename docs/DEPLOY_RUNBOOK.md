@@ -227,6 +227,23 @@ aborts the deploy *before* the service is rolled. `ignore_changes =
 [task_definition]` on the service means Terraform and the pipeline don't fight
 over the running image.
 
+### 3b. Autoscaling the backend (optional)
+
+Set `enable_autoscaling = true` and the module registers the ECS service with
+Application Auto Scaling and scales the task count on load — **target tracking**
+on ECS CPU (holds ~`autoscaling_cpu_target`%, default 60) and, optionally, on
+ALB requests-per-target. It owns `desired_count` from then on (the service's
+`ignore_changes = [desired_count]` keeps Terraform from reverting it), floored
+at `autoscaling_min_tasks` (default 2, one per AZ).
+
+**Size `autoscaling_max_tasks` against the database, not just cost.** Each task
+opens its own Prisma connection pool, so `max_tasks × pool_size` must stay under
+RDS `max_connections` — otherwise scaling *out* under load starts throwing
+"too many connections" exactly when you needed the extra tasks. Options: a
+conservative pool size, a larger RDS instance (higher `max_connections`), or put
+**RDS Proxy** in front for high fan-out. (RDS *storage* autoscales already;
+compute doesn't. Redis is fixed nodes.)
+
 ---
 
 ## 4. Deploy on-prem (Helm / Kubernetes)
