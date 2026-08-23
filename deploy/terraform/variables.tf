@@ -447,3 +447,33 @@ variable "enable_config" {
   description = "Enable AWS Config: a configuration recorder + delivery channel (with its own S3 bucket and IAM role) tracking resource configuration and drift."
   default     = false
 }
+
+# ── CI/CD deploy role (GitHub Actions → AWS via OIDC) ────────────────────────
+# Opt-in: creates an IAM role that .github/workflows/deploy.yml assumes over
+# OIDC (no static AWS keys) to push images to ECR, roll the ECS service, run
+# migrations, and sync the frontend. Off by default because it's only needed
+# where GitHub Actions is the deployer.
+
+variable "enable_cicd_deploy_role" {
+  type        = bool
+  description = "Create the GitHub Actions OIDC deploy role (and, unless github_oidc_provider_arn is set, the account's GitHub OIDC provider)."
+  default     = false
+}
+
+variable "github_repo" {
+  type        = string
+  description = "owner/repo the deploy role trusts, e.g. datalign-technology/procela. Required when enable_cicd_deploy_role = true."
+  default     = ""
+}
+
+variable "github_deploy_ref" {
+  type        = string
+  description = "Git ref the deploy role may assume from, as a GitHub OIDC `sub` suffix. Default restricts to the default branch; use '*' to allow any ref (e.g. for workflow_dispatch from feature branches)."
+  default     = "ref:refs/heads/create-procela-main"
+}
+
+variable "github_oidc_provider_arn" {
+  type        = string
+  description = "ARN of an EXISTING GitHub OIDC provider in this account (token.actions.githubusercontent.com). Leave empty to have this module create it — but an account may only have one, so set this if it already exists."
+  default     = ""
+}

@@ -1,0 +1,187 @@
+name: Deploy
+
+# Builds and deploys Procela to AWS: pushes the backend image to ECR, runs
+# database migrations as a one-off task, rolls the ECS service onto the new
+# image, then syncs the frontend to S3 and invalidates CloudFront.
+#
+# Auth is GitHub OIDC → the IAM role created by the Terraform module
+# (enable_cicd_deploy_role = true) — no static AWS keys.
+#
+# ── One-time setup ──────────────────────────────────────────────────────────
+# Apply the Terraform stack with enable_cicd_deploy_role = true and github_repo
+# set, then copy its outputs into GitHub repository Variables (Settings →
+# Secrets and variables → Actions → Variables). The var ← terraform output map:
+#
+#   AWS_REGION                 ← region
+#   AWS_DEPLOY_ROLE_ARN        ← cicd_deploy_role_arn
+#   ECR_REPOSITORY_URL         ← ecr_repository_url
+#   ECS_CLUSTER                ← ecs_cluster_name
+#   ECS_SERVICE                ← ecs_service_name
+#   ECS_TASK_FAMILY            ← ecs_task_family
+#   MIGRATE_TASK_FAMILY        ← migrate_task_family
+#   ECS_SUBNET_IDS             ← private_subnet_ids
+#   ECS_SECURITY_GROUP_ID      ← ecs_security_group_id
+#   FRONTEND_BUCKET            ← frontend_bucket
+#   CLOUDFRONT_DISTRIBUTION_ID ← cloudfront_distribution_id
+#
+# One-liner (needs the gh CLI + terraform, run from deploy/terraform/):
+#   for o in region:AWS_REGION cicd_deploy_role_arn:AWS_DEPLOY_ROLE_ARN \
+#     ecr_repository_url:ECR_REPOSITORY_URL ecs_cluster_name:ECS_CLUSTER \
+#     ecs_service_name:ECS_SERVICE ecs_task_family:ECS_TASK_FAMILY \
+#     migrate_task_family:MIGRATE_TASK_FAMILY private_subnet_ids:ECS_SUBNET_IDS \
+#     ecs_security_group_id:ECS_SECURITY_GROUP_ID frontend_bucket:FRONTEND_BUCKET \
+#     cloudfront_distribution_id:CLOUDFRONT_DISTRIBUTION_ID; do \
+#     gh variable set "${o#*:}" --body "$(terraform output -raw "${o%%:*}")"; done
+#
+# The job self-skips until AWS_DEPLOY_ROLE_ARN is set, so merging this workflow
+# before the infra exists is harmless.
+
+on:
+  push:
+    branches: [create-procela-main]
+    paths:
+      - 'packages/backend/**'
+      - 'packages/frontend/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      skip_migrations:
+        description: 'Skip the DB migration task (use only if no schema change)'
+        type: boolean
+        default: false
+
+concurrency:
+  # One deploy at a time; a newer push cancels an in-flight deploy.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # assume the AWS role via OIDC
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & deploy to AWS
+    runs-on: ubuntu-latest
+    # Only run when the deploy role is configured — keeps the workflow inert
+    # until the operator has applied the infra and set the repo variables.
+    if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push backend image
+        id: image
+        env:
+          ECR: ${{ vars.ECR_REPOSITORY_URL }}
+        run: |
+          set -euo pipefail
+          TAG="deploy-${GITHUB_SHA::12}"
+          IMAGE="${ECR}:${TAG}"
+          # Build context is packages/backend — the Dockerfile's COPY paths
+          # (package.json, prisma, src) are relative to it (matches docker-compose).
+          docker build packages/backend -t "$IMAGE"
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Pushed $IMAGE"
+
+      # Register a new revision of a task-def family with the new image and
+      # print its ARN. Reused for both the migrate task and the service.
+      - name: Register migrate task revision
+        id: migrate_taskdef
+        if: ${{ !inputs.skip_migrations }}
+        env:
+          FAMILY: ${{ vars.MIGRATE_TASK_FAMILY }}
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          DEF=$(aws ecs describe-task-definition --task-definition "$FAMILY" --query taskDefinition)
+          NEW=$(echo "$DEF" | jq --arg IMG "$IMAGE" '
+            .containerDefinitions[0].image = $IMG
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
+          ARN=$(aws ecs register-task-definition --cli-input-json "$NEW" --query taskDefinition.taskDefinitionArn --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migrations
+        if: ${{ !inputs.skip_migrations }}
+        env:
+          CLUSTER: ${{ vars.ECS_CLUSTER }}
+          TASKDEF: ${{ steps.migrate_taskdef.outputs.arn }}
+          SUBNETS: ${{ vars.ECS_SUBNET_IDS }}
+          SG: ${{ vars.ECS_SECURITY_GROUP_ID }}
+        run: |
+          set -euo pipefail
+          NETCFG="awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${SG}],assignPublicIp=DISABLED}"
+          TASK=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$TASKDEF" \
+            --launch-type FARGATE --network-configuration "$NETCFG" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $TASK"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK"
+          EXIT=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          REASON=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
+            --query 'tasks[0].stoppedReason' --output text)
+          echo "Migration exit code: $EXIT ($REASON)"
+          if [ "$EXIT" != "0" ]; then
+            echo "::error::Database migration failed (exit $EXIT) — aborting deploy before the service is rolled."
+            exit 1
+          fi
+
+      - name: Register backend service revision
+        id: service_taskdef
+        env:
+          FAMILY: ${{ vars.ECS_TASK_FAMILY }}
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          DEF=$(aws ecs describe-task-definition --task-definition "$FAMILY" --query taskDefinition)
+          NEW=$(echo "$DEF" | jq --arg IMG "$IMAGE" '
+            .containerDefinitions[0].image = $IMG
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
+          ARN=$(aws ecs register-task-definition --cli-input-json "$NEW" --query taskDefinition.taskDefinitionArn --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Roll the ECS service
+        env:
+          CLUSTER: ${{ vars.ECS_CLUSTER }}
+          SERVICE: ${{ vars.ECS_SERVICE }}
+          TASKDEF: ${{ steps.service_taskdef.outputs.arn }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --task-definition "$TASKDEF" >/dev/null
+          echo "Waiting for the service to reach a steady state…"
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          echo "Backend deploy complete."
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build & deploy frontend
+        env:
+          BUCKET: ${{ vars.FRONTEND_BUCKET }}
+          DISTRIBUTION: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build -w packages/frontend
+          # Hashed asset filenames get a long cache; index.html must not be
+          # cached so a new deploy is picked up immediately.
+          aws s3 sync packages/frontend/dist "s3://${BUCKET}" --delete \
+            --exclude index.html --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp packages/frontend/dist/index.html "s3://${BUCKET}/index.html" \
+            --cache-control "no-cache"
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
+            --paths "/index.html" "/" >/dev/null
+          echo "Frontend deploy complete."
