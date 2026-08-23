@@ -1152,6 +1152,43 @@ suite('live-db business flows', () => {
     }
   });
 
+  it('sync live driver: an ORACLE sync is wired (fails on connection, not "unsupported dbType")', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+
+    // Unreachable Oracle host → the run must reach a real connection attempt
+    // and fail there. Before Oracle was wired, resolveDbSource rejected it up
+    // front with a "supports POSTGRESQL, MYSQL, SQLSERVER" message.
+    const sync = prismaRepo(prismaSyncConnectionsRepository);
+    const scId = randomUUID();
+    await sync.create({
+      id: scId, orgId, name: 'Oracle ERP sync', targetEntity: 'systems',
+      sourceType: 'DATABASE', connectionId: null,
+      config: { dbType: 'ORACLE', host: '127.0.0.1', port: 1, database: 'ORCLPDB1', table: 'SYSTEMS' },
+      fieldMapping: { name: 'NAME' }, matchKey: 'name',
+      schedule: { enabled: false, intervalMinutes: 60, lastRunAt: null, nextRunAt: null },
+      status: 'ACTIVE', lastSyncResult: null, createdAt: now, updatedAt: now,
+    } as never);
+
+    const app = express();
+    app.use(express.json());
+    app.use('/sync-connections', syncConnectionsRouter);
+    const server = app.listen(0);
+    await new Promise((r) => server.once('listening', () => r(null)));
+    const port = (server.address() as AddressInfo).port;
+    const base = `http://127.0.0.1:${port}/sync-connections`;
+    try {
+      const run = (await (await fetch(`${base}/${scId}/run`, { method: 'POST' })).json()) as any;
+      assert.strictEqual(run.success, false, 'unreachable Oracle source fails the run');
+      assert.ok(run.error, 'an error message is returned');
+      assert.doesNotMatch(String(run.error), /supports POSTGRESQL/i, 'Oracle reached a real connection attempt, not the unsupported-engine guard');
+      const after = await sync.get(scId);
+      assert.strictEqual(after?.status, 'ERROR');
+    } finally {
+      await new Promise((r) => server.close(() => r(null)));
+    }
+  });
+
   it('sync agent-push: a connector fetches its due job and pushes rows that persist, with auth + ownership enforced', async () => {
     const { orgId } = await seedFixture();
     const now = Date.now();

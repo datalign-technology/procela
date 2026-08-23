@@ -36,6 +36,11 @@ function quoteIdent(dbType: DbSourceType, ident: string): string {
     case 'POSTGRESQL': return `"${ident}"`;
     case 'MYSQL': return `\`${ident}\``;
     case 'SQLSERVER': return `[${ident}]`;
+    // Oracle folds unquoted identifiers to upper case; a table created as
+    // EMPLOYEES is stored uppercase, so quoting a lower-case name would fail
+    // to match. Emit the validated identifier BARE (the identifier charset
+    // already blocks injection) and let Oracle's normal case-folding apply.
+    case 'ORACLE': return ident;
   }
 }
 
@@ -72,6 +77,10 @@ export function buildSelectSql(dbType: DbSourceType, spec: SelectSpec): string {
 
   if (dbType === 'SQLSERVER') {
     return `SELECT TOP (${n}) * FROM ${target}`;
+  }
+  if (dbType === 'ORACLE') {
+    // Oracle has no LIMIT; FETCH FIRST … ROWS ONLY is the 12c+ standard.
+    return `SELECT * FROM ${target} FETCH FIRST ${n} ROWS ONLY`;
   }
   return `SELECT * FROM ${target} LIMIT ${n}`;
 }

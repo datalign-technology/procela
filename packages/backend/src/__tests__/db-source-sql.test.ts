@@ -40,6 +40,20 @@ test('buildSelectSql: SQL Server uses TOP, not LIMIT', () => {
   );
 });
 
+test('buildSelectSql: Oracle uses bare identifiers + FETCH FIRST', () => {
+  // Bare (unquoted) so Oracle's upper-case folding matches the stored object.
+  assert.equal(
+    buildSelectSql('ORACLE', { schema: 'HR', table: 'EMPLOYEES', limit: 40 }),
+    'SELECT * FROM HR.EMPLOYEES FETCH FIRST 40 ROWS ONLY',
+  );
+  assert.equal(
+    buildSelectSql('ORACLE', { table: 'EMPLOYEES' }),
+    `SELECT * FROM EMPLOYEES FETCH FIRST ${DEFAULT_ROW_LIMIT} ROWS ONLY`,
+  );
+  // Injection is still rejected even though identifiers are emitted bare.
+  assert.throws(() => buildSelectSql('ORACLE', { table: 'emp; DROP TABLE x' }), /Invalid table identifier/);
+});
+
 test('buildSelectSql: a raw query is returned verbatim (trusted admin SQL)', () => {
   const q = 'SELECT id, name FROM v_customers WHERE active = 1';
   assert.equal(buildSelectSql('POSTGRESQL', { query: q, table: 'ignored' }), q);

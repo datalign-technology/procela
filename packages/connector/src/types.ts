@@ -179,7 +179,7 @@ export interface AgentSyncJob {
   targetEntity: string;
   matchKey: string;
   fieldMapping: Record<string, string>;
-  dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
+  dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER' | 'ORACLE';
   schema?: string;
   table?: string;
   /** Raw SELECT override; when set, table/schema/limit are ignored. */
