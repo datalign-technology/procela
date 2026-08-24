@@ -11,6 +11,7 @@ import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
 import { createNotification } from './notifications';
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth';
 import { rateLimit } from '../middleware/rate-limit';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { getConnectorsRepository } from '../db/connectors.repo';
 import { getConnectorEventsRepository } from '../db/connector-events.repo';
 
@@ -322,7 +323,7 @@ router.get('/:id/events', authenticateToken, async (req: AuthenticatedRequest, r
 /** POST /connectors/pair/claim — connector hands in its pairing code,
  *  gets back a long-lived token. The code is one-shot; subsequent
  *  claims with the same code 404. */
-router.post('/pair/claim', pairClaimLimiter, pairClaimHourLimiter, async (req: Request, res: Response) => {
+router.post('/pair/claim', pairClaimLimiter, pairClaimHourLimiter, asyncHandler(async (req: Request, res: Response) => {
   const code = String(req.body?.code || '').trim();
   const agentVersion = String(req.body?.agentVersion || '').trim();
   if (!code) { res.status(400).json({ success: false, error: 'code is required' }); return; }
@@ -348,11 +349,11 @@ router.post('/pair/claim', pairClaimLimiter, pairClaimHourLimiter, async (req: R
   });
   auditService.log(row.orgId, null, 'Connector', row.id, 'PAIRED', null, { name: row.name });
   res.json({ success: true, data: { connectorId: row.id, token } });
-});
+}));
 
 /** POST /connectors/heartbeat — agent says "still here". Plain
  *  freshness ping; no payload required beyond the token. */
-router.post('/heartbeat', requireConnectorToken, async (req: Request, res: Response) => {
+router.post('/heartbeat', requireConnectorToken, asyncHandler(async (req: Request, res: Response) => {
   const row = (req as any).connector as StoredConnector;
   const agentVersion = String(req.body?.agentVersion || '').trim();
   const wasOffline = freshnessFor(row) === 'OFFLINE';
@@ -369,7 +370,7 @@ router.post('/heartbeat', requireConnectorToken, async (req: Request, res: Respo
     auditService.log(row.orgId, null, 'Connector', row.id, 'BACK_ONLINE', null, { name: row.name });
   }
   res.json({ success: true });
-});
+}));
 
 /** POST /connectors/report — agent ships a metadata snapshot. Accepts
  *  a flat list of "assets" each with `name`, optional `systemId`,
@@ -384,7 +385,7 @@ router.post('/heartbeat', requireConnectorToken, async (req: Request, res: Respo
  *      so an older agent never wipes a curated schema.
  *    - Audit-only throughout — nothing not reported is deleted.
  *  Returns created/updated counts for both assets and columns. */
-router.post('/report', requireConnectorToken, async (req: Request, res: Response) => {
+router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, res: Response) => {
   const row = (req as any).connector as StoredConnector;
   const incoming = Array.isArray(req.body?.assets) ? req.body.assets : [];
   let created = 0;
@@ -494,7 +495,7 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
     data: { incoming: incoming.length, created, updated, columnsCreated, columnsUpdated, rowCount: incoming.length },
   });
   res.json({ success: true, data: { created, updated, columnsCreated, columnsUpdated, total: incoming.length } });
-});
+}));
 
 /** Internal helper used by the scheduled-offline scan (next file).
  *  Lifts the silent connectors into OFFLINE state and writes one

@@ -79,7 +79,11 @@ services:
       context: ./packages/frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      # The frontend image serves via nginx on port 80 (see
+      # packages/frontend/nginx.conf + Dockerfile EXPOSE 80), so the host
+      # port must map to container 80 — mapping to 3000 hits nothing and the
+      # browser gets ERR_CONNECTION_RESET.
+      - "3000:80"
     depends_on:
       - backend
 

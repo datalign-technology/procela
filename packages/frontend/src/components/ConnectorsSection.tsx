@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useOrgContext } from '../stores/orgContext';
 import ConfirmDialog from './ConfirmDialog';
 
 // Settings → Connectors panel. Lists every paired on-prem connector
@@ -144,6 +145,10 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
   sectionStyle: React.CSSProperties;
   sectionTitleStyle: React.CSSProperties;
 }) {
+  // Scope every read + the pairing create to the org the admin is viewing.
+  // Without this the connector inherits the JWT's default org (which may not
+  // be a real organizations row), and its reported assets fail the org FK.
+  const { activeOrgId } = useOrgContext();
   const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,14 +185,16 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.get<{ success: boolean; data: ConnectorRow[] }>('/connectors');
+      const res = await apiClient.get<{ success: boolean; data: ConnectorRow[] }>(
+        `/connectors${activeOrgId ? `?orgId=${activeOrgId}` : ''}`,
+      );
       setRows(res.data || []);
     } catch (e) {
       setError(errorMessage(e, 'failed to load connectors'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -203,10 +210,10 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
   // expects raw ids, not enriched objects.
   useEffect(() => {
     apiClient
-      .get<{ success: boolean; data: SystemRef[] }>('/systems')
+      .get<{ success: boolean; data: SystemRef[] }>(`/systems${activeOrgId ? `?orgId=${activeOrgId}` : ''}`)
       .then((res) => setSystems((res.data || []).map((s) => ({ id: s.id, name: s.name }))))
       .catch(() => { /* leave empty — picker shows a friendly hint */ });
-  }, []);
+  }, [activeOrgId]);
 
   const toggleNewSystem = (id: string) => {
     setNewSystemIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
@@ -219,6 +226,7 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
       const res = await apiClient.post<PairStartResponse>('/connectors/pair/start', {
         name: newName.trim(),
         systemIds: newSystemIds,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
       });
       if (res.success && res.data) {
         setIssuedCode({ code: res.data.pairingCode, expiresAt: res.data.expiresAt });

@@ -1025,6 +1025,20 @@ export default function DataAssetsPage({
     }
   };
 
+  const bulkSetSystem = async (systemId: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/data-assets/${id}`, { systemId })));
+      const sysName = systems.find((s) => s.id === systemId)?.name || 'selected system';
+      addToast('success', `Assigned ${ids.length} asset${ids.length === 1 ? '' : 's'} to ${sysName}`);
+      sel.clear();
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Failed to assign system');
+    }
+  };
+
   const inlineSaveField = async (assetId: string, field: string, value: string) => {
     try {
       const payload: Record<string, any> = {};
@@ -2005,6 +2019,20 @@ export default function DataAssetsPage({
           <option value="">Assign owner…</option>
           {peopleList.map((p) => (
             <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Assign system"
+          onChange={(e) => { if (e.target.value) bulkSetSystem(e.target.value); e.target.value = ''; }}
+          style={{
+            padding: '5px 12px', fontSize: 12, fontWeight: 500,
+            background: 'var(--color-surface)', color: 'var(--color-text)',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+          }}
+        >
+          <option value="">Assign system…</option>
+          {systems.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
