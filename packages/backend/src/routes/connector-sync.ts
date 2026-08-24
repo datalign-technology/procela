@@ -11,6 +11,7 @@
 import { Router, Request, Response } from 'express';
 import { requireConnectorToken, recordConnectorEvent, type StoredConnector } from './connectors';
 import { listAgentSyncJobs, applyAgentSyncPush } from './sync-connections';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = Router();
 
@@ -24,18 +25,18 @@ const router = Router();
  * responsible for and that are due to run now. The agent polls this each
  * cycle. `?all=1` returns every assigned job regardless of schedule (debug).
  */
-router.get('/sync-jobs', requireConnectorToken, async (req: Request, res: Response) => {
+router.get('/sync-jobs', requireConnectorToken, asyncHandler(async (req: Request, res: Response) => {
   const connector = (req as Request & { connector: StoredConnector }).connector;
   const onlyDue = req.query.all !== '1';
   const jobs = await listAgentSyncJobs({ id: connector.id, orgId: connector.orgId }, { onlyDue });
   res.json({ success: true, data: jobs });
-});
+}));
 
 /**
  * POST /api/v1/connectors/sync-jobs/:id/push — apply the rows the connector
  * read from its local source for one AGENT sync. Body: { rows: [...] }.
  */
-router.post('/sync-jobs/:id/push', requireConnectorToken, async (req: Request, res: Response) => {
+router.post('/sync-jobs/:id/push', requireConnectorToken, asyncHandler(async (req: Request, res: Response) => {
   const connector = (req as Request & { connector: StoredConnector }).connector;
   const rows = (req.body as { rows?: unknown })?.rows;
   if (!Array.isArray(rows)) {
@@ -74,6 +75,6 @@ router.post('/sync-jobs/:id/push', requireConnectorToken, async (req: Request, r
       res.json({ success: true, data: outcome.result });
       return;
   }
-});
+}));
 
 export default router;
