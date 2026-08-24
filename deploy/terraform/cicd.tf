@@ -10,17 +10,17 @@
 # var.github_oidc_provider_arn is empty; otherwise the existing one is reused.
 
 locals {
-  cicd_enabled  = var.enable_cicd_deploy_role
-  create_oidc   = local.cicd_enabled && var.github_oidc_provider_arn == ""
+  cicd_enabled = var.enable_cicd_deploy_role
+  create_oidc  = local.cicd_enabled && var.github_oidc_provider_arn == ""
   github_oidc_arn = local.cicd_enabled ? (
     var.github_oidc_provider_arn != "" ? var.github_oidc_provider_arn : aws_iam_openid_connect_provider.github[0].arn
   ) : ""
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
-  count           = local.create_oidc ? 1 : 0
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
+  count          = local.create_oidc ? 1 : 0
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
   # GitHub's OIDC thumbprint is no longer validated by STS for this provider,
   # but the field is still required; this is GitHub's documented value.
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
