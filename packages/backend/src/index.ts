@@ -704,4 +704,16 @@ function shutdown(signal: string): void {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
+// Last-resort safety net. Express 4 does not forward a rejection thrown by an
+// async route handler to the error middleware, so an un-awaited rejection
+// (e.g. a Prisma P2023 on a malformed :id) reaches Node's default
+// unhandledRejection handler and exits the process — taking every other
+// request, and any paired on-prem connector, down with it. Log it loudly and
+// stay up: the offending request still fails, but one bad handler can no
+// longer crash the whole API. (Individual routes should still guard their own
+// errors; this is the floor, not the fix.)
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'Unhandled promise rejection — keeping the server alive');
+});
+
 export default app;

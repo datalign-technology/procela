@@ -71,6 +71,10 @@ export function prismaSkillsRepository(
       return rows.map(fromPrisma);
     },
     async get(id) {
+      // Skill.id is a uuid column: a non-uuid id makes Prisma throw P2023
+      // ("Error creating UUID"). In an unguarded async route that crashes the
+      // process, so treat an id that can't be a uuid as simply "not found".
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
       const client = clientFactory();
       const row = await client.skill.findUnique({ where: { id } });
       return row ? fromPrisma(row) : null;

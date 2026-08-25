@@ -86,4 +86,15 @@ describe('prismaSkillsRepository (stubbed Prisma)', () => {
     const repo = prismaSkillsRepository(() => ({ skill: delegate }));
     assert.strictEqual(await repo.update('gone', { name: 'x' }), null);
   });
+
+  it('get returns null for a non-uuid id without querying Prisma (guards P2023 crash)', async () => {
+    let queried = false;
+    const delegate = makeDelegate({
+      findUnique: async () => { queried = true; throw new Error('Error creating UUID'); },
+    });
+    const repo = prismaSkillsRepository(() => ({ skill: delegate }));
+    assert.strictEqual(await repo.get('governance'), null);
+    assert.strictEqual(await repo.get('not-a-uuid'), null);
+    assert.strictEqual(queried, false, 'a non-uuid id must never reach Prisma');
+  });
 });
