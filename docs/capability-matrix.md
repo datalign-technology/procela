@@ -46,10 +46,10 @@ row's status changes so the snapshot doesn't drift from the source of truth._
 | Category | Built | Partial / Stubbed / Designed | Not Started |
 |---|---|---|---|
 | Catalog | 6 | 0 | 0 |
-| Data assets | 10 | 1 | 0 |
+| Data assets | 11 | 0 | 0 |
 | Glossary | 3 | 0 | 0 |
 | Systems | 3 | 0 | 1 |
-| Connections | 3 | 2 | 0 |
+| Connections | 5 | 0 | 0 |
 | Lineage | 1 | 1 | 2 |
 | Data quality | 3 | 0 | 1 |
 | Governance | 9 | 0 | 1 |
@@ -63,6 +63,6 @@ row's status changes so the snapshot doesn't drift from the source of truth._
 | Misc | 0 | 0 | 3 |
 
 Where it actually matters: of the **P0** items, the open ones are
-real database connectors, auto-extracted lineage, SSO, Postgres
-backend, and live SaaS hosting. Everything else is shipable wins or
-strategic defers.
+auto-extracted lineage, SSO, Postgres backend, and live SaaS hosting.
+(Real database connectors now ship via the on-prem edge agent.)
+Everything else is shipable wins or strategic defers.

@@ -101,8 +101,9 @@ customer.
 
 - [ ] **17. Real customer data seeded.** Either import via CSV (the
   People, Systems, and Data Assets pages have Import buttons) or turn
-  on real on-prem connectors (Phase 3 work — not built yet; the demo
-  has stub connectors only).
+  on the real on-prem connector (shipped — see item 25): a Node 20 edge
+  agent with Postgres / MySQL / SQL Server / Oracle adapters that pairs,
+  discovers, and syncs rows into the catalog.
 - [ ] **18. Legal:** ToS, privacy policy, DPA. Content hooks exist
   (`docs/`) but the actual text is placeholder.
 - [x] ~~**19. Support flow:**~~ **Wired** — an in-app "Report a problem"
@@ -179,7 +180,7 @@ customer.
 
 - [~] **25. Phase 3 connectors** — the on-prem agent
   ([`packages/connector/`](../packages/connector/)) is **built and
-  shipped**: a Node 20 agent with Postgres / MySQL / SQL Server adapters,
+  shipped**: a Node 20 agent with Postgres / MySQL / SQL Server / Oracle adapters,
   a pairing → token → heartbeat → scan loop, a Docker image, and a GHCR
   release workflow (`.github/workflows/release-connector.yml`). The
   backend side (`pair/start` · `pair/claim` · `heartbeat` · `report`)
