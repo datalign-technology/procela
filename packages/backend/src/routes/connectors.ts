@@ -14,6 +14,7 @@ import { rateLimit } from '../middleware/rate-limit';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { getConnectorsRepository } from '../db/connectors.repo';
 import { getConnectorEventsRepository } from '../db/connector-events.repo';
+import { computeDiscoveredAssetHealth } from '../lib/asset-health';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Connectors — the on-prem agent surface.
@@ -421,16 +422,23 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
     const existing = allAssets.find((d) => d.orgId === row.orgId && d.name === name);
     let assetId: string;
     if (existing) {
+      // Capture the previous row count BEFORE overwriting it — the delta vs
+      // this scan is an "actively maintained" signal for the health score.
+      const previousRowCount = typeof (existing as any).rowCount === 'number' ? (existing as any).rowCount : null;
       // Persist the reported row count. Only overwrite when this scan
       // actually reported one, so an older agent that omits rowCount
       // never nulls a value a newer scan recorded.
       if (rowCount !== null) (existing as any).rowCount = rowCount;
       if (lastWriteAt) (existing as any).healthScoreAt = lastWriteAt;
-      // Refresh a coarse health signal: 90 if recently written, 60
-      // otherwise. v2 will replace this with a real freshness model
-      // driven by the row count delta + writeAt delta.
-      const fresh = lastWriteAt && (Date.now() - new Date(lastWriteAt).getTime()) < 24 * 60 * 60_000;
-      existing.healthScore = fresh ? 90 : 60;
+      // Graded freshness health: decays by age since last write, caps an
+      // empty table low, and bumps a table whose row count changed since the
+      // last scan. Falls back to the persisted row count when this scan
+      // omitted one, so the empty-table check still applies.
+      existing.healthScore = computeDiscoveredAssetHealth({
+        lastWriteAt,
+        rowCount: rowCount ?? previousRowCount,
+        previousRowCount,
+      });
       existing.updatedAt = nowIso();
       // Tag the asset with the connector that owns its freshness
       // signal — surfaced as the "Synced N min ago" chip on the
@@ -442,14 +450,15 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
       updated++;
     } else {
       const now = nowIso();
-      const fresh = lastWriteAt && (Date.now() - new Date(lastWriteAt).getTime()) < 24 * 60 * 60_000;
       const newAsset = {
         id: uuid(), orgId: row.orgId, name,
         description: String(a?.description || ''),
         systemId: systemId || row.systemIds[0] || '',
         owner: '', stewardIds: [],
         governanceTier: 'BRONZE',
-        healthScore: fresh ? 90 : 60,
+        // First sighting — no prior row count, so this grades on freshness
+        // (and the empty-table cap) alone.
+        healthScore: computeDiscoveredAssetHealth({ lastWriteAt, rowCount }),
         createdAt: now, updatedAt: now,
         lastSyncedByConnectorId: row.id,
         lastSyncedAt: now,
