@@ -403,6 +403,15 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
   const colIndex = new Map<string, StoredDataAssetColumn>();
   for (const c of allColumns) colIndex.set(colKey(c.dataAssetId, c.columnName), c);
 
+  // #422: compute every create/update in memory first (Phase 1), preserving the
+  // in-batch dedup, then flush them concurrently (Phase 2). The previous handler
+  // awaited each asset + column write in series — ~a thousand serial round-trips
+  // for a real schema, slow enough to stall other requests during a report.
+  const assetCreates: any[] = [];
+  const assetUpdates: typeof allAssets = [];
+  const columnCreates: StoredDataAssetColumn[] = [];
+  const columnUpdates: StoredDataAssetColumn[] = [];
+
   for (const a of incoming) {
     const name = String(a?.name || '').trim();
     if (!name) continue;
@@ -428,7 +437,7 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
       // Data Asset detail page.
       (existing as any).lastSyncedByConnectorId = row.id;
       (existing as any).lastSyncedAt = nowIso();
-      await dataAssetsRepo.update(existing.id, existing);
+      assetUpdates.push(existing);
       assetId = existing.id;
       updated++;
     } else {
@@ -446,7 +455,7 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
         lastSyncedAt: now,
         ...(rowCount !== null ? { rowCount } : {}),
       } as any;
-      await dataAssetsRepo.create(newAsset);
+      assetCreates.push(newAsset);
       allAssets.push(newAsset);
       assetId = newAsset.id;
       created++;
@@ -467,7 +476,7 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
           if (dataType && existingCol.dataType !== dataType) {
             existingCol.dataType = dataType;
             existingCol.updatedAt = nowIso();
-            await dataAssetColumnsRepo.update(existingCol.id, existingCol);
+            columnUpdates.push(existingCol);
             columnsUpdated++;
           }
         } else {
@@ -480,7 +489,7 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
             sourceAsset: name, sourceColumn: columnName,
             createdAt: nowc, updatedAt: nowc,
           };
-          await dataAssetColumnsRepo.create(newCol);
+          columnCreates.push(newCol);
           allColumns.push(newCol);
           colIndex.set(key, newCol);
           columnsCreated++;
@@ -488,6 +497,15 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
       }
     }
   }
+
+  // Phase 2 — flush concurrently. Assets before columns (a column references its
+  // asset id); creates before updates so an in-batch duplicate name that became
+  // an update of a just-created row still lands.
+  await Promise.all(assetCreates.map((a) => dataAssetsRepo.create(a)));
+  await Promise.all(assetUpdates.map((a) => dataAssetsRepo.update(a.id, a)));
+  await Promise.all(columnCreates.map((c) => dataAssetColumnsRepo.create(c)));
+  await Promise.all(columnUpdates.map((c) => dataAssetColumnsRepo.update(c.id, c)));
+
   await connectorsRepo.update(row.id, { lastHeartbeatAt: nowIso(), updatedAt: nowIso() });
   await connectorEventsRepo.create({
     id: uuid(), connectorId: row.id, orgId: row.orgId,
