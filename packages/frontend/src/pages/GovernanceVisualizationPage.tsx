@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import Spinner from '../components/Spinner';
+import { installPrintFit } from '../lib/printFit';
 
 // ── Types ──
 
@@ -107,6 +108,14 @@ function ensurePrintStyles() {
         overflow: visible !important;
         height: auto !important;
         max-height: none !important;
+        padding: 0 !important;
+      }
+
+      /* Scale the diagram down to fit the page width (set by installPrintFit)
+         so a wide tree isn't clipped at the edge — a PDF can't scroll. */
+      [data-print-fit] {
+        transform: scale(var(--print-fit)) !important;
+        transform-origin: top left !important;
       }
 
       /* White background for print */
@@ -317,10 +326,13 @@ export default function GovernanceVisualizationPage() {
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const printFitRef = useRef<HTMLDivElement>(null);
 
-  // Inject print styles on mount
+  // Inject print styles on mount + scale the diagram to fit the page on print
+  // (a wide tree would otherwise clip at the page edge in a PDF).
   useEffect(() => {
     ensurePrintStyles();
+    return installPrintFit(() => printFitRef.current);
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -539,7 +551,7 @@ export default function GovernanceVisualizationPage() {
               overflow: 'auto', padding: 24,
             }}
           >
-            <div style={{
+            <div ref={printFitRef} style={{
               transform: `scale(${zoom})`,
               transformOrigin: 'top left',
               transition: 'transform 0.15s ease',
