@@ -7,6 +7,7 @@ import logger from '../lib/logger';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { getOrganizationsRepository } from '../db/organizations.repo';
 import type { Repository } from '../db/repository';
+import type { StoredPerson } from './people';
 // Lazy-required inside handlers to avoid the circular import with
 // `routes/people` (which imports the `organizations` array from this file).
 // Using `require` at call-time ensures both modules are fully initialised
@@ -321,6 +322,48 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   // the "company or division level" check on a stale cache. Lazy-required to
   // avoid the org-scope ↔ organizations circular import.
   await (require('../lib/org-scope').invalidateOrgScopeCache)();
+
+  // Bootstrap ownership: when an unrestricted user creates a *top-level* org
+  // (the dev / super-admin bootstrap path), provision them as a real member of
+  // it. The dev auth provider mints an org-less identity with no Person record,
+  // so without this the org has no owner and the creator can't consistently
+  // scope to the org they just made on later requests — the identity is a ghost
+  // and getVisibleOrgIds can't anchor it (#420). No-op for child orgs (the
+  // creator already sits in the tree) and for a user who is already a member.
+  if (visible === null && !parentId && req.user?.email) {
+    const peopleRepo = require('../db/people.repo').getPeopleRepository(require('./people').people);
+    const email = req.user.email;
+    const nowP = new Date().toISOString();
+    const existing = (await peopleRepo.list()).find(
+      (p: StoredPerson) => p.email.toLowerCase() === email.toLowerCase(),
+    );
+    if (!existing) {
+      const knownRoles = ['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER'];
+      const person: StoredPerson = {
+        id: uuid(),
+        orgIds: [org.id],
+        accessibleOrgIds: [org.id],
+        name: req.user.name || email,
+        email,
+        // Preserve the caller's role so a real SUPER_ADMIN isn't downgraded to
+        // ORG_ADMIN; default to ORG_ADMIN for the dev/company-creator case.
+        role: (knownRoles.includes(req.user.role) ? req.user.role : 'ORG_ADMIN') as StoredPerson['role'],
+        title: '',
+        skillIds: [],
+        createdAt: nowP,
+        updatedAt: nowP,
+      };
+      await peopleRepo.create(person);
+    } else if (!existing.orgIds.includes(org.id)) {
+      await peopleRepo.update(existing.id, {
+        ...existing,
+        orgIds: [...existing.orgIds, org.id],
+        accessibleOrgIds: [...(existing.accessibleOrgIds || []), org.id],
+        updatedAt: nowP,
+      });
+    }
+  }
+
   res.status(201).json({ success: true, data: org });
 });
 
