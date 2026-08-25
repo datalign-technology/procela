@@ -47,6 +47,41 @@ export interface RuleRunResult {
   message: string;
 }
 
+/** Minimal shape a rule contributes to an asset's health rollup. */
+export interface RuleHealthContribution {
+  weight: number;
+  currentScore: number;
+  lastRun?: { simulated?: boolean } | null;
+}
+
+/**
+ * Roll an asset's health up from its DQ rules — MEASURED rules only.
+ *
+ * A rule whose last run was simulated (no driver wired for the connection
+ * type) carries a hash-derived pass rate, not a measurement. Letting that
+ * feed the asset's persisted `healthScore` — which is surfaced app-wide
+ * (dashboard, gaps, list, AI context) with no "simulated" caveat — is the
+ * leak this guards against. Rules that have never run are excluded too.
+ *
+ * Returns `health: null` when the asset has no measured rule, so callers
+ * LEAVE the existing healthScore (connector freshness / manual) untouched
+ * rather than overwriting it with a fabricated number or zeroing it out.
+ */
+export function rollupAssetHealth(rules: RuleHealthContribution[]): {
+  health: number | null;
+  measuredCount: number;
+  simulatedCount: number;
+} {
+  const measured = rules.filter((r) => r.lastRun && r.lastRun.simulated === false);
+  const simulatedCount = rules.filter((r) => r.lastRun && r.lastRun.simulated === true).length;
+  const totalWeight = measured.reduce((sum, r) => sum + (r.weight || 0), 0);
+  if (measured.length === 0 || totalWeight <= 0) {
+    return { health: null, measuredCount: 0, simulatedCount };
+  }
+  const weightedSum = measured.reduce((sum, r) => sum + r.currentScore * (r.weight || 0), 0);
+  return { health: Math.round(weightedSum / totalWeight), measuredCount: measured.length, simulatedCount };
+}
+
 export interface RuleSubject {
   // Information about the Data Asset's source, looked up by the caller.
   connectionType?: string;

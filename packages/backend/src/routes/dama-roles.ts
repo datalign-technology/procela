@@ -440,6 +440,12 @@ router.get('/skill-match', async (req: Request, res: Response) => {
       missing: missing.map((id) => ({ id, name: skillNameById[id] || id })),
       coverage,
       totalExpected: expectedSkillIds.length,
+      // Disclose what the coverage % is measured against: a fixed, built-in
+      // map of DAMA role → expected skill categories (not org-configurable
+      // yet). Surfacing it stops the score reading as an objective fit score
+      // when it's really "% overlap with these default categories".
+      expectedCategories,
+      expectedCategoriesSource: 'BUILT_IN_DEFAULT',
     },
   });
 });

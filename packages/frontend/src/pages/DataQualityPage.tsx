@@ -72,6 +72,9 @@ interface QualityRule {
   status: string;
   lastMeasured: string | null;
   dataAssetName: string;
+  // Provenance of the last run — a simulated result carries a fabricated
+  // pass rate and does NOT count toward the asset's measured health.
+  lastRun?: { simulated?: boolean } | null;
   ruleType?: string;
   columnName?: string;
   scheduleFrequency?: ScheduleFrequency;
@@ -1036,13 +1039,21 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     const passing = rs.filter((r) => r.status === 'PASSING').length;
     const failing = rs.filter((r) => r.status === 'FAILING').length;
     const warn = rs.filter((r) => r.status === 'WARNING').length;
+    // A run is "measured" only when a real driver evaluated it. Simulated runs
+    // carry a fabricated pass rate and no longer feed the asset's healthScore,
+    // so when an asset has rules but none measured, its health is an estimate
+    // (connector freshness / manual) — flag it so it isn't read as measured DQ.
+    const measuredRuns = rs.filter((r) => r.lastRun && r.lastRun.simulated === false).length;
+    const estimated = rs.length > 0 && measuredRuns === 0;
     const score = a.healthScore ?? 0;
     const healthColor = rs.length === 0 ? 'var(--color-text-muted)' : score >= 80 ? 'var(--color-success)' : score >= 50 ? 'var(--color-warning)' : 'var(--color-error)';
     const totalWeight = rs.reduce((s, r) => s + r.weight, 0);
     const healthTooltip = rs.length === 0
       ? 'No rules defined. Add rules to calculate health.'
-      : `Health: ${score}%\nWeighted average of ${rs.length} rule${rs.length > 1 ? 's' : ''} (${measured.length} measured)\nFormula: Σ(score × weight) / Σ(weight)\nTotal weight: ${totalWeight}\nPassing: ${passing} | Warning: ${warn} | Failing: ${failing}`;
-    return { rs, measured, passing, failing, warn, score, healthColor, totalWeight, healthTooltip };
+      : estimated
+        ? `Health: ${score}% (estimated)\nThis asset's ${rs.length} rule${rs.length > 1 ? 's have' : ' has'} only simulated results — no real driver is wired for its connection type, so they don't count toward measured health. The shown value comes from connector freshness or a manual score. Upload the data as a local file to get measured DQ numbers.`
+        : `Health: ${score}%\nWeighted average of ${measuredRuns} measured rule${measuredRuns > 1 ? 's' : ''} (of ${rs.length} total)\nFormula: Σ(score × weight) / Σ(weight)\nTotal weight: ${totalWeight}\nPassing: ${passing} | Warning: ${warn} | Failing: ${failing}`;
+    return { rs, measured, measuredRuns, estimated, passing, failing, warn, score, healthColor, totalWeight, healthTooltip };
   };
 
   const assetColumns = [
@@ -1071,13 +1082,18 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     assetCols.isVisible('health') && {
       key: 'health', header: 'Health', sortable: true,
       render: (a: DataAssetFull) => {
-        const { score, healthColor, healthTooltip } = assetStats(a);
+        const { score, healthColor, healthTooltip, estimated } = assetStats(a);
         return (
           <div title={healthTooltip} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'help' }}>
             <div style={{ flex: 1, maxWidth: 80, height: 6, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
               <div style={{ width: `${score}%`, height: '100%', borderRadius: 3, background: healthColor }} />
             </div>
             <span style={{ fontSize: 12, fontWeight: 500, color: healthColor }}>{score}%</span>
+            {estimated && (
+              <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-warning)', border: '1px solid var(--color-warning)', borderRadius: 4, padding: '0 4px' }}>
+                Est
+              </span>
+            )}
           </div>
         );
       },

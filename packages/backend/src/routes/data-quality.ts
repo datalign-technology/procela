@@ -15,6 +15,7 @@ import { connections, ConnectionProfile } from './connections';
 import { syncDataQualityIssueForRule } from './governance-issues';
 import {
   evaluateRule,
+  rollupAssetHealth,
   suggestTemplates,
   describeRule,
   RULE_TEMPLATES,
@@ -255,21 +256,27 @@ router.post('/compute-health/:assetId', async (req: Request, res: Response) => {
     return;
   }
 
-  const totalWeight = rules.reduce((sum, r) => sum + r.weight, 0);
-  const weightedSum = rules.reduce((sum, r) => sum + r.currentScore * r.weight, 0);
-  const healthScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
-
-  // Update the data asset's healthScore
-  const updatedAt = new Date().toISOString();
-  await dataAssetsRepo.update(asset.id, { healthScore, updatedAt });
+  // Roll up from MEASURED rules only — simulated runs carry a fabricated
+  // pass rate and must not become the asset's real, app-wide healthScore.
+  const rollup = rollupAssetHealth(rules);
+  if (rollup.health !== null) {
+    await dataAssetsRepo.update(asset.id, { healthScore: rollup.health, updatedAt: new Date().toISOString() });
+  }
 
   res.json({
     success: true,
     data: {
       assetId,
-      healthScore,
+      // When no measured rule exists, health is left as-is (connector
+      // freshness / manual) — flagged 'estimated' so the UI can label it.
+      healthScore: rollup.health ?? asset.healthScore,
       rulesCount: rules.length,
-      totalWeight,
+      measuredRuleCount: rollup.measuredCount,
+      simulatedRuleCount: rollup.simulatedCount,
+      estimated: rollup.health === null,
+      ...(rollup.health === null
+        ? { message: 'Health left unchanged — no measured (non-simulated) rule to base it on.' }
+        : {}),
     },
   });
 });
@@ -535,7 +542,7 @@ router.post('/:id/run', async (req: Request, res: Response) => {
  *
  * Returns null if the linked asset can't be found (orphaned rule).
  */
-async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRunResult; assetHealth: number } | null> {
+async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRunResult; assetHealth: number; assetHealthEstimated: boolean } | null> {
   const asset = await dataAssetsRepo.get(rule.dataAssetId);
   if (!asset) return null;
 
@@ -568,14 +575,17 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
     nextRunAt: rule.nextRunAt,
   });
 
-  // Auto-recompute the asset's health score from the weighted average.
+  // Auto-recompute the asset's health from MEASURED rules only. A simulated
+  // run carries a fabricated pass rate, so it must not become the asset's
+  // real, app-wide healthScore. With no measured rule the existing score
+  // (connector freshness / manual) is left untouched rather than overwritten.
   const allRules = await dataQualityRulesRepo.list();
   const assetRules = allRules.filter((r) => r.dataAssetId === asset.id);
-  const totalWeight = assetRules.reduce((sum, r) => sum + r.weight, 0);
-  const weightedSum = assetRules.reduce((sum, r) => sum + r.currentScore * r.weight, 0);
-  const newAssetHealth = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
-  if (asset.healthScore !== newAssetHealth) {
-    await dataAssetsRepo.update(asset.id, { healthScore: newAssetHealth, updatedAt: result.ranAt });
+  const rollup = rollupAssetHealth(assetRules);
+  const newAssetHealth = rollup.health ?? asset.healthScore;
+  const assetHealthEstimated = rollup.health === null;
+  if (rollup.health !== null && asset.healthScore !== rollup.health) {
+    await dataAssetsRepo.update(asset.id, { healthScore: rollup.health, updatedAt: result.ranAt });
   }
 
   auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'RUN', null, {
@@ -583,8 +593,9 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
     passRate: result.passRate,
     totalRows: result.totalRows,
     assetHealthScore: newAssetHealth,
+    assetHealthEstimated,
   });
-  logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows, assetHealthScore: newAssetHealth }, 'DQ rule run');
+  logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows, assetHealthScore: newAssetHealth, assetHealthEstimated }, 'DQ rule run');
 
   // Sync a governance issue for the rule's current state. Creates
   // one on FAILING/WARNING, closes it on recovery. Idempotent —
@@ -593,7 +604,7 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
   try { await syncDataQualityIssueForRule(rule); }
   catch (err) { logger.error({ err, ruleId: rule.id }, 'Failed to sync governance issue for DQ rule'); }
 
-  return { engineResult: result, assetHealth: newAssetHealth };
+  return { engineResult: result, assetHealth: newAssetHealth, assetHealthEstimated };
 }
 
 // ── Scheduler ────────────────────────────────────────────────────────────
