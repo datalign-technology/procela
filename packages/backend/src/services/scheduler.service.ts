@@ -1,5 +1,6 @@
 import logger from '../lib/logger';
 import { sweepOverdueTasks } from '../routes/governance-tasks';
+import { captureStatsSnapshot } from '../routes/dashboard';
 import { digestForOrg } from './digest.service';
 import { processNodes } from '../routes/process-catalog';
 import { dataAssets } from '../routes/data-assets';
@@ -15,7 +16,7 @@ import { isSchedulerLeader } from '../lib/scheduler-leadership';
 
 // ──────────────────────────────────────────────────────────────────────────
 // scheduler.service — self-driving background loops that turn
-// otherwise-manual endpoints into automation. Two jobs, one timer:
+// otherwise-manual endpoints into automation. Three jobs, one timer:
 //
 //   * Overdue task sweep — every SWEEP_INTERVAL_MS. Fires the same
 //     sweepOverdueTasks helper the /sweep-overdue endpoint calls.
@@ -26,6 +27,12 @@ import { isSchedulerLeader } from '../lib/scheduler-leadership';
 //     last check" rule so the loop is testable without waiting seven
 //     days. In production this stays exactly as tight; the same
 //     boundary catches the real cron moment.
+//
+//   * Daily stats-snapshot capture — once per UTC calendar day, records
+//     each org's headline numbers (coverage / avg health / gaps) via
+//     captureStatsSnapshot. This is what builds real trend history: once
+//     an org has >= 2 real snapshots, /dashboard/trends returns them
+//     instead of the synthesized (illustrative) fallback series.
 //
 // The scheduler holds a single Node interval. Callers should invoke
 // startScheduler() during boot and stopScheduler() during graceful
@@ -61,6 +68,24 @@ async function getLastWeeklyDigestFiredAt(): Promise<number | null> {
 }
 async function setLastWeeklyDigestFiredAt(ms: number): Promise<void> {
   await settingsRepo.set<SchedulerState>('schedulerState', { lastWeeklyDigestFiredAt: ms });
+}
+
+// The daily stats-snapshot capture tracks which UTC calendar day it last ran,
+// so it captures each org's headline numbers at most once per day. Stored under
+// its own AppSetting key so it never clobbers the digest state above. Building
+// up >= 2 real snapshots is what lets /dashboard/trends return real history
+// instead of the synthesized (illustrative) fallback.
+const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+interface StatsSnapshotState { lastCapturedDay: string | null }
+async function getLastStatsSnapshotDay(): Promise<string | null> {
+  const state = await settingsRepo.get<StatsSnapshotState>('statsSnapshotState');
+  return state?.lastCapturedDay ?? null;
+}
+async function setLastStatsSnapshotDay(day: string): Promise<void> {
+  await settingsRepo.set<StatsSnapshotState>('statsSnapshotState', { lastCapturedDay: day });
+}
+async function shouldCaptureSnapshots(nowMs: number): Promise<boolean> {
+  return (await getLastStatsSnapshotDay()) !== utcDay(nowMs);
 }
 
 function isDisabled(): boolean {
@@ -133,6 +158,30 @@ async function tick(): Promise<void> {
       logger.error({ err }, 'Scheduler: weekly digest failed');
     }
   }
+
+  // Daily stats-snapshot capture — once per UTC calendar day, record each
+  // org's headline numbers so /dashboard/trends builds real history and the
+  // sparklines stop falling back to the synthesized (illustrative) series.
+  if (await shouldCaptureSnapshots(Date.now())) {
+    try {
+      const orgs = await orgRepo.list();
+      let captured = 0;
+      for (const org of orgs) {
+        try {
+          await captureStatsSnapshot(org.id);
+          captured++;
+        } catch (err) {
+          logger.error({ err, orgId: org.id }, 'Scheduler: stats snapshot failed for org');
+        }
+      }
+      // Mark the day done only after the sweep so a mid-sweep crash retries
+      // next tick rather than skipping the day entirely.
+      await setLastStatsSnapshotDay(utcDay(Date.now()));
+      logger.info({ captured, orgs: orgs.length }, 'Scheduler: daily stats snapshots captured');
+    } catch (err) {
+      logger.error({ err }, 'Scheduler: stats snapshot sweep failed');
+    }
+  }
 }
 
 export function startScheduler(): void {
@@ -162,5 +211,12 @@ export function stopScheduler(): void {
 // so its assertions don't depend on run ordering across suites.
 async function resetSchedulerState(): Promise<void> {
   await settingsRepo.set<SchedulerState>('schedulerState', { lastWeeklyDigestFiredAt: null });
+  await settingsRepo.set<StatsSnapshotState>('statsSnapshotState', { lastCapturedDay: null });
 }
-export const __test__ = { tick, shouldFireWeeklyDigest, resetSchedulerState };
+export const __test__ = {
+  tick,
+  shouldFireWeeklyDigest,
+  shouldCaptureSnapshots,
+  setLastStatsSnapshotDay,
+  resetSchedulerState,
+};

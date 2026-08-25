@@ -607,13 +607,18 @@ interface TrendPoint { date: string; coverage: number; avgHealth: number; gaps: 
 function DashboardTrends({ stats }: { stats: DashboardStats }) {
   const { activeOrgId } = useOrgContext();
   const [points, setPoints] = useState<TrendPoint[] | null>(null);
+  // When an org has < 2 real snapshots the backend returns a synthesized
+  // (illustrative) series — the current value is live but the history is
+  // projected. Surfaced as a "Sample" badge so it isn't read as measured.
+  const [synthesized, setSynthesized] = useState(false);
   useEffect(() => {
     if (!activeOrgId) { setPoints(null); return; }
     (async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: { points: TrendPoint[] } }>(`/dashboard/trends?orgId=${activeOrgId}`);
+        const res = await apiClient.get<{ success: boolean; data: { points: TrendPoint[]; synthesized?: boolean } }>(`/dashboard/trends?orgId=${activeOrgId}`);
         setPoints(res.data?.points || []);
-      } catch { setPoints([]); }
+        setSynthesized(!!res.data?.synthesized);
+      } catch { setPoints([]); setSynthesized(false); }
     })();
   }, [activeOrgId]);
 
@@ -637,7 +642,19 @@ function DashboardTrends({ stats }: { stats: DashboardStats }) {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Trends" right={<span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {weeksAgo} weeks</span>} />
+      <SectionHeading title="Trends" right={
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {synthesized && (
+            <span
+              title="Projected trend — the current value is live, but the history shown is illustrative until Procela has captured at least two daily snapshots for this org."
+              style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-warning)', border: '1px solid var(--color-warning)', borderRadius: 4, padding: '1px 6px', cursor: 'help' }}
+            >
+              Sample
+            </span>
+          )}
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {weeksAgo} weeks</span>
+        </span>
+      } />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         {metrics.map((m) => {
           const series = [...points.map((p) => p[m.key]), live[m.key]];
