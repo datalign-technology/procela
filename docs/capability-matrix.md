@@ -48,22 +48,24 @@ row's status changes so the snapshot doesn't drift from the source of truth._
 | Catalog | 6 | 0 | 0 |
 | Data assets | 11 | 0 | 0 |
 | Glossary | 3 | 0 | 0 |
-| Systems | 3 | 0 | 1 |
+| Systems | 4 | 0 | 0 |
 | Connections | 5 | 0 | 0 |
-| Lineage | 1 | 1 | 2 |
-| Data quality | 3 | 0 | 1 |
-| Governance | 9 | 0 | 1 |
+| Lineage | 1 | 2 | 1 |
+| Data quality | 3 | 1 | 0 |
+| Governance | 9 | 1 | 0 |
 | Domains | 2 | 0 | 0 |
 | Discovery | 2 | 0 | 1 |
 | AI | 4 | 0 | 1 |
-| Auth | 2 | 0 | 2 |
+| Auth | 3 | 0 | 1 |
 | Audit | 1 | 1 | 0 |
-| Infrastructure | 2 | 2 | 2 |
+| Infrastructure | 2 | 3 | 1 |
 | UX | 4 | 0 | 0 |
 | Misc | 0 | 0 | 3 |
 
-Where it actually matters: of the **P0** items, the open ones are
-auto-extracted lineage, SSO, and live SaaS hosting. (Real database
-connectors now ship via the on-prem edge agent, and the Postgres
-backing is complete — set `DATABASE_URL` and the whole backend runs
-on it.) Everything else is shipable wins or strategic defers.
+Where it actually matters: of the **P0** items, the open ones are the
+SQL/query-log half of auto-extracted lineage (the dbt half ships) and
+live SaaS hosting. (SSO — OIDC + SAML 2.0 with SCIM and JIT
+provisioning — is implemented and config-gated; real database
+connectors ship via the on-prem edge agent; the Postgres backing is
+complete — set `DATABASE_URL` and the whole backend runs on it.)
+Everything else is shipable wins or strategic defers.
