@@ -1,5 +1,12 @@
 # Postgres cutover plan
 
+> **Status: complete — this is a historical record.** Every PR in the
+> sequence below is delivered (each is tagged `(done)`), the whole backend
+> runs on Postgres when `DATABASE_URL` is set, and a live-Postgres CI job
+> gates it. See [`POSTGRES.md`](./POSTGRES.md) for the current-state
+> playbook. The present-tense framing below is preserved as the record of
+> how the cutover was planned and carried out.
+
 Moving the backend from JSON-file persistence to Postgres so that setting
 `DATABASE_URL` yields a correct, multi-instance-safe system. This is the
 detailed engineering plan behind checklist items **#3, #4, #5** in
@@ -8,7 +15,8 @@ code under `packages/backend/src`, not a summary.
 
 ## 1. Where we actually are
 
-**Already done (the hard ~80%):**
+**Already done (everything below — the section headers kept their
+plan-time "~80%" framing; the full sequence has since landed):**
 
 - 47 `db/*.repo.ts` repositories, each with a JSON path and a Prisma path,
   switched on `hasDatabase()` (`= !!process.env.DATABASE_URL`, `db/prisma.ts`).

@@ -64,7 +64,7 @@ Audit,Audit log,Built,Every entity change captured with before/after,P0,Yes,Yes,
 Audit,Audit export / compliance reports,Partial,Export possible via API; no canned regulatory reports,P1,Yes,Yes,Limited,Yes,Build report templates (SOX/GDPR/HIPAA)
 Infrastructure,Multi-tenant SaaS,Designed,org_id on every table; not yet hosted,P0,Yes,Yes,Native,Yes,Stand up production environment
 Infrastructure,On-prem deployment option,Designed,Container-first; AWS-specific services abstracted,P1,Yes,Yes,Partial,Yes,Validate with on-prem deploy
-Infrastructure,Real database backing,Not Started,Currently JSON-file persistence,P0,Postgres,Postgres,Postgres,Postgres,Migrate to Postgres + Prisma
+Infrastructure,Real database backing,Built,"Repository pattern across all entities (JSON + Prisma paths); set DATABASE_URL and the whole backend runs on Postgres 16 — docker-compose default + live-DB CI gate. JSON is the zero-config fallback",P0,Postgres,Postgres,Postgres,Postgres,—
 Infrastructure,Integration with BI tools,Not Started,No Tableau/Power BI/Looker certifications,P2,Yes,Yes,Yes,Yes,Defer
 Infrastructure,API completeness,Built,REST endpoints for every entity,P0,Yes,Yes,Yes,Yes,—
 Infrastructure,OpenAPI spec,Not Started,Endpoints exist but no spec generated,P1,Yes,Yes,Yes,Yes,Generate from routes

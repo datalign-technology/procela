@@ -58,11 +58,12 @@ row's status changes so the snapshot doesn't drift from the source of truth._
 | AI | 4 | 0 | 1 |
 | Auth | 2 | 0 | 2 |
 | Audit | 1 | 1 | 0 |
-| Infrastructure | 1 | 2 | 3 |
+| Infrastructure | 2 | 2 | 2 |
 | UX | 4 | 0 | 0 |
 | Misc | 0 | 0 | 3 |
 
 Where it actually matters: of the **P0** items, the open ones are
-auto-extracted lineage, SSO, Postgres backend, and live SaaS hosting.
-(Real database connectors now ship via the on-prem edge agent.)
-Everything else is shipable wins or strategic defers.
+auto-extracted lineage, SSO, and live SaaS hosting. (Real database
+connectors now ship via the on-prem edge agent, and the Postgres
+backing is complete — set `DATABASE_URL` and the whole backend runs
+on it.) Everything else is shipable wins or strategic defers.
