@@ -22,19 +22,19 @@ Glossary,Term-to-asset linking,Built,Through domain or direct assignment,P1,Yes,
 Systems,Systems registry,Built,"Name, type, vendor, criticality, connectivity, integration mechanisms, frequency",P0,Yes,Limited,Limited,Yes,—
 Systems,System ownership model,Built,"Single owner + deputy + multiple custodians (DAMA-aligned)",P0,Yes,No,No,Partial,—
 Systems,Integration mechanism taxonomy,Built,"REST/SOAP/GraphQL/MQ/Stream/File/ETL/DBRepl/ManualExport multi-select + frequency",P1,No,No,No,Limited,—
-Systems,System-to-system integration graph,Not Started,"Would be a separate SystemIntegration entity with direction + mechanism per edge",P2,Partial,Yes,Partial,Yes,Build SystemIntegration edges
+Systems,System-to-system integration graph,Built,"SystemIntegration directed edges (target + interface + direction + cadence) with inverse traversal; rendered as inbound/outbound lists",P2,Partial,Yes,Partial,Yes,Add force-directed graph visualization
 Connections,Connection profiles,Built,"DATABASE/FILE_STORAGE/API/DATA_WAREHOUSE/SPREADSHEET with credentials",P0,Yes,Yes,Yes,Yes,—
 Connections,Many-to-many connection ↔ system,Built,ConnectionSystemLink join table,P1,Yes,Partial,Yes,Yes,—
 Connections,Real database connectors,Built,"On-prem edge agent ships Postgres/MySQL/SQL Server/Oracle adapters (pair -> discover -> sync)",P0,200+ native,200+ native,200+ native,Many,Expand adapter coverage (Snowflake/BigQuery/warehouses)
 Connections,Connection testing,Built,Tests reachability; live test for staged file before save,P1,Yes,Yes,Yes,Yes,—
 Connections,Connection discovery (browse contents),Built,"On-prem connector discovers tables + columns (metadata only, audit-only)",P0,Yes,Yes,Yes,Yes,Expand adapter coverage
 Lineage,Manual lineage links,Built,System-to-system + asset-level Data Lineage page,P1,Yes,Yes,Yes,Yes,—
-Lineage,Auto-extracted lineage (SQL/dbt),Not Started,Need query-log parsers and/or dbt manifest ingestion,P0,Yes,Best-in-class,Best-in-class (dbt),Yes,Build extraction pipelines
+Lineage,Auto-extracted lineage (SQL/dbt),Partial,"dbt manifest ingestion (disk import + dbt Cloud API fetch) builds asset-level lineage edges from depends_on and derives DQ rules from dbt tests; SQL/query-log parsing not yet built",P0,Yes,Best-in-class,Best-in-class (dbt),Yes,Build SQL/query-log parser for non-dbt warehouses
 Lineage,Column-level lineage,Not Started,Schema supports it; no extraction,P1,Yes,Yes,Yes,Yes,Build extraction
 Lineage,Impact analysis from lineage,Partial,Gap detection sees process impact; not yet from technical lineage,P1,Yes,Yes,Yes,Yes,Bridge gap-detection to lineage
 Data quality,Quality rules engine,Built,Rule types (NOT_NULL/UNIQUE/REGEX/...) with thresholds and scheduling,P1,Add-on,Add-on,Partner,Best-in-class,Expand rule library + ML-based anomaly detection
 Data quality,Quality dimensions,Built,COMPLETENESS/UNIQUENESS/VALIDITY/etc.,P1,Yes,Yes,Yes,Yes,—
-Data quality,Profiling (auto-stats),Not Started,Needs column-level statistics extraction,P1,Yes,Yes,Yes,Yes,Build profiler service
+Data quality,Profiling (auto-stats),Partial,"On-prem connector extracts approximate row count (n_live_tup) + freshness per asset, persisted to DataAsset; no column-level statistics",P1,Yes,Yes,Yes,Yes,Build column-stats profiler (null%/distinct/min-max/histograms)
 Data quality,DQ scorecards / dashboards,Built,Health roll-up to asset; portfolio dashboard,P1,Yes,Yes,Yes,Yes,—
 Governance,Issues tracking,Built,Title/type/severity/status/domain/assignee,P1,Strong workflow engine,Functional,Functional,Yes,—
 Governance,Tasks,Built,Type/status/priority/assignee/due/automation mode,P1,Yes,Yes,Yes,Yes,—
@@ -45,7 +45,7 @@ Governance,Operations manuals,Built,Free-form long-form docs,P2,Yes,No,No,No,—
 Governance,Governance calendar / cadence,Built,Recurring events with auto-create tasks,P1,Yes,No,Limited,Yes,—
 Governance,Governance program / structure,Built,Governance group + DAMA role assignments,P1,Yes,No,Limited,Yes,—
 Governance,Maturity scoring,Built,Scorecard + maturity trends,P1,Yes,Limited,Limited,Yes,—
-Governance,Approval workflows (BPMN-style),Not Started,Would route tasks through state machines with approvers,P2,Best-in-class,Limited,Limited,Yes,Build workflow engine OR integrate (Camunda/Temporal)
+Governance,Approval workflows (BPMN-style),Partial,"Task lifecycle state machine (PENDING_APPROVAL/PENDING_REVIEW/REJECTED) with enforced transitions; no multi-approver routing engine",P2,Best-in-class,Limited,Limited,Yes,Build or integrate (Camunda/Temporal) multi-stage approver routing
 Domains,Data domain entity,Built,Domain with owner + stewards + asset assignment,P0,Yes,Yes,Yes,Yes,—
 Domains,Domain coverage gaps,Built,Gap detection includes orphan assets + unowned domains,P1,Yes,Yes,Yes,Yes,—
 Discovery,Asset search,Built,Name/description/system/type search,P0,Yes,Best-in-class (behavioral),Yes,Yes,—
@@ -56,7 +56,7 @@ AI,AI-suggested mappings,Built,Process step → asset suggestions with override 
 AI,AI-generated industry templates,Built,Procela's distinctive feature,P0,No,No,No,No,—
 AI,AI-suggested data source matching,Built,Asset-rooted Suggest Source via name similarity,P1,Limited,Limited,Limited,No,—
 AI,Anomaly detection on DQ,Not Started,Statistical drift / outlier detection,P2,Partner,Partner,Partner,Best-in-class,Add ML-based DQ
-Auth,SSO (SAML/OIDC),Not Started,JWT middleware exists; identity provider integration is next,P0,Yes,Yes,Yes,Yes,Wire Cognito/Azure AD/Okta
+Auth,SSO (SAML/OIDC),Built,"OIDC (discovery + PKCE + JWKS id_token validation, multi-IdP) and SAML 2.0 (signed ACS, SLO, metadata) both implemented; SCIM provisioning; JIT email-domain->org provisioning. Config-gated per deployment",P0,Yes,Yes,Yes,Yes,Validate against a live Entra/Okta tenant end-to-end
 Auth,Role-based access control,Built,SUPER_ADMIN/ORG_ADMIN/EDITOR/CONTRIBUTOR/VIEWER,P0,Yes,Yes,Yes,Yes,—
 Auth,Org hierarchy + scoped access,Built,Department/team scoping with descendant resolution,P1,Yes,Limited,Limited,Yes,—
 Auth,Active policy enforcement (row/column),Not Started,No masking/redaction at query time,P3,Yes,Yes,Yes,Yes,Defer; this is governance-tool table-stakes long-term
@@ -67,7 +67,7 @@ Infrastructure,On-prem deployment option,Designed,Container-first; AWS-specific 
 Infrastructure,Real database backing,Built,"Repository pattern across all entities (JSON + Prisma paths); set DATABASE_URL and the whole backend runs on Postgres 16 — docker-compose default + live-DB CI gate. JSON is the zero-config fallback",P0,Postgres,Postgres,Postgres,Postgres,—
 Infrastructure,Integration with BI tools,Not Started,No Tableau/Power BI/Looker certifications,P2,Yes,Yes,Yes,Yes,Defer
 Infrastructure,API completeness,Built,REST endpoints for every entity,P0,Yes,Yes,Yes,Yes,—
-Infrastructure,OpenAPI spec,Not Started,Endpoints exist but no spec generated,P1,Yes,Yes,Yes,Yes,Generate from routes
+Infrastructure,OpenAPI spec,Partial,"Hand-authored OpenAPI 3.0 spec served at /api/v1/docs with Swagger UI (/docs/ui); covers core entities, not all routers",P1,Yes,Yes,Yes,Yes,Auto-generate from routes; cover remaining routers
 UX,Column picker on table pages,Built,13 pages,P2,Limited,Limited,Yes,Limited,—
 UX,Org-context aware person pickers,Built,Format: "Name — Title · Org Path",P2,Yes,Limited,Yes,Limited,—
 UX,Focus-refresh on tab return,Built,All polling pages,P2,Yes,Yes,Yes,Yes,—
