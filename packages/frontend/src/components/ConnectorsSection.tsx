@@ -181,18 +181,23 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
     return () => document.removeEventListener('keydown', onKey);
   }, [issuedCode]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    // The 30s poll refreshes freshness chips in place — it must not clear the
+    // list or surface a transient error, or the connector row visibly flashes
+    // out and back on every tick. Only the initial (foreground) load shows a
+    // loading state; a background refresh swaps in new data silently.
+    const background = opts?.background ?? false;
+    if (!background) { setLoading(true); setError(null); }
     try {
       const res = await apiClient.get<{ success: boolean; data: ConnectorRow[] }>(
         `/connectors${activeOrgId ? `?orgId=${activeOrgId}` : ''}`,
       );
       setRows(res.data || []);
+      if (background) setError(null); // a successful refresh clears any stale error
     } catch (e) {
-      setError(errorMessage(e, 'failed to load connectors'));
+      if (!background) setError(errorMessage(e, 'failed to load connectors'));
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, [activeOrgId]);
 
@@ -201,7 +206,7 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
   // Refresh every 30s so the freshness chips drift toward STALE /
   // OFFLINE without the admin reloading the page.
   useEffect(() => {
-    const t = setInterval(load, 30_000);
+    const t = setInterval(() => load({ background: true }), 30_000);
     return () => clearInterval(t);
   }, [load]);
 
