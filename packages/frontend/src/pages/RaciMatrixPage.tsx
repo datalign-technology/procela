@@ -1,5 +1,5 @@
 import { SkeletonRows } from '../components/Skeleton';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import { apiClient } from '../api/client';
@@ -8,6 +8,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
+import { installPrintFit } from '../lib/printFit';
 import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
@@ -77,6 +78,43 @@ const tdStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
+const RACI_PRINT_STYLE_ID = 'procela-raci-print-styles';
+
+// Print/PDF support for the RACI matrix: hide the app shell, drop the
+// on-screen controls, and scale the (often very wide) matrix down to the
+// printable page width so it isn't clipped at the edge — a PDF can't scroll
+// horizontally. The scale factor itself is set at print time by installPrintFit.
+function ensureRaciPrintStyles() {
+  if (document.getElementById(RACI_PRINT_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = RACI_PRINT_STYLE_ID;
+  style.textContent = `
+    @media print {
+      nav, aside,
+      .sidebar, [class*="sidebar"], [class*="Sidebar"],
+      [class*="chatPanel"], [class*="ChatPanel"],
+      [class*="sessionTimeout"], [class*="toast"],
+      [class*="shell"] > aside {
+        display: none !important;
+      }
+      [class*="shell"], [class*="main"], [class*="content"] {
+        display: block !important;
+        padding: 0 !important;
+        overflow: visible !important;
+      }
+      .raci-print-hide { display: none !important; }
+      .raci-scroll-area { overflow: visible !important; }
+      [data-print-fit] {
+        transform: scale(var(--print-fit)) !important;
+        transform-origin: top left !important;
+      }
+      body { background: white !important; }
+      @page { margin: 0.5in; size: landscape; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export default function RaciMatrixPage({
   embedded = false,
   actionsPortal,
@@ -94,6 +132,13 @@ export default function RaciMatrixPage({
   const [groupBy, setGroupBy] = useState<ColumnGroupBy>('name');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [sectionFilter, setSectionFilter] = useState<'all' | 'business' | 'governance'>('all');
+  const printFitRef = useRef<HTMLTableElement>(null);
+
+  // Inject print styles + scale the matrix to fit the page on print.
+  useEffect(() => {
+    ensureRaciPrintStyles();
+    return installPrintFit(() => printFitRef.current);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -316,7 +361,7 @@ export default function RaciMatrixPage({
       {!loading && !error && hasData && data && (
         <>
           {/* Controls */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="raci-print-hide" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <ExportMenu build={buildExport} disabled={!data} />
             <IconButton icon="download" label="Print / PDF" variant="primary" onClick={() => window.print()} />
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
@@ -365,8 +410,8 @@ export default function RaciMatrixPage({
           )}
 
           {/* Table */}
-          <div style={{ overflow: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
-            <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+          <div className="raci-scroll-area" style={{ overflow: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
+            <table ref={printFitRef} style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
               <thead>
                 <tr>
                   <th scope="col" style={{ ...thStyle, position: 'sticky', left: 0, zIndex: 2, background: 'var(--color-surface)', minWidth: 280 }}>

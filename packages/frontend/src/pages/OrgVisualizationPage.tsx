@@ -111,6 +111,22 @@ function ensurePrintStyles() {
         overflow: visible !important;
         height: auto !important;
         max-height: none !important;
+        padding: 0 !important;
+      }
+      /* Fit the whole chart to the printable page width instead of clipping
+         a wide tree at the page edge (a PDF can't scroll horizontally). The
+         SVG's viewBox lets width:100% scale the drawing down, aspect-ratio
+         preserved; the zoom transform is dropped so it doesn't fight the fit. */
+      .viz-scroll-area > div {
+        width: 100% !important;
+        height: auto !important;
+        min-width: 0 !important;
+      }
+      .viz-scroll-area svg {
+        transform: none !important;
+        width: 100% !important;
+        height: auto !important;
+        max-width: 100% !important;
       }
       body, .viz-container, .viz-scroll-area { background: white !important; }
       @page {
@@ -379,7 +395,7 @@ export default function OrgVisualizationPage() {
               height: svgH * zoom,
               minWidth: 'fit-content',
             }}>
-              <svg width={svgW} height={svgH} style={{ display: 'block', transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
+              <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="xMinYMin meet" style={{ display: 'block', transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
                 {/* Edges first so nodes paint over them */}
                 {edges.map((e, i) => {
                   const x1 = e.from.x;
