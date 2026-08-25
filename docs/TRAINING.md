@@ -27,7 +27,7 @@ order once setup is complete.
 
 | Item | What you need |
 |---|---|
-| **Running dev environment** | Backend on `:3000`, frontend on `:5173` (`npm run dev` from the repo root) |
+| **Running dev environment** | Backend on `:3001`, frontend on `:5173` (`npm run dev` from the repo root) |
 | **Signed in** | As a `SUPER_ADMIN` or `ORG_ADMIN` so you can import and create |
 | **Fresh data store** | Recommended for a clean walkthrough. Use **Settings → Reset everything** to wipe before starting (super-admins only) |
 | **Test data files** | `test-data/utility/` — already in the repo |
