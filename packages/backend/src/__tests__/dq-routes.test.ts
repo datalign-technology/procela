@@ -139,10 +139,11 @@ describe('/data-quality routing', () => {
     }
   });
 
-  it('POST /:id/run also auto-recomputes the asset healthScore', async () => {
+  it('POST /:id/run does NOT let a simulated result drive the asset healthScore', async () => {
     // Seed an asset directly into the in-memory store (no other route
     // mounted here so we can't go through POST /data-assets). Health
-    // starts at 0 — the test verifies it changes after running a rule.
+    // starts at 0 — the test verifies a SIMULATED run leaves it there
+    // (a fabricated pass rate must never become the asset's real health).
     const now = new Date().toISOString();
     const seedAsset = {
       id: 'test-dq-run-asset',
@@ -182,14 +183,18 @@ describe('/data-quality routing', () => {
       const run = await request(port, 'POST', `/data-quality/${ruleId}/run`);
       assert.strictEqual(run.status, 200);
       assert.ok(run.body.data.passRate >= 0 && run.body.data.passRate <= 100);
+      // No LOCAL file is wired, so the engine simulates.
+      assert.strictEqual(run.body.data.simulated, true, 'run should be simulated (no driver)');
 
-      // The asset's healthScore should now equal the simulated pass rate
-      // because there's exactly one rule, so the weighted average == the
-      // pass rate.
+      // The per-rule score still records the simulated result (and the UI
+      // labels it "(simulated)")…
       const updatedRule = dataQualityRules.find((r: any) => r.id === ruleId);
       assert.ok(updatedRule, 'rule should exist after run');
-      assert.strictEqual(seedAsset.healthScore, updatedRule.currentScore,
-        `expected asset.healthScore (${seedAsset.healthScore}) to match rule.currentScore (${updatedRule.currentScore})`);
+      assert.strictEqual(updatedRule.currentScore, run.body.data.passRate);
+      // …but a simulated pass rate must NOT become the asset's real health,
+      // which is surfaced app-wide with no caveat. It stays at its prior 0.
+      assert.strictEqual(seedAsset.healthScore, 0,
+        `simulated run must leave asset health unchanged, got ${seedAsset.healthScore}`);
     } finally {
       // Clean up so the next test run starts fresh.
       const ai = dataAssets.indexOf(seedAsset);
