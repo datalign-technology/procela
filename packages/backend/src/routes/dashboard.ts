@@ -1224,15 +1224,35 @@ router.get('/governance-status', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/v1/dashboard/snapshot?orgId=<id>
- *
  * Capture the CURRENT computed stats for an org into the snapshot store
  * as one dated row. Idempotent per calendar day — if today's snapshot
  * for the org already exists it is overwritten in place rather than
  * duplicated. Returns the captured snapshot.
  *
- * This is the hook a scheduler / cron job would call (e.g. weekly) in
- * production to build up real trend history without any user action.
+ * Shared by POST /snapshot and the scheduler's daily capture sweep, which
+ * is what actually builds up real trend history so the sparklines stop
+ * falling back to the synthesized series (>= 2 real snapshots ⇒ real).
+ */
+export async function captureStatsSnapshot(oid: string): Promise<StatsSnapshot> {
+  const stats = await computeCoreStats(oid);
+  const today = new Date().toISOString().slice(0, 10);
+  const existing = (await statsSnapshotsRepo.list()).find((s) => s.orgId === oid && s.capturedAt === today);
+  if (existing) {
+    // Same calendar day → overwrite rather than append a duplicate.
+    return (await statsSnapshotsRepo.update(existing.id, stats)) ?? { ...existing, ...stats };
+  }
+  const snapshot: StatsSnapshot = { id: uuid(), orgId: oid, capturedAt: today, ...stats };
+  await statsSnapshotsRepo.create(snapshot);
+  return snapshot;
+}
+
+/**
+ * POST /api/v1/dashboard/snapshot?orgId=<id>
+ *
+ * Capture the current computed stats for an org as one dated row.
+ * Idempotent per calendar day. The scheduler calls captureStatsSnapshot
+ * directly on a daily cadence; this endpoint exposes the same for manual
+ * / on-demand capture.
  */
 router.post('/snapshot', async (req: Request, res: Response) => {
   const oid = req.query.orgId as string | undefined;
@@ -1240,20 +1260,7 @@ router.post('/snapshot', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'orgId is required' });
     return;
   }
-
-  const stats = await computeCoreStats(oid);
-  const today = new Date().toISOString().slice(0, 10);
-  const existing = (await statsSnapshotsRepo.list()).find((s) => s.orgId === oid && s.capturedAt === today);
-
-  let snapshot: StatsSnapshot;
-  if (existing) {
-    // Same calendar day → overwrite rather than append a duplicate.
-    snapshot = (await statsSnapshotsRepo.update(existing.id, stats)) ?? { ...existing, ...stats };
-  } else {
-    snapshot = { id: uuid(), orgId: oid, capturedAt: today, ...stats };
-    await statsSnapshotsRepo.create(snapshot);
-  }
-
+  const snapshot = await captureStatsSnapshot(oid);
   res.json({ success: true, data: snapshot });
 });
 
