@@ -45,6 +45,9 @@ Governance,Operations manuals,Built,Free-form long-form docs,P2,Yes,No,No,No,—
 Governance,Governance calendar / cadence,Built,Recurring events with auto-create tasks,P1,Yes,No,Limited,Yes,—
 Governance,Governance program / structure,Built,Governance group + DAMA role assignments,P1,Yes,No,Limited,Yes,—
 Governance,Maturity scoring,Built,Scorecard + maturity trends,P1,Yes,Limited,Limited,Yes,—
+Governance,Council scorecard (division rollup),Built,"Auto-derived per-division measures with true enterprise rollup, CDO/DGL overrides, published immutable versions",P1,Partial,No,No,Limited,—
+Governance,Policy exceptions register,Built,"Time-boxed waivers with expiry; past-expiry flagged and fed to council scorecard",P1,Yes,No,No,Limited,—
+Domains,Domain criticality tier,Built,"Tier-1..Tier-4 business-criticality flag; Tier-1 coverage drives council scorecard",P1,Yes,No,Limited,Yes,—
 Governance,Approval workflows (BPMN-style),Partial,"Task lifecycle state machine (PENDING_APPROVAL/PENDING_REVIEW/REJECTED) with enforced transitions; no multi-approver routing engine",P2,Best-in-class,Limited,Limited,Yes,Build or integrate (Camunda/Temporal) multi-stage approver routing
 Domains,Data domain entity,Built,Domain with owner + stewards + asset assignment,P0,Yes,Yes,Yes,Yes,—
 Domains,Domain coverage gaps,Built,Gap detection includes orphan assets + unowned domains,P1,Yes,Yes,Yes,Yes,—
