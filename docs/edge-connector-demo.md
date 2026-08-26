@@ -1,9 +1,20 @@
 # Edge-connector demo (utility + shipbuilder data)
 
-Run a **real** Procela on-prem edge connector against a **real** source database
-seeded with the utility (Tidewater Utilities) and shipbuilder (Momentum
-Industries) test data — and watch it discover the tables and measure their data
-quality inside the app. No stubs, no fabricated connector row.
+Run **real** Procela on-prem edge connectors against a **real** source database
+seeded with utility and shipbuilder test data — and watch them discover the
+tables and measure their data quality inside the app. No stubs, no fabricated
+connector row.
+
+The demo is **split by industry**, so each company only sees its own data:
+
+| Tenant | Connector | Scans schema | Discovers |
+|---|---|---|---|
+| **Tidewater Utilities** (electric / water) | Tidewater Edge Connector | `utility` | 4 utility tables |
+| **Momentum Industries** (shipbuilding) | Momentum Edge Connector | `shipbuilder` | 4 shipbuilder tables |
+
+Both connectors read the same physical source database (two schemas in one
+Postgres) but each is paired into a different tenant and scoped to that tenant's
+schema — so Tidewater never sees shipbuilder tables and vice-versa.
 
 ## What it shows
 
@@ -21,14 +32,18 @@ quality inside the app. No stubs, no fabricated connector row.
 docker compose --profile demo up --build
 ```
 
-That brings up the normal stack **plus** four demo services:
+That brings up the normal stack **plus** the demo services:
 
 | Service | Role |
 |---|---|
 | `source-db` | A stand-in **customer** Postgres, seeded from `docker/demo/source-db/init/*.sql` with `utility.*` and `shipbuilder.*` operational tables (with deliberately dirty rows so DQ is non-trivial). This is **not** Procela's store. |
-| `demo-seed` | Seeds the Procela app tenant (org, admin, systems) so the connector has a home to pair into. Runs once. |
-| `demo-bootstrap` | Pairs a real connector (`pair/start` → `pair/claim`) and writes `connector.yaml` to a shared volume. Runs once. |
-| `connector` | The real agent. Reads that config, discovers the source tables, reports them, and measures any DQ rules. |
+| `demo-seed` / `demo-seed-ship` | Seed the two tenants — Tidewater Utilities and Momentum Industries — so each connector has a home to pair into. Run once. |
+| `demo-bootstrap` / `demo-bootstrap-ship` | Pair a real connector each (`pair/start` → `pair/claim`), one scoped to `utility` and one to `shipbuilder`, writing `connector.yaml` / `ship-connector.yaml` to a shared volume. Run once. |
+| `connector` / `connector-ship` | The real agents. Each reads its config, discovers its schema's tables, reports them into its tenant, and measures any DQ rules. |
+
+The schema each connector scans is set by the `SCHEMAS` env on its bootstrap
+(comma-separated). To fold both industries back into one tenant, point a single
+bootstrap at `SCHEMAS: utility,shipbuilder`.
 
 The stack also runs a one-shot **`migrate`** service that applies the Prisma
 schema (`prisma migrate deploy`) to Postgres before the backend starts — the
@@ -43,23 +58,26 @@ same automatic `migrate` step.
 ## See it in the app
 
 1. Open the app at <http://localhost:3000> and sign in (dev quick-login is fine).
-2. Switch the org scope to **Tidewater Utilities**.
-3. **Data → Data Assets → Registry** — search `utility.` or `shipbuilder.` to see
-   the 8 discovered source tables, all **Bronze** (new arrivals surface as work
-   items, not silently approved). Expand a row to see the discovered columns.
-4. **Settings → Integrations → On-prem connectors** — the connector shows
-   **ONLINE** with a recent heartbeat and its scan events.
+2. Switch the org scope (top-left) to **Tidewater Utilities**.
+3. **Data → Data Assets → Registry** — search `utility.` to see the 4 discovered
+   utility tables, all **Bronze** (new arrivals surface as work items, not
+   silently approved). Expand a row to see the discovered columns. You won't see
+   any `shipbuilder.` tables here — those belong to the other tenant.
+4. Switch the org scope to **Momentum Industries** and search `shipbuilder.` to
+   see that tenant's 4 discovered tables.
+5. **Settings → Integrations → On-prem connectors** — each tenant shows its own
+   connector **ONLINE** with a recent heartbeat and its scan events.
 
 ## Measure data quality with the connector
 
 Discovery alone doesn't measure quality — you tell Procela which columns matter:
 
 1. Go to **Data → Data Quality → Rules → Add Rule**.
-2. Pick a discovered asset (e.g. `utility.billing_accounts`), then use the
-   **Column** picker to target a column, e.g. `email`, rule type **NOT_NULL**.
-   Add a couple more (e.g. `service_class` **IN_SET**
-   `residential,commercial,industrial`; `work_packages.pct_complete`
-   **NUMERIC_RANGE** 0–100).
+2. Pick a discovered asset (e.g. `utility.billing_accounts` under Tidewater),
+   then use the **Column** picker to target a column, e.g. `email`, rule type
+   **NOT_NULL**. Add another (e.g. `service_class` **IN_SET**
+   `residential,commercial,industrial`). Under Momentum, try
+   `shipbuilder.work_packages.pct_complete` **NUMERIC_RANGE** 0–100.
 3. Within one scan cycle (`scanSeconds`, 30s in the demo) the connector picks up
    the rule plan, runs the aggregate query against the source DB, and the rule
    flips to a **measured** score. With the seeded data you'll see realistic
@@ -73,12 +91,15 @@ still simulate.
 ## Tuning
 
 `docker/demo/bootstrap.mjs` renders the connector config from env (set on the
-`demo-bootstrap` service in `docker-compose.yml`):
+`demo-bootstrap` / `demo-bootstrap-ship` services in `docker-compose.yml`):
 
 - `SCAN_SECONDS` / `HEARTBEAT_SECONDS` — cadences (kept short for the demo).
 - `SOURCE_DSN` — the source database DSN (defaults to the `source-db` service).
 - `CONNECTOR_NAME`, `ADMIN_EMAIL` — connector display name and the tenant admin
   to pair as.
+- `SCHEMAS` — comma-separated schemas this connector scans (`utility` for the
+  Tidewater connector, `shipbuilder` for the Momentum one). Defaults to
+  `utility,shipbuilder` if unset.
 
 To add or change the sample source tables, edit
 `docker/demo/source-db/init/01-utility.sql` / `02-shipbuilder.sql` and recreate

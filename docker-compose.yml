@@ -155,8 +155,9 @@ services:
              node packages/backend/scripts/seed-tidewater.js http://backend:3001/api/v1"
     restart: "no"
 
-  # Pairs a real connector (pair/start → pair/claim) and writes connector.yaml
-  # to the shared config volume. Runs once and exits.
+  # UTILITY tenant connector. Pairs into Tidewater Utilities and scans ONLY the
+  # `utility` schema, so that tenant discovers just its own tables. Writes
+  # connector.yaml to the shared config volume. Runs once and exits.
   demo-bootstrap:
     image: node:20-slim
     profiles: ["demo"]
@@ -168,7 +169,8 @@ services:
       PROCELA_URL: http://backend:3001/api/v1
       ADMIN_EMAIL: admin@tidewater-utilities.com
       SOURCE_DSN: postgres://postgres@source-db:5432/source_demo
-      CONNECTOR_NAME: Demo Edge Connector
+      CONNECTOR_NAME: Tidewater Edge Connector
+      SCHEMAS: utility
       OUT: /config/connector.yaml
       SCAN_SECONDS: "30"
       HEARTBEAT_SECONDS: "15"
@@ -180,8 +182,8 @@ services:
     command: ["node", "docker/demo/bootstrap.mjs"]
     restart: "no"
 
-  # The real on-prem agent. Reads the generated config, discovers the source
-  # tables, reports them, and runs measured DQ pushdown on any rules you add.
+  # The real UTILITY on-prem agent. Reads its config, discovers the utility
+  # tables, reports them into Tidewater Utilities, and runs measured DQ.
   connector:
     build:
       context: ./packages/connector
@@ -193,6 +195,64 @@ services:
       - connector_config:/etc/procela:ro
     depends_on:
       demo-bootstrap:
+        condition: service_completed_successfully
+
+  # SHIPBUILDER tenant. Seeds Momentum Industries (a shipbuilding company) so
+  # its shipbuilder data has a separate home, keeping the two industries'
+  # catalogs cleanly apart. Runs once and exits.
+  demo-seed-ship:
+    image: node:20-slim
+    profiles: ["demo"]
+    working_dir: /repo
+    volumes:
+      - ./:/repo:ro
+    depends_on:
+      backend:
+        condition: service_started
+    command: >
+      sh -c "until node -e 'fetch(\"http://backend:3001/api/v1/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'; do echo 'waiting for backend'; sleep 2; done;
+             node packages/backend/scripts/seed-momentum-governance.js http://backend:3001/api/v1"
+    restart: "no"
+
+  # SHIPBUILDER tenant connector. Pairs into Momentum Industries and scans ONLY
+  # the `shipbuilder` schema. Writes ship-connector.yaml to the shared volume.
+  demo-bootstrap-ship:
+    image: node:20-slim
+    profiles: ["demo"]
+    working_dir: /repo
+    volumes:
+      - ./:/repo:ro
+      - connector_config:/config
+    environment:
+      PROCELA_URL: http://backend:3001/api/v1
+      ADMIN_EMAIL: admin@momentumindustries.com
+      SOURCE_DSN: postgres://postgres@source-db:5432/source_demo
+      CONNECTOR_NAME: Momentum Edge Connector
+      SCHEMAS: shipbuilder
+      OUT: /config/ship-connector.yaml
+      SCAN_SECONDS: "30"
+      HEARTBEAT_SECONDS: "15"
+    depends_on:
+      source-db:
+        condition: service_healthy
+      demo-seed-ship:
+        condition: service_completed_successfully
+    command: ["node", "docker/demo/bootstrap.mjs"]
+    restart: "no"
+
+  # The real SHIPBUILDER on-prem agent. Discovers the shipbuilder tables and
+  # reports them into Momentum Industries.
+  connector-ship:
+    build:
+      context: ./packages/connector
+      dockerfile: Dockerfile
+    profiles: ["demo"]
+    environment:
+      PROCELA_CONNECTOR_CONFIG: /etc/procela/ship-connector.yaml
+    volumes:
+      - connector_config:/etc/procela:ro
+    depends_on:
+      demo-bootstrap-ship:
         condition: service_completed_successfully
 
 volumes:
