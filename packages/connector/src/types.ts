@@ -210,3 +210,36 @@ export interface SyncPushResponse {
   };
   error?: string;
 }
+
+/** One rule the backend asks the connector to evaluate on its local source. */
+export interface DqPlanEntry {
+  ruleId: string;
+  table: string;   // discovered "schema.table" (or bare table)
+  column: string;
+  ruleType: 'NOT_NULL' | 'UNIQUE' | 'IN_SET' | 'NUMERIC_RANGE' | 'LENGTH_RANGE';
+  parameters: {
+    allowedValues?: string[];
+    min?: number; max?: number;
+    minLength?: number; maxLength?: number;
+  };
+  systemId: string | null;
+}
+
+/** One measured result the connector pushes back — counts only. */
+export interface DqResult {
+  ruleId: string;
+  totalRows: number;
+  passCount: number;
+}
+
+export interface DqPlanResponse {
+  success: boolean;
+  data?: { rules: DqPlanEntry[] };
+  error?: string;
+}
+
+export interface DqResultsResponse {
+  success: boolean;
+  data?: { applied: number; skipped: number };
+  error?: string;
+}
