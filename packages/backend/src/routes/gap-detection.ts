@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { processNodes } from './process-catalog';
-import { dataAssets } from './data-assets';
+import { dataAssets, dataAssetColumns } from './data-assets';
+import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
 import { dataDomains } from './data-domains';
 import { people } from './people';
 import { connections, connectionSystemLinks } from './connections';
@@ -28,6 +29,7 @@ const connectionsRepo = getConnectionsRepository(connections);
 const systemsRepo = getSystemsRepository(systems);
 const mappingsRepo = getMappingsRepository(mappings);
 const connectionSystemLinksRepo = getConnectionSystemLinksRepository(connectionSystemLinks);
+const dataAssetColumnsRepo = getDataAssetColumnsRepository(dataAssetColumns);
 
 const router = Router();
 
@@ -218,9 +220,37 @@ router.get('/', async (req: Request, res: Response) => {
     }
   }
 
+  // 12. Ungoverned bound columns — a column that carries a physical source
+  // pointer (i.e. the asset was bound to it) but has NO data-quality rule.
+  // Binding a column declares "this matters"; a bound column with no rule is
+  // scope you claimed but never measure. This is the column-level coverage
+  // gap that column-set bindings surface — asset-level linkage can look
+  // complete while individual bound columns go unmeasured.
+  let dqRules: Array<{ dataAssetId: string; columnId?: string }> = [];
+  try { dqRules = require('./data-quality').dataQualityRules || []; } catch { /* */ }
+  const ruledColumnIds = new Set(dqRules.map((r) => r.columnId).filter(Boolean) as string[]);
+  const allColumns = await dataAssetColumnsRepo.list();
+  const assetIdsInScope = new Set(assets.map((a) => a.id));
+  const assetNameById = new Map(assets.map((a) => [a.id, a.name] as const));
+  const ungovernedByAsset = new Map<string, string[]>();
+  for (const col of allColumns) {
+    if (!assetIdsInScope.has(col.dataAssetId)) continue;
+    if (!col.sourceColumn) continue;            // only bound (physical) columns
+    if (ruledColumnIds.has(col.id)) continue;   // already has at least one rule
+    if (!ungovernedByAsset.has(col.dataAssetId)) ungovernedByAsset.set(col.dataAssetId, []);
+    ungovernedByAsset.get(col.dataAssetId)!.push(col.columnName);
+  }
+  const ungovernedColumns = [...ungovernedByAsset.entries()].map(([assetId, columns]) => ({
+    assetId,
+    assetName: assetNameById.get(assetId) || assetId,
+    columns,
+    count: columns.length,
+  }));
+
   const summary = {
     unmappedSteps: unmappedSteps.length,
     ungovernedAssets: ungovernedAssets.length,
+    ungovernedColumns: ungovernedColumns.reduce((s, g) => s + g.count, 0),
     lowHealthAssets: lowHealthAssets.length,
     ownerlessProcesses: ownerlessProcesses.length,
     unownedDomains: unownedDomains.length,
@@ -233,7 +263,8 @@ router.get('/', async (req: Request, res: Response) => {
     totalGaps: unmappedSteps.length + ungovernedAssets.length + ownerlessProcesses.length
       + unownedDomains.length + orphanedAssets.length + unlinkedAssets.length
       + unassignedConnections.length + ownerlessSystems.length
-      + duplicateAssetNames.length,
+      + duplicateAssetNames.length
+      + ungovernedColumns.reduce((s, g) => s + g.count, 0),
   };
 
   res.json({
@@ -250,6 +281,7 @@ router.get('/', async (req: Request, res: Response) => {
       unassignedConnections,
       ownerlessSystems,
       duplicateAssetNames,
+      ungovernedColumns,
     },
     summary,
   });

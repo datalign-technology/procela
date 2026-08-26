@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
+import Card from '../components/Card';
 import FieldStack from '../components/FieldStack';
 import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
@@ -147,6 +148,14 @@ const selectStyle: React.CSSProperties = {
 };
 
 
+interface Asset360Column {
+  id: string;
+  columnName: string;
+  dataType?: string;
+  sourceColumn?: string;
+  rulesCount: number;
+  healthScore: number | null;
+}
 interface Asset360Data {
   asset: DataAssetEntity;
   system: { id: string; name: string; systemType: string } | null;
@@ -154,6 +163,15 @@ interface Asset360Data {
   mappings: { id: string; processStepId: string; linkType: string; notes: string; processPath: string }[];
   ownerInfo: { id: string | null; name: string } | null;
   stewardInfos: { id: string; name: string }[];
+  binding: {
+    id: string;
+    connectionId: string;
+    sourceAsset: string;
+    sourceColumn?: string;
+    sourceColumns: string[];
+    label?: string;
+  } | null;
+  columns: Asset360Column[];
 }
 
 interface FormData {
@@ -2195,18 +2213,70 @@ export default function DataAssetsPage({
         ) : viewing360 ? (
           <>
                 {/* Asset Info */}
-                <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                   {viewing360.system && (
                     <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', padding: '3px 10px', borderRadius: 4 }}>
                       System: {viewing360.system.name} {viewing360.system.systemType ? `(${viewing360.system.systemType})` : ''}
                     </span>
                   )}
-                  {viewing360.asset.sourceAsset && (
+                  {(viewing360.binding?.sourceAsset || viewing360.asset.sourceAsset) && (
                     <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', padding: '3px 10px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>
-                      Source: {viewing360.asset.sourceAsset}{viewing360.asset.sourceColumn ? `.${viewing360.asset.sourceColumn}` : ''}
+                      Source: {viewing360.binding?.sourceAsset || viewing360.asset.sourceAsset}
                     </span>
                   )}
                 </div>
+
+                {/* Physical binding — the business asset maps to this table and
+                    (when scoped) this named set of its columns, each with its
+                    own measured quality. */}
+                {(viewing360.binding || viewing360.columns.length > 0) && (
+                  <Card marginBottom={20}>
+                    <SectionLabel>Bound columns</SectionLabel>
+                    {viewing360.binding && (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '6px 0 10px' }}>
+                        {viewing360.binding.sourceColumns.length > 0
+                          ? <>This asset is bound to {viewing360.binding.sourceColumns.length} column{viewing360.binding.sourceColumns.length === 1 ? '' : 's'} of <code style={{ fontFamily: 'var(--font-mono)' }}>{viewing360.binding.sourceAsset}</code>.</>
+                          : <>This asset is bound to the whole of <code style={{ fontFamily: 'var(--font-mono)' }}>{viewing360.binding.sourceAsset}</code> (all columns).</>}
+                      </div>
+                    )}
+                    {viewing360.columns.length > 0 ? (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)' }}>
+                            <th style={{ padding: '4px 8px', fontWeight: 600 }}>Column</th>
+                            <th style={{ padding: '4px 8px', fontWeight: 600 }}>Type</th>
+                            <th style={{ padding: '4px 8px', fontWeight: 600 }}>Rules</th>
+                            <th style={{ padding: '4px 8px', fontWeight: 600 }}>Health</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {viewing360.columns.map((col) => {
+                            const h = col.healthScore;
+                            const hColor = h == null ? 'var(--color-text-muted)'
+                              : h >= 80 ? 'var(--color-success)'
+                              : h >= 50 ? 'var(--color-warning)' : 'var(--color-error)';
+                            return (
+                              <tr key={col.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                                <td style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)' }}>{col.columnName}</td>
+                                <td style={{ padding: '5px 8px', color: 'var(--color-text-secondary)' }}>{col.dataType || '—'}</td>
+                                <td style={{ padding: '5px 8px', color: col.rulesCount === 0 ? 'var(--color-warning)' : 'var(--color-text-secondary)' }}>
+                                  {col.rulesCount === 0 ? 'No rules' : `${col.rulesCount} rule${col.rulesCount === 1 ? '' : 's'}`}
+                                </td>
+                                <td style={{ padding: '5px 8px', fontWeight: 600, color: hColor }}>
+                                  {h == null ? '—' : `${h}%`}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                        No columns defined yet. Link this asset to a source and pick its columns, or auto-discover them.
+                      </div>
+                    )}
+                  </Card>
+                )}
 
                 {/* Sensitivity — Suggest & Review flow. Sits above the
                     cross-layer WhereUsed view so a reviewer sees the

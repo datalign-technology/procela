@@ -546,13 +546,31 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
   const asset = await dataAssetsRepo.get(rule.dataAssetId);
   if (!asset) return null;
 
-  const conn = asset.sourceConnectionId ? await connectionsRepo.get(asset.sourceConnectionId) : undefined;
+  // Resolve the connection from the asset's primary binding (bindings are the
+  // source of truth), falling back to the legacy shadow field for un-migrated
+  // rows.
+  const binding = primaryBindingFrom(await dataAssetBindingsRepo.list(), asset.id);
+  const connId = binding?.connectionId || asset.sourceConnectionId;
+  const conn = connId ? await connectionsRepo.get(connId) : undefined;
+
+  // Resolve the PHYSICAL column this rule measures. A column-targeted rule
+  // (rule.columnId, the model going forward) reads that column's own
+  // sourceColumn pointer — so each rule measures its own column instead of
+  // every rule collapsing onto the single asset-level sourceColumn. Fall back,
+  // in order, to the rule's denormalized columnName, then the binding/asset
+  // single column, for legacy asset-level rules.
+  let sourceColumn: string | undefined;
+  if (rule.columnId) {
+    const col = await dataAssetColumnsRepo.get(rule.columnId);
+    sourceColumn = col?.sourceColumn || col?.columnName;
+  }
+  if (!sourceColumn) sourceColumn = rule.columnName || binding?.sourceColumn || asset.sourceColumn;
 
   const result = evaluateRule(rule.ruleType!, rule.parameters || {}, {
     connectionType: conn?.connectionType,
     storageType: conn?.config?.storageType,
     localFilePath: conn?.config?.localFilePath,
-    sourceColumn: asset.sourceColumn,
+    sourceColumn,
     originalFileName: conn?.config?.originalFileName,
     assetId: asset.id,
     ruleId: rule.id,
@@ -653,12 +671,22 @@ export async function listConnectorRulePlan(connectorId: string): Promise<Connec
   const rules = (await dataQualityRulesRepo.list()).filter(
     (r) => byId.has(r.dataAssetId) && r.ruleType && supported.has(r.ruleType) && !!r.columnName,
   );
+  // Resolve the real physical table/column from the binding + column rows, not
+  // the business-facing asset/column names. The connector runs SQL, so it needs
+  // the source table (binding.sourceAsset) and physical column
+  // (DataAssetColumn.sourceColumn) — which differ from the business names when
+  // an asset is a renamed concept over a physical table.
+  const bindings = await dataAssetBindingsRepo.list();
+  const columns = await dataAssetColumnsRepo.list();
+  const colById = new Map(columns.map((c) => [c.id, c]));
   return rules.map((r) => {
     const a = byId.get(r.dataAssetId)!;
+    const binding = primaryBindingFrom(bindings, a.id);
+    const col = r.columnId ? colById.get(r.columnId) : undefined;
     return {
       ruleId: r.id,
-      table: a.name,
-      column: r.columnName!,
+      table: binding?.sourceAsset || a.name,
+      column: col?.sourceColumn || r.columnName!,
       ruleType: r.ruleType!,
       parameters: r.parameters || {},
       systemId: (a as { systemId?: string }).systemId || null,

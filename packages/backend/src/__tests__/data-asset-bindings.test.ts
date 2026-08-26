@@ -9,7 +9,7 @@ const dataAssetsRouter = require('../routes/data-assets').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const connectionsRouter = require('../routes/connections').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { dataAssets, dataAssetBindings, getPrimaryBinding } = require('../routes/data-assets');
+const { dataAssets, dataAssetBindings, dataAssetColumns, getPrimaryBinding } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { connections } = require('../routes/connections');
 
@@ -93,6 +93,10 @@ describe('DataAssetBinding routes', () => {
     for (let i = dataAssetBindings.length - 1; i >= 0; i--) {
       if (dataAssetBindings[i].dataAssetId === seededAssetId) dataAssetBindings.splice(i, 1);
     }
+    // Columns materialized from bound sets also dangle — purge them.
+    for (let i = dataAssetColumns.length - 1; i >= 0; i--) {
+      if (dataAssetColumns[i].dataAssetId === seededAssetId) dataAssetColumns.splice(i, 1);
+    }
     await new Promise<void>((r) => server.close(() => r()));
   });
 
@@ -118,6 +122,41 @@ describe('DataAssetBinding routes', () => {
     assert.strictEqual(res.body.data.sourceColumn, 'amount');
     // Clean up so later count assertions stay stable.
     await request(port, 'DELETE', `/data-assets/${seededAssetId}/bindings/${res.body.data.id}`);
+  });
+
+  it('creating a binding with a column set materializes governed columns', async () => {
+    // Non-destructive: these suite-level tests share one persisted asset and a
+    // narrative binding, so use unique column names and assert on the delta,
+    // then remove exactly what this test added.
+    const set = ['ms_col_x', 'ms_col_y', 'ms_col_z'];
+    const res = await request(port, 'POST', `/data-assets/${seededAssetId}/bindings`, {
+      connectionId: seededConnId2, sourceAsset: 'invoices', sourceColumns: set,
+    });
+    assert.strictEqual(res.status, 201);
+    const bindingId = res.body.data.id;
+    // The bound set now exists as DataAssetColumn rows, each pointing at its
+    // physical source column.
+    const cols = await request(port, 'GET', `/data-assets/${seededAssetId}/columns`);
+    const mine = cols.body.data.filter((c: any) => set.includes(c.columnName));
+    assert.strictEqual(mine.length, 3);
+    const x = mine.find((c: any) => c.columnName === 'ms_col_x');
+    assert.strictEqual(x.sourceColumn, 'ms_col_x');
+    assert.strictEqual(x.sourceConnectionId, seededConnId2);
+    assert.strictEqual(x.sourceAsset, 'invoices');
+    // Idempotent: re-linking the same set does not duplicate columns.
+    const res2 = await request(port, 'POST', `/data-assets/${seededAssetId}/bindings`, {
+      connectionId: seededConnId2, sourceAsset: 'invoices', sourceColumns: set,
+    });
+    const cols2 = await request(port, 'GET', `/data-assets/${seededAssetId}/columns`);
+    assert.strictEqual(cols2.body.data.filter((c: any) => set.includes(c.columnName)).length, 3);
+    // Remove exactly what this test added, restoring the prior state.
+    await request(port, 'DELETE', `/data-assets/${seededAssetId}/bindings/${bindingId}`);
+    await request(port, 'DELETE', `/data-assets/${seededAssetId}/bindings/${res2.body.data.id}`);
+    for (let i = dataAssetColumns.length - 1; i >= 0; i--) {
+      if (set.includes(dataAssetColumns[i].columnName) && dataAssetColumns[i].dataAssetId === seededAssetId) {
+        dataAssetColumns.splice(i, 1);
+      }
+    }
   });
 
   it('PUT can replace the column set on an existing binding', async () => {
