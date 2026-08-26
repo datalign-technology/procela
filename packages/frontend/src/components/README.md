@@ -610,6 +610,32 @@ verbatim across 18 pages. Two of those properties (`#6b7280`,
 to `var(--color-text-secondary)` + `var(--color-border)`, identical
 today but coupled to the palette going forward.
 
+### `<SearchInput>`
+
+The free-text list-filter box shared across the Data Assets hub tabs
+(Registry / Quality / Rules) so they look and behave identically. A
+token-styled controlled text input with a clear (`×`) button that
+appears once there's a value. Filtering stays the caller's job — this
+only owns the input affordance. Do NOT hand-roll a bare
+`<input placeholder="Search…">` for a list filter.
+
+```tsx
+import SearchInput from '@/components/SearchInput';
+
+<SearchInput
+  value={search}
+  onChange={setSearch}
+  placeholder="Search rules, asset, column…"
+  ariaLabel="Search rules"
+  width={230}
+/>
+```
+
+Props: `value` / `onChange` (controlled), `placeholder`, `ariaLabel`
+(defaults to the placeholder), `width` (number or CSS length). Pairs
+naturally with `<ActiveFiltersBar>` — surface the active term as a
+clearable chip there when the surface already shows filter chips.
+
 ---
 
 ### `<WizardProgress>`
