@@ -88,7 +88,7 @@ export interface StoredConnectorEvent {
   id: string;
   connectorId: string;
   orgId: string;
-  type: 'PAIRED' | 'HEARTBEAT' | 'SCAN_STARTED' | 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'ASSETS_REPORTED' | 'SYNC_JOBS_FETCHED' | 'SYNC_PUSHED';
+  type: 'PAIRED' | 'HEARTBEAT' | 'SCAN_STARTED' | 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'ASSETS_REPORTED' | 'SYNC_JOBS_FETCHED' | 'SYNC_PUSHED' | 'DQ_RULES_FETCHED' | 'DQ_RESULTS_APPLIED';
   ts: string;
   /** Optional payload — counts, durations, error text. Keep small. */
   data: Record<string, any>;
