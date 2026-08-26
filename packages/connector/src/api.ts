@@ -11,6 +11,9 @@ import type {
   ReportedAsset,
   SyncJobsResponse,
   SyncPushResponse,
+  DqPlanResponse,
+  DqResult,
+  DqResultsResponse,
 } from './types';
 
 function url(cfg: ConnectorConfig, path: string): string {
@@ -64,6 +67,29 @@ export async function getSyncJobs(cfg: ConnectorConfig): Promise<SyncJobsRespons
     headers: { Authorization: `Bearer ${cfg.token}` },
   });
   if (!res.ok) throw new Error(`sync-jobs HTTP ${res.status}`);
+  return res.json();
+}
+
+/** Fetch the DQ rules this connector should evaluate on its local sources. */
+export async function fetchDqPlan(cfg: ConnectorConfig): Promise<DqPlanResponse> {
+  if (!cfg.token) return { success: false, error: 'no token' };
+  const res = await fetch(url(cfg, '/connectors/dq-rules'), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${cfg.token}` },
+  });
+  if (!res.ok) throw new Error(`dq-rules HTTP ${res.status}`);
+  return res.json();
+}
+
+/** Push measured rule results (aggregate counts only) back to Procela. */
+export async function pushDqResults(cfg: ConnectorConfig, results: DqResult[]): Promise<DqResultsResponse> {
+  if (!cfg.token) return { success: false, error: 'no token' };
+  const res = await fetch(url(cfg, '/connectors/dq-results'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+    body: JSON.stringify({ results }),
+  });
+  if (!res.ok) throw new Error(`dq-results HTTP ${res.status}`);
   return res.json();
 }
 

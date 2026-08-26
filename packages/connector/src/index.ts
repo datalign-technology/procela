@@ -37,6 +37,7 @@ import { scanDbt } from './dbt';
 import { scanOracle } from './oracle';
 import { withRetry } from './retry';
 import { runSyncJobs } from './sync';
+import { runDqRules } from './dq';
 import { configureProxy } from './proxy';
 
 // Resolvers for ${ENV_VAR} / ${file:/path} references in source
@@ -222,6 +223,10 @@ async function main(): Promise<void> {
     const now = Date.now();
     if (now - lastScanAt > cfg.scanSeconds * 1000) {
       await runScan(cfg).catch((err) => log('scan iteration threw', { err: err?.message || String(err) }));
+      // Evaluate DQ rules on the same cadence, right after a fresh scan so
+      // any newly-discovered columns already have assets to attach to. The
+      // connector pushes only aggregate pass/fail counts — never row values.
+      await runDqRules(cfg, log, secretResolvers).catch((err) => log('dq iteration threw', { err: err?.message || String(err) }));
       lastScanAt = now;
     }
     // Sleep in small slices so SIGINT lands quickly.
