@@ -558,6 +558,23 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
     ruleId: rule.id,
   });
 
+  const outcome = await applyRuleResult(rule, result);
+  logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows, assetHealthScore: outcome.assetHealth, assetHealthEstimated: outcome.assetHealthEstimated }, 'DQ rule run');
+  return { engineResult: result, assetHealth: outcome.assetHealth, assetHealthEstimated: outcome.assetHealthEstimated };
+}
+
+/**
+ * Persist a rule's run result and cascade its side effects: advance the
+ * schedule cursor, recompute the owning asset's health from MEASURED rules
+ * only (a simulated result never drives it — see rollupAssetHealth), audit
+ * the run, and sync the governance issue. Shared by the local engine
+ * (runRuleNow) and the connector-pushed path (recordConnectorRuleResults)
+ * so both record identically. Safe when the asset is missing.
+ */
+async function applyRuleResult(
+  rule: DataQualityRule,
+  result: RuleRunResult,
+): Promise<{ assetHealth: number; assetHealthEstimated: boolean }> {
   rule.lastRun = result;
   rule.currentScore = result.passRate;
   rule.lastMeasured = result.ranAt;
@@ -575,36 +592,125 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
     nextRunAt: rule.nextRunAt,
   });
 
-  // Auto-recompute the asset's health from MEASURED rules only. A simulated
-  // run carries a fabricated pass rate, so it must not become the asset's
-  // real, app-wide healthScore. With no measured rule the existing score
-  // (connector freshness / manual) is left untouched rather than overwritten.
-  const allRules = await dataQualityRulesRepo.list();
-  const assetRules = allRules.filter((r) => r.dataAssetId === asset.id);
-  const rollup = rollupAssetHealth(assetRules);
-  const newAssetHealth = rollup.health ?? asset.healthScore;
-  const assetHealthEstimated = rollup.health === null;
-  if (rollup.health !== null && asset.healthScore !== rollup.health) {
-    await dataAssetsRepo.update(asset.id, { healthScore: rollup.health, updatedAt: result.ranAt });
+  const asset = await dataAssetsRepo.get(rule.dataAssetId);
+  let assetHealth = 0;
+  let assetHealthEstimated = true;
+  if (asset) {
+    const assetRules = (await dataQualityRulesRepo.list()).filter((r) => r.dataAssetId === asset.id);
+    const rollup = rollupAssetHealth(assetRules);
+    assetHealth = rollup.health ?? asset.healthScore;
+    assetHealthEstimated = rollup.health === null;
+    if (rollup.health !== null && asset.healthScore !== rollup.health) {
+      await dataAssetsRepo.update(asset.id, { healthScore: rollup.health, updatedAt: result.ranAt });
+    }
   }
 
   auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'RUN', null, {
     simulated: result.simulated,
     passRate: result.passRate,
     totalRows: result.totalRows,
-    assetHealthScore: newAssetHealth,
+    assetHealthScore: assetHealth,
     assetHealthEstimated,
   });
-  logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows, assetHealthScore: newAssetHealth, assetHealthEstimated }, 'DQ rule run');
 
-  // Sync a governance issue for the rule's current state. Creates
-  // one on FAILING/WARNING, closes it on recovery. Idempotent —
-  // safe to call every run. Wrapped in try/catch so a governance
-  // subsystem hiccup doesn't take the DQ engine down with it.
+  // Sync a governance issue for the rule's current state. Idempotent, and
+  // wrapped so a governance hiccup doesn't take the DQ engine down.
   try { await syncDataQualityIssueForRule(rule); }
   catch (err) { logger.error({ err, ruleId: rule.id }, 'Failed to sync governance issue for DQ rule'); }
 
-  return { engineResult: result, assetHealth: newAssetHealth, assetHealthEstimated };
+  return { assetHealth, assetHealthEstimated };
+}
+
+// ── Connector-side (on-prem) rule execution ──────────────────────────────
+//
+// The edge connector runs rules inside the customer network and pushes back
+// aggregate pass/fail counts — a measured result (simulated: false) that
+// feeds real asset health, without any row values leaving the host. These
+// rule types push down to a single aggregate query cleanly across every
+// bundled adapter; REGEX_MATCH (no portable engine support — SQL Server has
+// no native regex) and CUSTOM (arbitrary code) stay on the file/dbt path.
+export const CONNECTOR_SUPPORTED_RULE_TYPES: RuleType[] =
+  ['NOT_NULL', 'UNIQUE', 'IN_SET', 'NUMERIC_RANGE', 'LENGTH_RANGE'];
+
+export interface ConnectorRulePlanEntry {
+  ruleId: string;
+  /** Discovered asset name (schema.table) the connector matches to a source. */
+  table: string;
+  column: string;
+  ruleType: RuleType;
+  parameters: RuleParameters;
+  /** The asset's system, so the connector can pick the source that owns it. */
+  systemId: string | null;
+}
+
+/** The executable-rule plan for the assets a given connector discovered:
+ *  supported, typed, column-targeted rules only. */
+export async function listConnectorRulePlan(connectorId: string): Promise<ConnectorRulePlanEntry[]> {
+  const assets = (await dataAssetsRepo.list())
+    .filter((a) => (a as { lastSyncedByConnectorId?: string }).lastSyncedByConnectorId === connectorId);
+  const byId = new Map(assets.map((a) => [a.id, a]));
+  const supported = new Set(CONNECTOR_SUPPORTED_RULE_TYPES);
+  const rules = (await dataQualityRulesRepo.list()).filter(
+    (r) => byId.has(r.dataAssetId) && r.ruleType && supported.has(r.ruleType) && !!r.columnName,
+  );
+  return rules.map((r) => {
+    const a = byId.get(r.dataAssetId)!;
+    return {
+      ruleId: r.id,
+      table: a.name,
+      column: r.columnName!,
+      ruleType: r.ruleType!,
+      parameters: r.parameters || {},
+      systemId: (a as { systemId?: string }).systemId || null,
+    };
+  });
+}
+
+export interface ConnectorRuleResult {
+  ruleId: string;
+  totalRows: number;
+  passCount: number;
+  passRate?: number;
+  ranAt?: string;
+}
+
+/** Record measured results the connector pushed for its own rules. Each
+ *  becomes a non-simulated RuleRunResult that feeds real asset health. A
+ *  result whose rule isn't on one of THIS connector's assets is skipped —
+ *  a connector can only move health for the data it owns. */
+export async function recordConnectorRuleResults(
+  connector: { id: string; orgId: string },
+  results: ConnectorRuleResult[],
+): Promise<{ applied: number; skipped: number }> {
+  const ownedAssetIds = new Set(
+    (await dataAssetsRepo.list())
+      .filter((a) => (a as { lastSyncedByConnectorId?: string }).lastSyncedByConnectorId === connector.id)
+      .map((a) => a.id),
+  );
+  const ruleById = new Map((await dataQualityRulesRepo.list()).map((r) => [r.id, r]));
+
+  let applied = 0;
+  let skipped = 0;
+  for (const r of results) {
+    const rule = ruleById.get(r.ruleId);
+    if (!rule || !ownedAssetIds.has(rule.dataAssetId)) { skipped++; continue; }
+
+    const totalRows = Math.max(0, Math.floor(Number(r.totalRows) || 0));
+    const passCount = Math.max(0, Math.min(totalRows, Math.floor(Number(r.passCount) || 0)));
+    const passRate = typeof r.passRate === 'number'
+      ? Math.max(0, Math.min(100, Math.round(r.passRate)))
+      : (totalRows > 0 ? Math.round((passCount / totalRows) * 100) : 100);
+    const ranAt = typeof r.ranAt === 'string' ? r.ranAt : new Date().toISOString();
+
+    const result: RuleRunResult = {
+      ranAt, simulated: false, totalRows, passCount,
+      failCount: totalRows - passCount, passRate, failureSamples: [],
+      message: 'Measured on-prem by the connector.',
+    };
+    await applyRuleResult(rule, result);
+    applied++;
+  }
+  return { applied, skipped };
 }
 
 // ── Scheduler ────────────────────────────────────────────────────────────

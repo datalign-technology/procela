@@ -65,6 +65,7 @@ import dataDomainsRouter from './routes/data-domains';
 import docsRouter from './routes/docs';
 import connectorsRouter from './routes/connectors';
 import connectorSyncRouter from './routes/connector-sync';
+import connectorDqRouter from './routes/connector-dq';
 import exportsRouter from './routes/exports';
 import digestRouter from './routes/digest';
 import tagsRouter from './routes/tags';
@@ -343,6 +344,8 @@ app.use('/api/v1/connectors', connectorsRouter);
 // prefix. Mounted after connectorsRouter; its /sync-jobs paths don't collide
 // with the registry routes.
 app.use('/api/v1/connectors', connectorSyncRouter);
+// Connector-side DQ endpoints (connector-token auth) — /connectors/dq-*.
+app.use('/api/v1/connectors', connectorDqRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
