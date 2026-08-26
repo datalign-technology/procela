@@ -85,9 +85,10 @@ shapes**:
   the customer's network and ships metadata outbound. Used when the source is
   not directly reachable from Procela.
 
-**The connector is the metadata-only subset of a direct Connection.** Everything
-the agent's `/report` writes, a direct Connection also writes — into the same
-columns:
+**The connector writes the same columns a direct Connection does — and now also
+runs _measured_ DQ on-prem for the five pushdown-safe rule types** (a direct
+Connection's DQ currently simulates). Everything the agent's `/report` writes, a
+direct Connection also writes — into the same columns:
 
 | What arrives | Table · columns | Option 1 (Connection) | Option 2 (connector) |
 |---|---|---|---|
@@ -95,11 +96,14 @@ columns:
 | Freshness (row count, last-synced, health) | `data_assets` · `healthScore`, `healthScoreAt`, `lastSyncedByConnectorId`, `lastSyncedAt` | ✅ | ✅ |
 | Column names & types | `data_asset_columns` · `columnName`, `dataType`, `sourceAsset`, `sourceColumn` | ✅ live introspection | ✅ from the report |
 | Live column introspection on demand (Test / Discover) | — | ✅ | ❌ metadata push only |
-| Data-quality rule execution against live data | `DataQualityRule` results | ✅ | ❌ |
+| Data-quality rule execution | `DataQualityRule` results | ⚠️ simulated today | ✅ 5 pushdown types measured on-prem; REGEX_MATCH/CUSTOM simulate |
 
-Option 1 is a **superset**: it adds interactive Test/Discover, live column
-introspection, and running DQ rules against live data. Option 2 delivers the
-same catalog rows, minus anything that requires live access to the source.
+Option 1 adds interactive **Test / Discover** and live column introspection on
+demand. Option 2 delivers the same catalog rows on its scan cadence, and
+additionally runs **measured** DQ on-prem for the five pushdown-safe rule types
+(NOT_NULL, UNIQUE, IN_SET, NUMERIC_RANGE, LENGTH_RANGE) — which a direct
+Connection currently only simulates. Aggregate pass/fail counts cross the wire;
+row values never do.
 
 **Neither path copies raw rows into Procela.** Both persist *metadata about* the
 data; the actual records stay in the source system.

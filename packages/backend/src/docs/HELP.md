@@ -184,7 +184,8 @@ Where value streams can be created. Streams attach to the active org in the Work
 ### Data Quality
 
 - Quality rules per asset / column with dimensions (completeness, accuracy, timeliness, etc.).
-- Weighted scoring rolls up to an asset-level health score.
+- Weighted scoring rolls up an asset-level health score from **measured** rule results only.
+- **Where rules run measured:** a local-file (CSV) upload, and an on-prem connector — which evaluates the five pushdown-safe types (NOT_NULL, UNIQUE, IN_SET, NUMERIC_RANGE, LENGTH_RANGE) inside the customer network and pushes back aggregate pass/fail counts, no row values leaving the host. A direct database Connection, and the REGEX_MATCH / CUSTOM types anywhere, still return a clearly-labelled **simulated** result that does not move health (the asset is badged "Est").
 - dbt tests imported via a manifest become rules automatically (templateId starts with dbt:). Edits to those rules persist across re-imports; removed tests delete their rule.
 - Scheduled execution. Set a rule's frequency to Hourly / Daily / Weekly and a background scheduler runs it on that cadence — no cron config, no external orchestrator. Manual `Run now` still works whenever you want an immediate check. Each run persists a snapshot (pass rate, sample failing rows, run timestamp) and updates the asset's health score.
 - **Failures auto-create governance issues.** When a scheduled or manual run transitions a rule to FAILING, Procela creates a governance issue in the DATA QUALITY category, severity HIGH, assigned to the domain steward (falling back to domain owner, then asset owner). The issue's `linkedRuleId` marks it as auto-created so a subsequent failing run just updates the existing ticket instead of piling up duplicates. WARNING transitions create the same issue at severity MEDIUM. The assignee sees an ACTION notification in the top-bar bell that links straight to the issue detail.
@@ -224,7 +225,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 ![The pairing-code modal after clicking "Add connector" and hitting Generate — an eight-digit code in monospaced type dominates the modal, with the docker run hint underneath. This is what the admin hands (securely) to the operator running the container.](images/connector-pairing.png)
 
 ![Animated walkthrough: on Settings → Integrations, clicking "Add connector", naming it, and hitting "Generate pairing code" produces the one-time eight-digit code to paste into the on-prem connector's config.](images/connector-setup.gif)
-- **What crosses the wire.** Only catalog metadata — table names in `schema.table` form, approximate row counts, last-write timestamps, and any table-comment description. **Connection strings, credentials, and row values never leave the on-prem host.** Every payload the agent sends is auditable in the connector's activity drawer.
+- **What crosses the wire.** Catalog metadata — table names in `schema.table` form, approximate row counts, last-write timestamps, and any table-comment description — plus aggregate data-quality results (pass/fail counts from pushdown queries). **Connection strings, credentials, and row values never leave the on-prem host.** Every payload the agent sends is auditable in the connector's activity drawer.
 - **What Procela does with it.** Each reported table either creates a new **Bronze**-tier Data Asset (which shows up as an Orphan Asset work item for stewards) or updates an existing asset's `lastSyncedAt` and health score. Everything downstream — dashboards, weekly digests, gap detection, orphan lists, AI answers — reads from the same asset table, so connector-sourced data blends in without any feature having to know it came from a connector.
 - **Rate-limits and safety rails.** `/pair/claim` throttles at 10/min and 100/hr per IP so the 8-digit code isn't brute-forceable. Tokens are `pct_`-prefixed and stored as SHA-256 hashes; the plaintext is shown once at claim time and never again. Revoke immediately disables a token but keeps the row for audit.
 
@@ -233,7 +234,8 @@ Where value streams can be created. Streams attach to the active org in the Work
 | Question | If **yes** | If **no** |
 |---|---|---|
 | Can Procela reach the source over the internet (with credentials)? | **Connection** | **On-prem connector** |
-| Do you need Data Quality rule execution or live column-level discovery? | **Connection** (only supported there today) | Either works if you just need catalog + freshness |
+| Do you need live column-level discovery on demand (Test / Discover)? | **Connection** | Not on demand — the connector reports metadata on its scan cadence |
+| Do you need **measured** Data Quality rules? | Both work: the connector runs the five supported types (NOT_NULL/UNIQUE/IN_SET/NUMERIC_RANGE/LENGTH_RANGE) measured on-prem; a direct Connection currently simulates | Connector still measures the five supported types; REGEX_MATCH / CUSTOM simulate |
 | Regulatory constraint that no cloud system holds your DB credentials? | **On-prem connector** — credentials stay on-prem | — |
 
 The two are not exclusive. An org can have some sources on Connections and some on connectors; the resulting Data Assets look identical downstream. See the **Frequently Asked Questions** section for the install commands.
@@ -690,7 +692,7 @@ Source-system data (the databases and warehouses you connect to) is **not** copi
 
 A **Connection** is Procela reaching **into** your source system — you give Procela a host, port, and credentials, and Procela's servers make live outbound calls to your database. It's the right choice when Procela can route to the source (cloud databases, VPN-tunnelled internal databases, warehouses like Snowflake). It supports the richest feature surface today: Test, Discover, data-quality rule execution, live column-level introspection.
 
-An **on-prem connector** is a small container that runs **inside your network** and reaches **out to** Procela over HTTPS. It's the right choice when Procela cannot route to your database — the classic "our security team won't open inbound firewall rules" case. It ships only catalog metadata (table names, row counts, freshness); connection strings and row data never leave the on-prem host. Today it supports Postgres, SQL Server, and MySQL/MariaDB; more adapters are added case-by-case.
+An **on-prem connector** is a small container that runs **inside your network** and reaches **out to** Procela over HTTPS. It's the right choice when Procela cannot route to your database — the classic "our security team won't open inbound firewall rules" case. It ships catalog metadata (table names, row counts, freshness) plus aggregate data-quality results (pass/fail counts); connection strings and row data never leave the on-prem host. Today it supports Postgres, MySQL/MariaDB, SQL Server, and Oracle; more adapters are added case-by-case.
 
 An org can use both — some sources on Connections, some on connectors — and the resulting Data Assets look identical downstream. See **6. Systems → On-prem connectors** for the freshness-state and pairing details.
 
