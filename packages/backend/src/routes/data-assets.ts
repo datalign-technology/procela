@@ -257,12 +257,14 @@ const createBindingBodySchema = z.object({
     invalid_type_error: 'sourceAsset is required (the table / file / endpoint name)',
   }).min(1, 'sourceAsset is required (the table / file / endpoint name)'),
   sourceColumn: z.string().optional(),
+  sourceColumns: z.array(z.string()).optional(),
   label: z.string().optional(),
   isPrimary: z.boolean().optional(),
 });
 const updateBindingBodySchema = z.object({
   sourceAsset: z.string().optional(),
   sourceColumn: z.string().optional(),
+  sourceColumns: z.array(z.string()).optional(),
   label: z.string().optional(),
   isPrimary: z.boolean().optional(),
 });
@@ -301,7 +303,11 @@ export interface StoredDataAssetBinding {
   dataAssetId: string;
   connectionId: string;
   sourceAsset: string;      // table / file / endpoint / sheet name
-  sourceColumn?: string;    // specific column; null = whole asset
+  sourceColumn?: string;    // legacy single column; null = whole asset. Kept
+                            // for back-compat; the first of sourceColumns is
+                            // mirrored here so single-column consumers still work.
+  sourceColumns?: string[]; // the named column set this asset binds to; empty
+                            // or absent = the whole source asset (all columns)
   label?: string;           // free-form, e.g. "prod"
   isPrimary: boolean;
   createdAt: string;
@@ -311,6 +317,21 @@ export interface StoredDataAssetBinding {
 export const dataAssetBindings: StoredDataAssetBinding[] =
   loadStore<StoredDataAssetBinding>('dataAssetBindings');
 registerStore('dataAssetBindings', dataAssetBindings);
+
+/**
+ * Normalize the column set for a binding. Accepts the new multi-column array
+ * and/or a legacy single column, trims, drops blanks, and de-duplicates while
+ * preserving order. An empty result means "the whole source asset".
+ */
+function normalizeColumnSet(columns?: string[], legacySingle?: string): string[] {
+  const raw = columns !== undefined ? columns : (legacySingle ? [legacySingle] : []);
+  const out: string[] = [];
+  for (const c of raw) {
+    const v = (c || '').trim();
+    if (v && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
 
 /**
  * One-time migration: any existing Data Asset that still carries the legacy
@@ -388,6 +409,51 @@ async function syncBindingFromAssetFields(asset: StoredDataAsset): Promise<void>
     createdAt: now,
     updatedAt: now,
   });
+}
+
+/**
+ * Project a binding's named column set into the asset's governed columns.
+ *
+ * A DataAssetBinding.sourceColumns entry names a physical column the asset is
+ * scoped to, but all governance — DQ rules, per-column health, gap detection —
+ * hangs off DataAssetColumn rows keyed by columnId. So binding a set must
+ * materialize those rows or the set stays inert (a label, not something you can
+ * put a rule on). Idempotent: skips columns that already exist (case-insensitive
+ * by name), so re-linking or editing the set never duplicates. A binding with no
+ * column set (whole table/file) materializes nothing here — the full column list
+ * comes from auto-discover instead.
+ *
+ * Returns the columns it created (for messaging / audit context).
+ */
+async function materializeColumnsFromBinding(
+  asset: StoredDataAsset,
+  binding: StoredDataAssetBinding,
+): Promise<StoredDataAssetColumn[]> {
+  const cols = binding.sourceColumns || [];
+  if (cols.length === 0) return [];
+  const existing = (await dataAssetColumnsRepo.list()).filter((c) => c.dataAssetId === asset.id);
+  const seen = new Set(existing.map((c) => c.columnName.toLowerCase()));
+  const now = new Date().toISOString();
+  const created: StoredDataAssetColumn[] = [];
+  for (const colName of cols) {
+    if (seen.has(colName.toLowerCase())) continue;
+    seen.add(colName.toLowerCase());
+    const col: StoredDataAssetColumn = {
+      id: uuid(),
+      dataAssetId: asset.id,
+      columnName: colName,
+      dataType: '',
+      description: '',
+      sourceConnectionId: binding.connectionId,
+      sourceAsset: binding.sourceAsset,
+      sourceColumn: colName,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await dataAssetColumnsRepo.create(col);
+    created.push(col);
+  }
+  return created;
 }
 
 // ── Data Asset Columns ──────────────────────────────────────────────────
@@ -728,6 +794,23 @@ router.get('/:id/360', async (req: Request, res: Response) => {
     .filter(Boolean)
     .map((p) => ({ id: p!.id, name: p!.name }));
 
+  // Physical binding + the governed columns it scopes the asset to, each with
+  // its per-column DQ health. This is where a client sees "this business asset
+  // maps to these columns of that table, and here's each column's quality."
+  const primaryBinding = await getPrimaryBinding(asset.id);
+  const assetColumns = (await dataAssetColumnsRepo.list()).filter((c) => c.dataAssetId === asset.id);
+  const enrichedColumns = enrichColumnsWithDq(asset.id, assetColumns);
+  const bindingInfo = primaryBinding
+    ? {
+        id: primaryBinding.id,
+        connectionId: primaryBinding.connectionId,
+        sourceAsset: primaryBinding.sourceAsset,
+        sourceColumn: primaryBinding.sourceColumn,
+        sourceColumns: primaryBinding.sourceColumns || (primaryBinding.sourceColumn ? [primaryBinding.sourceColumn] : []),
+        label: primaryBinding.label,
+      }
+    : null;
+
   res.json({
     success: true,
     data: {
@@ -737,6 +820,8 @@ router.get('/:id/360', async (req: Request, res: Response) => {
       mappings: assetMappings,
       ownerInfo: ownerPerson ? { id: ownerPerson.id, name: ownerPerson.name } : (asset.owner ? { id: null, name: asset.owner } : null),
       stewardInfos,
+      binding: bindingInfo,
+      columns: enrichedColumns,
     },
   });
 });
@@ -772,7 +857,8 @@ router.post('/:id/bindings', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { connectionId, sourceAsset, sourceColumn, label, isPrimary } = parsed.data;
+  const { connectionId, sourceAsset, sourceColumn, sourceColumns, label, isPrimary } = parsed.data;
+  const columnSet = normalizeColumnSet(sourceColumns, sourceColumn);
 
   // Look up the connection lazily so we don't create a static import cycle
   // with the connections route (which imports back into routes/data-assets
@@ -805,13 +891,17 @@ router.post('/:id/bindings', async (req: Request, res: Response) => {
     dataAssetId: asset.id,
     connectionId,
     sourceAsset,
-    sourceColumn: sourceColumn || undefined,
+    sourceColumn: columnSet[0],
+    sourceColumns: columnSet.length ? columnSet : undefined,
     label: label || undefined,
     isPrimary: shouldBePrimary,
     createdAt: now,
     updatedAt: now,
   };
   await dataAssetBindingsRepo.create(binding);
+  // Project the bound column set into governed DataAssetColumn rows so the set
+  // is immediately something you can attach DQ rules to and measure.
+  await materializeColumnsFromBinding(asset, binding);
   auditService.log(asset.orgId, null, 'DataAssetBinding', binding.id, 'CREATE', null, binding);
   res.status(201).json({ success: true, data: binding });
 });
@@ -836,9 +926,20 @@ router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { sourceAsset, sourceColumn, label, isPrimary } = parsed.data;
+  const { sourceAsset, sourceColumn, sourceColumns, label, isPrimary } = parsed.data;
   if (sourceAsset !== undefined) binding.sourceAsset = sourceAsset;
-  if (sourceColumn !== undefined) binding.sourceColumn = sourceColumn || undefined;
+  // sourceColumns is the canonical multi-column set; sourceColumn stays as its
+  // mirrored first entry. A caller may send either — the array wins when both
+  // are present, and a legacy single column is treated as a one-column set.
+  if (sourceColumns !== undefined) {
+    const columnSet = normalizeColumnSet(sourceColumns, undefined);
+    binding.sourceColumns = columnSet.length ? columnSet : undefined;
+    binding.sourceColumn = columnSet[0];
+  } else if (sourceColumn !== undefined) {
+    const columnSet = normalizeColumnSet(undefined, sourceColumn);
+    binding.sourceColumns = columnSet.length ? columnSet : undefined;
+    binding.sourceColumn = columnSet[0];
+  }
   if (label !== undefined) binding.label = label || undefined;
   if (isPrimary === true && !binding.isPrimary) {
     const allBindings = await dataAssetBindingsRepo.list();
@@ -852,6 +953,10 @@ router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
   }
   binding.updatedAt = new Date().toISOString();
   await dataAssetBindingsRepo.update(binding.id, binding);
+  // Newly-added columns in the set become governed columns; existing ones and
+  // removed ones are left untouched (removing a column here should not silently
+  // drop its DQ rules — that stays an explicit column delete).
+  await materializeColumnsFromBinding(asset, binding);
   auditService.log(asset.orgId, null, 'DataAssetBinding', binding.id, 'UPDATE', null, binding);
   res.json({ success: true, data: binding });
 });
@@ -1035,25 +1140,30 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // Column CRUD — nested under /data-assets/:id/columns
 // ──────────────────────────────────────────────────────────────────────────
 
-/** GET /data-assets/:id/columns — list columns for an asset, enriched with
- *  per-column DQ rule summary (count, passing, failing, health score). */
-router.get('/:id/columns', async (req: Request, res: Response) => {
-  const asset = await dataAssetsRepo.get(String(req.params.id));
-  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
-  const cols = (await dataAssetColumnsRepo.list()).filter((c) => c.dataAssetId === asset.id);
-
-  // Lazy-import DQ rules to avoid circular dep at module level.
+/**
+ * Enrich an asset's columns with their per-column DQ summary: rule counts by
+ * status and a weight-averaged health score (null when the column has no
+ * rules). Shared by GET /:id/columns and the 360 view so both compute
+ * column health identically.
+ */
+function enrichColumnsWithDq(assetId: string, cols: StoredDataAssetColumn[]) {
+  // Lazy-import DQ rules to avoid a circular dep at module level.
   let dqRules: any[] = [];
   try { dqRules = require('./data-quality').dataQualityRules || []; } catch { /* */ }
 
-  const enriched = cols.map((col) => {
-    const rules = dqRules.filter((r: any) => r.dataAssetId === asset.id && r.columnId === col.id);
+  return cols.map((col) => {
+    const rules = dqRules.filter((r: any) => r.dataAssetId === assetId && r.columnId === col.id);
     const passing = rules.filter((r: any) => r.status === 'PASSING').length;
     const failing = rules.filter((r: any) => r.status === 'FAILING').length;
     const warning = rules.filter((r: any) => r.status === 'WARNING').length;
-    const totalWeight = rules.reduce((s: number, r: any) => s + (r.weight || 5), 0);
-    const weightedSum = rules.reduce((s: number, r: any) => s + (r.currentScore || 0) * (r.weight || 5), 0);
-    const health = rules.length > 0 && totalWeight > 0 ? Math.round(weightedSum / totalWeight) : null;
+    // Column health, like asset health, is weighted over MEASURED rules only.
+    // A rule created but never run (or one that could only be simulated) must
+    // NOT drag the column to a fabricated 0% — an unmeasured column reads null
+    // ("—") so the UI never presents an estimate as a measurement.
+    const measured = rules.filter((r: any) => r.lastRun && r.lastRun.simulated === false);
+    const totalWeight = measured.reduce((s: number, r: any) => s + (r.weight || 5), 0);
+    const weightedSum = measured.reduce((s: number, r: any) => s + (r.currentScore || 0) * (r.weight || 5), 0);
+    const health = measured.length > 0 && totalWeight > 0 ? Math.round(weightedSum / totalWeight) : null;
     const enrichedRules = rules.map((r: any) => ({
       id: r.id, name: r.name, ruleType: r.ruleType || null,
       dimension: r.dimension, threshold: r.threshold,
@@ -1072,8 +1182,15 @@ router.get('/:id/columns', async (req: Request, res: Response) => {
       rules: enrichedRules,
     };
   });
+}
 
-  res.json({ success: true, data: enriched });
+/** GET /data-assets/:id/columns — list columns for an asset, enriched with
+ *  per-column DQ rule summary (count, passing, failing, health score). */
+router.get('/:id/columns', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  const cols = (await dataAssetColumnsRepo.list()).filter((c) => c.dataAssetId === asset.id);
+  res.json({ success: true, data: enrichColumnsWithDq(asset.id, cols) });
 });
 
 /** POST /data-assets/:id/columns — create a column */
@@ -1174,6 +1291,19 @@ router.post('/:id/columns/auto-discover', async (req: Request, res: Response) =>
     // (populated during the original test/upload for LOCAL files).
     if (discoveredColumns.length === 0 && conn.config?.columns && Array.isArray(conn.config.columns)) {
       discoveredColumns = conn.config.columns;
+    }
+    // If the binding scopes the asset to a NAMED column set, honor it: ingest
+    // only those columns (case-insensitively), so the governed columns match
+    // what the asset was actually bound to instead of the whole physical table.
+    // An empty set means "whole table" — ingest everything discovered.
+    const boundSet = binding.sourceColumns || [];
+    if (boundSet.length > 0) {
+      const wanted = new Set(boundSet.map((c) => c.toLowerCase()));
+      const filtered = discoveredColumns.filter((c) => wanted.has(c.toLowerCase()));
+      // Fall back to the bound names themselves if discovery returned nothing
+      // that matches (e.g. simulated discovery of a different table) — the set
+      // is the source of truth for scope.
+      discoveredColumns = filtered.length > 0 ? filtered : boundSet;
     }
     if (discoveredColumns.length === 0) {
       res.json({ success: true, data: [], message: 'No columns discovered from this connection.' });

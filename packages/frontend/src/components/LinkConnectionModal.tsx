@@ -44,6 +44,7 @@ export interface ExistingBindingSummary {
   connectionId: string;
   sourceAsset: string;
   sourceColumn?: string;
+  sourceColumns?: string[];
 }
 
 // ── Inline styles (self-contained so the modal drops into any page) ──
@@ -70,8 +71,27 @@ export default function LinkConnectionModal({
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pickedAsset, setPickedAsset] = useState<string>(existingBinding?.sourceAsset || '');
-  const [, setPickedColumn] = useState<string>(existingBinding?.sourceColumn || '');
+  // The named column set this asset binds to. Empty = the whole table/file.
+  const [pickedColumns, setPickedColumns] = useState<string[]>(
+    existingBinding?.sourceColumns?.length
+      ? existingBinding.sourceColumns
+      : existingBinding?.sourceColumn
+        ? [existingBinding.sourceColumn]
+        : [],
+  );
   const [saving, setSaving] = useState(false);
+
+  // Toggle a column in/out of the bound set. Columns belong to a specific
+  // table, so picking a column from a different table than the current one
+  // switches the picked table and starts a fresh set.
+  const toggleColumn = (tableName: string, col: string) => {
+    if (pickedAsset !== tableName) {
+      setPickedAsset(tableName);
+      setPickedColumns([col]);
+      return;
+    }
+    setPickedColumns((prev) => (prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]));
+  };
 
   const isChangeMode = !!existingBinding;
 
@@ -144,8 +164,9 @@ export default function LinkConnectionModal({
       await apiClient.post(`/data-assets/${asset.id}/bindings`, {
         connectionId: selectedConnId,
         sourceAsset: pickedAsset,
-        // Bindings are table/file level. Columns are managed as child
-        // entities via auto-discover on the Data Assets page.
+        // A binding can target the whole table/file, or a named set of its
+        // columns. An empty set means "all columns".
+        ...(pickedColumns.length ? { sourceColumns: pickedColumns } : {}),
         isPrimary: true,
       });
       onLinked();
@@ -177,8 +198,8 @@ export default function LinkConnectionModal({
               {isChangeMode ? 'Change connection' : 'Link to connection'} {'\u2014'} {asset.name}
             </h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-              Pick a connection, then select the table/file and (optionally) the column this
-              asset corresponds to.
+              Pick a connection, then select the table/file and (optionally) the set of columns
+              this asset corresponds to.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close connection link dialog" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}><span aria-hidden="true">&times;</span></button>
@@ -191,7 +212,7 @@ export default function LinkConnectionModal({
             aria-label="Connection"
             style={selectStyle}
             value={selectedConnId}
-            onChange={(e) => { setSelectedConnId(e.target.value); setPickedAsset(''); setPickedColumn(''); setExpanded(new Set()); }}
+            onChange={(e) => { setSelectedConnId(e.target.value); setPickedAsset(''); setPickedColumns([]); setExpanded(new Set()); }}
           >
             <option value="">-- Select a connection --</option>
             {connections.map((c) => (
@@ -209,7 +230,7 @@ export default function LinkConnectionModal({
         {selectedConnId && (
           <div style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
-              2. Pick a table / file {pickedConn?.connectionType === 'DATABASE' ? '(and optionally a column)' : ''}
+              2. Pick a table / file {pickedConn?.connectionType === 'DATABASE' ? '(tick columns to bind a named set)' : ''}
             </label>
             {discovering && (
               <div style={{ padding: 12, border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
@@ -236,9 +257,10 @@ export default function LinkConnectionModal({
                     <div key={a.name}>
                       <div
                         {...clickable(() => {
-                          // Clicking the row picks the whole-asset binding and toggles cols.
+                          // Clicking the row picks the whole-asset (all columns)
+                          // binding and toggles the column list open.
                           setPickedAsset(a.name);
-                          setPickedColumn('');
+                          setPickedColumns([]);
                           if (hasCols) toggleExpand(a.name);
                         }, { label: `Select asset ${a.name}` })}
                         style={{
@@ -255,20 +277,30 @@ export default function LinkConnectionModal({
                         <span style={{ fontSize: 10, background: '#f1f5f9', color: '#64748b', padding: '1px 6px', borderRadius: 3 }}>{a.type}</span>
                         {a.rowCount != null && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{a.rowCount.toLocaleString()} rows</span>}
                       </div>
-                      {isOpen && hasCols && (a.columns || []).map((col) => (
-                          <div
+                      {isOpen && hasCols && (a.columns || []).map((col) => {
+                        const isColChecked = isThisAssetPicked && pickedColumns.includes(col);
+                        return (
+                          <label
                             key={`${a.name}.${col}`}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 8,
-                              padding: '6px 12px 6px 34px', borderBottom: '1px solid var(--color-border)',
-                              background: '#fafafa',
+                              padding: '6px 12px 6px 28px', borderBottom: '1px solid var(--color-border)',
+                              background: isColChecked ? '#eff6ff' : '#fafafa',
+                              cursor: 'pointer',
                             }}
                           >
-                            <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{'\u21B3'}</span>
+                            <input
+                              type="checkbox"
+                              checked={isColChecked}
+                              onChange={() => toggleColumn(a.name, col)}
+                              aria-label={`Include column ${col}`}
+                              style={{ cursor: 'pointer' }}
+                            />
                             <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' }}>{col}</span>
                             <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>column</span>
-                          </div>
-                      ))}
+                          </label>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -286,9 +318,30 @@ export default function LinkConnectionModal({
                 {pickedConn?.name} / {pickedAsset}
               </code>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
-              After linking, use "Auto-discover columns" on the Data Assets page to populate the individual columns for this table/file.
-            </div>
+            {pickedColumns.length > 0 ? (
+              <div style={{ marginTop: 6 }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>
+                  Column set ({pickedColumns.length}):
+                </span>{' '}
+                {pickedColumns.map((c) => (
+                  <span
+                    key={c}
+                    style={{
+                      display: 'inline-block', margin: '2px 4px 2px 0', padding: '1px 7px',
+                      borderRadius: 10, background: '#dbeafe', color: '#1e40af',
+                      fontFamily: 'var(--font-mono)', fontSize: 11,
+                    }}
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                Binds to the whole table/file (all columns). Tick specific columns above to bind
+                this asset to just a named set of them.
+              </div>
+            )}
           </div>
         )}
 

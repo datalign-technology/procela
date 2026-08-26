@@ -22,6 +22,7 @@ type PrismaDataAssetBindingRow = {
   connectionId: string;
   sourceAsset: string;
   sourceColumn: string | null;
+  sourceColumns: string[];
   label: string | null;
   isPrimary: boolean;
   createdAt: Date;
@@ -44,6 +45,7 @@ function fromPrisma(r: PrismaDataAssetBindingRow): StoredDataAssetBinding {
     connectionId: r.connectionId,
     sourceAsset: r.sourceAsset,
     ...(r.sourceColumn ? { sourceColumn: r.sourceColumn } : {}),
+    ...(r.sourceColumns && r.sourceColumns.length ? { sourceColumns: r.sourceColumns } : {}),
     ...(r.label ? { label: r.label } : {}),
     isPrimary: r.isPrimary,
     createdAt: r.createdAt.toISOString(),
@@ -59,6 +61,7 @@ function toPrismaData(row: Partial<StoredDataAssetBinding>): Record<string, unkn
   if (row.connectionId !== undefined) d.connectionId = row.connectionId;
   if (row.sourceAsset !== undefined) d.sourceAsset = row.sourceAsset;
   if (row.sourceColumn !== undefined) d.sourceColumn = row.sourceColumn || null;
+  if (row.sourceColumns !== undefined) d.sourceColumns = row.sourceColumns || [];
   if (row.label !== undefined) d.label = row.label || null;
   if (row.isPrimary !== undefined) d.isPrimary = row.isPrimary;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);

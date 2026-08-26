@@ -73,6 +73,13 @@ interface DuplicateAssetGroup {
   assets: Array<{ id: string; name: string }>;
 }
 
+interface UngovernedColumnGroup {
+  assetId: string;
+  assetName: string;
+  columns: string[];
+  count: number;
+}
+
 interface GapData {
   unmappedSteps: UnmappedStep[];
   ungovernedAssets: UngovervedAsset[];
@@ -83,6 +90,7 @@ interface GapData {
   unlinkedAssets: UnlinkedAsset[];
   unassignedPeople: UnassignedPerson[];
   duplicateAssetNames: DuplicateAssetGroup[];
+  ungovernedColumns: UngovernedColumnGroup[];
 }
 
 interface GapSummary {
@@ -95,6 +103,7 @@ interface GapSummary {
   unlinkedAssets: number;
   unassignedPeople: number;
   duplicateAssetNames: number;
+  ungovernedColumns: number;
   totalGaps: number;
 }
 
@@ -146,6 +155,13 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'lowHealthAssets',
     title: 'Low-Health Assets',
     description: 'Data assets linked to processes with health score below 50%. Quality issues may affect dependent processes.',
+    severity: 'warning',
+    icon: gapIcon('/data-quality'),
+  },
+  {
+    key: 'ungovernedColumns',
+    title: 'Ungoverned Columns',
+    description: 'Columns an asset is bound to (they carry a physical source) but with no data-quality rule. Binding a column declares it matters — one with no rule is coverage you claimed but never measure.',
     severity: 'warning',
     icon: gapIcon('/data-quality'),
   },
@@ -614,6 +630,25 @@ function renderItems(key: string, items: any[]) {
               ({g.assets.length} assets share this name)
             </span>
           </span>
+        </Row>
+      ));
+
+    case 'ungovernedColumns':
+      return items.map((g: UngovernedColumnGroup) => (
+        <Row
+          key={g.assetId}
+          to={`/data-assets?highlight=${encodeURIComponent(g.assetId)}`}
+          title={`Open ${g.assetName} on Data Assets to add a quality rule to its bound columns`}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 500 }}>{g.assetName}</div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+              {g.columns.map((c) => (
+                <span key={c} style={badgeStyle('#fef3c7', '#92400e')}>{c}</span>
+              ))}
+            </div>
+          </div>
+          <span style={mutedStyle}>{g.count} unmeasured</span>
         </Row>
       ));
 
