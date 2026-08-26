@@ -244,7 +244,7 @@ export default function HelpPage() {
           <li>Register data assets in business terms. Each asset has a Trust Level (Untrusted / Managed / Trusted &mdash; DAMA mode calls these Uncertified / Managed / Certified).</li>
           <li>Sidebar filter by data type: Operational, Governance, Reference, Analytical, Master.</li>
           <li>Inline editing for Trust Level and health score directly in the table.</li>
-          <li><strong>Health score</strong> comes from one of three places: a manual score you set here; a weighted roll-up of <em>measured</em> data-quality rules (see Data Quality); or, for an asset a connector discovered that has no rules yet, a freshness signal graded on how recently the table was written &mdash; a table written in the last day scores 95, decaying as it goes stale, and an empty table is capped low. The bar shows whichever applies.</li>
+          <li><strong>Health score</strong> comes from one of three places: a manual score you set here; a weighted roll-up of <em>measured</em> data-quality rules (see Data Quality); or, for an asset a connector discovered that has no rules yet, a freshness signal graded on how recently the table was written &mdash; a table written in the last day scores 95, decaying as it goes stale, and an empty table is capped low. The bar shows whichever applies. (Add supported rules to a connector asset and the connector measures them on-prem, so they drive health like any other measured rule.)</li>
           <li><strong>Link to Source</strong> connects an asset to a database table, file, or API in the add/edit form.</li>
           <li>Expandable columns show data types and quality rules per column.</li>
           <li>Bulk set Trust Level / owner / steward.</li>
@@ -279,7 +279,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>Data Quality</h3>
         <ul style={listStyle}>
           <li>Quality rules per asset / column with dimensions (completeness, accuracy, timeliness, etc.).</li>
-          <li><strong>Weighted scoring</strong> rolls <em>measured</em> rule results up to an asset-level health score. A rule run against a source with no driver wired returns a clearly-labelled <em>simulated</em> result &mdash; simulated results do not count toward health, so an asset whose rules are all simulated keeps its freshness / manual score and is badged <strong>Est</strong>. Only a real (local-file) rule run moves the health number.</li>
+          <li><strong>Weighted scoring</strong> rolls <em>measured</em> rule results up to an asset-level health score. Measured results come from a local-file (CSV) upload, or from an <strong>on-prem connector</strong> &mdash; which runs the five pushdown-safe rule types (NOT_NULL, UNIQUE, IN_SET, NUMERIC_RANGE, LENGTH_RANGE) inside your network and pushes back real pass rates, no row values leaving the host. Rules that still <em>simulate</em> &mdash; any rule against a <strong>direct database Connection</strong>, and REGEX_MATCH / CUSTOM anywhere &mdash; return a clearly-labelled result that does not count toward health; an asset whose rules are <em>all</em> simulated keeps its freshness / manual score and is badged <strong>Est</strong>.</li>
           <li>dbt tests imported via a manifest become rules automatically (templateId starts with <code>dbt:</code>). Edits to those rules persist across re-imports; removed tests delete their rule.</li>
         </ul>
         <h3 style={h3Style}>Orphan Assets</h3>

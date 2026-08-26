@@ -44,11 +44,13 @@ back into business-layer governance is not closed.*
   business-defined asset — accept, merge, or promote. This is the bridge
   between the technical layer and the business layer that Procela's whole
   premise rests on.
-- **A3 — Source-fed health scores.** CLAUDE.md: health is "initially
-  manually set; Phase 3 will pull from source systems." Derive
-  `health_score` from scan signals (freshness, row-count deltas,
-  null-rate, schema drift) so Gap Detection and the dashboards reflect
-  measured reality instead of a hand-entered number.
+- **A3 — Source-fed health scores.** _Partially delivered._ The on-prem
+  connector now feeds **measured** `health_score` from real DQ results for
+  the five pushdown-safe rule types (null-rate via NOT_NULL, uniqueness,
+  set/range/length checks), and freshness/row-count already drive the
+  connector's discovered-asset health. Remaining: schema-drift and
+  row-count-delta signals, and closing the direct-Connection DQ-simulation
+  gap so a cloud-reachable database measures too.
 
 ## Track B — production-scale hardening
 

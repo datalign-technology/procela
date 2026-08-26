@@ -2,9 +2,10 @@
 
 A small Node 20 agent that runs **inside your network**, scans
 configured data sources for catalog metadata (table names, row
-counts, freshness), and ships only that metadata back to Procela
-over an outbound HTTPS connection. Connection strings and row
-data stay on-prem.
+counts, freshness), evaluates supported data-quality rules against
+them, and ships that metadata plus aggregate DQ results (pass/fail
+counts) back to Procela over an outbound HTTPS connection.
+Connection strings and row data stay on-prem.
 
 This package builds a single container image (`procela-connector`)
 that takes one YAML config file. It is intended for customers who
