@@ -365,7 +365,7 @@ import { mappings } from './routes/mappings';
 import { governanceGroups } from './routes/governance-groups';
 import { damaRoles } from './routes/dama-roles';
 import { dataDomains } from './routes/data-domains';
-import { auditLogs, initAuditChain, flushAuditQueue } from './services/audit.service';
+import { auditLogs, initAuditChain, flushAuditQueue, auditService } from './services/audit.service';
 import { tags } from './routes/tags';
 import { comments } from './routes/comments';
 import { notifications } from './routes/notifications';
@@ -717,6 +717,14 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 // errors; this is the floor, not the fix.)
 process.on('unhandledRejection', (reason) => {
   logger.error({ err: reason }, 'Unhandled promise rejection — keeping the server alive');
+  // Also record it in the tamper-evident audit log (system-scoped — there's no
+  // request context here) so the failure is reviewable, not just in stdout.
+  try {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    auditService.log('system', null, 'System', 'unhandledRejection', 'ERROR', null, {
+      name: err.name, message: err.message, stack: err.stack,
+    });
+  } catch { /* never let audit logging defeat the safety net */ }
 });
 
 export default app;
