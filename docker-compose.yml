@@ -42,6 +42,26 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
 
+  # Applies the Prisma schema to Postgres before the backend starts. The
+  # backend image runs `node dist/index.js` only — migrations are a separate
+  # step (the same split as the Helm migrate-hook Job in production). Without
+  # this, the backend boots against an empty database and every query fails
+  # with `relation "..." does not exist` (42P01). Runs once and exits; it
+  # reuses the backend image, so it adds no extra build.
+  migrate:
+    build:
+      context: ./packages/backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://procela:procela@postgres:5432/procela
+    volumes:
+      - ./packages/backend/prisma:/app/prisma
+    command: ["npx", "prisma", "migrate", "deploy"]
+    restart: "no"
+
   backend:
     build:
       context: ./packages/backend
@@ -51,6 +71,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       mailpit:
