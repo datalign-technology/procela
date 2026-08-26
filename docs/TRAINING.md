@@ -833,6 +833,9 @@ business model is the source of truth on both paths.
 - **Unmapped activities** — activities with no data link
 - **Ungoverned assets** — assets below Silver / Gold tier supporting
   critical processes
+- **Ungoverned columns** — a column an asset is bound to (it carries a
+  physical source) but with no quality rule — coverage you claimed but
+  never measure
 - **Ownerless items** — entities with no owner assigned
 
 Each gap clicks through to the item where you can resolve it.
@@ -863,7 +866,11 @@ activities have required-skill data and people have skills.
 
 ### 9.5 Data Quality auto-issues
 
-**Data → Data Quality** lists rules per asset/column. Set a
+**Data → Data Quality** lists rules per asset/column. When you add a
+rule, the *Column* picker (populated from the asset's columns) lets you
+target one specific column — the bound set — or the asset as a whole.
+Both the Quality and Rules tabs have a free-text search box, so you can
+find an asset by name or a rule by rule name / asset / column. Set a
 rule's *Frequency* to Hourly / Daily / Weekly and it runs
 automatically — no cron, no external orchestrator. When a run
 transitions a rule to FAILING, Procela auto-creates a

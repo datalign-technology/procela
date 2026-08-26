@@ -6,16 +6,16 @@ Catalog,Industry templates (AI-generated),Built,"8 industries (Utilities, Defens
 Catalog,Process mapping to data assets,Built,Mappings entity with AI-suggested + user-overridden flag,P0,Partial,No,No,No,—
 Catalog,Process catalog versioning,Built,Version field on nodes,P2,Yes,Partial,No,Partial,—
 Data assets,Asset registry (business terms),Built,"Name, description, system, governance tier, health, owner, steward",P0,Yes,Yes,Yes,Yes,—
-Data assets,Asset bindings (M:N to physical),Built,DataAssetBinding entity with primary/alternate marker,P0,Yes,Yes,Yes,Yes,—
+Data assets,Asset bindings (M:N to physical; named column sets),Built,DataAssetBinding entity with primary/alternate marker and named column sets that materialize governed columns,P0,Yes,Yes,Yes,Yes,—
 Data assets,Asset origin tracking,Built,"MANUAL/GOVERNANCE_TEMPLATE/DISCOVERED/IMPORTED/SYNCED provenance",P1,Limited,Limited,Limited,Limited,—
 Data assets,Suggested-source flow,Built,"Asset-rooted: ""Suggest source"" picks candidates from existing connections via name similarity",P1,No,No,Limited,No,—
 Data assets,Tier promotion suggestions,Built,Auto-derived tier eligibility shown as soft prompt; promotion stays manual,P1,No,No,No,Limited,—
 Data assets,Data quality / health score,Built,Manual + rule-derived,P1,Add-on,Add-on,Partner,Best-in-class,Need automated rules engine
 Data assets,Classification / sensitivity,Built,PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED,P0,Yes,Yes,Yes,Yes,—
 Data assets,Asset retention policy,Built,Duration + reason fields,P1,Yes,Partial,Partial,Yes,—
-Data assets,Column-level catalog,Built,DataAssetColumns sub-entity,P1,Yes,Yes,Yes,Yes,—
+Data assets,Column-level catalog,Built,DataAssetColumns sub-entity; auto-materialized from a binding column set,P1,Yes,Yes,Yes,Yes,—
 Data assets,Column auto-discovery,Built,"CSV uploads + on-prem connector reads information_schema.columns (Postgres/MySQL/SQL Server/Oracle)",P1,Yes,Yes,Yes,Yes,—
-Data assets,Asset 360 view,Built,Linked mappings + bindings + health + owner roll-up,P1,Yes,Yes,Yes,Yes,—
+Data assets,Asset 360 view,Built,Linked mappings + bindings + bound-columns panel + per-column health + owner roll-up,P1,Yes,Yes,Yes,Yes,—
 Glossary,Business glossary terms,Built,"Term, definition, category, status, domain, owner, source-of-truth",P0,Yes,Yes,Yes,Yes,—
 Glossary,Glossary import / generation,Built,CSV import + AI-generated industry terms,P1,Yes,Limited,Limited,Yes,—
 Glossary,Term-to-asset linking,Built,Through domain or direct assignment,P1,Yes,Yes,Yes,Yes,—
@@ -35,7 +35,7 @@ Lineage,Impact analysis from lineage,Partial,Gap detection sees process impact; 
 Data quality,Quality rules engine,Built,Rule types (NOT_NULL/UNIQUE/REGEX/...) with thresholds and scheduling,P1,Add-on,Add-on,Partner,Best-in-class,Expand rule library + ML-based anomaly detection
 Data quality,Quality dimensions,Built,COMPLETENESS/UNIQUENESS/VALIDITY/etc.,P1,Yes,Yes,Yes,Yes,—
 Data quality,Profiling (auto-stats),Partial,"On-prem connector extracts approximate row count (n_live_tup) + freshness per asset, persisted to DataAsset; no column-level statistics",P1,Yes,Yes,Yes,Yes,Build column-stats profiler (null%/distinct/min-max/histograms)
-Data quality,DQ scorecards / dashboards,Built,Health roll-up to asset; portfolio dashboard,P1,Yes,Yes,Yes,Yes,—
+Data quality,DQ scorecards / dashboards,Built,Measured-only health roll-up per asset and per column; portfolio dashboard,P1,Yes,Yes,Yes,Yes,—
 Governance,Issues tracking,Built,Title/type/severity/status/domain/assignee,P1,Strong workflow engine,Functional,Functional,Yes,—
 Governance,Tasks,Built,Type/status/priority/assignee/due/automation mode,P1,Yes,Yes,Yes,Yes,—
 Governance,Policies + controls,Built,Policy entity with attached Controls + evidence flag,P1,Yes,Limited,Limited,Yes,—
@@ -50,7 +50,7 @@ Domains,Data domain entity,Built,Domain with owner + stewards + asset assignment
 Domains,Domain coverage gaps,Built,Gap detection includes orphan assets + unowned domains,P1,Yes,Yes,Yes,Yes,—
 Discovery,Asset search,Built,Name/description/system/type search,P0,Yes,Best-in-class (behavioral),Yes,Yes,—
 Discovery,Behavioral / usage-based ranking,Not Started,Need query log + access pattern capture,P2,Partial,Yes,Partial,Partial,Defer
-Discovery,Gap detection,Built,9 gap types (unassigned connections/owners/etc.) with totals,P1,Yes,Limited,Limited,Yes,—
+Discovery,Gap detection,Built,10 gap types (incl. ungoverned bound columns) with totals,P1,Yes,Limited,Limited,Yes,—
 AI,Conversational AI assistant,Built,Server-side Claude API with catalog context,P0,Add-on,Add-on (Anywhere),Built-in (Atlan AI),Limited,—
 AI,AI-suggested mappings,Built,Process step → asset suggestions with override tracking,P1,Limited,Limited,Limited,Limited,—
 AI,AI-generated industry templates,Built,Procela's distinctive feature,P0,No,No,No,No,—

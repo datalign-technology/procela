@@ -62,12 +62,14 @@ per-report counts in the `data` JSON. The UI only reads them
 ### `data_asset_columns` — co-managed; the agent is the primary populator
 | Column | Written by |
 |---|---|
-| `columnName`, `dataType`, `sourceAsset`, `sourceColumn` | **agent** (`/report` — creates new columns, refreshes a changed `dataType`) |
+| `columnName`, `dataType`, `sourceAsset`, `sourceColumn` | **agent** (`/report` — creates new columns, refreshes a changed `dataType`) **and UI** — binding an asset to a named column set materializes a governed column row per bound column (with its source pointers), and column auto-discover pulls the bound set from the connection |
 | `description`, `sourceConnectionId` | **UI** (manual curation) |
 | `createdAt`, `updatedAt` | system |
 
 Audit-only here too: columns that stop being reported are left in place, and a
-manually-added column is never overwritten except for a `dataType` refresh.
+manually-added (or binding-materialized) column is never overwritten except for
+a `dataType` refresh. Materialization is idempotent — re-binding the same set
+never duplicates a column.
 
 ---
 
