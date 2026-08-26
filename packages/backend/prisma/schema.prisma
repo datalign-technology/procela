@@ -125,6 +125,7 @@ model Organization {
   governanceIssues   GovernanceIssue[]
   governancePolicies GovernancePolicy[]
   governanceControls GovernanceControl[]
+  governanceExceptions GovernanceException[]
   governanceGroups   GovernanceGroup[]
   comments           Comment[]
   // FlowRelationship no longer carries an orgId — see the comment on
@@ -418,6 +419,9 @@ model DataDomain {
   description     String?  @db.Text
   ownerId         String?  @db.Uuid
   scopeDefinition String?  @db.Text
+  // Business-criticality tier (TIER_1 = council-critical). Drives the Council
+  // Scorecard's tier-1 coverage measure; null = unclassified.
+  criticality     CriticalityTier?
   status          String   @default("DRAFT")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -820,6 +824,32 @@ model GovernancePolicy {
   @@unique([orgId, code])
   @@index([orgId])
   @@map("governance_policies")
+}
+
+// A time-boxed waiver: a policy/control knowingly unmet, granted with an
+// expiry. The Council Scorecard counts those past expiry and still ACTIVE.
+// Date fields are ISO strings to match the Stored shape (see GovernancePolicy).
+model GovernanceException {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  title       String
+  description String?  @db.Text
+  // Soft reference to a GovernancePolicy (untyped, like GovernanceControl.policyId).
+  policyId    String?
+  ownerId     String?  @db.Uuid
+  reason      String?  @db.Text
+  status      String   @default("ACTIVE")
+  grantedAt   String
+  expiresAt   String
+  createdBy   String?
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("governance_exceptions")
 }
 
 model GovernanceControl {
@@ -1356,6 +1386,27 @@ model MaturitySnapshot {
 
   @@index([orgId])
   @@map("maturity_snapshots")
+}
+
+// A saved version of the Council Scorecard for a parent org + reporting period.
+// `derived` is the machine-computed snapshot (per-division rows + enterprise
+// rollup); `overrides` is a sparse map of CDO/DGL edits layered on top;
+// `narrative` holds the two prose sections. Matches the MaturitySnapshot
+// pattern (no FK relation — orgId + index).
+model CouncilScorecard {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @db.Uuid
+  period    String
+  status    String   @default("PUBLISHED")
+  createdBy String?
+  derived   Json     @default("{}")
+  overrides Json     @default("{}")
+  narrative Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("council_scorecards")
 }
 
 model GapSnapshot {

@@ -21,6 +21,10 @@ export interface StoredDataDomain {
   stewardIds: string[];          // personIds of Data Stewards
   dataAssetIds: string[];
   scopeDefinition?: string;
+  // Business-criticality tier. TIER_1 = the domains the council watches most
+  // closely; drives the Council Scorecard's tier-1 coverage measure. null =
+  // unclassified. Valid values mirror the CriticalityTier enum.
+  criticality?: string;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -55,6 +59,7 @@ if (!hasDatabase()) {
 }
 
 const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
+const VALID_CRITICALITY = ['TIER_1', 'TIER_2', 'TIER_3', 'TIER_4'];
 const SIMPLE_TRANSITIONS: Record<string, string[]> = {
   DRAFT:      ['ACTIVE'],
   ACTIVE:     ['DRAFT', 'DEPRECATED'],
@@ -238,6 +243,7 @@ router.post('/', async (req: Request, res: Response) => {
     ownerId: null,
     stewardIds: [],
     dataAssetIds: [],
+    criticality: VALID_CRITICALITY.includes(req.body?.criticality) ? req.body.criticality : undefined,
     status: status && VALID_STATUSES.includes(status) ? status : 'DRAFT',
     createdAt: now,
     updatedAt: now,
@@ -273,6 +279,9 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (ownerId !== undefined) domain.ownerId = ownerId || null;
   if (stewardIds !== undefined && Array.isArray(stewardIds)) domain.stewardIds = stewardIds;
   if (dataAssetIds !== undefined && Array.isArray(dataAssetIds)) domain.dataAssetIds = dataAssetIds;
+  if (req.body?.criticality !== undefined) {
+    domain.criticality = VALID_CRITICALITY.includes(req.body.criticality) ? req.body.criticality : undefined;
+  }
   // Scope Definition merged into Description: fold any incoming value in.
   if (scopeDefinition !== undefined) {
     domain.description = combineDescription(domain.description, scopeDefinition) || '';

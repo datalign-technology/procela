@@ -41,6 +41,7 @@ type PrismaDomainRow = {
   description: string | null;
   ownerId: string | null;
   scopeDefinition: string | null;
+  criticality?: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -72,6 +73,7 @@ function fromPrisma(r: PrismaDomainRow): StoredDataDomain {
     stewardIds: (r.stewards ?? []).map((s) => s.personId),
     dataAssetIds: (r.dataAssets ?? []).map((a) => a.id),
     ...(r.scopeDefinition ? { scopeDefinition: r.scopeDefinition } : {}),
+    ...(r.criticality ? { criticality: r.criticality } : {}),
     status: r.status,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -90,6 +92,7 @@ function toPrismaData(row: Partial<StoredDataDomain>): Record<string, unknown> {
   if (row.description !== undefined) data.description = row.description || null;
   if (row.ownerId !== undefined) data.ownerId = row.ownerId;
   if (row.scopeDefinition !== undefined) data.scopeDefinition = row.scopeDefinition || null;
+  if (row.criticality !== undefined) data.criticality = row.criticality || null;
   if (row.status !== undefined) data.status = row.status;
   if (row.createdAt !== undefined) data.createdAt = new Date(row.createdAt);
   // updatedAt is Prisma-managed via @updatedAt; never forward inbound
