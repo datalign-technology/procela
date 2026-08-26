@@ -242,7 +242,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>Data Assets</h3>
         <ul style={listStyle}>
           <li>Register data assets in business terms. Each asset has a Trust Level (Untrusted / Managed / Trusted &mdash; DAMA mode calls these Uncertified / Managed / Certified).</li>
-          <li>Sidebar filter by data type: Operational, Governance, Reference, Analytical, Master.</li>
+          <li>Sidebar filter by <strong>Data Classification</strong>: Master, Reference, Transactional, Analytical, Metadata. (This is the business kind of data — distinct from a column's SQL data type and from Sensitivity.)</li>
           <li>Inline editing for Trust Level and health score directly in the table.</li>
           <li><strong>Health score</strong> comes from one of three places: a manual score you set here; a weighted roll-up of <em>measured</em> data-quality rules (see Data Quality); or, for an asset a connector discovered that has no rules yet, a freshness signal graded on how recently the table was written &mdash; a table written in the last day scores 95, decaying as it goes stale, and an empty table is capped low. The bar shows whichever applies. (Add supported rules to a connector asset and the connector measures them on-prem, so they drive health like any other measured rule.)</li>
           <li><strong>Link to Source</strong> connects an asset to a database table, file, or API in the add/edit form.</li>
