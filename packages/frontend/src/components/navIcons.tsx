@@ -291,6 +291,27 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M12 7 V12 L15 14" />
     </NavSvg>
   ),
+  // Council Scorecard: a report card — rows of measures each with a
+  // status mark on the right, the per-division rating the council reads.
+  '/council-scorecard': (
+    <NavSvg>
+      <rect x="4" y="3.5" width="16" height="17" rx="1.5" />
+      <path d="M7 9 H12" />
+      <path d="M7 13 H12" />
+      <path d="M7 17 H12" />
+      <circle cx="16" cy="9"  r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="13" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="17" r="0.9" fill="currentColor" stroke="none" />
+    </NavSvg>
+  ),
+  // Governance Exceptions: a shield (a control) with a bar through it —
+  // a control deliberately waived for a time.
+  '/governance-exceptions': (
+    <NavSvg>
+      <path d="M12 3 L19 6 V11 C19 15.8 15.9 19.3 12 21 C8.1 19.3 5 15.8 5 11 V6 Z" />
+      <path d="M9 12 H15" />
+    </NavSvg>
+  ),
   '/settings': (
     <NavSvg>
       <circle cx="12" cy="12" r="3" />
