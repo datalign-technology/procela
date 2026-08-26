@@ -106,6 +106,34 @@ describe('DataAssetBinding routes', () => {
     assert.strictEqual(res.body.data.sourceColumn, 'email');
   });
 
+  it('POST accepts a named column set and mirrors the first into sourceColumn', async () => {
+    const res = await request(port, 'POST', `/data-assets/${seededAssetId}/bindings`, {
+      connectionId: seededConnId2, sourceAsset: 'invoices',
+      sourceColumns: [' amount ', 'invoice_date', 'amount', 'status', ''],
+    });
+    assert.strictEqual(res.status, 201);
+    // Trimmed, de-duplicated, blanks dropped, order preserved.
+    assert.deepStrictEqual(res.body.data.sourceColumns, ['amount', 'invoice_date', 'status']);
+    // Legacy single column mirrors the first of the set.
+    assert.strictEqual(res.body.data.sourceColumn, 'amount');
+    // Clean up so later count assertions stay stable.
+    await request(port, 'DELETE', `/data-assets/${seededAssetId}/bindings/${res.body.data.id}`);
+  });
+
+  it('PUT can replace the column set on an existing binding', async () => {
+    const created = await request(port, 'POST', `/data-assets/${seededAssetId}/bindings`, {
+      connectionId: seededConnId2, sourceAsset: 'invoices', sourceColumns: ['a', 'b'],
+    });
+    const id = created.body.data.id;
+    const put = await request(port, 'PUT', `/data-assets/${seededAssetId}/bindings/${id}`, {
+      sourceColumns: ['x', 'y', 'z'],
+    });
+    assert.strictEqual(put.status, 200);
+    assert.deepStrictEqual(put.body.data.sourceColumns, ['x', 'y', 'z']);
+    assert.strictEqual(put.body.data.sourceColumn, 'x');
+    await request(port, 'DELETE', `/data-assets/${seededAssetId}/bindings/${id}`);
+  });
+
   it('GET /:id/bindings returns the asset\u2019s bindings', async () => {
     const res = await request(port, 'GET', `/data-assets/${seededAssetId}/bindings`);
     assert.strictEqual(res.status, 200);

@@ -500,6 +500,7 @@ export default function DataAssetsPage({
     connectionId: string;
     sourceAsset: string;
     sourceColumn?: string;
+    sourceColumns?: string[];
     isPrimary: boolean;
   }
   const [bindingsByAsset, setBindingsByAsset] = useState<Record<string, BindingRow[]>>({});
@@ -593,6 +594,21 @@ export default function DataAssetsPage({
   const primaryBindingOf = (assetId: string): BindingRow | undefined => {
     const list = bindingsByAsset[assetId] || [];
     return list.find((b) => b.isPrimary) || list[0];
+  };
+
+  // The named column set a binding resolves to (empty = whole table/file).
+  const bindingColumnSet = (b?: { sourceColumns?: string[]; sourceColumn?: string }): string[] => {
+    if (!b) return [];
+    if (b.sourceColumns && b.sourceColumns.length) return b.sourceColumns;
+    return b.sourceColumn ? [b.sourceColumn] : [];
+  };
+  // Compact "table" / "table.col" / "table · 3 cols" label for list rows.
+  const bindingSourceLabel = (b?: { sourceAsset: string; sourceColumns?: string[]; sourceColumn?: string }): string => {
+    if (!b) return '';
+    const cols = bindingColumnSet(b);
+    if (cols.length === 0) return b.sourceAsset;
+    if (cols.length === 1) return `${b.sourceAsset}.${cols[0]}`;
+    return `${b.sourceAsset} · ${cols.length} cols`;
   };
 
   const unlinkPrimary = async (asset: DataAssetEntity) => {
@@ -1114,10 +1130,16 @@ export default function DataAssetsPage({
       render: (asset: DataAssetEntity) => {
         const binding = primaryBindingOf(asset.id);
         const connName = binding ? connectionNameById[binding.connectionId] : undefined;
+        const cols = bindingColumnSet(binding);
         return binding ? (
-          <span title={`Linked to connection ${connName || binding.connectionId}`}>
+          <span
+            title={
+              `Linked to connection ${connName || binding.connectionId}` +
+              (cols.length > 1 ? `\nColumns: ${cols.join(', ')}` : '')
+            }
+          >
             <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-              {binding.sourceAsset}{binding.sourceColumn ? `.${binding.sourceColumn}` : ''}
+              {bindingSourceLabel(binding)}
             </code>
           </span>
         ) : (
@@ -2346,7 +2368,7 @@ export default function DataAssetsPage({
             activeOrgId={activeOrgId}
             existingBinding={linkModalMode === 'change' ? (() => {
               const b = primaryBindingOf(linkModalAsset.id);
-              return b ? { id: b.id, connectionId: b.connectionId, sourceAsset: b.sourceAsset, sourceColumn: b.sourceColumn } : undefined;
+              return b ? { id: b.id, connectionId: b.connectionId, sourceAsset: b.sourceAsset, sourceColumn: b.sourceColumn, sourceColumns: b.sourceColumns } : undefined;
             })() : undefined}
             onClose={() => setLinkModalAsset(null)}
             onLinked={fetchData}

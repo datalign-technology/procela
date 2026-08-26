@@ -90,23 +90,23 @@ enum NotificationType {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Organization {
-  id                     String     @id @default(uuid()) @db.Uuid
-  parentId               String?    @db.Uuid
-  name                   String
-  type                   OrgType    @default(COMPANY)
-  industry               String?
-  description            String?    @db.Text
-  headCount              Int        @default(0)
-  statusMode             StatusMode @default(SIMPLE)
+  id                String     @id @default(uuid()) @db.Uuid
+  parentId          String?    @db.Uuid
+  name              String
+  type              OrgType    @default(COMPANY)
+  industry          String?
+  description       String?    @db.Text
+  headCount         Int        @default(0)
+  statusMode        StatusMode @default(SIMPLE)
   // Branding fields kept flat rather than under a `branding Json?`
   // blob so tenantSlug can be uniquely indexed for tenant lookup.
-  tenantSlug             String?    @unique
-  brandDisplayName       String?
-  brandGlyph             String?
-  ssoButtonLabel         String?
-  brandPrimaryColor      String?
-  createdAt              DateTime   @default(now())
-  updatedAt              DateTime   @updatedAt
+  tenantSlug        String?    @unique
+  brandDisplayName  String?
+  brandGlyph        String?
+  ssoButtonLabel    String?
+  brandPrimaryColor String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
   parent   Organization?  @relation("OrgHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children Organization[] @relation("OrgHierarchy")
@@ -516,20 +516,23 @@ model DataAssetSteward {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model DataAssetBinding {
-  id           String   @id @default(uuid()) @db.Uuid
-  orgId        String   @db.Uuid
-  dataAssetId  String   @db.Uuid
-  connectionId String   @db.Uuid
-  sourceAsset  String
-  sourceColumn String?
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @db.Uuid
+  dataAssetId   String   @db.Uuid
+  connectionId  String   @db.Uuid
+  sourceAsset   String
+  // sourceColumn is the legacy single column (mirrors sourceColumns[0]);
+  // sourceColumns is the named column set the asset binds to (empty = whole asset).
+  sourceColumn  String?
+  sourceColumns String[] @default([])
   // Optional free-form label ("prod", "staging", …) and a primary flag
   // (exactly one binding per asset should be primary once any exist).
   // Both fields carried on the JSON row already; the schema drift here
   // was picked up during the secondary-store repo sweep.
-  label        String?
-  isPrimary    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  label         String?
+  isPrimary     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   dataAsset    DataAsset    @relation(fields: [dataAssetId], references: [id], onDelete: Cascade)
@@ -608,9 +611,9 @@ model Skill {
 }
 
 model PersonSkill {
-  id       String  @id @default(uuid()) @db.Uuid
-  personId String  @db.Uuid
-  skillId  String  @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  personId String @db.Uuid
+  skillId  String @db.Uuid
 
   person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
   skill  Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
@@ -1036,20 +1039,20 @@ model AnalysisReport {
 }
 
 model Sop {
-  id              String    @id @default(uuid()) @db.Uuid
-  orgId           String    @db.Uuid
+  id              String   @id @default(uuid()) @db.Uuid
+  orgId           String   @db.Uuid
   code            String
   title           String
-  purpose         String    @default("") @db.Text
-  category        String    @default("OTHER")
-  applicableRoles String[]  @default([])
-  triggerEvent    String    @default("")
-  steps           Json      @default("[]")
-  status          String    @default("DRAFT")
-  version         Int       @default(1)
-  ownerPersonId   String?   @db.Uuid
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  purpose         String   @default("") @db.Text
+  category        String   @default("OTHER")
+  applicableRoles String[] @default([])
+  triggerEvent    String   @default("")
+  steps           Json     @default("[]")
+  status          String   @default("DRAFT")
+  version         Int      @default(1)
+  ownerPersonId   String?  @db.Uuid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([orgId])
   @@index([orgId, code])
@@ -1380,14 +1383,14 @@ model StatsSnapshot {
 }
 
 model ProcessVersion {
-  id        String  @id @default(uuid()) @db.Uuid
-  nodeId    String  @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
+  nodeId    String   @db.Uuid
   version   Int
-  snapshot  Json    @default("{}")
+  snapshot  Json     @default("{}")
   changedBy String?
   changedAt DateTime
-  status    String  @default("")
-  note      String  @default("") @db.Text
+  status    String   @default("")
+  note      String   @default("") @db.Text
 
   @@index([nodeId])
   @@map("process_versions")

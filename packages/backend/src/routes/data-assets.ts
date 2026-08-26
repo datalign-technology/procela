@@ -257,12 +257,14 @@ const createBindingBodySchema = z.object({
     invalid_type_error: 'sourceAsset is required (the table / file / endpoint name)',
   }).min(1, 'sourceAsset is required (the table / file / endpoint name)'),
   sourceColumn: z.string().optional(),
+  sourceColumns: z.array(z.string()).optional(),
   label: z.string().optional(),
   isPrimary: z.boolean().optional(),
 });
 const updateBindingBodySchema = z.object({
   sourceAsset: z.string().optional(),
   sourceColumn: z.string().optional(),
+  sourceColumns: z.array(z.string()).optional(),
   label: z.string().optional(),
   isPrimary: z.boolean().optional(),
 });
@@ -301,7 +303,11 @@ export interface StoredDataAssetBinding {
   dataAssetId: string;
   connectionId: string;
   sourceAsset: string;      // table / file / endpoint / sheet name
-  sourceColumn?: string;    // specific column; null = whole asset
+  sourceColumn?: string;    // legacy single column; null = whole asset. Kept
+                            // for back-compat; the first of sourceColumns is
+                            // mirrored here so single-column consumers still work.
+  sourceColumns?: string[]; // the named column set this asset binds to; empty
+                            // or absent = the whole source asset (all columns)
   label?: string;           // free-form, e.g. "prod"
   isPrimary: boolean;
   createdAt: string;
@@ -311,6 +317,21 @@ export interface StoredDataAssetBinding {
 export const dataAssetBindings: StoredDataAssetBinding[] =
   loadStore<StoredDataAssetBinding>('dataAssetBindings');
 registerStore('dataAssetBindings', dataAssetBindings);
+
+/**
+ * Normalize the column set for a binding. Accepts the new multi-column array
+ * and/or a legacy single column, trims, drops blanks, and de-duplicates while
+ * preserving order. An empty result means "the whole source asset".
+ */
+function normalizeColumnSet(columns?: string[], legacySingle?: string): string[] {
+  const raw = columns !== undefined ? columns : (legacySingle ? [legacySingle] : []);
+  const out: string[] = [];
+  for (const c of raw) {
+    const v = (c || '').trim();
+    if (v && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
 
 /**
  * One-time migration: any existing Data Asset that still carries the legacy
@@ -772,7 +793,8 @@ router.post('/:id/bindings', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { connectionId, sourceAsset, sourceColumn, label, isPrimary } = parsed.data;
+  const { connectionId, sourceAsset, sourceColumn, sourceColumns, label, isPrimary } = parsed.data;
+  const columnSet = normalizeColumnSet(sourceColumns, sourceColumn);
 
   // Look up the connection lazily so we don't create a static import cycle
   // with the connections route (which imports back into routes/data-assets
@@ -805,7 +827,8 @@ router.post('/:id/bindings', async (req: Request, res: Response) => {
     dataAssetId: asset.id,
     connectionId,
     sourceAsset,
-    sourceColumn: sourceColumn || undefined,
+    sourceColumn: columnSet[0],
+    sourceColumns: columnSet.length ? columnSet : undefined,
     label: label || undefined,
     isPrimary: shouldBePrimary,
     createdAt: now,
@@ -836,9 +859,20 @@ router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { sourceAsset, sourceColumn, label, isPrimary } = parsed.data;
+  const { sourceAsset, sourceColumn, sourceColumns, label, isPrimary } = parsed.data;
   if (sourceAsset !== undefined) binding.sourceAsset = sourceAsset;
-  if (sourceColumn !== undefined) binding.sourceColumn = sourceColumn || undefined;
+  // sourceColumns is the canonical multi-column set; sourceColumn stays as its
+  // mirrored first entry. A caller may send either — the array wins when both
+  // are present, and a legacy single column is treated as a one-column set.
+  if (sourceColumns !== undefined) {
+    const columnSet = normalizeColumnSet(sourceColumns, undefined);
+    binding.sourceColumns = columnSet.length ? columnSet : undefined;
+    binding.sourceColumn = columnSet[0];
+  } else if (sourceColumn !== undefined) {
+    const columnSet = normalizeColumnSet(undefined, sourceColumn);
+    binding.sourceColumns = columnSet.length ? columnSet : undefined;
+    binding.sourceColumn = columnSet[0];
+  }
   if (label !== undefined) binding.label = label || undefined;
   if (isPrimary === true && !binding.isPrimary) {
     const allBindings = await dataAssetBindingsRepo.list();

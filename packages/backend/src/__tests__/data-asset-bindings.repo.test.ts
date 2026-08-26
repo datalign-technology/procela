@@ -61,7 +61,7 @@ describe('prismaDataAssetBindingsRepository', () => {
     const d = delegate({
       findMany: async () => [{
         id: 'b1', orgId: 'o1', dataAssetId: 'a1', connectionId: 'c1',
-        sourceAsset: 'public.customers', sourceColumn: null, label: null, isPrimary: true,
+        sourceAsset: 'public.customers', sourceColumn: null, sourceColumns: [], label: null, isPrimary: true,
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),
       }],
@@ -69,6 +69,7 @@ describe('prismaDataAssetBindingsRepository', () => {
     const repo = prismaDataAssetBindingsRepository(() => ({ dataAssetBinding: d }));
     const rows = await repo.list();
     assert.strictEqual(rows[0].sourceColumn, undefined);
+    assert.strictEqual(rows[0].sourceColumns, undefined);
     assert.strictEqual(rows[0].label, undefined);
     assert.strictEqual(rows[0].isPrimary, true);
   });
