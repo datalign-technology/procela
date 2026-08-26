@@ -131,10 +131,11 @@ export const navSections: NavSection[] = [
       { to: '/documentation', label: 'Documentation' },
       { to: '/governance-calendar', label: 'Calendar' },
       { to: '/governance-work', label: 'Tasks & Issues' },
+      { to: '/governance-exceptions', label: 'Exceptions' },
     ],
     subGroups: [
       { label: 'Set up', itemTos: ['/governance-program', '/governance-groups', '/dama-roles', '/governance-policies', '/decision-rights'] },
-      { label: 'Operate', itemTos: ['/documentation', '/governance-calendar', '/governance-work'] },
+      { label: 'Operate', itemTos: ['/documentation', '/governance-calendar', '/governance-work', '/governance-exceptions'] },
     ],
   },
   {
@@ -148,12 +149,13 @@ export const navSections: NavSection[] = [
       { to: '/analysis',          label: 'Analysis' },
       { to: '/processes/data-map', label: 'Process ↔ Data Map' },
       { to: '/reports',           label: 'Reports' },
+      { to: '/council-scorecard', label: 'Council Scorecard' },
       { to: '/gap-detection',     label: 'Gap Detection' },
       { to: '/audit-log',         label: 'Audit Log' },
     ],
     subGroups: [
       { label: 'Explore', itemTos: ['/enterprise-view', '/analysis', '/processes/data-map'] },
-      { label: 'Review',  itemTos: ['/reports', '/gap-detection', '/audit-log'] },
+      { label: 'Review',  itemTos: ['/reports', '/council-scorecard', '/gap-detection', '/audit-log'] },
     ],
   },
 ];

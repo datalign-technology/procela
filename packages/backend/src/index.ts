@@ -87,6 +87,8 @@ import attachmentsRouter from './routes/attachments';
 import brandingRouter from './routes/branding';
 import syncConnectionsRouter from './routes/sync-connections';
 import governancePoliciesRouter from './routes/governance-policies';
+import governanceExceptionsRouter from './routes/governance-exceptions';
+import councilScorecardRouter from './routes/council-scorecard';
 import governanceControlsRouter from './routes/governance-controls';
 import governanceTasksRouter from './routes/governance-tasks';
 import governanceIssuesRouter from './routes/governance-issues';
@@ -283,6 +285,11 @@ app.use('/api/v1/dbt-cloud-connections', authenticateToken, requireResource('con
 app.use('/api/v1/governance-groups', authenticateToken, requireResource('governance'), governanceGroupsRouter);
 app.use('/api/v1/dama-roles', authenticateToken, requireResource('governance'), damaRolesRouter);
 app.use('/api/v1/governance-policies', authenticateToken, requireResource('governance'), governancePoliciesRouter);
+app.use('/api/v1/governance-exceptions', authenticateToken, requireResource('governance'), governanceExceptionsRouter);
+// Council scorecard is mounted WITHOUT requireResource: writes are gated by
+// requireScorecardEditor (admin OR CDO/DGL), so a CDO who is only a platform
+// Viewer can still edit. Reads are open to any authenticated user.
+app.use('/api/v1/council-scorecard', authenticateToken, councilScorecardRouter);
 app.use('/api/v1/governance-controls', authenticateToken, requireResource('governance'), governanceControlsRouter);
 app.use('/api/v1/governance-tasks', authenticateToken, requireResource('governance'), governanceTasksRouter);
 app.use('/api/v1/governance-issues', authenticateToken, requireResource('governance'), governanceIssuesRouter);

@@ -47,6 +47,8 @@ const EnterpriseViewPage         = lazy(() => import('@/pages/EnterpriseViewPage
 const AnalysisPage               = lazy(() => import('@/pages/AnalysisPage'));
 const ReportsPage                = lazy(() => import('@/pages/ReportsPage'));
 const ReportBuilderPage          = lazy(() => import('@/pages/ReportBuilderPage'));
+const CouncilScorecardPage       = lazy(() => import('@/pages/CouncilScorecardPage'));
+const GovernanceExceptionsPage   = lazy(() => import('@/pages/GovernanceExceptionsPage'));
 const AuditLogPage               = lazy(() => import('@/pages/AuditLogPage'));
 const SettingsPage               = lazy(() => import('@/pages/SettingsPage'));
 const BrandingPage               = lazy(() => import('@/pages/BrandingPage'));
@@ -133,6 +135,8 @@ export default function App() {
           <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/council-scorecard" element={<CouncilScorecardPage />} />
+          <Route path="/governance-exceptions" element={<GovernanceExceptionsPage />} />
           <Route path="/reports/builder" element={<ReportBuilderPage />} />
           <Route path="/reports/builder/:id" element={<ReportBuilderPage />} />
           <Route path="/audit-log" element={<AuditLogPage />} />

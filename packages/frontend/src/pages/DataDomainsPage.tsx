@@ -29,7 +29,7 @@ interface DataDomain {
   ownerId: string | null; ownerName: string | null;
   stewardIds: string[]; stewards: { id: string; name: string }[];
   dataAssetIds: string[]; assets: { id: string; name: string }[];
-  status: string; scopeDefinition?: string;
+  status: string; scopeDefinition?: string; criticality?: string;
   createdAt: string; updatedAt: string;
 }
 interface Person { id: string; name: string; }
@@ -39,8 +39,8 @@ const inputStyle: React.CSSProperties = { border: '1px solid var(--color-border)
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
 
-interface FormData { name: string; description: string; status: string; }
-const emptyForm: FormData = { name: '', description: '', status: 'DRAFT' };
+interface FormData { name: string; description: string; status: string; criticality: string; }
+const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', criticality: '' };
 
 const SIMPLE_TRANSITIONS: Record<string, string[]> = { DRAFT: ['ACTIVE'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 const ADVANCED_TRANSITIONS: Record<string, string[]> = { DRAFT: ['PROPOSED'], PROPOSED: ['UNDER_REVIEW', 'DRAFT'], UNDER_REVIEW: ['APPROVED', 'DRAFT'], APPROVED: ['ACTIVE', 'DRAFT'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
@@ -205,7 +205,7 @@ export default function DataDomainsPage() {
     setForm(emptyForm); setEditingId(null); setCreateStewardshipTeam(true); setShowForm(true);
   };
   const openEdit = (domain: DataDomain) => {
-    setForm({ name: domain.name, description: domain.description, status: domain.status });
+    setForm({ name: domain.name, description: domain.description, status: domain.status, criticality: domain.criticality || '' });
     setEditingId(domain.id); setShowForm(true);
   };
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
@@ -467,6 +467,16 @@ export default function DataDomainsPage() {
               ) : (
                 <select aria-label="Status" style={selectStyle} value="DRAFT" disabled><option value="DRAFT">Draft</option></select>
               )}
+            </div>
+            <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Criticality</label>
+              <select aria-label="Criticality" style={selectStyle} value={form.criticality} onChange={(e) => setForm({ ...form, criticality: e.target.value })}>
+                <option value="">Unclassified</option>
+                <option value="TIER_1">Tier-1 (critical)</option>
+                <option value="TIER_2">Tier-2</option>
+                <option value="TIER_3">Tier-3</option>
+                <option value="TIER_4">Tier-4</option>
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Tier-1 domains drive the Council Scorecard's coverage measure.</div>
             </div>
             {/* Description absorbed the former "Scope Definition" field. */}
             <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
