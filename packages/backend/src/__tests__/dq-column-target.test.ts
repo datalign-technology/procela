@@ -126,4 +126,26 @@ describe('DQ per-column execution', () => {
     assert.strictEqual(emailRun.body.data.passRate, 83);
     assert.strictEqual(statusRun.body.data.passRate, 100);
   });
+
+  it('PUT re-targets a rule to a different column and syncs columnName', async () => {
+    // Start asset-level (no column), then target it via PUT.
+    const created = (await request(port, 'POST', '/data-quality', {
+      dataAssetId: assetId, name: 'retarget me', dimension: 'COMPLETENESS', ruleType: 'NOT_NULL', threshold: 95,
+    })).body.data;
+    assert.strictEqual(created.columnId, undefined);
+
+    const put = await request(port, 'PUT', `/data-quality/${created.id}`, { columnId: statusColId });
+    assert.strictEqual(put.status, 200);
+    assert.strictEqual(put.body.data.columnId, statusColId);
+    assert.strictEqual(put.body.data.columnName, 'status');
+
+    // It now measures the status column (100%), proving the re-target took.
+    const run = await request(port, 'POST', `/data-quality/${created.id}/run`);
+    assert.strictEqual(run.body.data.passRate, 100);
+
+    // Clearing the column returns it to asset-level.
+    const cleared = await request(port, 'PUT', `/data-quality/${created.id}`, { columnId: '' });
+    assert.strictEqual(cleared.body.data.columnId, undefined);
+    assert.strictEqual(cleared.body.data.columnName, undefined);
+  });
 });

@@ -90,6 +90,7 @@ interface DataAssetRef {
 
 interface FormData {
   dataAssetId: string;
+  columnId: string;
   dimension: string;
   name: string;
   description: string;
@@ -100,6 +101,7 @@ interface FormData {
 
 const emptyForm: FormData = {
   dataAssetId: '',
+  columnId: '',
   dimension: 'COMPLETENESS',
   name: '',
   description: '',
@@ -227,6 +229,10 @@ export default function DataQualityPage({
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  // Columns of the asset selected in the form, so a rule can target a specific
+  // column (the bound/discovered set) instead of the asset as a whole.
+  const [formColumns, setFormColumns] = useState<ColumnWithHealth[]>([]);
+  const [formColumnsLoading, setFormColumnsLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterAssetId, setFilterAssetId] = useState('');
@@ -293,9 +299,27 @@ export default function DataQualityPage({
   const failingCount = rules.filter((r) => r.status === 'FAILING').length;
   const avgScore = totalRules > 0 ? Math.round(rules.reduce((sum, r) => sum + r.currentScore, 0) / totalRules) : 0;
 
+  // Load the selected asset's columns for the form's column picker.
+  const loadFormColumns = useCallback(async (assetId: string) => {
+    if (!assetId) { setFormColumns([]); return; }
+    setFormColumnsLoading(true);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: ColumnWithHealth[] }>(`/data-assets/${assetId}/columns`);
+      setFormColumns(res.data || []);
+    } catch { setFormColumns([]); }
+    finally { setFormColumnsLoading(false); }
+  }, []);
+
+  // Changing the asset resets the column choice and reloads the column list.
+  const onFormAssetChange = (assetId: string) => {
+    setForm((prev) => ({ ...prev, dataAssetId: assetId, columnId: '' }));
+    loadFormColumns(assetId);
+  };
+
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
+    setFormColumns([]);
     setEditingId(null);
     setShowForm(true);
   };
@@ -303,6 +327,7 @@ export default function DataQualityPage({
   const openEdit = (rule: QualityRule) => {
     setForm({
       dataAssetId: rule.dataAssetId,
+      columnId: (rule as any).columnId || '',
       dimension: rule.dimension,
       name: rule.name,
       description: rule.description,
@@ -310,6 +335,7 @@ export default function DataQualityPage({
       currentScore: rule.currentScore,
       weight: rule.weight,
     });
+    loadFormColumns(rule.dataAssetId);
     setEditingId(rule.id);
     setShowForm(true);
   };
@@ -725,10 +751,34 @@ export default function DataQualityPage({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Asset *</label>
-              <select aria-label="Data Asset" style={selectStyle} value={form.dataAssetId} onChange={(e) => updateField('dataAssetId', e.target.value)}>
+              <select aria-label="Data Asset" style={selectStyle} value={form.dataAssetId} onChange={(e) => onFormAssetChange(e.target.value)}>
                 <option value="">-- Select data asset --</option>
                 {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Column</label>
+              <select
+                aria-label="Column"
+                style={selectStyle}
+                value={form.columnId}
+                disabled={!form.dataAssetId || formColumnsLoading}
+                onChange={(e) => updateField('columnId', e.target.value)}
+              >
+                <option value="">{formColumnsLoading ? 'Loading columns…' : 'Whole asset (no specific column)'}</option>
+                {formColumns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.columnName}{c.rulesCount ? ` · ${c.rulesCount} rule${c.rulesCount === 1 ? '' : 's'}` : ''}
+                  </option>
+                ))}
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>
+                {!form.dataAssetId
+                  ? 'Pick an asset first.'
+                  : !formColumnsLoading && formColumns.length === 0
+                    ? 'No columns yet — link the asset to a source and pick its columns, or leave asset-level.'
+                    : 'Target a specific column so the rule measures just that field.'}
+              </div>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Dimension</label>

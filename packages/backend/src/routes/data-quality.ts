@@ -451,10 +451,23 @@ router.put('/:id', async (req: Request, res: Response) => {
   const rule = await dataQualityRulesRepo.get(String(req.params.id));
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
 
-  const { dataAssetId, dimension, name, description, threshold, currentScore, weight,
+  const { dataAssetId, columnId, dimension, name, description, threshold, currentScore, weight,
     ruleType, parameters, templateId, scheduleFrequency } = req.body;
 
   if (dataAssetId !== undefined) rule.dataAssetId = dataAssetId;
+  // Re-target the rule to a specific column (or clear it back to asset-level).
+  // Keep the denormalized columnName in sync so display + the connector plan
+  // stay correct.
+  if (columnId !== undefined) {
+    if (columnId) {
+      const col = await dataAssetColumnsRepo.get(String(columnId));
+      rule.columnId = columnId;
+      rule.columnName = col?.columnName;
+    } else {
+      rule.columnId = undefined;
+      rule.columnName = undefined;
+    }
+  }
   if (dimension !== undefined && QUALITY_DIMENSIONS.includes(dimension)) rule.dimension = dimension;
   if (name !== undefined) rule.name = name;
   if (description !== undefined) rule.description = description;
@@ -485,6 +498,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   rule.updatedAt = new Date().toISOString();
   await dataQualityRulesRepo.update(rule.id, {
     dataAssetId: rule.dataAssetId,
+    columnId: rule.columnId,
+    columnName: rule.columnName,
     dimension: rule.dimension,
     name: rule.name,
     description: rule.description,
