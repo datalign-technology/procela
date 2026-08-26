@@ -87,5 +87,89 @@ services:
     depends_on:
       - backend
 
+  # ── Edge-connector demo (profile: demo) ───────────────────────────────────
+  # `docker compose --profile demo up --build` brings up the normal stack PLUS
+  # a real on-prem edge connector reading a real source database seeded with the
+  # utility + shipbuilder test data. See docs/edge-connector-demo.md.
+  #
+  # These services only start when the `demo` profile is requested, so a plain
+  # `docker compose up` is unchanged.
+
+  # A stand-in for the CUSTOMER's operational database — NOT Procela's store.
+  # The connector reads this; Procela never sees its rows, only aggregate DQ
+  # counts. Seeded from docker/demo/source-db/init/*.sql on first boot.
+  source-db:
+    image: postgres:16-alpine
+    profiles: ["demo"]
+    environment:
+      POSTGRES_DB: source_demo
+      # Trust auth keeps the demo credential-free; the connector connects as
+      # the postgres user with no password. Never do this outside a demo.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - ./docker/demo/source-db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d source_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Seeds the Procela app tenant (org, admin, systems) so the connector has a
+  # home to pair into. Runs once and exits.
+  demo-seed:
+    image: node:20-slim
+    profiles: ["demo"]
+    working_dir: /repo
+    volumes:
+      - ./:/repo:ro
+    depends_on:
+      backend:
+        condition: service_started
+    command: >
+      sh -c "until wget -qO- http://backend:3001/api/v1/health >/dev/null 2>&1; do echo 'waiting for backend'; sleep 2; done;
+             node packages/backend/scripts/seed-tidewater.js http://backend:3001/api/v1"
+    restart: "no"
+
+  # Pairs a real connector (pair/start → pair/claim) and writes connector.yaml
+  # to the shared config volume. Runs once and exits.
+  demo-bootstrap:
+    image: node:20-slim
+    profiles: ["demo"]
+    working_dir: /repo
+    volumes:
+      - ./:/repo:ro
+      - connector_config:/config
+    environment:
+      PROCELA_URL: http://backend:3001/api/v1
+      ADMIN_EMAIL: admin@tidewater-utilities.com
+      SOURCE_DSN: postgres://postgres@source-db:5432/source_demo
+      CONNECTOR_NAME: Demo Edge Connector
+      OUT: /config/connector.yaml
+      SCAN_SECONDS: "30"
+      HEARTBEAT_SECONDS: "15"
+    depends_on:
+      source-db:
+        condition: service_healthy
+      demo-seed:
+        condition: service_completed_successfully
+    command: ["node", "docker/demo/bootstrap.mjs"]
+    restart: "no"
+
+  # The real on-prem agent. Reads the generated config, discovers the source
+  # tables, reports them, and runs measured DQ pushdown on any rules you add.
+  connector:
+    build:
+      context: ./packages/connector
+      dockerfile: Dockerfile
+    profiles: ["demo"]
+    environment:
+      PROCELA_CONNECTOR_CONFIG: /etc/procela/connector.yaml
+    volumes:
+      - connector_config:/etc/procela:ro
+    depends_on:
+      demo-bootstrap:
+        condition: service_completed_successfully
+
 volumes:
   postgres_data:
+  connector_config:
