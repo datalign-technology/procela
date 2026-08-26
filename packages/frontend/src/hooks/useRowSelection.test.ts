@@ -27,6 +27,19 @@ describe('useRowSelection', () => {
     expect(result.current.count).toBe(0);
   });
 
+  it('remove drops one id (e.g. after deleting that row) and is a no-op otherwise', () => {
+    const { result } = renderHook(() => useRowSelection(rows('a', 'b', 'c'), key));
+    act(() => { result.current.toggle('a'); result.current.toggle('b'); });
+    expect(result.current.count).toBe(2);
+    act(() => result.current.remove('a'));
+    expect(result.current.isSelected('a')).toBe(false);
+    expect(result.current.isSelected('b')).toBe(true);
+    expect(result.current.count).toBe(1);
+    // removing an id that isn't selected leaves the set unchanged
+    act(() => result.current.remove('c'));
+    expect(result.current.count).toBe(1);
+  });
+
   it('toggleAll selects every visible row, then clears them', () => {
     const { result } = renderHook(() => useRowSelection(rows('a', 'b', 'c'), key));
     act(() => result.current.toggleAll());

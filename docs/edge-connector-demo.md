@@ -74,14 +74,17 @@ Discovery alone doesn't measure quality — you tell Procela which columns matte
 
 1. Go to **Data → Data Quality → Rules → Add Rule**.
 2. Pick a discovered asset (e.g. `utility.billing_accounts` under Tidewater),
-   then use the **Column** picker to target a column, e.g. `email`, rule type
-   **NOT_NULL**. Add another (e.g. `service_class` **IN_SET**
-   `residential,commercial,industrial`). Under Momentum, try
-   `shipbuilder.work_packages.pct_complete` **NUMERIC_RANGE** 0–100.
+   use the **Column** picker to target a column (e.g. `email`), and choose a
+   **Rule Type** of **Not null**. The Rule Type is what makes the rule
+   measurable — an untyped rule is never picked up by the connector. Add another
+   (e.g. `service_class` → **In set** → `residential, commercial, industrial`).
+   Under Momentum, try `work_packages.pct_complete` → **Numeric range** 0–100.
+   (The quick way: on the **Quality** tab, expand an asset and use the per-column
+   **Not null / Unique** buttons, which set the type for you.)
 3. Within one scan cycle (`scanSeconds`, 30s in the demo) the connector picks up
    the rule plan, runs the aggregate query against the source DB, and the rule
    flips to a **measured** score. With the seeded data you'll see realistic
-   numbers — e.g. `email` NOT_NULL lands around **94%** (≈6% of rows have a null
+   numbers — e.g. `email` Not-null lands around **94%** (≈6% of rows have a null
    or malformed address), not a fabricated 100%.
 
 The five pushdown-safe rule types run measured on the connector: `NOT_NULL`,

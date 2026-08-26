@@ -40,6 +40,9 @@ export interface RowSelection {
   isSelected: (id: string) => boolean;
   /** Toggle a single row. */
   toggle: (id: string) => void;
+  /** Drop one id from the selection — e.g. after deleting that row, so a
+   *  phantom selection doesn't linger in the count / bulk-action bar. */
+  remove: (id: string) => void;
   /** Select every visible row, or — if all visible rows are already
    *  selected — deselect them (preserving any off-screen selections). */
   toggleAll: () => void;
@@ -88,10 +91,19 @@ export function useRowSelection<T>(
     });
   }, []);
 
+  const remove = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
   const clear = useCallback(() => setSelectedIds(new Set()), []);
 
   const allSelected = visibleKeys.length > 0 && visibleKeys.every((k) => selectedIds.has(k));
   const someSelected = !allSelected && visibleKeys.some((k) => selectedIds.has(k));
 
-  return { selectedIds, count: selectedIds.size, isSelected, toggle, toggleAll, clear, allSelected, someSelected };
+  return { selectedIds, count: selectedIds.size, isSelected, toggle, remove, toggleAll, clear, allSelected, someSelected };
 }
