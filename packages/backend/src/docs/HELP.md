@@ -40,8 +40,8 @@ The sidebar opens with Get Started for first-run onboarding (it auto-hides at 10
 - Processes — the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under Insights → Data Mapping.)
 - Data — Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.
 - Systems — Systems and Connections (databases, APIs, files).
-- Governance — grouped into Set up (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and Operate (Documentation with Manual + Procedures tabs, Calendar, Tasks & Issues). The sub-labels are visual dividers in the expanded section — every item still navigates directly.
-- Insights — grouped into Explore (Enterprise View, Analysis, Data Mapping) and Review (Reports, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance — promoted out of Governance so they're easier to find.
+- Governance — grouped into Set up (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and Operate (Documentation with Manual + Procedures tabs, Calendar, Tasks & Issues, Exceptions). The sub-labels are visual dividers in the expanded section — every item still navigates directly.
+- Insights — grouped into Explore (Enterprise View, Analysis, Data Mapping) and Review (Reports, Council Scorecard, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance — promoted out of Governance so they're easier to find.
 
 Settings sits at the bottom of the sidebar. Help lives only in the top bar (next to Ask AI) — it opens the guide in a separate popup window so you keep whatever page you're on. The Training Guide follows the same pattern. The `/help` URL still works if you have deep links saved (e.g. `/help#connectors`).
 
@@ -181,6 +181,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Assign owner and stewards per domain.
 - Option to auto-create a Data Stewardship Team when creating a domain.
 - AI-generated domain suggestions based on your industry.
+- **Criticality** — mark a domain's business-criticality tier (Tier-1 = council-critical … Tier-4). Tier-1 domains are what the Council Scorecard measures for coverage — the share of your most critical domains that have a named owner.
 
 ### Data Quality
 
@@ -345,6 +346,13 @@ Skills drive four cross-page workflows:
 - Issues — 9 types (Metadata, Data Quality, Classification, Ownership, Policy, Access, Lineage, Compliance, Workflow), severity levels.
 - Steward onboarding: auto-creates 4 tasks when a steward role is assigned (7 / 14 / 21 / 90-day milestones).
 
+### Governance Exceptions
+
+- **A register of time-boxed waivers at Governance → Operate → Exceptions.** An exception records that a policy or control has been deliberately waived for a stated reason until an expiry date — the auditable alternative to a control quietly going unmet.
+- **Grant one** with a title (what is being waived), an expiry date, and an optional reason. New exceptions start Active.
+- **Past-expiry is the signal.** An exception that is still Active after its expiry date is flagged in red and counted at the top of the page — those are what the governance council watches, and they feed the *Exceptions past expiry* measure on the Council Scorecard. Renew (reopen with a new date) or Close each one.
+- **Close / reopen / delete.** Close an exception once the underlying gap is fixed; reopen if it recurs. Granting and changing exceptions is limited to users with governance-write permission.
+
 ### Enterprise View
 
 - Single pane of glass across processes, systems, data assets, domains, and people.
@@ -378,6 +386,14 @@ Skills drive four cross-page workflows:
 - Audit log full export. The Audit Log page has two CSV exports: Export view dumps what's currently loaded (post-filter, capped at the page limit) for ad-hoc review; Full log (CSV) hits the server endpoint that bypasses the cap and includes the `entryHash` column for chain-integrity verification offline. Use the second one for compliance reviewers asking for "everything in this org for the last N months".
 - My Reports + Report Builder. Build a report against Procela's logical data model — pick a starting entity (Processes, Data Assets, Systems, People, Mappings, Domains, Roles, Skills, Organizations), choose columns directly on that entity or joined columns from a related entity (e.g. Responsible Person → Name, Required Skills → Name), add filters with op-aware value inputs (enum dropdowns, number coercion), set sort, and preview live as you type. Save with a name and visibility (Shared with org / Private to me); saved reports show up on the My Reports tab with metadata (primary entity, column count). Edit at /reports/builder/:id; new at /reports/builder.
 - Gap Detection. Cross-cutting view of unmapped activities, ungoverned assets, ungoverned columns (a column an asset is bound to but has no quality rule — coverage you claimed but never measure), ownership gaps, low-health assets, unowned domains, orphaned assets, unlinked assets, unassigned people, and duplicate asset names. Drill-down everywhere: the four summary cards at the top (Total Gaps / Critical / Warning / Informational) scroll to the first matching section when clicked; each row inside a section is a hyperlink that opens the affected item on its source page so you can fix the gap in one click — Unmapped Activity rows jump to the Process Catalog with the node highlighted, asset rows jump to Data Assets, person rows open the person's profile, and so on.
+
+### Council Scorecard
+
+- **A monthly governance report at Insights → Review → Council Scorecard.** Each child division reports four measures that roll up to an enterprise total, plus two narrative sections. Not to be confused with the *Scorecard* tab under Reports, which is the governance-*maturity* index (five dimensions, 0–100) for a single org — this is the council's per-division report card.
+- **The four measures are auto-derived from live data:** Tier-1 coverage (share of Tier-1 domains with a named owner), Classification (share of assets with a sensitivity classification), Open issues over 30 days, and Exceptions past expiry. Each division's row is computed over its own subtree; the **Enterprise** row is a true rollup — computed across the parent's whole subtree, not an average of the divisions. Status per row (On track / Behind / At risk) is derived from the measures against their targets.
+- **Two narrative sections are auto-drafted:** "What moved this month" from the last 30 days of governance activity (audit log), and "For the council" from current risk facts (Tier-1 domains without an owner, exceptions past expiry, unclassified assets). Both carry an *auto-derived* chip until edited.
+- **Edit & override (CDO / Data Governance Lead only).** Those two roles — or an org admin — can override any derived cell or the narrative. Overrides are per-cell: the machine value is preserved underneath and an overridden cell is marked, so the council always sees what was adjusted. A cell can be reset back to its derived value.
+- **Save versions.** *Publish snapshot* freezes the current derived-plus-overridden scorecard as an immutable version for the period; the version-history panel reopens any past month read-only. Publishing and editing are recorded in the audit log.
 
 ### Dependency Enforcement
 

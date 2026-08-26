@@ -507,6 +507,12 @@ Procela knows which system carries the canonical copy.
 | Operational Data | **Jennifer Vasquez** (Director Transmission & Distribution Ops) | **Brandon Willis** (Data Steward Grid Operations) + **Deborah Kwon** (Data Steward Generation) |
 | Regulatory Data | **Lorraine Kimura** (Director Regulatory Affairs) | **Phillip Rosenberg** (Data Steward Compliance Evidence) |
 
+   While you're here, set **Criticality** on each domain — mark
+   *Customer Data* and *Regulatory Data* as **Tier-1 (critical)** and
+   leave *Operational Data* at a lower tier. Tier-1 is what the Council
+   Scorecard (Module 10.4) measures for coverage, so this flag is what
+   makes a domain count toward the enterprise report card.
+
 2. Go back to each asset from step 4.1 and assign it to its domain.
    Watch the Owner picker on **Outage Logs** and **Customer Master**
    — the hint reads *"Inherits from domain — Jennifer Vasquez"* and
@@ -935,6 +941,34 @@ the program can't launch until it's complete (the platform pops a
 confirmation if you try to advance early, listing exactly what's
 missing).
 
+### 10.4 Council Scorecard + Exceptions
+
+The **Council Scorecard** (**Insights → Review → Council Scorecard**)
+is the monthly report card a governance council reads: each child
+division reports four measures — Tier-1 domain coverage, asset
+classification, open issues over 30 days, and exceptions past expiry —
+and they roll up to a true **Enterprise** total (computed across the
+whole subtree, not an average). Open it now and you'll see the two
+domains you flagged Tier-1 in Module 4.3 driving the coverage number,
+plus two auto-drafted narratives ("What moved this month", "For the
+council").
+
+1. As a **CDO** or **Data Governance Lead** (or an org admin), click
+   **Edit** — every derived cell becomes editable and you can override
+   any measure or rewrite a narrative. An overridden cell keeps the
+   machine value underneath and is marked, so the council can see what
+   was adjusted; **Reset** puts it back to derived.
+2. Click **Publish snapshot** to freeze this month as an immutable
+   version. The version-history panel reopens any past month read-only —
+   that's your historical reference for how governance moved
+   quarter over quarter.
+
+To feed the *Exceptions past expiry* measure, visit **Governance →
+Operate → Exceptions** and grant a waiver with an expiry date in the
+past — it flags red on that page and increments the exceptions column
+on the scorecard. Close it and the count drops. This is the auditable
+way a control gets waived instead of quietly going unmet.
+
 ---
 
 ## Module 11 — Ask AI for grounded answers (5 min)
@@ -1095,6 +1129,8 @@ via the **RACI Matrix**.
 | Standing committees | Governance → Groups |
 | Policies + standards | Governance → Documents |
 | Reports + scorecards | Insights → Reports |
+| Council report card (division rollup) | Insights → Review → Council Scorecard |
+| Policy waivers / exceptions | Governance → Operate → Exceptions |
 | Pivot exploration | Insights → Analysis |
 | Where are the gaps? | Dashboard → Gaps section + Insights → Gap Detection |
 | Live source metadata / freshness | Systems → Connections (if Procela can reach the DB) or Settings → On-prem connectors (if it can't) |

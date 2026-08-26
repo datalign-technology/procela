@@ -171,8 +171,8 @@ export default function HelpPage() {
           <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process view of activity↔asset mappings lives under <strong>Insights &rarr; Process &harr; Data Map</strong> &mdash; its <em>Table</em> view.)</li>
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
-          <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
-          <li><strong>Insights</strong> &mdash; grouped into <strong>Explore</strong> (Enterprise View, Analysis, Process &harr; Data Map) and <strong>Review</strong> (Reports, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
+          <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues, Exceptions). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
+          <li><strong>Insights</strong> &mdash; grouped into <strong>Explore</strong> (Enterprise View, Analysis, Process &harr; Data Map) and <strong>Review</strong> (Reports, Council Scorecard, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
         </ul>
         <p style={pStyle}>Settings sits at the bottom of the sidebar; Help is the button in the top bar (next to Ask AI).</p>
 
@@ -276,6 +276,7 @@ export default function HelpPage() {
           <li>Assign owner and stewards per domain.</li>
           <li>Option to auto-create a Data Stewardship Team when creating a domain.</li>
           <li>AI-generated domain suggestions based on your industry.</li>
+          <li><strong>Criticality</strong> &mdash; mark a domain's business-criticality tier (Tier-1 = council-critical &hellip; Tier-4). Tier-1 domains are what the <strong>Council Scorecard</strong> measures for coverage &mdash; the share of your most critical domains that have a named owner.</li>
         </ul>
         <h3 style={h3Style}>Data Quality</h3>
         <ul style={listStyle}>
@@ -436,6 +437,13 @@ export default function HelpPage() {
           <li><strong>Automatic overdue detection.</strong> A background sweep runs every hour and writes a <em>Task overdue: &lt;title&gt;</em> warning into the notifications bell for the assignee of any OPEN / IN_PROGRESS / PENDING_APPROVAL task whose due date has slipped. It's idempotent (the row is stamped after firing) and re-arms when the due date is pushed forward or the task cycles back to OPEN. Unassigned tasks fire org-wide. <code>POST /api/v1/governance-tasks/sweep-overdue</code> drives the same sweep synchronously.</li>
           <li><strong>Weekly digest scheduler.</strong> The same in-app scheduler fires the gap-delta digest (see below) once a week on the first tick after Sunday 23:00 UTC. The last-fired timestamp is persisted, so a restart in the firing window doesn't double-notify. All background loops can be disabled via <code>PROCELA_DISABLE_SCHEDULERS=1</code> — set it on every replica except the one designated to run scheduled work, so jobs fire once, not once per replica.</li>
         </ul>
+        <h3 style={h3Style}>Governance Exceptions</h3>
+        <ul style={listStyle}>
+          <li><strong>A register of time-boxed waivers at Governance &rarr; Operate &rarr; Exceptions.</strong> An exception records that a policy or control has been deliberately waived for a stated reason until an expiry date &mdash; the auditable alternative to a control quietly going unmet.</li>
+          <li><strong>Grant one</strong> with a title (what is being waived), an expiry date, and an optional reason. New exceptions start Active.</li>
+          <li><strong>Past-expiry is the signal.</strong> An exception still Active after its expiry date is flagged in red and counted at the top of the page &mdash; those are what the governance council watches, and they feed the <em>Exceptions past expiry</em> measure on the Council Scorecard. Renew (reopen with a new date) or Close each one.</li>
+          <li><strong>Close / reopen / delete.</strong> Close an exception once the underlying gap is fixed; reopen if it recurs. Granting and changing exceptions is limited to users with governance-write permission.</li>
+        </ul>
         <h3 style={h3Style}>Dependency Enforcement</h3>
         <p style={pStyle}>
           Governance pages show prerequisite banners when prior steps haven't been completed.
@@ -450,8 +458,8 @@ export default function HelpPage() {
           Cross-cutting exploration and review surfaces that read across every part of the
           catalog. Promoted out of Governance into their own <strong>Insights</strong> sidebar
           section &mdash; grouped into <strong>Explore</strong> (Enterprise View, Analysis, Data
-          Mapping, Process &harr; Data Map) and <strong>Review</strong> (Reports, Gap Detection,
-          Audit Log).
+          Mapping, Process &harr; Data Map) and <strong>Review</strong> (Reports, Council Scorecard,
+          Gap Detection, Audit Log).
         </p>
         <h3 style={h3Style}>Enterprise View</h3>
         <ul style={listStyle}>
@@ -476,6 +484,14 @@ export default function HelpPage() {
           <li>Tabbed: <strong>My Reports</strong> (the report catalog + Builder, default tab), <strong>Executive Report</strong> (printable / PDF one-page overview), and <strong>Scorecard</strong> (governance health by dimension). The old Analysis tab was dropped — cube pivots live on their own page at <strong>Explore &rarr; Analysis</strong>; framing them as a sub-section of Reports was a dead-end nav.</li>
           <li><strong>My Reports + Report Builder.</strong> Build a report against Procela's logical data model — pick a starting entity (Processes, Data Assets, Systems, People, Mappings, Domains, Roles, Skills, Organizations), choose columns directly on that entity <em>or</em> joined columns from a related entity (e.g. <em>Responsible Person → Name</em>, <em>Required Skills → Name</em>), add filters with op-aware value inputs (enum dropdowns, number coercion), set sort, and preview live as you type. Save with a name and visibility (Shared with org / Private to me); saved reports show up on the My Reports tab with metadata (primary entity, column count). Edit at <code>/reports/builder/:id</code>; new at <code>/reports/builder</code>.</li>
           <li><strong>Gap Detection.</strong> Cross-cutting view of unmapped activities, ungoverned assets, <strong>ungoverned columns</strong> (a column an asset is bound to but has no quality rule &mdash; coverage you claimed but never measure), ownership gaps, low-health assets, unowned domains, orphaned assets, unlinked assets, unassigned people, and duplicate asset names. Drill-down everywhere: the four summary cards at the top (Total Gaps / Critical / Warning / Informational) scroll to the first matching section when clicked; each row inside a section is a hyperlink that opens the affected item on its source page so you can fix the gap in one click — Unmapped Activity rows jump to the Process Catalog with the node highlighted, asset rows jump to Data Assets, person rows open the person's profile, and so on.</li>
+        </ul>
+        <h3 style={h3Style}>Council Scorecard</h3>
+        <ul style={listStyle}>
+          <li><strong>A monthly governance report at Insights &rarr; Review &rarr; Council Scorecard.</strong> Each child division reports four measures that roll up to an enterprise total, plus two narrative sections. Not to be confused with the <em>Scorecard</em> tab under Reports, which is the governance-<em>maturity</em> index (five dimensions, 0&ndash;100) for a single org &mdash; this is the council's per-division report card.</li>
+          <li><strong>The four measures are auto-derived from live data:</strong> Tier-1 coverage (share of Tier-1 domains with a named owner), Classification (share of assets with a sensitivity classification), Open issues over 30 days, and Exceptions past expiry. Each division's row is computed over its own subtree; the <strong>Enterprise</strong> row is a true rollup &mdash; computed across the parent's whole subtree, not an average of the divisions. Status per row (On track / Behind / At risk) is derived from the measures against their targets.</li>
+          <li><strong>Two narrative sections are auto-drafted:</strong> &ldquo;What moved this month&rdquo; from the last 30 days of governance activity (audit log), and &ldquo;For the council&rdquo; from current risk facts (Tier-1 domains without an owner, exceptions past expiry, unclassified assets). Both carry an <em>auto-derived</em> chip until edited.</li>
+          <li><strong>Edit &amp; override (CDO / Data Governance Lead only).</strong> Those two roles &mdash; or an org admin &mdash; can override any derived cell or the narrative. Overrides are per-cell: the machine value is preserved underneath and an overridden cell is marked, so the council always sees what was adjusted. A cell can be reset back to its derived value.</li>
+          <li><strong>Save versions.</strong> <em>Publish snapshot</em> freezes the current derived-plus-overridden scorecard as an immutable version for the period; the version-history panel reopens any past month read-only. Publishing and editing are recorded in the audit log.</li>
         </ul>
         <h3 style={h3Style}>Process &harr; Data Map</h3>
         <ul style={listStyle}>
