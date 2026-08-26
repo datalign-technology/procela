@@ -1432,7 +1432,7 @@ export default function DataAssetsPage({
           overflowY: 'auto',
         }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
-            Data Types
+            Data Classification
           </div>
           <div
             {...clickable(() => setFilterCategory(''), { pressed: !filterCategory })}
@@ -1600,8 +1600,8 @@ export default function DataAssetsPage({
               {formValidation.fieldError('name') && <div style={fieldErrorStyle}>{formValidation.fieldError('name')}</div>}
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Type</label>
-              <select aria-label="Data Type" style={selectStyle} value={form.dataType} onChange={(e) => updateField('dataType', e.target.value)}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Classification</label>
+              <select aria-label="Data Classification" style={selectStyle} value={form.dataType} onChange={(e) => updateField('dataType', e.target.value)}>
                 <option value="">-- Select --</option>
                 <option value="MASTER">Master</option>
                 <option value="REFERENCE">Reference</option>
@@ -1609,6 +1609,7 @@ export default function DataAssetsPage({
                 <option value="ANALYTICAL">Analytical</option>
                 <option value="METADATA">Metadata</option>
               </select>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>The kind of data this is — not a column type. (Sensitivity like PII / Confidential is set separately.)</div>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
