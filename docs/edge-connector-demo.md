@@ -30,7 +30,15 @@ That brings up the normal stack **plus** four demo services:
 | `demo-bootstrap` | Pairs a real connector (`pair/start` → `pair/claim`) and writes `connector.yaml` to a shared volume. Runs once. |
 | `connector` | The real agent. Reads that config, discovers the source tables, reports them, and measures any DQ rules. |
 
-A plain `docker compose up` (no `--profile demo`) is unchanged.
+The stack also runs a one-shot **`migrate`** service that applies the Prisma
+schema (`prisma migrate deploy`) to Postgres before the backend starts — the
+backend `depends_on` it completing. So the database is migrated automatically;
+there is no manual migration step. (Migrations are a separate service, not part
+of the backend image, mirroring the Helm migrate-hook Job used in production.)
+This applies to a plain `docker compose up` too — see below.
+
+A plain `docker compose up` (no `--profile demo`) is unchanged apart from the
+same automatic `migrate` step.
 
 ## See it in the app
 
@@ -39,8 +47,8 @@ A plain `docker compose up` (no `--profile demo`) is unchanged.
 3. **Data → Data Assets → Registry** — search `utility.` or `shipbuilder.` to see
    the 8 discovered source tables, all **Bronze** (new arrivals surface as work
    items, not silently approved). Expand a row to see the discovered columns.
-4. **Settings → Connectors** — the connector shows **ONLINE** with a recent
-   heartbeat and its scan events.
+4. **Settings → Integrations → On-prem connectors** — the connector shows
+   **ONLINE** with a recent heartbeat and its scan events.
 
 ## Measure data quality with the connector
 
