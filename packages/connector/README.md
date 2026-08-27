@@ -67,8 +67,8 @@ database credentials live?":
 
 ## Pairing flow
 
-1. Open Procela → **Settings → Connectors → Add connector**. A
-   one-time 8-digit code appears. The code expires in 10 minutes
+1. Open Procela → **Settings → Integrations → On-prem connectors → Add
+   connector**. A one-time 8-digit code appears. The code expires in 10 minutes
    and can only be claimed once.
 2. Drop that code into `connector.yaml` (`pairingCode:`) or pass
    it via `PROCELA_PAIRING_CODE` on first boot.

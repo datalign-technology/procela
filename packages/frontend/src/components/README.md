@@ -372,6 +372,11 @@ const sel = useRowSelection(visibleRows, (r) => r.id);
 `--color-*` tokens (the old hand-rolled bars were hardcoded blue while
 the brand primary is teal). Do NOT hand-roll a selection bar.
 
+When you delete a single row that could also be selected, call
+`sel.remove(id)` in the delete handler — the hook preserves selections that
+scroll out of view (so it can't tell a deleted row from a filtered one), and
+without this the bar keeps counting a row that no longer exists.
+
 ---
 
 ## Badges & indicators
