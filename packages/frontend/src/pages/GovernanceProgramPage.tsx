@@ -107,13 +107,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 
-const textareaStyle: React.CSSProperties = {
-  ...inputStyle,
-  minHeight: 80,
-  fontFamily: 'inherit',
-  resize: 'vertical',
-};
-
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 
 const PHASE_COLORS: Record<number, string> = {
@@ -157,9 +150,9 @@ const PHASE_CHECK_HINTS: Record<string, string> = {
 };
 
 const PHASE_CHECK_LINKS: Record<string, string> = {
-  'Scope defined': '#1:scope',
-  'Guiding principles established': '#1:principles',
-  'Operating model selected': '#1:principles',
+  'Scope defined': '/governance/foundation',
+  'Guiding principles established': '/governance/foundation',
+  'Operating model selected': '/governance/foundation',
   'Data domains defined': '/data-domains',
   'Governance Council established': '/governance',
   'Governance Committee established': '/governance',
@@ -248,7 +241,9 @@ function PhaseCard({
       <div style={{ padding: '0 16px 12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>
           <span style={{ fontWeight: 600, color: statusColor }}>{statusLabel}</span>
-          <span>{phase.progress}%</span>
+          {/* A count, not a percent — a step count reads as honest current
+              state and never looks like a regression when a check toggles. */}
+          <span>{phase.checks.filter((c) => c.done).length} / {phase.checks.length} done</span>
         </div>
         <ProgressBar value={phase.progress} color={isCompleted ? '#22c55e' : color} />
       </div>
@@ -339,6 +334,15 @@ const STATUS_LABEL: Record<string, string> = {
   PLANNING: 'Planning', ACTIVE: 'Active', PAUSED: 'Paused', COMPLETED: 'Completed',
 };
 
+// Badge palette per lifecycle status — paired bg/fg stays hex so the
+// semantic pill doesn't drift when a single token is retuned.
+const STATUS_PILL: Record<string, { bg: string; fg: string }> = {
+  PLANNING: { bg: '#e0edff', fg: '#1d4ed8' },
+  ACTIVE: { bg: '#dcfce7', fg: '#15803d' },
+  PAUSED: { bg: '#fef3c7', fg: '#b45309' },
+  COMPLETED: { bg: '#ede9fe', fg: '#6d28d9' },
+};
+
 interface IncompletePhase { phase: number; name: string; missing: string[] }
 
 export default function GovernanceProgramPage() {
@@ -357,8 +361,6 @@ export default function GovernanceProgramPage() {
   const [status, setStatus] = useState<PhaseStatus | null>(null);
   const [recs, setRecs] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'scope' | 'principles'>('scope');
 
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null);
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -370,9 +372,6 @@ export default function GovernanceProgramPage() {
 
   const expandAndScroll = (n: number, tab?: string) => {
     setExpandedPhase(n);
-    if (tab && (tab === 'scope' || tab === 'principles')) {
-      setActiveTab(tab);
-    }
     if (tab === 'leadership') {
       setRoleGroupFilter('COUNCIL');
       setExpandedRoleGroups(new Set(['COUNCIL']));
@@ -383,18 +382,6 @@ export default function GovernanceProgramPage() {
       cardRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
   };
-
-  // Editable form state
-  const [inScope, setInScope] = useState('');
-  const [outOfScope, setOutOfScope] = useState('');
-  const [boundaries, setBoundaries] = useState('');
-  const [vision, setVision] = useState('');
-  const [principles, setPrinciples] = useState<string[]>([]);
-  const [newPrinciple, setNewPrinciple] = useState('');
-  const [decisionRights, setDecisionRights] = useState('');
-  const [operatingModel, setOperatingModel] = useState<Program['principles']['operatingModel']>('');
-  const [targetStartDate, setTargetStartDate] = useState('');
-  const [targetLaunchDate, setTargetLaunchDate] = useState('');
 
   // ── Roles tab state ──
   const [roleAssignments, setRoleAssignments] = useState<DamaRoleAssignment[]>([]);
@@ -412,20 +399,6 @@ export default function GovernanceProgramPage() {
   const [confirmRemoveRoleId, setConfirmRemoveRoleId] = useState<string | null>(null);
   const [roleGroupFilter, setRoleGroupFilter] = useState<string | null>(null);
 
-  const hydrateFromProgram = (p: Program) => {
-    setInScope(p.scope?.inScope || '');
-    setOutOfScope(p.scope?.outOfScope || '');
-    // Boundaries absorbed the former separate Constraints field — fold any
-    // existing constraints text in on load so nothing is lost.
-    setBoundaries([p.scope?.boundaries, p.scope?.constraints].map((s) => (s || '').trim()).filter(Boolean).join('\n\n'));
-    setVision(p.principles?.vision || '');
-    setPrinciples(Array.isArray(p.principles?.principles) ? p.principles.principles : []);
-    setDecisionRights(p.principles?.decisionRights || '');
-    setOperatingModel(p.principles?.operatingModel || '');
-    setTargetStartDate(p.targetStartDate ? p.targetStartDate.slice(0, 10) : '');
-    setTargetLaunchDate(p.targetLaunchDate ? p.targetLaunchDate.slice(0, 10) : '');
-  };
-
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -434,7 +407,6 @@ export default function GovernanceProgramPage() {
       const p = progRes.data;
       setProgram(p);
       if (p) {
-        hydrateFromProgram(p);
         try {
           const [statusRes, recsRes] = await Promise.all([
             apiClient.get<{ success: boolean; data: PhaseStatus }>(`/governance-program/${p.id}/status`),
@@ -468,7 +440,7 @@ export default function GovernanceProgramPage() {
         `/governance-program/${program.id}`,
         { status: to, ...(opts.force ? { force: true } : {}), ...(opts.reason ? { reason: opts.reason } : {}) },
       );
-      if (res.data) { setProgram(res.data); hydrateFromProgram(res.data); }
+      if (res.data) { setProgram(res.data); }
       addToast('success', `Program ${STATUS_LABEL[to].toLowerCase()}.`);
       setStatusTarget(null);
       setStatusReason('');
@@ -490,74 +462,6 @@ export default function GovernanceProgramPage() {
       }
     } finally {
       setStatusBusy(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    if (!program) return;
-    setSaving(true);
-    try {
-      const payload = {
-        // constraints merged into boundaries; write it empty so the two
-        // can't drift back apart.
-        scope: { inScope, outOfScope, boundaries, constraints: '' },
-        principles: { vision, principles, decisionRights, operatingModel },
-        targetStartDate: targetStartDate || null,
-        targetLaunchDate: targetLaunchDate || null,
-      };
-      const res = await apiClient.put<{ success: boolean; data: Program }>(`/governance-program/${program.id}`, payload);
-      if (res.data) {
-        setProgram(res.data);
-        hydrateFromProgram(res.data);
-      }
-      addToast('success', 'Governance program saved');
-      // Refresh status and recommendations
-      try {
-        const [statusRes, recsRes] = await Promise.all([
-          apiClient.get<{ success: boolean; data: PhaseStatus }>(`/governance-program/${program.id}/status`),
-          apiClient.get<{ success: boolean; data: Recommendation[] }>(`/governance-program/${program.id}/recommendations`),
-        ]);
-        setStatus(statusRes.data || null);
-        setRecs(recsRes.data || []);
-      } catch { /* */ }
-    } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      const msg = e?.response?.data?.error || errorMessage(err, 'Failed to save program');
-      addToast('error', msg);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const addPrinciple = () => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    const trimmed = newPrinciple.trim();
-    if (!trimmed) return;
-    const updated = [...principles, trimmed];
-    setPrinciples(updated);
-    setNewPrinciple('');
-    if (program) {
-      apiClient.put(`/governance-program/${program.id}`, {
-        principles: { vision, principles: updated, decisionRights, operatingModel },
-      }).then(() => {
-        addToast('success', 'Principle added');
-        fetchAll();
-      }).catch(() => addToast('error', 'Failed to add principle'));
-    }
-  };
-
-  const removePrinciple = (index: number) => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    const updated = principles.filter((_, i) => i !== index);
-    setPrinciples(updated);
-    if (program) {
-      apiClient.put(`/governance-program/${program.id}`, {
-        principles: { vision, principles: updated, decisionRights, operatingModel },
-      }).then(() => {
-        addToast('success', 'Principle removed');
-        fetchAll();
-      }).catch(() => addToast('error', 'Failed to remove principle'));
     }
   };
 
@@ -667,17 +571,74 @@ export default function GovernanceProgramPage() {
       <PageHeader
         title="Governance Program"
         subtitle="Launch and run your data governance program in phases — foundation, structure, ownership, and operations."
-        meta={status ? (
-          <div style={{ maxWidth: 600, width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <SectionLabel marginBottom={0}>
-                Overall Progress
-              </SectionLabel>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-primary)' }}>
-                {status.overallProgress}%
+        meta={status && program ? (
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Lifecycle status + current stage — two honest axes that don't
+                regress, replacing the old single roll-up percentage. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {(() => {
+                const c = STATUS_PILL[program.status] || STATUS_PILL.PLANNING;
+                return (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 20, background: c.bg, color: c.fg }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: c.fg }} />
+                    {STATUS_LABEL[program.status]}
+                  </span>
+                );
+              })()}
+              <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                {status.phases.phase4.completed
+                  ? 'All four phases in place'
+                  : <>Phase <strong style={{ color: 'var(--color-text)' }}>{status.currentPhase}</strong> of 4 · {PHASE_TITLES[status.currentPhase]}</>}
               </span>
             </div>
-            <ProgressBar value={status.overallProgress} />
+
+            {/* Lifecycle strip — the governed path, current state highlighted,
+                with the valid next transitions as actions right here. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {(['PLANNING', 'ACTIVE', 'PAUSED', 'COMPLETED'] as ProgramStatus[]).map((s, i) => {
+                const on = program.status === s;
+                return (
+                  <React.Fragment key={s}>
+                    {i > 0 && <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>&rarr;</span>}
+                    <span style={{ fontSize: 11, fontWeight: on ? 700 : 500, padding: '4px 11px', borderRadius: 20, border: `1px solid ${on ? 'var(--color-primary)' : 'var(--color-border)'}`, background: on ? 'var(--color-primary-light)' : 'var(--color-surface)', color: on ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                      {STATUS_LABEL[s]}
+                    </span>
+                  </React.Fragment>
+                );
+              })}
+              <span style={{ width: 1, height: 18, background: 'var(--color-border)', margin: '0 2px' }} />
+              {(VALID_TRANSITIONS[program.status as ProgramStatus] || []).map((to) => {
+                const label = STATUS_ACTION_LABEL[`${program.status}>${to}`] || `Set ${STATUS_LABEL[to]}`;
+                const isPrimary = to === 'ACTIVE';
+                const isDanger = to === 'COMPLETED';
+                return (
+                  <Button
+                    key={to}
+                    variant="primary"
+                    size="sm"
+                    disabled={!isAdmin || statusBusy}
+                    title={!isAdmin ? 'Only an admin / program owner can change the program status' : undefined}
+                    style={{
+                      background: !isAdmin ? 'var(--color-border)' : isDanger ? '#b91c1c' : isPrimary ? 'var(--color-primary)' : 'var(--color-surface)',
+                      color: !isAdmin ? 'var(--color-text-muted)' : (isPrimary || isDanger) ? '#fff' : 'var(--color-text)',
+                      border: isPrimary || isDanger ? 'none' : '1px solid var(--color-border)',
+                    }}
+                    onClick={() => {
+                      if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
+                      setStatusReason('');
+                      setEarlyLaunchInfo(null);
+                      if (to === 'ACTIVE' && program.status === 'PLANNING') {
+                        changeStatus('ACTIVE');
+                      } else {
+                        setStatusTarget(to);
+                      }
+                    }}
+                  >
+                    {label}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
         ) : undefined}
       >
@@ -706,11 +667,16 @@ export default function GovernanceProgramPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {recs.map((r, idx) => {
                   const pc = priorityColor(r.priority);
+                  // Phase-1 foundation work now lives on the dedicated
+                  // Governance → Foundation page; everything else either
+                  // deep-links out or expands its phase in place.
+                  const isFoundation = r.phase === 1;
                   const isSamePage = r.link === '/governance-program';
-                  const actionTab = /principle|operating model/i.test(r.action) ? 'principles' : /scope/i.test(r.action) ? 'scope' : undefined;
                   const handleGoClick = () => {
-                    if (isSamePage) {
-                      expandAndScroll(r.phase, actionTab);
+                    if (isFoundation) {
+                      navigate('/governance/foundation');
+                    } else if (isSamePage) {
+                      expandAndScroll(r.phase);
                     } else {
                       navigate(r.link);
                     }
@@ -830,72 +796,37 @@ export default function GovernanceProgramPage() {
                 </button>
               </div>
               {/* Phase 1 content */}
-              {expandedPhase === 1 && program && (
-                <div>
-                  <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
-                    {(['scope', 'principles'] as const).map((t) => (
-                      <button key={t} onClick={() => setActiveTab(t)} style={{
-                        padding: '8px 16px', fontSize: 13,
-                        fontWeight: activeTab === t ? 600 : 500,
-                        background: 'transparent', border: 'none',
-                        borderBottom: activeTab === t ? '2px solid var(--color-primary)' : '2px solid transparent',
-                        color: activeTab === t ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                        marginBottom: -1, cursor: 'pointer', textTransform: 'capitalize',
-                      }}>{t}</button>
-                    ))}
-                  </div>
-                  {activeTab === 'scope' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>In Scope</label><textarea aria-label="In Scope" style={textareaStyle} value={inScope} onChange={(e) => setInScope(e.target.value)} placeholder="What data, systems, and processes are governed by this program?" /></div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Out of Scope</label><textarea aria-label="Out of Scope" style={textareaStyle} value={outOfScope} onChange={(e) => setOutOfScope(e.target.value)} placeholder="What is explicitly excluded from this program?" /></div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries &amp; Constraints</label><textarea aria-label="Boundaries & Constraints" style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational / geographic / functional boundaries, plus budget, timeline, regulatory or resource constraints to respect" /></div>
-                    </div>
-                  )}
-                  {activeTab === 'principles' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vision</label><textarea aria-label="Vision" style={textareaStyle} value={vision} onChange={(e) => setVision(e.target.value)} placeholder="What does success look like for your data governance program?" /></div>
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Guiding Principles</label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-                          {principles.length === 0 && <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No principles defined yet.</div>}
-                          {principles.map((p, idx) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4 }}>
-                              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', minWidth: 20 }}>{idx + 1}.</span>
-                              <span style={{ flex: 1, fontSize: 13 }}>{p}</span>
-                              <button type="button" onClick={() => removePrinciple(idx)} aria-label={`Remove principle ${p}`} title="Remove principle" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: 2 }}><span aria-hidden="true">&times;</span></button>
-                            </div>
-                          ))}
+              {expandedPhase === 1 && program && (() => {
+                // Foundation authoring moved to Governance → Foundation. This
+                // panel is now a read-only summary of what's captured, with a
+                // link to edit it — so the tracker stays a tracker.
+                const opLabel: Record<string, string> = { CENTRALIZED: 'Centralized', FEDERATED: 'Federated', HYBRID: 'Hybrid' };
+                const rows: Array<{ label: string; value: string; set: boolean }> = [
+                  { label: 'In scope', value: program.scope?.inScope || '', set: !!program.scope?.inScope?.trim() },
+                  { label: 'Out of scope', value: program.scope?.outOfScope || '', set: !!program.scope?.outOfScope?.trim() },
+                  { label: 'Vision', value: program.principles?.vision || '', set: !!program.principles?.vision?.trim() },
+                  { label: 'Guiding principles', value: `${(program.principles?.principles || []).length} defined`, set: (program.principles?.principles || []).length > 0 },
+                  { label: 'Operating model', value: opLabel[program.principles?.operatingModel || ''] || 'Not selected', set: !!program.principles?.operatingModel },
+                ];
+                return (
+                  <div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                      {rows.map((r) => (
+                        <div key={r.label} style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+                          <span style={{ width: 140, flexShrink: 0, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>{r.label}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: r.set ? 'var(--color-text)' : 'var(--color-text-muted)', whiteSpace: 'pre-wrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {r.set ? r.value : <em style={{ color: 'var(--color-error)' }}>Not set yet</em>}
+                          </span>
                         </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <input aria-label="Guiding Principles" style={inputStyle} value={newPrinciple} onChange={(e) => setNewPrinciple(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPrinciple(); } }} placeholder="e.g. Data is a shared asset; treat it like one" />
-                          <Button variant="secondary" onClick={addPrinciple}>Add</Button>
-                        </div>
-                      </div>
-                      {/* Decision Rights is a structured entity of its own —
-                          the free-text box here duplicated it. Point at the
-                          dedicated page instead; any stored text is retained. */}
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Decision Rights</label><div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Defined on the <Link to="/decision-rights" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Decision Rights</Link> page — who decides / recommends / approves for each decision.</div></div>
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Operating Model</label>
-                        <select aria-label="Operating Model" style={selectStyle} value={operatingModel} onChange={(e) => setOperatingModel(e.target.value as Program['principles']['operatingModel'])}>
-                          <option value="">-- Select --</option><option value="CENTRALIZED">Centralized</option><option value="FEDERATED">Federated</option><option value="HYBRID">Hybrid</option>
-                        </select>
-                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>Centralized = one central team. Federated = domains self-govern. Hybrid = shared.</div>
-                      </div>
+                      ))}
                     </div>
-                  )}
-                  <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--color-text-secondary)' }}>Program Dates</h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Start Date</label><input type="date" aria-label="Target Start Date" style={inputStyle} value={targetStartDate} onChange={(e) => setTargetStartDate(e.target.value)} /></div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Launch Date</label><input type="date" aria-label="Target Launch Date" style={inputStyle} value={targetLaunchDate} onChange={(e) => setTargetLaunchDate(e.target.value)} /></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingTop: 14, borderTop: '1px solid var(--color-border)' }}>
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Scope, principles, operating model and dates are edited on the Foundation page.</span>
+                      <Button variant="primary" onClick={() => navigate('/governance/foundation')}>Manage in Foundation &rarr;</Button>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-                    <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
               {/* Phase 2 content */}
               {expandedPhase === 2 && (() => {
                 const totalRoles = ROLE_GUIDE.length;
@@ -1078,63 +1009,35 @@ export default function GovernanceProgramPage() {
                   </div>
                 </div>
               )}
-              {/* Phase 4 content */}
-              {expandedPhase === 4 && program && (
+              {/* Phase 4 content — its checks, like the other phases. The
+                  program lifecycle itself (Launch / Pause / Complete) is
+                  governed from the status strip in the header. */}
+              {expandedPhase === 4 && status && (
                 <div>
                   <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
-                    The program lifecycle is governed: only an admin / program owner can change it, transitions follow a fixed path, and every change is written to the audit log. Phase 1 (Foundation) must be complete before the program can go active; launching with later phases incomplete asks for an explicit confirmation.
+                    Operationalize the program: wire up governance processes, activate your policies, and launch. <strong>Program launched</strong> ticks when you set the lifecycle to <strong>Active</strong> from the status strip at the top of the page.
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13 }}>
-                      Current status: <strong>{STATUS_LABEL[program.status] || program.status}</strong>
-                    </span>
-                    {program.status === 'ACTIVE' && (
-                      <span style={{ fontSize: 12, color: 'var(--color-success)', fontWeight: 600 }}>&#10003; Program is live</span>
-                    )}
-                    {(VALID_TRANSITIONS[program.status as ProgramStatus] || []).map((to) => {
-                      const key = `${program.status}>${to}`;
-                      const label = STATUS_ACTION_LABEL[key] || `Set ${STATUS_LABEL[to]}`;
-                      const isPrimary = to === 'ACTIVE';
-                      const isDanger = to === 'COMPLETED';
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {status.phases.phase4.checks.map((check, idx) => {
+                      const actionMap: Record<string, { route?: string; label: string }> = {
+                        'Core processes defined': { route: '/processes', label: 'Processes' },
+                        'Policies activated': { route: '/governance-policies', label: 'Policies' },
+                        'Program launched': { label: 'Use the status strip above' },
+                      };
+                      const target = actionMap[check.label];
+                      const canNav = !!target?.route;
                       return (
-                        <Button
-                          key={to}
-                          variant="primary"
-                          disabled={!isAdmin || statusBusy}
-                          title={!isAdmin ? 'Only an admin / program owner can change the program status' : undefined}
-                          style={{
-                            background: !isAdmin ? 'var(--color-border)'
-                              : isDanger ? '#b91c1c'
-                              : isPrimary ? 'var(--color-primary)'
-                              : 'var(--color-bg)',
-                            color: !isAdmin ? 'var(--color-text-muted)'
-                              : (isPrimary || isDanger) ? '#fff' : 'var(--color-text)',
-                            border: isPrimary || isDanger ? 'none' : '1px solid var(--color-border)',
-                          }}
-                          onClick={() => {
-                            if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
-                            setStatusReason('');
-                            setEarlyLaunchInfo(null);
-                            // Launch goes straight to the request — the
-                            // backend decides if a confirmation is needed
-                            // and returns the incomplete list. Pause /
-                            // Complete / Reopen always confirm first.
-                            if (to === 'ACTIVE' && program.status === 'PLANNING') {
-                              changeStatus('ACTIVE');
-                            } else {
-                              setStatusTarget(to);
-                            }
-                          }}
-                        >
-                          {label}
-                        </Button>
+                        <div key={idx} {...(canNav ? clickable(() => navigate(target!.route!), { label: target!.label }) : {})}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderLeft: `4px solid ${check.done ? '#22c55e' : '#d1d5db'}`, borderRadius: 'var(--radius-md)', cursor: canNav ? 'pointer' : 'default', transition: 'background-color 0.12s' }}
+                          onMouseEnter={(e) => { if (canNav) e.currentTarget.style.backgroundColor = 'var(--color-surface)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg)'; }}>
+                          <span style={{ width: 20, height: 20, borderRadius: '50%', background: check.done ? '#22c55e' : 'transparent', border: check.done ? 'none' : '2px solid #d1d5db', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{check.done ? '✓' : ''}</span>
+                          <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{check.label}</span>
+                          {check.done ? <span style={{ fontSize: 12, color: 'var(--color-success)', fontWeight: 600 }}>&#10003; Done</span>
+                            : <span style={{ fontSize: 12, fontWeight: 500, color: canNav ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0 }}>{target?.label}{canNav ? ' →' : ''}</span>}
+                        </div>
                       );
                     })}
-                    {!isAdmin && (
-                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        View only — your role can't change the program lifecycle.
-                      </span>
-                    )}
                   </div>
                 </div>
               )}
