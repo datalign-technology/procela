@@ -43,6 +43,7 @@ const GovernanceCalendarPage     = lazy(() => import('@/pages/GovernanceCalendar
 const DecisionRightsPage         = lazy(() => import('@/pages/DecisionRightsPage'));
 const BusinessGlossaryPage       = lazy(() => import('@/pages/BusinessGlossaryPage'));
 const GovernanceProgramPage      = lazy(() => import('@/pages/GovernanceProgramPage'));
+const GovernanceFoundationPage   = lazy(() => import('@/pages/GovernanceFoundationPage'));
 const EnterpriseViewPage         = lazy(() => import('@/pages/EnterpriseViewPage'));
 const AnalysisPage               = lazy(() => import('@/pages/AnalysisPage'));
 const ReportsPage                = lazy(() => import('@/pages/ReportsPage'));
@@ -132,6 +133,7 @@ export default function App() {
           <Route path="/decision-rights" element={<DecisionRightsPage />} />
           <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
           <Route path="/governance-program" element={<GovernanceProgramPage />} />
+          <Route path="/governance/foundation" element={<GovernanceFoundationPage />} />
           <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/reports" element={<ReportsPage />} />
