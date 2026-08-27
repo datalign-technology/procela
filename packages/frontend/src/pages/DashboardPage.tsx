@@ -706,6 +706,40 @@ type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 
 // masonry column; the surrounding full-width bands anchor the top and bottom.
 const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'skillGaps', 'catalogShape', 'stewardOnboarding', 'whatsNext', 'quickActions', 'recentActivity'];
 
+// ── Density: Simple vs Detailed ──
+// A first-time, non-technical visitor lands on twelve stacked analytical
+// bands (tier donut, gauges, sparkline trends, maturity ring, skill-gap
+// charts…) — a wall of data before they've done anything. "Simple" shows
+// only the four sections that answer "what do I do next?": the personal
+// act-now view, the headline KPI strip, the concrete gap list, and the
+// recommended next steps. "Detailed" is the full customizable dashboard.
+// The choice is per-user and sticky; the default is decided by whether the
+// user has ever customized their layout (see useDashboardDensity).
+const ESSENTIAL_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'gaps', 'whatsNext'];
+
+type DashboardDensity = 'simple' | 'detailed';
+
+function useDashboardDensity(hasSavedLayout: boolean) {
+  const userId = useAuthStore((s) => s.user?.id) ?? 'anon';
+  const KEY = `procela_dashboard_density:${userId}`;
+  const [density, setDensityState] = useState<DashboardDensity>(() => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw === 'simple' || raw === 'detailed') return raw;
+    } catch { /* localStorage unavailable — fall through to the default */ }
+    // First visit (no explicit choice yet): a user who has already
+    // customized their dashboard layout has engaged with the full view —
+    // leave them in Detailed. A brand-new user starts in Simple so the
+    // first impression is a focused four-section page, not a wall of charts.
+    return hasSavedLayout ? 'detailed' : 'simple';
+  });
+  const setDensity = (d: DashboardDensity) => {
+    setDensityState(d);
+    try { localStorage.setItem(KEY, d); } catch { /* best-effort persistence */ }
+  };
+  return { density, setDensity };
+}
+
 type SectionWidth = 'full' | 'half';
 
 // Default width per section. `full` takes its own row; consecutive `half`
@@ -764,6 +798,11 @@ function useDashboardLayout() {
       return raw ? JSON.parse(raw) as StoredLayout : null;
     } catch { return null; }
   };
+
+  // Captured once at mount: does this user already have a saved layout? Used
+  // by the density default so a user who has customized the dashboard keeps
+  // the Detailed view while a first-time visitor starts in Simple.
+  const [hasSaved] = useState<boolean>(() => read() !== null);
 
   const [order, setOrder] = useState<SectionKey[]>(() => {
     const parsed = read();
@@ -856,7 +895,7 @@ function useDashboardLayout() {
     persist(DEFAULT_SECTIONS, new Set(), { ...DEFAULT_WIDTHS });
   };
 
-  return { order, hidden, width, moveUp, moveDown, toggle, setWidth, reset };
+  return { order, hidden, width, hasSaved, moveUp, moveDown, toggle, setWidth, reset };
 }
 
 // Icons match the sidebar rail via renderNavIcon(route). Was
@@ -1260,7 +1299,9 @@ export default function DashboardPage() {
   usePolling(fetchData, 30000);
 
   const layout = useDashboardLayout();
+  const { density, setDensity } = useDashboardDensity(layout.hasSaved);
   const [showCustomize, setShowCustomize] = useState(false);
+  const simple = density === 'simple';
 
   if (error) {
     return (
@@ -1313,25 +1354,54 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         actions={!isEmptyOrg ? (
-          <button
-            onClick={() => setShowCustomize((v) => !v)}
-            aria-expanded={showCustomize}
-            title="Reorder or hide dashboard sections"
-            style={{
-              padding: '5px 12px', fontSize: 11, fontWeight: 500,
-              background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
-              color: showCustomize ? '#fff' : 'var(--color-text-secondary)',
-              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-              cursor: 'pointer', transition: 'all 0.15s',
-            }}
-          >
-            {showCustomize ? 'Done' : 'Customize'}
-          </button>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            {/* Simple vs Detailed — Simple shows only the four essential
+                sections (personal view, KPIs, gaps, next steps); Detailed is
+                the full customizable dashboard. A first-time visitor defaults
+                to Simple so the landing isn't a wall of charts. */}
+            <div role="group" aria-label="Dashboard density" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+              {(['simple', 'detailed'] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => { setDensity(d); if (d === 'simple') setShowCustomize(false); }}
+                  aria-pressed={density === d}
+                  title={d === 'simple' ? 'Show only the essentials' : 'Show all dashboard sections'}
+                  style={{
+                    padding: '5px 12px', fontSize: 11, fontWeight: density === d ? 600 : 500,
+                    border: 'none', cursor: 'pointer', textTransform: 'capitalize',
+                    background: density === d ? 'var(--color-primary)' : 'var(--color-surface)',
+                    color: density === d ? '#fff' : 'var(--color-text-secondary)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+            {/* Customize governs the Detailed layout only — hide it in Simple. */}
+            {!simple && (
+              <button
+                onClick={() => setShowCustomize((v) => !v)}
+                aria-expanded={showCustomize}
+                title="Reorder or hide dashboard sections"
+                style={{
+                  padding: '5px 12px', fontSize: 11, fontWeight: 500,
+                  background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
+                  color: showCustomize ? '#fff' : 'var(--color-text-secondary)',
+                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+              >
+                {showCustomize ? 'Done' : 'Customize'}
+              </button>
+            )}
+          </div>
         ) : undefined}
       >
       </PageHeader>
 
-      {showCustomize && (
+      {!simple && showCustomize && (
         <Card
           padding={16}
           marginBottom={24}
@@ -1413,6 +1483,30 @@ export default function DashboardPage() {
 
       {isEmptyOrg ? (
         <GettingStartedCard stats={stats} />
+      ) : simple ? (
+        // Simple view — only the four essential sections, each full-width and
+        // stacked, in a fixed sensible order. Independent of the Detailed
+        // Customize order/width/hidden state so "Simple" is always the same
+        // predictable, low-density landing. A footer nudge points to Detailed.
+        <>
+          <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
+          <div>
+            {ESSENTIAL_SECTIONS.map((key) => (
+              <div key={key} className="dashboard-section-cell">{sectionMap[key]}</div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+            Showing the essentials.{' '}
+            <button
+              type="button"
+              onClick={() => setDensity('detailed')}
+              style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Switch to Detailed
+            </button>{' '}
+            for trends, governance posture, program maturity and more.
+          </div>
+        </>
       ) : (
         <>
           <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
