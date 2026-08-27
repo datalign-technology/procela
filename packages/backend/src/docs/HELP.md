@@ -135,6 +135,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 
 - Register data assets in business terms. Each asset has a Trust Level (Untrusted / Managed / Trusted — DAMA mode calls these Uncertified / Managed / Certified).
 - Sidebar filter by data type: Operational, Governance, Reference, Analytical, Master.
+- **Filter by rules (DQ coverage).** The toolbar has a rules filter — *Has rules* / *No rules* / *Rules but unmeasured*, each with a live count. *No rules* is your coverage gap (assets nothing measures yet); *Rules but unmeasured* is the false-confidence bucket (assets that carry rules but where none have a real, non-simulated result, so their health is an **estimate** badged *Est*, not a measured reading — the ones to point a connector at next).
 - Inline editing for Trust Level and health score directly in the table.
 - Link to Source connects an asset to a database table, file, or API. In the Link-to-connection dialog you can bind the asset to the **whole** table/file, or tick a **named set of its columns** — so one physical table can back several business assets, each scoped to its own subset. The Source cell shows the target as `table`, `table.column`, or `table · N cols`.
 - Expandable columns show data types and quality rules per column. Binding a column set **materializes those columns as governed columns** automatically, so they are immediately targetable by quality rules and roll their health up to the asset.

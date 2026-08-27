@@ -127,6 +127,11 @@ interface DataAssetEntity {
    *  "orphan" signal that used to live on its own page. Drives the
    *  Unmapped row badge and the mapping-status filter. */
   isOrphan?: boolean;
+  /** DQ coverage counts (from the list endpoint) that drive the rules
+   *  filter: total rules on the asset, and how many have a real
+   *  (non-simulated) measured result. */
+  ruleCount?: number;
+  measuredRuleCount?: number;
 }
 
 interface SystemRef {
@@ -462,6 +467,9 @@ export default function DataAssetsPage({
   // shows only orphans (assets no process step uses); 'mapped' the inverse.
   // Seeded from ?mapping= so /data-assets?mapping=unmapped (the redirect
   // target for the retired /data-assets/orphans route) lands pre-filtered.
+  // DQ coverage filter: '' all · 'has' any rule · 'none' no rules ·
+  // 'unmeasured' has rules but none measured (health is estimated, not real).
+  const [filterCoverage, setFilterCoverage] = useState<'' | 'has' | 'none' | 'unmeasured'>('');
   const [filterMapping, setFilterMapping] = useState<'' | 'mapped' | 'unmapped'>(
     () => { const m = searchParams.get('mapping'); return m === 'mapped' || m === 'unmapped' ? m : ''; },
   );
@@ -675,6 +683,15 @@ export default function DataAssetsPage({
     if (filterOrigin && (a.origin || 'MANUAL') !== filterOrigin) return false;
     if (filterMapping === 'unmapped' && !a.isOrphan) return false;
     if (filterMapping === 'mapped' && a.isOrphan) return false;
+    if (filterCoverage) {
+      const rc = a.ruleCount || 0;
+      const mc = a.measuredRuleCount || 0;
+      if (filterCoverage === 'has' && rc === 0) return false;
+      if (filterCoverage === 'none' && rc > 0) return false;
+      // "Est" — has rules but none are actually measured (all simulated or
+      // never run), so its health is estimated. The false-confidence bucket.
+      if (filterCoverage === 'unmeasured' && !(rc > 0 && mc === 0)) return false;
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       if (!a.name.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
@@ -682,7 +699,7 @@ export default function DataAssetsPage({
     return true;
   });
 
-  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOrigin || filterMapping || searchQuery);
+  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOrigin || filterMapping || filterCoverage || searchQuery);
 
   // URL-persisted sort.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -1596,11 +1613,23 @@ export default function DataAssetsPage({
           <option value="unmapped">Unmapped ({assets.filter((a) => a.isOrphan).length})</option>
           <option value="mapped">Mapped ({assets.filter((a) => !a.isOrphan).length})</option>
         </select>
+        <select
+          aria-label="Filter by data-quality coverage"
+          title="Whether the asset has data-quality rules — and whether any are actually measured"
+          style={{ ...selectStyle, width: 'auto', minWidth: 150 }}
+          value={filterCoverage}
+          onChange={(e) => setFilterCoverage(e.target.value as typeof filterCoverage)}
+        >
+          <option value="">All Rules</option>
+          <option value="has">Has rules ({assets.filter((a) => (a.ruleCount || 0) > 0).length})</option>
+          <option value="none">No rules ({assets.filter((a) => (a.ruleCount || 0) === 0).length})</option>
+          <option value="unmeasured">Rules but unmeasured ({assets.filter((a) => (a.ruleCount || 0) > 0 && (a.measuredRuleCount || 0) === 0).length})</option>
+        </select>
         {hasActiveFilters && (
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOrigin(''); setFilterMapping(''); setSearchQuery(''); }}
+            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOrigin(''); setFilterMapping(''); setFilterCoverage(''); setSearchQuery(''); }}
           >
             Clear Filters
           </Button>

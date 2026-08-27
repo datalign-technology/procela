@@ -846,6 +846,15 @@ business model is the source of truth on both paths.
 
 Each gap clicks through to the item where you can resolve it.
 
+**Tip — work the coverage gap on the asset list.** The **Data Assets**
+page has a rules filter (*Has rules* / *No rules* / *Rules but
+unmeasured*, each with a live count). *No rules* is the same DQ-coverage
+gap Gap Detection surfaces, but filterable right on the registry;
+*Rules but unmeasured* catches the sneakier case — assets that *look*
+governed but whose health is only an **estimate** (badged *Est*) because
+no rule has produced a real measured result yet. Point a connector (or a
+CSV upload) at those next.
+
 ### 9.2 Data Mapping orphans
 
 If you regenerated the process hierarchy in Module 3 (or deleted
