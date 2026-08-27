@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
+import CreateScopeNotice from '../components/CreateScopeNotice';
 import TruncatedText from '../components/TruncatedText';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
@@ -466,7 +467,7 @@ export default function SystemsPage({
   embedded?: boolean;
   actionsPortal?: HTMLElement | null;
 } = {}) {
-  const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
+  const { activeOrgId, canCreateValueStreams } = useOrgContext();
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
   const { getOrgName } = useOrgNameLookup();
@@ -973,11 +974,7 @@ export default function SystemsPage({
           the Add button is hidden and this banner explains why.
           The list itself still renders so users can read inherited
           rows from above. */}
-      {activeOrgId && !canOwnHere && (
-        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
-          Systems can only be created at the <strong>company or division</strong> level. <strong>{activeOrgName}</strong> is a {activeOrgType}. Pick a company or division from the "Working in" dropdown to add or edit systems here.
-        </div>
-      )}
+      {activeOrgId && !canOwnHere && <CreateScopeNotice noun="systems" />}
 
       {/* Two-column layout: System Types sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
