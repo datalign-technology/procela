@@ -230,7 +230,10 @@ async function computePhaseStatus(program: StoredGovernanceProgram): Promise<Pha
   }
   const hasGovernanceProcesses = orgProcesses.some((n: any) => isGovernanceNode(n));
   const hasActivePolicy = orgPolicies.some((p: any) => p.status === 'ACTIVE');
-  const programLaunched = program.status === 'ACTIVE';
+  // A completed program has, by definition, been launched — count both so a
+  // program marked COMPLETED doesn't drop this check (and overall progress)
+  // back below 100%.
+  const programLaunched = program.status === 'ACTIVE' || program.status === 'COMPLETED';
 
   const phase4Checks: PhaseCheck[] = [
     { label: 'Core processes defined', done: hasGovernanceProcesses },
