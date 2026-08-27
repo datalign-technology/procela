@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -31,12 +32,46 @@ interface SavedVersion { id: string; orgId: string; period: string; status: stri
 
 type Overrides = Record<string, number | string>;
 
-const MEASURES: Array<{ key: 'coverage' | 'classification' | 'openIssues' | 'exceptions'; label: string; sub: string; kind: 'pct' | 'count'; }> = [
-  { key: 'coverage',       label: 'Tier-1 coverage', sub: 'target 80%',            kind: 'pct' },
-  { key: 'classification', label: 'Classification',  sub: 'target 70%',            kind: 'pct' },
-  { key: 'openIssues',     label: 'Open issues',     sub: '>30d · target 0',       kind: 'count' },
-  { key: 'exceptions',     label: 'Exceptions',      sub: 'past expiry · target 0', kind: 'count' },
+// Each measure links to the page where you act on it — like the dashboard
+// tiles and Gap Detection rows, the number is a hyperlink to its source.
+const MEASURES: Array<{ key: 'coverage' | 'classification' | 'openIssues' | 'exceptions'; label: string; sub: string; kind: 'pct' | 'count'; href: string; }> = [
+  { key: 'coverage',       label: 'Tier-1 coverage', sub: 'target 80%',            kind: 'pct',   href: '/data-domains' },
+  { key: 'classification', label: 'Classification',  sub: 'target 70%',            kind: 'pct',   href: '/data-assets' },
+  { key: 'openIssues',     label: 'Open issues',     sub: '>30d · target 0',       kind: 'count', href: '/governance-work?tab=issues' },
+  { key: 'exceptions',     label: 'Exceptions',      sub: 'past expiry · target 0', kind: 'count', href: '/governance-exceptions' },
 ];
+
+// Friendly destination names for link tooltips.
+const MEASURE_DEST: Record<'coverage' | 'classification' | 'openIssues' | 'exceptions', string> = {
+  coverage: 'Data Domains',
+  classification: 'Data Assets',
+  openIssues: 'Tasks & Issues',
+  exceptions: 'Governance Exceptions',
+};
+
+// Each narrative section links to where its facts come from: "what moved" is
+// drawn from the audit log; "for the council" summarises current gaps.
+const NARRATIVE_LINK: Record<'whatMoved' | 'forCouncil', { to: string; label: string }> = {
+  whatMoved: { to: '/audit-log', label: 'View recent activity' },
+  forCouncil: { to: '/gap-detection', label: 'Review the gaps' },
+};
+
+// A hyperlink that inherits the surrounding text/number colour and only
+// underlines on hover, so a linked measure reads as a normal value until you
+// reach for it (matches the Gap Detection row-link affordance).
+function ActionLink({ to, title, style, children }: { to: string; title?: string; style?: React.CSSProperties; children: React.ReactNode }) {
+  return (
+    <Link
+      to={to}
+      title={title}
+      style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer', ...style }}
+      onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; e.currentTarget.style.textDecorationColor = 'var(--color-primary)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+    >
+      {children}
+    </Link>
+  );
+}
 
 function statusPill(status: string) {
   const s = status.toLowerCase();
@@ -87,6 +122,14 @@ export default function CouncilScorecardPage() {
     } catch { addToast('error', 'Failed to load the scorecard.'); }
     finally { setLoading(false); }
   }, [activeOrgId, addToast]);
+
+  // Exit edit mode and discard unsaved edits — revert overrides + narrative to
+  // the live derived baseline (live mode has no stored overrides).
+  const cancelEdit = () => {
+    setOverrides({});
+    setNarrative(derived?.narrative || {});
+    setEditing(false);
+  };
 
   const loadVersions = useCallback(async () => {
     if (!activeOrgId) return;
@@ -158,7 +201,11 @@ export default function CouncilScorecardPage() {
     }
     const display = val == null ? '—' : `${val}${m.kind === 'pct' ? '%' : ''}`;
     return (
-      <span title={overridden ? 'Overridden by an editor' : undefined} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, fontVariantNumeric: 'tabular-nums', fontWeight: isEnt ? 600 : 500 }}>
+      <ActionLink
+        to={m.href}
+        title={`Open ${m.label} — ${MEASURE_DEST[m.key]}`}
+        style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, fontVariantNumeric: 'tabular-nums', fontWeight: isEnt ? 600 : 500 }}
+      >
         <span style={{ color: overridden ? 'var(--color-primary)' : 'var(--color-text)' }}>
           {display}{overridden && <span title="Overridden" style={{ marginLeft: 4, fontSize: 9, color: 'var(--color-primary)' }}>●</span>}
         </span>
@@ -167,7 +214,7 @@ export default function CouncilScorecardPage() {
             <span style={{ display: 'block', height: '100%', width: `${Math.min(100, val)}%`, background: pctBarColor(val, m.key === 'coverage' ? derived.targets.coverage : derived.targets.classification), borderRadius: 2 }} />
           </span>
         )}
-      </span>
+      </ActionLink>
     );
   };
 
@@ -182,6 +229,7 @@ export default function CouncilScorecardPage() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {viewingVersionId && <Button variant="secondary" onClick={loadDerived}>Back to live</Button>}
             {canEdit && !editing && <Button variant="secondary" onClick={() => setEditing(true)}>Edit &amp; override</Button>}
+            {canEdit && editing && <Button variant="secondary" onClick={cancelEdit} disabled={saving}>Cancel</Button>}
             {canEdit && editing && <Button variant="primary" onClick={publish} loading={saving}>Publish snapshot</Button>}
           </div>
         )}
@@ -193,15 +241,27 @@ export default function CouncilScorecardPage() {
           const val = resolved(ent, m.key);
           const tgt = m.key === 'coverage' ? derived.targets.coverage : m.key === 'classification' ? derived.targets.classification : 0;
           return (
-            <Card key={m.key} padding={16}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)' }}>{m.label}</div>
-              <div style={{ fontSize: 30, fontWeight: 700, marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-                {val == null ? '—' : `${val}${m.kind === 'pct' ? '%' : ''}`}
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                {m.kind === 'pct' ? `Target ${tgt}%` : 'Target 0'}
-              </div>
-            </Card>
+            <Link
+              key={m.key}
+              to={m.href}
+              title={`Open ${m.label} — ${MEASURE_DEST[m.key]}`}
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block', borderRadius: 'var(--radius-md)', transition: 'transform .08s ease, box-shadow .08s ease' }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+            >
+              <Card padding={16}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  {m.label}
+                  <span aria-hidden style={{ color: 'var(--color-primary)', fontSize: 13 }}>→</span>
+                </div>
+                <div style={{ fontSize: 30, fontWeight: 700, marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
+                  {val == null ? '—' : `${val}${m.kind === 'pct' ? '%' : ''}`}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                  {m.kind === 'pct' ? `Target ${tgt}%` : 'Target 0'}
+                </div>
+              </Card>
+            </Link>
           );
         })}
       </div>
@@ -227,7 +287,7 @@ export default function CouncilScorecardPage() {
                       {isEnt && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', background: 'var(--color-surface)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', padding: '1px 6px', borderRadius: 999, marginRight: 8 }}>▲ Rollup</span>}
                       {row.name}
                     </td>
-                    <td style={tdR}><span style={{ color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{row.domainsGoverned} of {row.domainsTotal}</span></td>
+                    <td style={tdR}><ActionLink to="/data-domains" title="Open Data Domains" style={{ color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{row.domainsGoverned} of {row.domainsTotal}</ActionLink></td>
                     {MEASURES.map((m) => <td key={m.key} style={tdR}>{renderMeasureCell(row, m, isEnt)}</td>)}
                     <td style={tdR}>
                       {editing && canEdit ? (
@@ -260,7 +320,12 @@ export default function CouncilScorecardPage() {
                 style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 6, padding: 10, fontSize: 13.5, background: 'var(--color-surface)', color: 'var(--color-text)', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
               />
             ) : (
-              <div style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{narrative[key] || '—'}</div>
+              <>
+                <div style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{narrative[key] || '—'}</div>
+                <div style={{ marginTop: 12 }}>
+                  <ActionLink to={NARRATIVE_LINK[key].to} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)' }}>{NARRATIVE_LINK[key].label} →</ActionLink>
+                </div>
+              </>
             )}
           </Card>
         ))}
