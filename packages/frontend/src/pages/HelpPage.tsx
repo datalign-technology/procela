@@ -374,10 +374,11 @@ export default function HelpPage() {
         <h2 id="help-governance" style={h2Style}>8. Governance</h2>
         <h3 style={h3Style}>Governance Program</h3>
         <ul style={listStyle}>
-          <li>4-phase setup journey with progress tracking per phase. The phase you're currently on is highlighted with a <strong>“YOU ARE HERE”</strong> marker and a larger title, so "phase N of 4" is obvious at a glance; completed phases show a check and finished ones dim back.</li>
-          <li>Define governance scope (what's in / out), guiding principles, operating model.</li>
+          <li>A <strong>tracker</strong> for the 4-phase setup journey. It's a dashboard, not an editor — every check reflects work done elsewhere and deep-links there. The phase you're on is highlighted with a <strong>“YOU ARE HERE”</strong> marker, and each phase card shows a plain <strong>"n / m done" count</strong> (not a percentage); completed phases show a check.</li>
+          <li><strong>No single overall percentage.</strong> That number was a live roll-up of every check and could move <em>down</em> when your catalog changed (e.g. adding an unowned domain), which read like a regression. The header shows two honest axes instead: the <strong>lifecycle status</strong> (a badge + a Planning &rarr; Active &rarr; Paused &rarr; Completed strip) and the current <strong>"Phase X of 4"</strong> stage.</li>
           <li>Phase completion is computed automatically from your actual data; next-action recommendations link to the right page.</li>
-          <li><strong>Governed lifecycle:</strong> the program status (Planning &rarr; Active &harr; Paused &rarr; Completed, with explicit Reopen) can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active; launching with Phases 2&ndash;4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch.</li>
+          <li><strong>Foundation authoring lives on its own page.</strong> Scope (in / out), guiding principles, and operating model are edited on <strong>Governance &rarr; Foundation</strong>; the Program page's Phase-1 panel is a read-only summary with a <strong>Manage in Foundation &rarr;</strong> link. Same program record — the phase checks update as you save.</li>
+          <li><strong>Governed lifecycle:</strong> the program status (Planning &rarr; Active &harr; Paused &rarr; Completed, with explicit Reopen) is changed from the <strong>status strip at the top of the page</strong>, can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active; launching with Phases 2&ndash;4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch. A program marked <strong>Completed</strong> still counts as launched, so completing it never drops the tracker back below done.</li>
         </ul>
         <h3 style={h3Style}>Governance Groups</h3>
         <ul style={listStyle}>
@@ -723,8 +724,11 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>What is the Governance Program page?</h3>
         <p style={pStyle}>
-          It guides you through a 4-phase approach to building a governance program: Foundation, Structural Design,
-          People &amp; Processes, and Operationalization. Progress is tracked automatically based on your actual data.
+          It's a <strong>tracker</strong> for a 4-phase approach to building a governance program: Foundation, Structural Design,
+          People &amp; Processes, and Operationalization. Progress is tracked automatically from your actual data and shown as a
+          per-phase "n / m done" count plus a lifecycle status (Planning &rarr; Active &rarr; Paused &rarr; Completed) &mdash; there's no
+          single overall percentage, because that number could move backward as your catalog changed. Phase 1 groundwork (scope,
+          guiding principles, operating model) is authored on the <strong>Governance &rarr; Foundation</strong> page.
         </p>
 
         <h3 style={h3Style}>How do SOPs work?</h3>

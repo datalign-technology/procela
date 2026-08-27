@@ -944,11 +944,19 @@ you need to touch the enterprise governance program.
 
 ### 10.3 Governance Program Maturity
 
-**Governance → Governance Program** shows the current phase + auto-
-computed completion status. **Phase 1** is Foundation Definition;
-the program can't launch until it's complete (the platform pops a
-confirmation if you try to advance early, listing exactly what's
-missing).
+**Governance → Program** is a **tracker** for the four-phase journey. The
+header shows two honest axes — a **lifecycle status** (Planning → Active →
+Paused → Completed, changed right there from the status strip) and the
+current **"Phase X of 4"** stage — and each phase card shows a plain
+**"n / m done"** count. There's deliberately no single overall percentage:
+that number rolled up every check and could slide *down* as your catalog
+changed, which looked like a regression.
+
+**Phase 1** is Foundation Definition; its scope, guiding principles, and
+operating model are authored on **Governance → Foundation** (the Program
+page links to it). The program can't launch until Phase 1 is complete —
+the platform pops a confirmation if you try to advance early, listing
+exactly what's missing.
 
 ### 10.4 Council Scorecard + Exceptions
 
