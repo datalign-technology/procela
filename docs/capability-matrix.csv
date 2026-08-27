@@ -16,6 +16,7 @@ Data assets,Asset retention policy,Built,Duration + reason fields,P1,Yes,Partial
 Data assets,Column-level catalog,Built,DataAssetColumns sub-entity; auto-materialized from a binding column set,P1,Yes,Yes,Yes,Yes,—
 Data assets,Column auto-discovery,Built,"CSV uploads + on-prem connector reads information_schema.columns (Postgres/MySQL/SQL Server/Oracle)",P1,Yes,Yes,Yes,Yes,—
 Data assets,Asset 360 view,Built,Linked mappings + bindings + bound-columns panel + per-column health + owner roll-up,P1,Yes,Yes,Yes,Yes,—
+Data assets,DQ coverage filter,Built,"List filter (has rules / no rules / rules-but-unmeasured Est) from repo-backed per-asset rule counts; surfaces un-measured and false-confidence assets",P2,Yes,Yes,Yes,Yes,—
 Glossary,Business glossary terms,Built,"Term, definition, category, status, domain, owner, source-of-truth",P0,Yes,Yes,Yes,Yes,—
 Glossary,Glossary import / generation,Built,CSV import + AI-generated industry terms,P1,Yes,Limited,Limited,Yes,—
 Glossary,Term-to-asset linking,Built,Through domain or direct assignment,P1,Yes,Yes,Yes,Yes,—

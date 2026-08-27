@@ -10,6 +10,7 @@ import logger from '../lib/logger';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
 import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
+import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
 import { systems } from './systems';
 import { dataDomains } from './data-domains';
 import { mappings } from './mappings';
@@ -634,17 +635,36 @@ router.get('/orphans', async (req: Request, res: Response) => {
 /** GET /api/v1/data-assets */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const [allAssets, allSystems, allMappings, allDomains, allPeople, allBindings] = await Promise.all([
+  const [allAssets, allSystems, allMappings, allDomains, allPeople, allBindings, allRules] = await Promise.all([
     dataAssetsRepo.list(),
     systemsRepo().list(),
     mappingsRepo().list(),
     dataDomainsRepo().list(),
     peopleRepo().list(),
     dataAssetBindingsRepo.list(),
+    // Read DQ rules through the repo (Postgres-aware) so the per-asset
+    // coverage summary is correct in DB mode, not just JSON mode.
+    getDataQualityRulesRepository(require('./data-quality').dataQualityRules).list(),
   ]);
   const filtered = filterByOrgScope(allAssets, orgId as string | undefined);
   const filteredSystems = filterByOrgScope(allSystems, orgId as string | undefined);
   const boundAssetIds = new Set(allBindings.map((b) => b.dataAssetId));
+
+  // Per-asset DQ coverage counts for the "rules" filter on the list page:
+  //   ruleCount         — any rule on the asset (typed or not, run or not)
+  //   measuredRuleCount — rules with a real (non-simulated) last run, i.e.
+  //                       the ones that actually move measured health.
+  // The client derives three coverage states from these: has rules /
+  // no rules / rules-but-unmeasured (Est).
+  const ruleCountByAsset = new Map<string, number>();
+  const measuredCountByAsset = new Map<string, number>();
+  for (const r of allRules as Array<{ dataAssetId?: string; lastRun?: { simulated?: boolean } }>) {
+    if (!r.dataAssetId) continue;
+    ruleCountByAsset.set(r.dataAssetId, (ruleCountByAsset.get(r.dataAssetId) || 0) + 1);
+    if (r.lastRun && r.lastRun.simulated === false) {
+      measuredCountByAsset.set(r.dataAssetId, (measuredCountByAsset.get(r.dataAssetId) || 0) + 1);
+    }
+  }
 
   // Orphan signal: an asset with zero mapping rows pointing at it is
   // "unmapped" — nobody's process uses it. Computed here (same set the
@@ -733,6 +753,8 @@ router.get('/', async (req: Request, res: Response) => {
       stewardName, stewardSource, domainStewardIds, domainStewardNames,
       systemName, suggestedTier,
       isOrphan: !mappedAssetIds.has(asset.id),
+      ruleCount: ruleCountByAsset.get(asset.id) || 0,
+      measuredRuleCount: measuredCountByAsset.get(asset.id) || 0,
     };
   });
 

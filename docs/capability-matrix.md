@@ -46,7 +46,7 @@ row's status changes so the snapshot doesn't drift from the source of truth._
 | Category | Built | Partial / Stubbed / Designed | Not Started |
 |---|---|---|---|
 | Catalog | 6 | 0 | 0 |
-| Data assets | 11 | 0 | 0 |
+| Data assets | 12 | 0 | 0 |
 | Glossary | 3 | 0 | 0 |
 | Systems | 4 | 0 | 0 |
 | Connections | 5 | 0 | 0 |
