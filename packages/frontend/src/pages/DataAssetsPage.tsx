@@ -487,6 +487,10 @@ export default function DataAssetsPage({
   // Duplicate-name soft-warn: stashes the pending save so the ConfirmDialog
   // can resume it on confirm. `keepOpen` mirrors the handleSave argument.
   const [confirmDuplicate, setConfirmDuplicate] = useState<{ name: string; keepOpen: boolean } | null>(null);
+  // Confirm before deleting a column that has DQ rules referencing it —
+  // deleting the column leaves those rules orphaned (they keep their
+  // dataAssetId + denormalized columnName but their columnId dangles).
+  const [confirmColDelete, setConfirmColDelete] = useState<{ assetId: string; colId: string; columnName: string; rulesCount: number } | null>(null);
 
   // Source-connection discovery state — populated when the user clicks
   // "Discover" on the Link to Source block so they can pick a table /
@@ -751,6 +755,15 @@ export default function DataAssetsPage({
     } finally {
       setDiscovering(null);
     }
+  };
+
+  // Gate the delete on a confirm ONLY when the column has DQ rules — a
+  // clean column deletes silently (the connector re-adds it on the next
+  // scan anyway). With rules, warn first so the orphaning is a choice.
+  const requestDeleteColumn = (assetId: string, col: DataAssetColumn) => {
+    const n = col.rulesCount ?? col.rules?.length ?? 0;
+    if (n > 0) setConfirmColDelete({ assetId, colId: col.id, columnName: col.columnName, rulesCount: n });
+    else void deleteColumn(assetId, col.id);
   };
 
   const deleteColumn = async (assetId: string, colId: string) => {
@@ -1333,7 +1346,7 @@ export default function DataAssetsPage({
                       {colRules.length > 0 ? `${colRules.length} rule${colRules.length === 1 ? '' : 's'}` : ''}
                     </span>
                     <div onClick={(e) => e.stopPropagation()}>
-                      <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => deleteColumn(asset.id, col.id)} />
+                      <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => requestDeleteColumn(asset.id, col)} />
                     </div>
                   </div>
                   {/* Expanded rules under this column */}
@@ -2115,6 +2128,21 @@ export default function DataAssetsPage({
           if (pending) await performSave(pending.keepOpen);
         }}
         onCancel={() => setConfirmDuplicate(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmColDelete !== null}
+        title="Delete this column?"
+        message={confirmColDelete
+          ? `“${confirmColDelete.columnName}” has ${confirmColDelete.rulesCount} data-quality rule${confirmColDelete.rulesCount === 1 ? '' : 's'} referencing it. Deleting the column leaves ${confirmColDelete.rulesCount === 1 ? 'that rule' : 'those rules'} in place but detached from the column — ${confirmColDelete.rulesCount === 1 ? 'it' : 'they'} will still measure by column name if the source column exists, but no longer appear under this column. Delete the column anyway?`
+          : ''}
+        confirmLabel="Delete Column"
+        onConfirm={async () => {
+          const pending = confirmColDelete;
+          setConfirmColDelete(null);
+          if (pending) await deleteColumn(pending.assetId, pending.colId);
+        }}
+        onCancel={() => setConfirmColDelete(null)}
       />
 
       {/* Table */}
