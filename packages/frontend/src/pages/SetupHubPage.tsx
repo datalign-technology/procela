@@ -415,7 +415,7 @@ export default function SetupHubPage() {
         <Spinner center label="Loading your setup status…" />
       ) : (
         <>
-          <TrackLabel n={1} title="Get your organization in" sub="Capture your business, assign ownership, and the governance basics." />
+          <TrackLabel n={1} title="Onboard your organization" sub="Capture your business, assign ownership, and the governance basics." />
           {phases.map((ph) => {
           const phaseOpen = isPhaseOpen(ph);
           return (
