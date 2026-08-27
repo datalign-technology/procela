@@ -37,9 +37,9 @@ That brings up the normal stack **plus** the demo services:
 | Service | Role |
 |---|---|
 | `source-db` | A stand-in **customer** Postgres, seeded from `docker/demo/source-db/init/*.sql` with `utility.*` and `shipbuilder.*` operational tables (with deliberately dirty rows so DQ is non-trivial). This is **not** Procela's store. |
-| `demo-seed` / `demo-seed-ship` | Seed the two tenants — Tidewater Utilities and Momentum Industries — so each connector has a home to pair into. Run once. |
-| `demo-bootstrap` / `demo-bootstrap-ship` | Pair a real connector each (`pair/start` → `pair/claim`), one scoped to `utility` and one to `shipbuilder`, writing `connector.yaml` / `ship-connector.yaml` to a shared volume. Run once. |
-| `connector` / `connector-ship` | The real agents. Each reads its config, discovers its schema's tables, reports them into its tenant, and measures any DQ rules. |
+| `tidewater-seed` / `momentum-seed` | Seed the two tenants — Tidewater Utilities and Momentum Industries — so each connector has a home to pair into. Run once. |
+| `tidewater-bootstrap` / `momentum-bootstrap` | Pair a real connector each (`pair/start` → `pair/claim`), one scoped to `utility` and one to `shipbuilder`, writing `connector.yaml` / `ship-connector.yaml` to a shared volume. Run once. |
+| `tidewater-connector` / `momentum-connector` | The real agents. Each reads its config, discovers its schema's tables, reports them into its tenant, and measures any DQ rules. |
 
 The schema each connector scans is set by the `SCHEMAS` env on its bootstrap
 (comma-separated). To fold both industries back into one tenant, point a single
@@ -94,7 +94,7 @@ still simulate.
 ## Tuning
 
 `docker/demo/bootstrap.mjs` renders the connector config from env (set on the
-`demo-bootstrap` / `demo-bootstrap-ship` services in `docker-compose.yml`):
+`tidewater-bootstrap` / `momentum-bootstrap` services in `docker-compose.yml`):
 
 - `SCAN_SECONDS` / `HEARTBEAT_SECONDS` — cadences (kept short for the demo).
 - `SOURCE_DSN` — the source database DSN (defaults to the `source-db` service).
