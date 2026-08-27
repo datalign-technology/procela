@@ -216,7 +216,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 
 ![Settings → On-prem connectors panel showing at least one paired connector row with an "Online" status chip, a systems column populated with system names, and the "Add connector" button visible top-right. Empty-state or single-row is fine — the point is to show the admin's landing view.](images/connectors-panel.png)
 
-- Small container (`ghcr.io/crossleyc-bot/procela-connector`) that runs **inside your customer's network** and ships catalog metadata back to Procela over outbound HTTPS. Use it when Procela cannot reach the source database — the classic "our security team won't open inbound firewall rules" case.
+- Small container (`ghcr.io/datalign-technology/procela-connector`) that runs **inside your customer's network** and ships catalog metadata back to Procela over outbound HTTPS. Use it when Procela cannot reach the source database — the classic "our security team won't open inbound firewall rules" case.
 - Managed in **Settings → Integrations → On-prem connectors**. Admin creates a connector record with a name and the systems it reports for, receives a one-time 8-digit pairing code, and the operator running the container claims the code on first boot. From then on the connector heartbeats every 60s and scans configured databases every 30 min (both cadences are configurable in the connector's YAML).
 - **Freshness states.** Each row shows a live status derived from `lastHeartbeatAt`:
   - **Online** — heartbeat received in the last 30 minutes
@@ -737,10 +737,10 @@ An org can use both — some sources on Connections, some on connectors — and 
 3. Pull the image and start the container. `:0.3.0` and `:latest` are both fine; pin to a specific semver for production.
 
     ```bash
-    docker pull ghcr.io/crossleyc-bot/procela-connector:0.3.0
+    docker pull ghcr.io/datalign-technology/procela-connector:0.3.0
     docker run --restart unless-stopped \
       -v /etc/procela/connector.yaml:/etc/procela/connector.yaml \
-      ghcr.io/crossleyc-bot/procela-connector:0.3.0
+      ghcr.io/datalign-technology/procela-connector:0.3.0
     ```
 
 4. Within ~60 seconds the row in **Settings → On-prem connectors** flips from "Awaiting first heartbeat" to **Online**. After the first scan (default 30 min) the affected Data Assets pick up **Synced N min ago** chips.
