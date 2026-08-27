@@ -21,9 +21,9 @@ pairingCode: "12345678"
 heartbeatSeconds: 60
 scanSeconds: 1800
 
-# Data sources to scan. v1 supports Postgres, SQL Server, and
-# MySQL/MariaDB; a single connector container can watch any mix
-# of them.
+# Data sources to scan. Supported types: Postgres, SQL Server,
+# MySQL/MariaDB, Oracle, and dbt (manifest.json). A single connector
+# container can watch any mix of them.
 # A connectionString password may reference a secret the host already
 # holds instead of sitting inline here, so the credential comes from your
 # secret store (Docker/K8s secret, Vault, systemd credential):

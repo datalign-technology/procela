@@ -87,34 +87,34 @@ stores only a SHA-256 hash. Lose it and you must revoke + re-pair.
 ## Pull & run (recommended)
 
 Pre-built multi-arch images (`linux/amd64`, `linux/arm64`) are
-published to GitHub Container Registry: `:edge` on every push to the
-main branch, and pinned semver tags on each tagged release. No
-`connector-v*` release has been cut yet, so `:edge` is the tag to
-pull today — switch to a pinned `:0.3.0` for production once the
-first release is tagged:
+published to GitHub Container Registry: pinned semver tags on each
+tagged release, and `:edge` on every push to the main branch. For
+production, **pin a released version** — `0.3.0` is the latest — so a
+trunk push can't move the image underneath you:
 
 ```bash
-docker pull ghcr.io/datalign-technology/procela-connector:edge
+docker pull ghcr.io/datalign-technology/procela-connector:0.3.0
 
 docker run --rm \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  ghcr.io/datalign-technology/procela-connector:edge
+  ghcr.io/datalign-technology/procela-connector:0.3.0
 
 # Or pass the pairing code via env on first boot
 docker run --rm \
   -e PROCELA_PAIRING_CODE=12345678 \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  ghcr.io/datalign-technology/procela-connector:edge
+  ghcr.io/datalign-technology/procela-connector:0.3.0
 ```
 
 Available tags:
 
-- `:edge` — auto-built from every push to the main branch. This is
-  the tag to pull today; no tagged release has been cut yet.
-- `:sha-<short>` — every build, for exact-provenance pinning
 - `:0.3.0`, `:0.3`, `:0`, `:latest` — published on each
-  `connector-vX.Y.Z` git tag. None exist until the first
-  `connector-v0.3.0` release is tagged.
+  `connector-vX.Y.Z` git tag. `connector-v0.3.0` is the latest
+  release; `:0.3` and `:0` float to the newest patch/minor within
+  that line. **Use one of these for production.**
+- `:edge` — auto-built from every push to the main branch. Tracks
+  trunk ahead of the next release; use it only to try unreleased fixes.
+- `:sha-<short>` — every build, for exact-provenance pinning
 
 See `connector.example.yaml` for the full config shape.
 
