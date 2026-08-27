@@ -285,10 +285,11 @@ Skills drive four cross-page workflows:
 
 ### Governance Program
 
-- 4-phase setup journey with progress tracking per phase. The phase you're currently on is highlighted with a “YOU ARE HERE” marker and a larger title, so "phase N of 4" is obvious at a glance; completed phases show a check and finished ones dim back.
-- Define governance scope (what's in / out), guiding principles, operating model.
+- A **tracker** for a 4-phase setup journey (Foundation → Structural Design → People & Processes → Operationalization). It's a dashboard, not an editor — every check reflects work done elsewhere and deep-links there. The phase you're on is highlighted with a “YOU ARE HERE” marker; each phase card shows a plain **"n / m done" count** (not a percentage) and completed phases show a check.
+- **No single overall percentage.** That number was a live roll-up of all the checks and could move *down* when your catalog changed (e.g. adding an unowned domain), which read like a regression. The header shows two honest axes instead: the **lifecycle status** (a badge + a Planning → Active → Paused → Completed strip) and the current **"Phase X of 4"** stage.
 - Phase completion is computed automatically from your actual data; next-action recommendations link to the right page.
-- Governed lifecycle: the program status (Planning → Active ↔ Paused → Completed, with explicit Reopen) can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active; launching with Phases 2–4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch.
+- **Foundation authoring lives on its own page.** Scope (in / out), guiding principles, and operating model are edited on **Governance → Foundation**; the Program page's Phase-1 panel is a read-only summary with a **Manage in Foundation →** link. (Same underlying program record — the phase checks update as you save.)
+- Governed lifecycle: the program status (Planning → Active ↔ Paused → Completed, with explicit Reopen) is changed from the **status strip at the top of the page**, can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active; launching with Phases 2–4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch. A program marked **Completed** still counts as launched, so completing it never drops the tracker back below done.
 
 ### Governance Groups
 
@@ -603,8 +604,11 @@ Procela connects your business processes to the data and systems that support th
 
 ### What is the Governance Program page?
 
-It guides you through a 4-phase approach to building a governance program: Foundation, Structural Design,
- People & Processes, and Operationalization. Progress is tracked automatically based on your actual data.
+It's a **tracker** for a 4-phase approach to building a governance program: Foundation, Structural Design,
+People & Processes, and Operationalization. Progress is tracked automatically from your actual data and shown
+as a per-phase "n / m done" count plus a lifecycle status (Planning → Active → Paused → Completed) — there's no
+single overall percentage, because that number could move backward as your catalog changed. Phase 1 groundwork
+(scope, guiding principles, operating model) is authored on the **Governance → Foundation** page.
 
 ### How do SOPs work?
 
