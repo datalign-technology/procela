@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { processNodes } from './process-catalog';
 import { dataAssets, dataAssetColumns } from './data-assets';
 import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
+import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
 import { dataDomains } from './data-domains';
 import { people } from './people';
 import { connections, connectionSystemLinks } from './connections';
@@ -226,8 +227,12 @@ router.get('/', async (req: Request, res: Response) => {
   // scope you claimed but never measure. This is the column-level coverage
   // gap that column-set bindings surface — asset-level linkage can look
   // complete while individual bound columns go unmeasured.
+  // Read through the persistence-aware repo — the raw in-memory
+  // `dataQualityRules` array is empty under Postgres (rules live in the DB),
+  // which would make every bound column look ungoverned. Same fix as
+  // enrichColumnsWithDq in data-assets.
   let dqRules: Array<{ dataAssetId: string; columnId?: string }> = [];
-  try { dqRules = require('./data-quality').dataQualityRules || []; } catch { /* */ }
+  try { dqRules = await getDataQualityRulesRepository(require('./data-quality').dataQualityRules).list(); } catch { /* */ }
   const ruledColumnIds = new Set(dqRules.map((r) => r.columnId).filter(Boolean) as string[]);
   const allColumns = await dataAssetColumnsRepo.list();
   const assetIdsInScope = new Set(assets.map((a) => a.id));

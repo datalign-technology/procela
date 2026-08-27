@@ -10,6 +10,7 @@ import logger from '../lib/logger';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
 import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
+import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
 import { systems } from './systems';
 import { dataDomains } from './data-domains';
 import { mappings } from './mappings';
@@ -799,7 +800,7 @@ router.get('/:id/360', async (req: Request, res: Response) => {
   // maps to these columns of that table, and here's each column's quality."
   const primaryBinding = await getPrimaryBinding(asset.id);
   const assetColumns = (await dataAssetColumnsRepo.list()).filter((c) => c.dataAssetId === asset.id);
-  const enrichedColumns = enrichColumnsWithDq(asset.id, assetColumns);
+  const enrichedColumns = await enrichColumnsWithDq(asset.id, assetColumns);
   const bindingInfo = primaryBinding
     ? {
         id: primaryBinding.id,
@@ -1146,10 +1147,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
  * rules). Shared by GET /:id/columns and the 360 view so both compute
  * column health identically.
  */
-function enrichColumnsWithDq(assetId: string, cols: StoredDataAssetColumn[]) {
-  // Lazy-import DQ rules to avoid a circular dep at module level.
+async function enrichColumnsWithDq(assetId: string, cols: StoredDataAssetColumn[]) {
+  // Read DQ rules through the persistence-aware repo, NOT the raw in-memory
+  // `dataQualityRules` array. Under Postgres that array stays empty (the rules
+  // live in the DB), so reading it directly reported every column as having
+  // zero rules / null health even when rules existed — while the asset-level
+  // rollup (repo-backed) showed the real count. The repo is built lazily over
+  // the shared store so the module-level circular dep with ./data-quality is
+  // still avoided.
   let dqRules: any[] = [];
-  try { dqRules = require('./data-quality').dataQualityRules || []; } catch { /* */ }
+  try {
+    dqRules = await getDataQualityRulesRepository(require('./data-quality').dataQualityRules).list();
+  } catch { /* */ }
 
   return cols.map((col) => {
     const rules = dqRules.filter((r: any) => r.dataAssetId === assetId && r.columnId === col.id);
@@ -1190,7 +1199,7 @@ router.get('/:id/columns', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const cols = (await dataAssetColumnsRepo.list()).filter((c) => c.dataAssetId === asset.id);
-  res.json({ success: true, data: enrichColumnsWithDq(asset.id, cols) });
+  res.json({ success: true, data: await enrichColumnsWithDq(asset.id, cols) });
 });
 
 /** POST /data-assets/:id/columns — create a column */
