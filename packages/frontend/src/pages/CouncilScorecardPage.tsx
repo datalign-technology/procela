@@ -123,6 +123,14 @@ export default function CouncilScorecardPage() {
     finally { setLoading(false); }
   }, [activeOrgId, addToast]);
 
+  // Exit edit mode and discard unsaved edits — revert overrides + narrative to
+  // the live derived baseline (live mode has no stored overrides).
+  const cancelEdit = () => {
+    setOverrides({});
+    setNarrative(derived?.narrative || {});
+    setEditing(false);
+  };
+
   const loadVersions = useCallback(async () => {
     if (!activeOrgId) return;
     try {
@@ -221,6 +229,7 @@ export default function CouncilScorecardPage() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {viewingVersionId && <Button variant="secondary" onClick={loadDerived}>Back to live</Button>}
             {canEdit && !editing && <Button variant="secondary" onClick={() => setEditing(true)}>Edit &amp; override</Button>}
+            {canEdit && editing && <Button variant="secondary" onClick={cancelEdit} disabled={saving}>Cancel</Button>}
             {canEdit && editing && <Button variant="primary" onClick={publish} loading={saving}>Publish snapshot</Button>}
           </div>
         )}
