@@ -20,6 +20,7 @@ function mockSelection(overrides: Partial<RowSelection> = {}): RowSelection {
     count: 0,
     isSelected: () => false,
     toggle: vi.fn(),
+    remove: vi.fn(),
     toggleAll: vi.fn(),
     clear: vi.fn(),
     allSelected: false,

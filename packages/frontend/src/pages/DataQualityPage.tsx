@@ -98,6 +98,8 @@ interface FormData {
   threshold: number;
   currentScore: number;
   weight: number;
+  ruleType: string;
+  parameters: Record<string, unknown>;
 }
 
 const emptyForm: FormData = {
@@ -109,9 +111,27 @@ const emptyForm: FormData = {
   threshold: 80,
   currentScore: 0,
   weight: 5,
+  ruleType: '',
+  parameters: {},
 };
 
 const QUALITY_DIMENSIONS = ['COMPLETENESS', 'ACCURACY', 'TIMELINESS', 'CONSISTENCY', 'UNIQUENESS', 'VALIDITY'];
+
+// Rule types the form can set. The first five are measured for real by an
+// on-prem connector (aggregate pushdown) or a CSV upload; regex/custom and the
+// untyped option are simulated and don't count toward measured health. Only a
+// typed rule is picked up by the connector's rule plan — an untyped rule never
+// measures, which is why "None" is clearly labelled.
+const RULE_TYPE_OPTIONS: Array<{ value: string; label: string; measured: boolean }> = [
+  { value: '',              label: 'None — manual / unmeasured',  measured: false },
+  { value: 'NOT_NULL',      label: 'Not null',                    measured: true  },
+  { value: 'UNIQUE',        label: 'Unique',                      measured: true  },
+  { value: 'IN_SET',        label: 'In set (allowed values)',     measured: true  },
+  { value: 'NUMERIC_RANGE', label: 'Numeric range',               measured: true  },
+  { value: 'LENGTH_RANGE',  label: 'Length range',                measured: true  },
+  { value: 'REGEX_MATCH',   label: 'Regex match (simulated)',     measured: false },
+  { value: 'CUSTOM',        label: 'Custom (simulated)',          measured: false },
+];
 
 const DIMENSION_BADGES: Record<string, { bg: string; color: string }> = {
   COMPLETENESS: { bg: '#dbeafe', color: '#1e40af' },
@@ -346,10 +366,16 @@ export default function DataQualityPage({
       threshold: rule.threshold,
       currentScore: rule.currentScore,
       weight: rule.weight,
+      ruleType: (rule as any).ruleType || '',
+      parameters: ((rule as any).parameters as Record<string, unknown>) || {},
     });
     loadFormColumns(rule.dataAssetId);
     setEditingId(rule.id);
     setShowForm(true);
+  };
+
+  const updateParam = (key: string, value: unknown) => {
+    setForm((prev) => ({ ...prev, parameters: { ...prev.parameters, [key]: value } }));
   };
 
   const handleSave = async () => {
@@ -383,6 +409,9 @@ export default function DataQualityPage({
       if (assetId) {
         try { await apiClient.post(`/data-quality/compute-health/${assetId}`); } catch { /* */ }
       }
+      // Drop it from the selection so the bulk-action bar doesn't keep
+      // counting a row that no longer exists.
+      sel.remove(id);
       addToast('success', 'Quality rule deleted');
       fetchData();
     } catch {
@@ -806,6 +835,72 @@ export default function DataQualityPage({
                 {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Rule Type</label>
+              <select aria-label="Rule Type" style={selectStyle} value={form.ruleType} onChange={(e) => updateField('ruleType', e.target.value)}>
+                {RULE_TYPE_OPTIONS.map((o) => <option key={o.value || 'none'} value={o.value}>{o.label}</option>)}
+              </select>
+              <div style={{ fontSize: 11, color: form.ruleType === '' ? 'var(--color-warning)' : 'var(--color-text-muted)', marginTop: 3 }}>
+                {form.ruleType === ''
+                  ? 'Untyped rules are never measured by the connector — pick a type for a real pass rate.'
+                  : RULE_TYPE_OPTIONS.find((o) => o.value === form.ruleType)?.measured
+                    ? 'Measured for real by an on-prem connector (aggregate pushdown) or a CSV upload.'
+                    : 'Simulated — returns a labelled result that does not count toward measured health.'}
+              </div>
+            </div>
+            {form.ruleType === 'IN_SET' && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Allowed values</label>
+                <input
+                  aria-label="Allowed values"
+                  style={inputStyle}
+                  value={(Array.isArray(form.parameters.allowedValues) ? form.parameters.allowedValues as string[] : []).join(', ')}
+                  onChange={(e) => updateParam('allowedValues', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                  placeholder="e.g. residential, commercial, industrial"
+                />
+              </div>
+            )}
+            {form.ruleType === 'NUMERIC_RANGE' && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Min</label>
+                  <input type="number" aria-label="Minimum" style={inputStyle}
+                    value={form.parameters.min === undefined ? '' : Number(form.parameters.min)}
+                    onChange={(e) => updateParam('min', e.target.value === '' ? undefined : Number(e.target.value))} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Max</label>
+                  <input type="number" aria-label="Maximum" style={inputStyle}
+                    value={form.parameters.max === undefined ? '' : Number(form.parameters.max)}
+                    onChange={(e) => updateParam('max', e.target.value === '' ? undefined : Number(e.target.value))} />
+                </div>
+              </div>
+            )}
+            {form.ruleType === 'LENGTH_RANGE' && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Min length</label>
+                  <input type="number" aria-label="Minimum length" style={inputStyle} min={0}
+                    value={form.parameters.minLength === undefined ? '' : Number(form.parameters.minLength)}
+                    onChange={(e) => updateParam('minLength', e.target.value === '' ? undefined : Number(e.target.value))} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Max length</label>
+                  <input type="number" aria-label="Maximum length" style={inputStyle} min={0}
+                    value={form.parameters.maxLength === undefined ? '' : Number(form.parameters.maxLength)}
+                    onChange={(e) => updateParam('maxLength', e.target.value === '' ? undefined : Number(e.target.value))} />
+                </div>
+              </div>
+            )}
+            {form.ruleType === 'REGEX_MATCH' && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Pattern</label>
+                <input aria-label="Pattern" style={inputStyle}
+                  value={typeof form.parameters.pattern === 'string' ? form.parameters.pattern : ''}
+                  onChange={(e) => updateParam('pattern', e.target.value)}
+                  placeholder="e.g. ^[^@]+@[^@]+\.[^@]+$" />
+              </div>
+            )}
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Rule Name *</label>
               <input
