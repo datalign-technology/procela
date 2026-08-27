@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import PageHeader from '../components/PageHeader';
+import CreateScopeNotice from '../components/CreateScopeNotice';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import FieldStack from '../components/FieldStack';
@@ -416,7 +417,7 @@ export default function DataAssetsPage({
    *  slot (the tab-bar row) instead of a strip below the tabs. */
   actionsPortal?: HTMLElement | null;
 } = {}) {
-  const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
+  const { activeOrgId, canCreateValueStreams } = useOrgContext();
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
   const { getOrgName } = useOrgNameLookup();
@@ -1452,11 +1453,7 @@ export default function DataAssetsPage({
           department or team the Add button is hidden and this banner
           explains why. The list itself still renders so users can
           read inherited rows from above. */}
-      {activeOrgId && !canOwnHere && (
-        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
-          Data assets can only be created at the <strong>company or division</strong> level. <strong>{activeOrgName}</strong> is a {activeOrgType}. Pick a company or division from the "Working in" dropdown to add or edit assets here.
-        </div>
-      )}
+      {activeOrgId && !canOwnHere && <CreateScopeNotice noun="data assets" />}
 
       {/* Two-column layout: Categories sidebar + content (mirrors Systems page) */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import CreateScopeNotice from '../components/CreateScopeNotice';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { useValueStreamScope } from '../hooks/useValueStreamScope';
@@ -1259,11 +1260,7 @@ export default function ProcessCatalogPage() {
           Select a <strong>company or division</strong> from the "Working in" dropdown above to create and manage value streams.
         </div>
       )}
-      {activeOrgId && !canCreateValueStreams && (
-        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
-          Value streams can only be created at the <strong>company or division</strong> level. <strong>{activeOrgName}</strong> is a {activeOrgType}. Select a company or division from the "Working in" dropdown.
-        </div>
-      )}
+      {activeOrgId && !canCreateValueStreams && <CreateScopeNotice noun="value streams" />}
       {activeOrgId && canCreateValueStreams && companyWithDivisions && (
         <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
           <div>

@@ -268,10 +268,10 @@ function MyDashboard() {
         <SectionHeading title="My Dashboard" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-            My Dashboard shows the tasks and issues assigned to you. Your account isn&rsquo;t linked
-            to a person in this organization yet, so there&rsquo;s nothing to show here.
+            This is your personal view — the tasks, issues, and domains assigned to you will show up
+            here once your account is linked to a person in this organization.
             <div style={{ marginTop: 8 }}>
-              <Link to="/people" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View people &rarr;</Link>
+              <Link to="/people" style={{ fontSize: 12, color: 'var(--color-primary)' }}>Link your profile in People &rarr;</Link>
             </div>
           </div>
         </Card>
