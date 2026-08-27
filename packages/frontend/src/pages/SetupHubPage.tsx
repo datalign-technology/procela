@@ -376,8 +376,8 @@ export default function SetupHubPage() {
       <PageHeader
         title="Get Started with Procela"
         subtitle={overall === 100
-          ? `${activeOrgName} is fully set up. Revisit any step below to keep it current.`
-          : `Set up ${activeOrgName} in three phases — capture your business, assign ownership, then wrap governance around it.`}
+          ? `${activeOrgName} is set up. Revisit any step below, or stand up the governance program in Track 2.`
+          : `Two tracks: get ${activeOrgName} into Procela — capture, assign ownership, the governance basics — then stand up the governance program itself.`}
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
@@ -414,7 +414,9 @@ export default function SetupHubPage() {
       {loading ? (
         <Spinner center label="Loading your setup status…" />
       ) : (
-        phases.map((ph) => {
+        <>
+          <TrackLabel n={1} title="Get your organization in" sub="Capture your business, assign ownership, and the governance basics." />
+          {phases.map((ph) => {
           const phaseOpen = isPhaseOpen(ph);
           return (
           <section key={ph.num} style={{ marginBottom: 20 }}>
@@ -512,9 +514,138 @@ export default function SetupHubPage() {
             )}
           </section>
           );
-        })
+          })}
+          <div style={{ marginTop: 28 }}>
+            <TrackLabel n={2} title="Stand up the governance program" sub="Mature the program itself — foundation, structure, people, operations." />
+            <GovernanceProgramTrack orgId={activeOrgId} />
+          </div>
+        </>
       )}
     </Page>
+  );
+}
+
+// ── Track 2: the Governance Program, surfaced on the hub ──
+// The Get Started hub onboards the *organization* (Capture / Assign /
+// Govern); the Governance Program is the maturity model for the governance
+// *program itself*. Showing it here as a second track makes /setup the one
+// place to see "what's next" without merging the two — the program's own
+// page stays the detailed tracker. This card is informational: the program's
+// maturity is deliberately NOT folded into the onboarding ring / auto-hide,
+// which stay about onboarding (a program keeps maturing after onboarding is
+// done).
+interface ProgPhase { name: string; completed: boolean; progress: number; checks: { done: boolean }[] }
+interface ProgStatus {
+  currentPhase: 1 | 2 | 3 | 4;
+  phases: { phase1: ProgPhase; phase2: ProgPhase; phase3: ProgPhase; phase4: ProgPhase };
+  overallProgress: number;
+}
+interface Prog { id: string; status: 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' }
+
+const GOV_STATUS_PILL: Record<string, { bg: string; fg: string }> = {
+  PLANNING: { bg: '#e0edff', fg: '#1d4ed8' },
+  ACTIVE: { bg: '#dcfce7', fg: '#15803d' },
+  PAUSED: { bg: '#fef3c7', fg: '#b45309' },
+  COMPLETED: { bg: '#ede9fe', fg: '#6d28d9' },
+};
+const GOV_STATUS_LABEL: Record<string, string> = { PLANNING: 'Planning', ACTIVE: 'Active', PAUSED: 'Paused', COMPLETED: 'Completed' };
+const GOV_PHASE_COLOR = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b'];
+const GOV_PHASE_SHORT = ['Foundation', 'Structure', 'People', 'Operations'];
+
+function GovernanceProgramTrack({ orgId }: { orgId: string }) {
+  const navigate = useNavigate();
+  const [prog, setProg] = useState<Prog | null>(null);
+  const [status, setStatus] = useState<ProgStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    apiClient.get<{ success: boolean; data: Prog }>(`/governance-program?orgId=${orgId}`)
+      .then(async (r) => {
+        if (!alive) return;
+        const p = r.data;
+        setProg(p);
+        if (p) {
+          try {
+            const s = await apiClient.get<{ success: boolean; data: ProgStatus }>(`/governance-program/${p.id}/status`);
+            if (alive) setStatus(s.data);
+          } catch { /* status may not be available yet */ }
+        }
+      })
+      .catch(() => { /* API may not be running */ })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [orgId]);
+
+  if (loading) return null; // stay quiet — the onboarding tracks already render
+
+  if (!prog) {
+    return (
+      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, padding: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--color-text-secondary)', flex: 1 }}>No governance program set up for this organization yet.</span>
+        <button onClick={() => navigate('/governance-program')} style={primaryBtn}>Set up governance program &rarr;</button>
+      </div>
+    );
+  }
+
+  const pill = GOV_STATUS_PILL[prog.status] || GOV_STATUS_PILL.PLANNING;
+  const phaseList = status ? [status.phases.phase1, status.phases.phase2, status.phases.phase3, status.phases.phase4] : [];
+
+  return (
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: status ? 12 : 0 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, padding: '4px 11px', borderRadius: 20, background: pill.bg, color: pill.fg }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: pill.fg }} />
+          {GOV_STATUS_LABEL[prog.status]}
+        </span>
+        {status && (
+          <span style={{ fontSize: 12.5, color: 'var(--color-text-secondary)' }}>
+            {status.phases.phase4.completed
+              ? 'All four phases in place'
+              : <>Phase <strong style={{ color: 'var(--color-text)' }}>{status.currentPhase}</strong> of 4 · {GOV_PHASE_SHORT[status.currentPhase - 1]}</>}
+          </span>
+        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => navigate('/governance-program')} style={primaryBtn}>Open Program &rarr;</button>
+          <button onClick={() => navigate('/governance/foundation')} style={secondaryBtn}>Edit Foundation</button>
+        </div>
+      </div>
+      {status && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          {phaseList.map((ph, i) => {
+            const done = ph.checks.filter((c) => c.done).length;
+            const total = ph.checks.length;
+            return (
+              <div key={i} style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '10px 12px', background: 'var(--color-bg)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <span style={{ width: 18, height: 18, borderRadius: '50%', background: ph.completed ? '#22c55e' : GOV_PHASE_COLOR[i], color: '#fff', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{ph.completed ? '✓' : i + 1}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{GOV_PHASE_SHORT[i]}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600 }}>{done}/{total}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 2, height: 5 }}>
+                  {Array.from({ length: total }).map((_, k) => (
+                    <span key={k} style={{ flex: 1, borderRadius: 2, background: k < done ? '#22c55e' : 'var(--color-border)' }} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TrackLabel({ n, title, sub }: { n: number; title: string; sub: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 12px' }}>
+      <span style={{ width: 24, height: 24, borderRadius: 7, background: n === 1 ? '#3b82f6' : 'var(--color-primary)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{n}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{sub}</div>
+      </div>
+    </div>
   );
 }
 

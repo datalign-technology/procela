@@ -156,7 +156,7 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>Not the same as the Governance Program journey</h3>
         <p style={pStyle}>
-          The Get Started hub onboards the <em>organization</em> into Procela. The four-phase <strong>Governance Program</strong> journey (Foundation → Structural Design → People &amp; Processes → Operationalization), reached via <strong>Governance &rarr; Program</strong>, is the maturity model for the governance <em>program itself</em>. See Section 8 for the program journey.
+          The Get Started hub onboards the <em>organization</em> into Procela. The four-phase <strong>Governance Program</strong> journey (Foundation → Structural Design → People &amp; Processes → Operationalization), reached via <strong>Governance &rarr; Program</strong>, is the maturity model for the governance <em>program itself</em>. The two are still distinct, but the program journey is now also surfaced as <strong>Track 2</strong> on the Get Started hub so both live in one place. See Section 8 for the program journey.
         </p>
       </Card>
 
@@ -165,7 +165,7 @@ export default function HelpPage() {
         <h2 id="help-navigation" style={h2Style}>2. Navigation</h2>
         <p style={pStyle}>The sidebar opens with <strong>Get Started</strong> for first-run onboarding (it auto-hides at 100%), then the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.</p>
         <ul style={listStyle}>
-          <li><strong>Get Started</strong> &mdash; Resumable three-phase onboarding hub (Capture / Assign / Govern) with a progress ring. Auto-hides once your org reaches 100%. See Section 1 for the mechanics.</li>
+          <li><strong>Get Started</strong> &mdash; Resumable onboarding hub in <strong>two tracks</strong>: Track 1 gets your org into Procela (Capture / Assign / Govern), and Track 2 surfaces the <strong>Governance Program</strong>'s four-phase journey (status + per-phase counts, deep-linking to the Program &amp; Foundation pages). The progress ring and auto-hide track onboarding (Track 1); the program keeps maturing after that. See Section 1 for the mechanics.</li>
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
           <li><strong>Organizations</strong> &mdash; Accordion covering the "who" of the platform: <strong>Structure</strong> (your company / division / team tree), <strong>People</strong> (the humans on your team), <strong>Agents</strong> (AI agents that hold governance roles and run automation), and <strong>Skills</strong> (the competencies your roles need).</li>
           <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process view of activity↔asset mappings lives under <strong>Insights &rarr; Process &harr; Data Map</strong> &mdash; its <em>Table</em> view.)</li>

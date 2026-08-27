@@ -28,13 +28,13 @@ The fastest way in is the Get Started hub — a resumable, data-driven journey t
 
 ### Not the same as the Governance Program journey
 
-The Get Started hub onboards the organization into Procela. The four-phase Governance Program journey (Foundation → Structural Design → People & Processes → Operationalization), reached via Governance → Program, is the maturity model for the governance program itself. See Section 8 for the program journey.
+The Get Started hub onboards the organization into Procela. The four-phase Governance Program journey (Foundation → Structural Design → People & Processes → Operationalization), reached via Governance → Program, is the maturity model for the governance program itself. The two are still distinct, but the program journey is now also surfaced as **Track 2** on the Get Started hub so both live in one place. See Section 8 for the program journey.
 
 ## 2. Navigation
 
 The sidebar opens with Get Started for first-run onboarding (it auto-hides at 100%), then the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.
 
-- Get Started — Resumable three-phase onboarding hub (Capture / Assign / Govern) with a progress ring. Auto-hides once your org reaches 100%. See Section 1 for the mechanics.
+- Get Started — Resumable onboarding hub in **two tracks**: Track 1 gets your org into Procela (Capture / Assign / Govern), and Track 2 surfaces the **Governance Program**'s four-phase journey (status + per-phase counts, deep-linking to the Program & Foundation pages). The progress ring and auto-hide track onboarding (Track 1); the program keeps maturing after that. See Section 1 for the mechanics.
 - Dashboard — Personalized home with your tasks, issues, domains, and KPIs.
 - Organizations — Accordion covering the "who" of the platform: Structure (your company / division / team tree), People (the humans on your team), Agents (AI agents that hold governance roles and run automation), and Skills (the competencies your roles need).
 - Processes — the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under Insights → Data Mapping.)
