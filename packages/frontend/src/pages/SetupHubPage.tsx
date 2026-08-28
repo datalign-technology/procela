@@ -25,9 +25,9 @@ import Spinner from '@/components/Spinner';
 // oscillates. Each stage carries its own count instead. Every item's status is
 // DERIVED from live data (dashboard stats + governance-program status), so the
 // page is accurate each time it opens. The one number published back to
-// setupStore (for the sidebar ring + auto-hide) is the ONBOARDING portion
-// (Capture/Assign/Govern) — the guide is about getting set up; a program keeps
-// maturing long after, so "Operate" must not keep the ring from ever filling.
+// setupStore (for the sidebar ring + auto-hide) spans the full journey —
+// all four stages (Capture/Assign/Govern/Operate) — so the ring only fills,
+// and the guide only auto-hides, once the program is actually stood up.
 // ──────────────────────────────────────────────────────────────────────────
 
 const COVERAGE_DONE_THRESHOLD = 80;
@@ -174,11 +174,13 @@ export default function SetupHubPage() {
     return idx === -1 ? stages.length - 1 : idx;
   }, [counts, stages.length]);
 
-  // Sidebar ring / auto-hide track the ONBOARDING portion only (stages 1–3).
+  // Sidebar ring / auto-hide track the full journey — all four stages
+  // (Capture/Assign/Govern/Operate) — so the ring only fills, and the guide
+  // only auto-hides, once the program is actually stood up and running.
   useEffect(() => {
     if (!activeOrgId || loading || !stats) return;
     let done = 0, total = 0;
-    for (let i = 0; i < 3; i++) { done += counts[i].done; total += counts[i].total; }
+    for (let i = 0; i < counts.length; i++) { done += counts[i].done; total += counts[i].total; }
     setProgress(activeOrgId, total > 0 ? Math.round((done / total) * 100) : 0);
   }, [activeOrgId, loading, stats, counts, setProgress]);
 
