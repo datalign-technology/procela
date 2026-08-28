@@ -247,16 +247,21 @@ Assign) and standing up the program (Govern, Operate) are the same
 path, not two separate tracks.
 
 Across the top, the program's **lifecycle** — Planning → Active →
-Paused → Completed — governs the whole arc, with a single *Launch
-program → / Open program →* action. Below it, a **stepper** marks the
-current stage with a *You are here* tag and shows each stage's own
-count; there's deliberately **no overall %** (one number mixing "added
-my systems" with "program launched" just oscillates). A **four-column
-board** then lists each stage's items with **HERE / AUTO** source
-badges — *Here* = you define it in Procela, *Auto* = derived from your
-catalog — and every row deep-links to where the work happens. *Operate*
-reads strictly top-to-bottom: *Program launched* only ticks once the
-structure and roles & policies it depends on are in place.
+Paused → Completed — governs the whole arc. Its valid next transitions
+(*Launch*, *Pause*, *Complete*, *Reopen*) are buttons right there,
+role-gated and audited; **Launch stays disabled until Foundation
+(Phase 1) is complete**, and once the program goes live its actual
+**Launched** date shows next to the status. A one-line **stage summary**
+("Stage X of 4 · <name>") names where you are; there's deliberately
+**no overall %** (one number mixing "added my systems" with "program
+launched" just oscillates). A **four-column board** then lists each
+stage's items with **HERE / AUTO** source badges — *Here* = you define
+it in Procela, *Auto* = derived from your catalog — and every row
+deep-links to where the work happens. *Operate* reads strictly
+top-to-bottom: *Program launched* only ticks once the structure and
+roles & policies it depends on are in place. Below the board,
+**Next Actions** lists the board's still-unchecked items in stage order
+(HIGH for the current stage, NEXT for later ones).
 
 There is no separate Governance Program page — the four-phase program
 tracker (Foundation → Structure → People → Operations), its lifecycle,
@@ -975,9 +980,20 @@ your catalog changed, which looked like a regression. (The old
 **Phase 1** is Foundation Definition; its scope, guiding principles, and
 operating model are authored on **Governance → Foundation** (the Govern
 stage links to it). The program can't launch until Phase 1 is complete —
-launching from the lifecycle bar pops a confirmation if you try to advance
-early, listing exactly what's missing, and records the reason in the audit
-log.
+the **Launch button stays disabled** (with a tooltip) until Foundation is
+done, on both the Get Started lifecycle bar and the Foundation page. Because
+Foundation is the prerequisite, you can also **launch straight from the
+Governance → Foundation page** once it's complete. Launching with the later
+phases (2–4) still incomplete pops a confirmation listing exactly what's
+missing and records the reason in the audit log (an audited "early launch").
+
+When the program first goes Active, Procela stamps an actual **Launched**
+date — set once and kept through any later pause/resume/reopen — and shows it
+next to the lifecycle status on Get Started and on the Foundation page.
+
+(The Foundation page holds scope, guiding principles, and the operating model
+only. The old *Target Start / Target Launch* date fields were removed — they
+were never surfaced anywhere; the actual Launched date above replaces them.)
 
 ### 10.4 Council Scorecard + Exceptions
 

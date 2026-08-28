@@ -21,7 +21,7 @@ Across the top, the governance program's lifecycle — Planning → Active → P
 
 ### How progress is shown
 
-- No overall %. A single number mixing "have I added my systems" with "is the program launched" is meaningless and oscillates — so each stage carries its own count instead. A stepper highlights the current stage with a "You are here" tag, and a stage line reads "Stage X of 4 · <name> — n of m done".
+- No overall %. A single number mixing "have I added my systems" with "is the program launched" is meaningless and oscillates — so each stage carries its own count instead. A stage line names the current stage and reads "Stage X of 4 · <name> — n of m done".
 - Derived from live data, not checkboxes. Add five systems and the Systems item flips automatically — there's no separate to-do list to keep in sync. Statuses come from dashboard stats (operationally scoped) plus the governance-program status.
 - HERE / AUTO source badges. Each board item is tagged Here (you define it in Procela — e.g. adding systems, mapping data, editing the Foundation) or Auto (derived from your catalog — e.g. ownership coverage, program launch). Every row deep-links to the page where the work happens.
 - Operationally scoped. Process-side counts (value streams, steps, ownership gaps, coverage) reflect only your business processes, so the canned Data Governance Management scaffold never masquerades as business-process progress.
@@ -29,7 +29,7 @@ Across the top, the governance program's lifecycle — Planning → Active → P
 
 ### Reading the board
 
-- Below the stepper, a four-column board (one column per stage) shows each item as a checklist row with its source badge and a segmented progress bar. Every row's deep-link hands off to the same destination the left nav exposes, so the move from journey to workspace is seamless. Operate reads strictly top-to-bottom: "Program launched" only ticks once the structure and roles & policies it depends on are in place.
+- Below the stage line, a four-column board (one column per stage) shows each item as a checklist row with its source badge and a segmented progress bar. Every row's deep-link hands off to the same destination the left nav exposes, so the move from journey to workspace is seamless. Operate reads strictly top-to-bottom: "Program launched" only ticks once the structure and roles & policies it depends on are in place.
 - The hub is for setup and check-ins; the left nav is your persistent workspace once you know the app.
 
 ### The governance program lives here
@@ -291,7 +291,7 @@ Skills drive four cross-page workflows:
 
 ### Governance Program (on Get Started)
 
-- The program has **no page of its own** — its four-phase tracker, lifecycle, and Next Actions live on the **Get Started** hub (Section 1), as the **Govern** and **Operate** stages. Every check reflects work done elsewhere and deep-links there; the stage you're on is marked “YOU ARE HERE” and each carries a plain **"n / m done" count**, not a percentage. (The old /governance-program URL redirects to /setup.)
+- The program has **no page of its own** — its four-phase tracker, lifecycle, and Next Actions live on the **Get Started** hub (Section 1), as the **Govern** and **Operate** stages. Every check reflects work done elsewhere and deep-links there; the stage you're on is named by the stage line (Stage X of 4) and each carries a plain **"n / m done" count**, not a percentage. (The old /governance-program URL redirects to /setup.)
 - **No single overall percentage.** A live roll-up of all the checks could move *down* when your catalog changed (e.g. adding an unowned domain), which read like a regression. Get Started shows honest axes instead: the **lifecycle status** (a badge + a Planning → Active → Paused → Completed strip) and each stage's own count.
 - **Foundation authoring lives on its own page.** Scope (in / out), guiding principles, and operating model are edited on **Governance → Foundation**; the Govern stage's *Governance foundation* item deep-links there. (Same underlying program record — the checks update as you save.)
 - Governed lifecycle: the program status (Planning → Active ↔ Paused → Completed, with explicit Reopen) is changed from the **lifecycle bar on Get Started**, can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active — the Launch button is disabled until it is — and launching with Phases 2–4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch. Because Foundation is the prerequisite, you can also launch from the Governance → Foundation page once it's complete. The actual go-live is captured as a Launched date (set the first time it goes Active, kept through pause/resume) and shown next to the status. A program marked **Completed** still counts as launched, so completing it never drops the tracker back below done.
