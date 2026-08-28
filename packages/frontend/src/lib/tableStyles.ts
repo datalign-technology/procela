@@ -3,11 +3,10 @@
 // extracting them here makes a future tweak (padding, font, accent
 // colour) a one-point change instead of a search-and-replace.
 //
-// Three surfaces deliberately don't use these: RaciMatrixPage
-// (bordered matrix cells with different padding), ExecutiveReportPage
-// (PDF-export styling), and lib/markdown.tsx (rendered-markdown
-// tables). All three have visually distinct table semantics and
-// shouldn't be coerced into the list-table look.
+// Two surfaces deliberately don't use these: RaciMatrixPage
+// (bordered matrix cells with different padding) and lib/markdown.tsx
+// (rendered-markdown tables). Both have visually distinct table
+// semantics and shouldn't be coerced into the list-table look.
 
 import type { CSSProperties } from 'react';
 

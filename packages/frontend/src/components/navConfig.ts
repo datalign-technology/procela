@@ -206,7 +206,7 @@ export const ROUTE_GROUPS: Record<string, string[]> = {
   '/governance-calendar': ['/governance-calendar'],
   '/governance-work': ['/governance-work'],
   '/enterprise-view': ['/enterprise-view', '/control-tower'],
-  '/reports': ['/reports', '/report', '/scorecard'],
+  '/reports': ['/reports', '/report', '/scorecard'],  // /scorecard redirects to /reports
   '/analysis': ['/analysis'],
   '/organizations': ['/organizations'],
   '/people': ['/people'],

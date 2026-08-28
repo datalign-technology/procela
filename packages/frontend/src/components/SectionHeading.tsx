@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 // SectionHeading — the one section title used across dashboards and reports.
 //
 // Replaces the two drifting systems: the Dashboard's bare `<h2 16/600>` and
-// the Executive Report's teal-underlined `<h2 18/700>`. One title treatment
+// a formal report's teal-underlined `<h2 18/700>`. One title treatment
 // (18/700, ink), with the accent moved to an optional `underline` rule and an
 // optional `eyebrow` — so teal never competes with the title text itself.
 //
@@ -19,7 +19,7 @@ interface SectionHeadingProps {
   title: ReactNode;
   /** Small uppercase brand label above the title (e.g. a section number). */
   eyebrow?: ReactNode;
-  /** Teal bottom rule — the formal document treatment (Executive Report). */
+  /** Teal bottom rule — the formal document treatment. */
   underline?: boolean;
   /** Trailing slot on the same baseline — a toggle, a "View all" link, etc. */
   right?: ReactNode;

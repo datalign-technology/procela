@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 // StatTile — the one KPI / metric tile.
 //
 // Replaces the Dashboard's two tile systems (MyDashboard + Overview strips)
-// and the Executive Report's static metric boxes. One number size (24/700),
+// and a printable report's static metric boxes. One number size (24/700),
 // one label, one card. Counts wear plain ink — the label carries identity;
 // spend colour only where the number is a *state* (coverage, health) by
 // passing `valueColor={healthColorVar(x)}`.
