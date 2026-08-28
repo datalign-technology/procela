@@ -313,21 +313,21 @@ async function computeRecommendations(program: StoredGovernanceProgram): Promise
         recs.push({
           phase: 1,
           action: 'Define governance scope',
-          link: '/governance-program',
+          link: '/governance/foundation',
           priority: 'HIGH',
         });
       } else if (check.label === 'Guiding principles established') {
         recs.push({
           phase: 1,
           action: 'Establish guiding principles',
-          link: '/governance-program',
+          link: '/governance/foundation',
           priority: 'HIGH',
         });
       } else if (check.label === 'Operating model selected') {
         recs.push({
           phase: 1,
           action: 'Select an operating model',
-          link: '/governance-program',
+          link: '/governance/foundation',
           priority: 'HIGH',
         });
       }
@@ -350,21 +350,21 @@ async function computeRecommendations(program: StoredGovernanceProgram): Promise
         recs.push({
           phase: 2,
           action: 'Establish a Data Governance Council',
-          link: '/governance',
+          link: '/governance-groups',
           priority: 'HIGH',
         });
       } else if (check.label === 'Governance Committee established') {
         recs.push({
           phase: 2,
           action: 'Establish a Data Governance Committee',
-          link: '/governance',
+          link: '/governance-groups',
           priority: 'MEDIUM',
         });
       } else if (check.label === 'Governance leadership roles established') {
         recs.push({
           phase: 2,
           action: 'Assign governance leadership roles (CDO, Governance Lead) to establish the governance structure',
-          link: '/governance-program',
+          link: '/dama-roles',
           priority: 'MEDIUM',
         });
       }
@@ -380,7 +380,7 @@ async function computeRecommendations(program: StoredGovernanceProgram): Promise
         recs.push({
           phase: 3,
           action: 'Assign Data Owners to be accountable for each data domain',
-          link: '/governance-program',
+          link: '/dama-roles',
           priority: 'HIGH',
         });
       } else if (check.label === 'Data stewards identified') {
@@ -394,7 +394,7 @@ async function computeRecommendations(program: StoredGovernanceProgram): Promise
         recs.push({
           phase: 3,
           action: 'Form a stewardship team',
-          link: '/governance',
+          link: '/governance-groups',
           priority: 'HIGH',
         });
       } else if (check.label === 'Domain ownership assigned') {
@@ -431,7 +431,7 @@ async function computeRecommendations(program: StoredGovernanceProgram): Promise
         recs.push({
           phase: 4,
           action: 'Launch the governance program (set status to ACTIVE)',
-          link: '/governance-program',
+          link: '/setup',
           priority: 'HIGH',
         });
       }

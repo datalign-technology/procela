@@ -14,11 +14,11 @@ import { useRefreshOnFocus } from '../hooks/usePolling';
 // GovernanceFoundationPage — "Governance → Foundation".
 //
 // The program's foundation artifacts (scope, guiding principles, operating
-// model, target dates) used to be authored inline on the Governance Program
-// page, which mixed a *dashboard* (phase tracker) with an *editor*. This page
-// owns the authoring; the Governance Program page is now a pure tracker whose
-// Phase-1 checks deep-link here. Same `PUT /governance-program/:id` API — no
-// data change — so it stays in sync with the phase status.
+// model, target dates) are authored on this page. The program's phase tracker
+// and governed lifecycle live on the Get Started hub (/setup) — there is no
+// separate Governance Program page — and its Govern-stage "Governance
+// foundation" item deep-links here. Same `PUT /governance-program/:id` API —
+// no data change — so it stays in sync with the phase status.
 // ──────────────────────────────────────────────────────────────────────────
 
 interface Program {
@@ -133,7 +133,7 @@ export default function GovernanceFoundationPage() {
         title="Foundation"
         subtitle="Define your governance program's scope, guiding principles, and operating model — the Phase 1 groundwork the rest of the program builds on."
       >
-        <Link to="/governance-program" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>&larr; Governance Program</Link>
+        <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>&larr; Set up Procela</Link>
       </PageHeader>
 
       {loading && <Card padding={24} shadow="none"><Spinner center label="Loading…" /></Card>}
@@ -210,7 +210,7 @@ export default function GovernanceFoundationPage() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-            <Button variant="secondary" onClick={() => navigate('/governance-program')}>Back to Program</Button>
+            <Button variant="secondary" onClick={() => navigate('/setup')}>Back to Setup</Button>
             <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
           </div>
         </Card>

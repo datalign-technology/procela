@@ -130,33 +130,40 @@ export default function HelpPage() {
       <Card padding={24} marginBottom={20}>
         <h2 id="help-getting-started" style={h2Style}>1. Getting Started</h2>
         <p style={pStyle}>
-          The fastest way in is the <strong>Get Started</strong> hub &mdash; a resumable, data-driven journey that walks an org through everything Procela needs. It sits at the top of the sidebar and at <code>/setup</code>.
+          The fastest way in is the <strong>Get Started</strong> hub (titled <strong>Set up Procela</strong>) &mdash; a resumable, data-driven journey from an empty org to a running governance program. It sits at the top of the sidebar and at <code>/setup</code>. Onboarding the org and standing up the program are <strong>one spine</strong>, not two separate tracks: onboarding is simply the first half of standing the program up.
         </p>
 
-        <h3 style={h3Style}>The three phases</h3>
+        <h3 style={h3Style}>The four stages</h3>
         <ul style={listStyle}>
           <li><strong>① Capture</strong> &mdash; tell Procela about your business: organization structure, people, processes, systems, and data assets.</li>
           <li><strong>② Assign</strong> &mdash; give every process and data domain a clear owner.</li>
-          <li><strong>③ Govern</strong> &mdash; connect data to processes, tier and grade assets, stand up your governance operating model, and review remaining gaps.</li>
+          <li><strong>③ Govern</strong> &mdash; connect data to processes, tier and grade assets, and define your governance foundation (scope, principles, operating model).</li>
+          <li><strong>④ Operate</strong> &mdash; stand up the governance structure and roles &amp; policies, then launch and run the program.</li>
         </ul>
 
-        <h3 style={h3Style}>How progress is computed</h3>
-        <ul style={listStyle}>
-          <li><strong>Derived from live data, not checkboxes.</strong> Add five systems and the Systems task flips automatically &mdash; there's no separate to-do list to keep in sync. Status icons: <strong>◐</strong> in progress, <strong>!</strong> needs attention, <strong>✓</strong> done, ○ not started.</li>
-          <li><strong>Affirmation for subjective capture steps.</strong> Steps like <em>Organization structure</em> or <em>People</em> have no objective "done" &mdash; once any data exists, the task shows <em>In progress</em> with a <em>Mark this step complete</em> checkbox; affirmed tasks get a <em>Reopen this step</em> link.</li>
-          <li><strong>Operationally scoped.</strong> Process-side counts (value streams, steps, ownership gaps, coverage) reflect only your business processes. Generating the canned <em>Data Governance Management</em> value stream from the Processes page no longer counts as business-process progress &mdash; that scaffold is tracked separately by the Phase 3 <em>Governance operating model</em> task, which keys off governance groups.</li>
-          <li><strong>Sidebar progress ring.</strong> The overall percentage feeds the ring next to the <em>Get Started</em> link; the link auto-hides once the journey reaches 100%.</li>
-        </ul>
-
-        <h3 style={h3Style}>Reading the hub</h3>
-        <ul style={listStyle}>
-          <li>Each <strong>phase section</strong> and each <strong>task card</strong> is collapsible. Every section starts collapsed so the page opens on a clean three-row overview of the journey. Click any header to expand it; use the <em>Expand all</em> / <em>Collapse all</em> controls in the page header to flip the whole tree at once.</li>
-          <li>Every task's CTA deep-links to the same destination the left nav exposes, so the hand-off from journey to workspace is seamless. The hub is for first-run setup and check-ins; the left nav is your persistent workspace once you know the app.</li>
-        </ul>
-
-        <h3 style={h3Style}>Not the same as the Governance Program journey</h3>
+        <h3 style={h3Style}>The lifecycle bar</h3>
         <p style={pStyle}>
-          The Get Started hub onboards the <em>organization</em> into Procela. The four-phase <strong>Governance Program</strong> journey (Foundation → Structural Design → People &amp; Processes → Operationalization), reached via <strong>Governance &rarr; Program</strong>, is the maturity model for the governance <em>program itself</em>. The two are still distinct, but the program journey is now also surfaced as <strong>Track 2</strong> on the Get Started hub so both live in one place. See Section 8 for the program journey.
+          Across the top, the governance program's lifecycle &mdash; <strong>Planning → Active → Paused → Completed</strong> &mdash; governs the whole arc. The valid next transitions (<em>Launch</em>, <em>Pause</em>, <em>Complete</em>, <em>Reopen</em>) are buttons right here on the lifecycle bar; they're role-gated (admin / program owner) and audited, with a reason prompt and an early-launch confirmation when phases are still incomplete.
+        </p>
+
+        <h3 style={h3Style}>How progress is shown</h3>
+        <ul style={listStyle}>
+          <li><strong>No overall %.</strong> A single number mixing "have I added my systems" with "is the program launched" is meaningless and oscillates &mdash; so each stage carries <em>its own</em> count instead. A stepper highlights the current stage with a <em>You are here</em> tag, and a stage line reads <em>Stage X of 4 · &lt;name&gt; &mdash; n of m done</em>.</li>
+          <li><strong>Derived from live data, not checkboxes.</strong> Add five systems and the Systems item flips automatically &mdash; there's no separate to-do list to keep in sync. Statuses come from dashboard stats (operationally scoped) plus the governance-program status.</li>
+          <li><strong>HERE / AUTO source badges.</strong> Each board item is tagged <strong>Here</strong> (you define it in Procela &mdash; e.g. adding systems, mapping data, editing the Foundation) or <strong>Auto</strong> (derived from your catalog &mdash; e.g. ownership coverage, program launch). Every row deep-links to the page where the work happens.</li>
+          <li><strong>Operationally scoped.</strong> Process-side counts (value streams, steps, ownership gaps, coverage) reflect only your business processes, so the canned <em>Data Governance Management</em> scaffold never masquerades as business-process progress.</li>
+          <li><strong>Sidebar progress ring.</strong> The ring next to the <em>Get Started</em> link now spans <strong>all four stages</strong> &mdash; it fills, and the link auto-hides, only once the program is actually stood up and running, not merely when the org is onboarded.</li>
+        </ul>
+
+        <h3 style={h3Style}>Reading the board</h3>
+        <ul style={listStyle}>
+          <li>Below the stepper, a <strong>four-column board</strong> (one column per stage) shows each item as a checklist row with its source badge and a segmented progress bar. Every row's deep-link hands off to the same destination the left nav exposes, so the move from journey to workspace is seamless. <strong>Operate</strong> reads strictly top-to-bottom: <em>Program launched</em> only ticks once the structure and roles &amp; policies it depends on are in place.</li>
+          <li>The hub is for setup and check-ins; the left nav is your persistent workspace once you know the app.</li>
+        </ul>
+
+        <h3 style={h3Style}>The governance program lives here</h3>
+        <p style={pStyle}>
+          There is no separate Governance Program page &mdash; it was folded into this journey. The <strong>Govern</strong> and <strong>Operate</strong> stages, the lifecycle bar, and Next Actions together <em>are</em> the program's four-phase tracker (Foundation → Structure → People → Operations) and its governed lifecycle. Authoring the foundation itself &mdash; scope, guiding principles, operating model &mdash; happens on <strong>Governance &rarr; Foundation</strong>, and the individual pieces (domains, groups, roles, policies) live on their own Governance pages, which each board item and Next Action deep-links to. (The old <code>/governance-program</code> URL now redirects here.)
         </p>
       </Card>
 
@@ -165,13 +172,13 @@ export default function HelpPage() {
         <h2 id="help-navigation" style={h2Style}>2. Navigation</h2>
         <p style={pStyle}>The sidebar opens with <strong>Get Started</strong> for first-run onboarding (it auto-hides at 100%), then the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.</p>
         <ul style={listStyle}>
-          <li><strong>Get Started</strong> &mdash; Resumable onboarding hub in <strong>two tracks</strong>: Track 1 gets your org into Procela (Capture / Assign / Govern), and Track 2 surfaces the <strong>Governance Program</strong>'s four-phase journey (status + per-phase counts, deep-linking to the Program &amp; Foundation pages). The progress ring and auto-hide track onboarding (Track 1); the program keeps maturing after that. See Section 1 for the mechanics.</li>
+          <li><strong>Get Started</strong> &mdash; Resumable setup hub: <strong>one journey</strong> (Capture → Assign → Govern → Operate) from an empty org to a running governance program, with the program lifecycle (Planning → Active → Paused → Completed) across the top and HERE/AUTO board items deep-linking to each workspace. No overall %; each stage carries its own count. The progress ring and auto-hide track all four stages. See Section 1 for the mechanics.</li>
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
           <li><strong>Organizations</strong> &mdash; Accordion covering the "who" of the platform: <strong>Structure</strong> (your company / division / team tree), <strong>People</strong> (the humans on your team), <strong>Agents</strong> (AI agents that hold governance roles and run automation), and <strong>Skills</strong> (the competencies your roles need).</li>
           <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process view of activity↔asset mappings lives under <strong>Insights &rarr; Process &harr; Data Map</strong> &mdash; its <em>Table</em> view.)</li>
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
-          <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues, Exceptions). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
+          <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Foundation, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues, Exceptions). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly. (The program's tracker and lifecycle live on <strong>Get Started</strong> now, not a separate Program page.)</li>
           <li><strong>Insights</strong> &mdash; grouped into <strong>Explore</strong> (Enterprise View, Analysis, Process &harr; Data Map) and <strong>Review</strong> (Reports, Council Scorecard, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
         </ul>
         <p style={pStyle}>Settings sits at the bottom of the sidebar; Help is the button in the top bar (next to Ask AI).</p>
@@ -372,13 +379,12 @@ export default function HelpPage() {
       {/* 8. Governance */}
       <Card padding={24} marginBottom={20}>
         <h2 id="help-governance" style={h2Style}>8. Governance</h2>
-        <h3 style={h3Style}>Governance Program</h3>
+        <h3 style={h3Style}>Governance Program (on Get Started)</h3>
         <ul style={listStyle}>
-          <li>A <strong>tracker</strong> for the 4-phase setup journey. It's a dashboard, not an editor — every check reflects work done elsewhere and deep-links there. The phase you're on is highlighted with a <strong>“YOU ARE HERE”</strong> marker, and each phase card shows a plain <strong>"n / m done" count</strong> (not a percentage); completed phases show a check.</li>
-          <li><strong>No single overall percentage.</strong> That number was a live roll-up of every check and could move <em>down</em> when your catalog changed (e.g. adding an unowned domain), which read like a regression. The header shows two honest axes instead: the <strong>lifecycle status</strong> (a badge + a Planning &rarr; Active &rarr; Paused &rarr; Completed strip) and the current <strong>"Phase X of 4"</strong> stage.</li>
-          <li>Phase completion is computed automatically from your actual data; next-action recommendations link to the right page.</li>
-          <li><strong>Foundation authoring lives on its own page.</strong> Scope (in / out), guiding principles, and operating model are edited on <strong>Governance &rarr; Foundation</strong>; the Program page's Phase-1 panel is a read-only summary with a <strong>Manage in Foundation &rarr;</strong> link. Same program record — the phase checks update as you save.</li>
-          <li><strong>Governed lifecycle:</strong> the program status (Planning &rarr; Active &harr; Paused &rarr; Completed, with explicit Reopen) is changed from the <strong>status strip at the top of the page</strong>, can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active; launching with Phases 2&ndash;4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch. A program marked <strong>Completed</strong> still counts as launched, so completing it never drops the tracker back below done.</li>
+          <li>The program has <strong>no page of its own</strong> &mdash; its four-phase tracker, lifecycle, and Next Actions live on the <strong>Get Started</strong> hub (Section 1), as the <strong>Govern</strong> and <strong>Operate</strong> stages. Every check reflects work done elsewhere and deep-links there; the stage you're on is marked <strong>“YOU ARE HERE”</strong> and each carries a plain <strong>"n / m done" count</strong>, not a percentage. (The old <code>/governance-program</code> URL redirects to <code>/setup</code>.)</li>
+          <li><strong>No single overall percentage.</strong> A live roll-up of every check could move <em>down</em> when your catalog changed (e.g. adding an unowned domain), which read like a regression. Get Started shows honest axes instead: the <strong>lifecycle status</strong> (a badge + a Planning &rarr; Active &rarr; Paused &rarr; Completed strip) and each stage's own count.</li>
+          <li><strong>Foundation authoring lives on its own page.</strong> Scope (in / out), guiding principles, and operating model are edited on <strong>Governance &rarr; Foundation</strong>; the Govern stage's <em>Governance foundation</em> item deep-links there. Same program record — the checks update as you save.</li>
+          <li><strong>Governed lifecycle:</strong> the program status (Planning &rarr; Active &harr; Paused &rarr; Completed, with explicit Reopen) is changed from the <strong>lifecycle bar on Get Started</strong>, can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active; launching with Phases 2&ndash;4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch. A program marked <strong>Completed</strong> still counts as launched, so completing it never drops the tracker back below done.</li>
         </ul>
         <h3 style={h3Style}>Governance Groups</h3>
         <ul style={listStyle}>
@@ -722,13 +728,15 @@ export default function HelpPage() {
           place to define how the business works, assign ownership, and govern data quality across every level.
         </p>
 
-        <h3 style={h3Style}>What is the Governance Program page?</h3>
+        <h3 style={h3Style}>Where did the Governance Program page go?</h3>
         <p style={pStyle}>
-          It's a <strong>tracker</strong> for a 4-phase approach to building a governance program: Foundation, Structural Design,
-          People &amp; Processes, and Operationalization. Progress is tracked automatically from your actual data and shown as a
-          per-phase "n / m done" count plus a lifecycle status (Planning &rarr; Active &rarr; Paused &rarr; Completed) &mdash; there's no
-          single overall percentage, because that number could move backward as your catalog changed. Phase 1 groundwork (scope,
-          guiding principles, operating model) is authored on the <strong>Governance &rarr; Foundation</strong> page.
+          It was folded into <strong>Get Started</strong> (<code>/setup</code>) &mdash; the old <code>/governance-program</code> URL now
+          redirects there. The 4-phase approach (Foundation, Structural Design, People &amp; Processes, Operationalization) is now the
+          <strong>Govern</strong> and <strong>Operate</strong> stages of the Get Started journey, with the lifecycle bar (Planning &rarr;
+          Active &rarr; Paused &rarr; Completed) and Next Actions right there. Progress is tracked automatically from your actual data as a
+          per-stage "n / m done" count &mdash; there's no single overall percentage, because that number could move backward as your
+          catalog changed. Phase 1 groundwork (scope, guiding principles, operating model) is authored on the
+          <strong>Governance &rarr; Foundation</strong> page.
         </p>
 
         <h3 style={h3Style}>How do SOPs work?</h3>
@@ -883,7 +891,7 @@ export default function HelpPage() {
               ['g then m', 'Go to Data Mapping (mappings)'],
               ['g then l', 'Go to Lineage'],
               ['g then q', 'Go to Data Quality'],
-              ['g then g', 'Go to Governance Program'],
+              ['g then g', 'Go to Governance Foundation'],
               ['g then r', 'Go to Reports'],
               ['g then e', 'Go to Enterprise View'],
               ['g then h', 'Go to Help'],

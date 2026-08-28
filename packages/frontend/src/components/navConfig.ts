@@ -123,7 +123,6 @@ export const navSections: NavSection[] = [
   {
     label: 'Governance',
     items: [
-      { to: '/governance-program', label: 'Program' },
       { to: '/governance/foundation', label: 'Foundation' },
       { to: '/governance-groups', label: 'Groups' },
       { to: '/dama-roles', label: 'Roles' },
@@ -135,7 +134,7 @@ export const navSections: NavSection[] = [
       { to: '/governance-exceptions', label: 'Exceptions' },
     ],
     subGroups: [
-      { label: 'Set up', itemTos: ['/governance-program', '/governance/foundation', '/governance-groups', '/dama-roles', '/governance-policies', '/decision-rights'] },
+      { label: 'Set up', itemTos: ['/governance/foundation', '/governance-groups', '/dama-roles', '/governance-policies', '/decision-rights'] },
       { label: 'Operate', itemTos: ['/documentation', '/governance-calendar', '/governance-work', '/governance-exceptions'] },
     ],
   },
@@ -197,7 +196,6 @@ export const ROUTE_GROUPS: Record<string, string[]> = {
   '/business-glossary': ['/business-glossary'],
   '/processes/data-map': ['/processes/data-map', '/mappings'],
   '/data-lineage': ['/data-lineage'],
-  '/governance-program': ['/governance-program'],
   '/governance/foundation': ['/governance/foundation'],
   '/governance-groups': ['/governance-groups'],
   '/data-domains': ['/data-domains'],

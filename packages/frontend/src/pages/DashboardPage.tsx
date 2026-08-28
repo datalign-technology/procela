@@ -1146,7 +1146,7 @@ function ProgramMaturity() {
             ))}
           </div>
         )}
-        <Link to="/governance-program" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 8, display: 'inline-block' }}>
+        <Link to="/setup" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 8, display: 'inline-block' }}>
           View full program →
         </Link>
       </Card>

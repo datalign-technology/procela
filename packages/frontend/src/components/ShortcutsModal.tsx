@@ -43,7 +43,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['G', 'M'], description: 'Go to Data Mapping' },
       { keys: ['G', 'L'], description: 'Go to Data Lineage' },
       { keys: ['G', 'Q'], description: 'Go to Data Quality' },
-      { keys: ['G', 'G'], description: 'Go to Governance Program' },
+      { keys: ['G', 'G'], description: 'Go to Governance Foundation' },
       { keys: ['G', 'R'], description: 'Go to Reports' },
       { keys: ['G', 'E'], description: 'Go to Enterprise View' },
       { keys: ['G', 'H'], description: 'Go to Help' },
