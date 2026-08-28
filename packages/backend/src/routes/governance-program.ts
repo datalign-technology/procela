@@ -54,6 +54,9 @@ export interface StoredGovernanceProgram {
   targetStartDate: string | null;
   targetLaunchDate: string | null;
   status: ProgramStatus;
+  /** Actual go-live timestamp — set the first time the program goes ACTIVE,
+   *  preserved through pause/resume/reopen. Null until first launched. */
+  launchedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -111,6 +114,7 @@ function buildDefaultProgram(orgId: string): StoredGovernanceProgram {
     targetStartDate: null,
     targetLaunchDate: null,
     status: 'PLANNING',
+    launchedAt: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -606,6 +610,11 @@ router.put('/:id', async (req: Request, res: Response) => {
         return;
       }
       earlyLaunch = incompletePhases.length > 0;
+
+      // Record the actual go-live the first time the program launches, and
+      // never overwrite it — a later pause/resume/reopen keeps the original
+      // launch date.
+      if (!program.launchedAt) program.launchedAt = new Date().toISOString();
     }
 
     program.status = to;

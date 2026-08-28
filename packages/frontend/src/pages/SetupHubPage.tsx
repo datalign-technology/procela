@@ -59,7 +59,7 @@ interface ProgStatus {
   overallProgress: number;
 }
 type ProgramStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
-interface Prog { id: string; status: ProgramStatus }
+interface Prog { id: string; status: ProgramStatus; launchedAt?: string | null }
 interface IncompletePhase { phase: number; name: string; missing: string[] }
 
 // Client mirror of the backend lifecycle state machine — the backend is
@@ -293,6 +293,9 @@ export default function SetupHubPage() {
 
   const progStatus: Prog['status'] = prog?.status ?? 'PLANNING';
   const pill = STATUS_PILL[progStatus];
+  const launchedLabel = prog?.launchedAt
+    ? new Date(prog.launchedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    : null;
 
   return (
     <Page padding="8px 0 64px">
@@ -334,6 +337,11 @@ export default function SetupHubPage() {
                 {i < LIFECYCLE.length - 1 && <span style={{ color: 'var(--color-text-muted)' }}>→</span>}
               </span>
             ))}
+            {launchedLabel && (
+              <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)', marginLeft: 4 }}>
+                Launched <strong style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{launchedLabel}</strong>
+              </span>
+            )}
             {!prog ? (
               <button onClick={() => navigate('/governance/foundation')} style={{ ...primaryBtn, marginLeft: 'auto' }}>Set up program &rarr;</button>
             ) : (
@@ -344,19 +352,26 @@ export default function SetupHubPage() {
                   const label = STATUS_ACTION_LABEL[`${progStatus}>${to}`] || `Set ${to}`;
                   const isPrimary = to === 'ACTIVE';
                   const isDanger = to === 'COMPLETED';
-                  const gated = !isAdmin || statusBusy;
+                  // Foundation (Phase 1) is a hard prerequisite for going ACTIVE
+                  // — the backend rejects it, so disable the button rather than
+                  // let it fail. Later phases stay allowed (audited early launch).
+                  const needsFoundation = to === 'ACTIVE' && !status?.phases.phase1.completed;
+                  const disabled = !isAdmin || statusBusy || needsFoundation;
+                  const title = !isAdmin ? 'Only an admin / program owner can change the program status'
+                    : needsFoundation ? 'Complete the Foundation (Phase 1) — scope, principles, and operating model — before launching.'
+                    : undefined;
                   return (
                     <button
                       key={to}
-                      disabled={gated}
-                      title={!isAdmin ? 'Only an admin / program owner can change the program status' : undefined}
+                      disabled={disabled}
+                      title={title}
                       onClick={() => startTransition(to)}
                       style={{
                         ...primaryBtn,
-                        background: !isAdmin ? 'var(--color-border)' : isDanger ? '#b91c1c' : isPrimary ? 'var(--color-primary)' : 'var(--color-surface)',
-                        color: !isAdmin ? 'var(--color-text-muted)' : (isPrimary || isDanger) ? '#fff' : 'var(--color-text)',
+                        background: disabled ? 'var(--color-border)' : isDanger ? '#b91c1c' : isPrimary ? 'var(--color-primary)' : 'var(--color-surface)',
+                        color: disabled ? 'var(--color-text-muted)' : (isPrimary || isDanger) ? '#fff' : 'var(--color-text)',
                         border: isPrimary || isDanger ? 'none' : '1px solid var(--color-border)',
-                        cursor: gated ? 'not-allowed' : 'pointer',
+                        cursor: disabled ? 'not-allowed' : 'pointer',
                       }}
                     >
                       {label}

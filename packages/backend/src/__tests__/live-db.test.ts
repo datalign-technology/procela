@@ -574,7 +574,7 @@ suite('live-db repository round-trips', () => {
       id: randomUUID(), orgId, name: 'Enterprise DG',
       scope: { inScope: 'utilities', outOfScope: '', boundaries: '', constraints: '' },
       principles: { vision: 'v', principles: ['p1'], decisionRights: '', operatingModel: 'HYBRID' },
-      targetStartDate: null, targetLaunchDate: null, status: 'PLANNING',
+      targetStartDate: null, targetLaunchDate: null, status: 'PLANNING', launchedAt: null,
       createdAt: now, updatedAt: now,
     });
     await dr.create({
@@ -1383,7 +1383,7 @@ suite('live-db business flows', () => {
       scope: { inScope: 'Everything in the catalog', outOfScope: '', boundaries: '', constraints: '' },
       principles: { vision: 'Trusted data', principles: ['P1', 'P2'], decisionRights: '', operatingModel: 'FEDERATED' },
       targetStartDate: null, targetLaunchDate: null,
-      status: 'ACTIVE', createdAt: now, updatedAt: now,
+      status: 'ACTIVE', launchedAt: null, createdAt: now, updatedAt: now,
     });
     const domains = prismaRepo(prismaDataDomainsRepository);
     await domains.create({
