@@ -426,7 +426,7 @@ async function seedGovernanceDepth(repos: DemoRepos, ts: string, ctx: GovDepthCt
     scope: { inScope: 'Enterprise processes, data domains, and systems in the catalog.', outOfScope: 'Personal productivity data and unmanaged spreadsheets.', boundaries: 'All business units in the org hierarchy.', constraints: 'Regulatory reporting deadlines take priority over roadmap work.' },
     principles: { vision: 'Trusted data, owned by the business, discoverable by everyone.', principles: ['Data is an asset', 'Every asset has an owner', 'Govern by tier, not by fiat', 'Automate the routine controls'], decisionRights: 'Council approves policy; domain owners approve domain scope.', operatingModel: 'FEDERATED' },
     targetStartDate: daysFromNow(-180).slice(0, 10), targetLaunchDate: daysFromNow(-60).slice(0, 10),
-    status: 'ACTIVE', createdAt: ts, updatedAt: ts,
+    status: 'ACTIVE', launchedAt: daysFromNow(-55), createdAt: ts, updatedAt: ts,
   });
 
   // Decision rights (2) — one person-decided, one group-decided.

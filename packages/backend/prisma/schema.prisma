@@ -1170,6 +1170,7 @@ model GovernanceProgram {
   targetStartDate  String?
   targetLaunchDate String?
   status           String   @default("PLANNING")
+  launchedAt       DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

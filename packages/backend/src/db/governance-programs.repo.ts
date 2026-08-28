@@ -26,6 +26,7 @@ type PrismaGovernanceProgramRow = {
   targetStartDate: string | null;
   targetLaunchDate: string | null;
   status: string;
+  launchedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -48,6 +49,7 @@ function fromPrisma(r: PrismaGovernanceProgramRow): StoredGovernanceProgram {
     targetStartDate: r.targetStartDate,
     targetLaunchDate: r.targetLaunchDate,
     status: r.status as StoredGovernanceProgram['status'],
+    launchedAt: r.launchedAt ? r.launchedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -63,6 +65,7 @@ function toPrismaData(row: Partial<StoredGovernanceProgram>): Record<string, unk
   if (row.targetStartDate !== undefined) d.targetStartDate = row.targetStartDate;
   if (row.targetLaunchDate !== undefined) d.targetLaunchDate = row.targetLaunchDate;
   if (row.status !== undefined) d.status = row.status;
+  if (row.launchedAt !== undefined) d.launchedAt = row.launchedAt ? new Date(row.launchedAt) : null;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;
 }
