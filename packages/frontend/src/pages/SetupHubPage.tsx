@@ -367,37 +367,9 @@ export default function SetupHubPage() {
             )}
           </div>
 
-          {/* Stepper — the four stages, current highlighted. */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 14 }}>
-            {stages.map((st, i) => {
-              const c = counts[i];
-              const isCurrent = i === currentIdx;
-              const complete = c.done >= c.total;
-              return (
-                <div key={st.num} style={{ display: 'flex', alignItems: 'flex-start', flex: i < stages.length - 1 ? 1 : '0 0 auto', minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                    <span style={{
-                      width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                      background: complete || isCurrent ? st.color : 'var(--color-surface)',
-                      color: complete || isCurrent ? '#fff' : 'var(--color-text-muted)',
-                      border: complete || isCurrent ? 'none' : '1.5px solid var(--color-border)',
-                      display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800,
-                    }}>{complete ? '✓' : st.num}</span>
-                    <div style={{ minWidth: 0 }}>
-                      {isCurrent && <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: st.color }}>You are here</div>}
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: isCurrent || complete ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>{st.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600 }}>{c.done} / {c.total}</div>
-                    </div>
-                  </div>
-                  {i < stages.length - 1 && (
-                    <div style={{ flex: 1, height: 2, background: 'var(--color-border)', margin: '15px 12px 0', minWidth: 12 }} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Stage line — the single honest summary, no overall %. */}
+          {/* Stage line — the single honest summary, no overall %. The board
+              below carries the per-stage detail, so the redundant stepper that
+              used to sit here has been removed. */}
           <div style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', marginBottom: 16 }}>
             <strong style={{ color: 'var(--color-text)' }}>Stage {currentIdx + 1} of 4 · {stages[currentIdx].name}</strong>
             {' — '}{counts[currentIdx].done} of {counts[currentIdx].total} done. Each stage carries its own count; there’s no overall %.
