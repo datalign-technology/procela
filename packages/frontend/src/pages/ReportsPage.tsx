@@ -1,21 +1,10 @@
-import { lazy, Suspense, useEffect, useState, useCallback } from 'react';
-import { useSearchParams, Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
-
-const ExecutiveReportPage = lazy(() => import('./ExecutiveReportPage'));
-const ScorecardPage       = lazy(() => import('./ScorecardPage'));
-
-type ReportTab = 'user' | 'executive' | 'scorecard';
-
-const TABS: { id: ReportTab; label: string; description: string }[] = [
-  { id: 'user',      label: 'My Reports',       description: 'Reports you and your org have built against the Procela data model.' },
-  { id: 'executive', label: 'Executive Report', description: 'One-page overview for leadership.' },
-  { id: 'scorecard', label: 'Scorecard',        description: 'Data and governance health by dimension.' },
-];
 
 interface UserReportSummary {
   id: string;
@@ -118,72 +107,12 @@ function UserReportsTab() {
 }
 
 export default function ReportsPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab') as ReportTab | null;
-  const active: ReportTab = TABS.some((t) => t.id === tabParam) ? (tabParam as ReportTab) : 'user';
-
-  useEffect(() => {
-    if (!tabParam) setSearchParams({ tab: 'user' }, { replace: true });
-  }, [tabParam, setSearchParams]);
-
-  const setActive = (id: ReportTab) => setSearchParams({ tab: id }, { replace: true });
-
-  const TabContent = (() => {
-    switch (active) {
-      case 'user':      return <UserReportsTab />;
-      case 'executive': return <ExecutiveReportPage />;
-      case 'scorecard': return <ScorecardPage />;
-    }
-  })();
-
-  const activeTab = TABS.find((t) => t.id === active)!;
-
+  // Reports is now just the report catalog + Builder. The Executive Report and
+  // Governance Maturity Scorecard tabs were removed, so the tab bar is gone too.
   return (
     <div>
-      <div className="no-print">
-      <PageHeader title="Reports" subtitle={activeTab.description} />
-
-      <div
-        role="tablist"
-        aria-label="Report views"
-        style={{
-          display: 'flex', gap: 2, marginBottom: 16,
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        {TABS.map((t) => {
-          const isActive = t.id === active;
-          return (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setActive(t.id)}
-              style={{
-                padding: '8px 16px',
-                fontSize: 13, fontWeight: isActive ? 600 : 500,
-                background: 'transparent',
-                border: 'none',
-                borderBottom: isActive ? '2px solid var(--color-primary)' : '2px solid transparent',
-                color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                marginBottom: -1,
-                cursor: 'pointer',
-              }}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-      </div>
-
-      <Suspense fallback={
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-          <SkeletonRows rows={6} columns={4} />
-        </div>
-      }>
-        {TabContent}
-      </Suspense>
+      <PageHeader title="Reports" subtitle="Reports you and your org have built against the Procela data model." />
+      <UserReportsTab />
     </div>
   );
 }

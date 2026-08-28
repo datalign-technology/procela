@@ -1,6 +1,6 @@
 ---
 name: screenshot-app
-description: Launch the Procela web app locally and screenshot authenticated pages (Dashboard, Executive Report, any route) against seeded demo data. Use whenever asked to screenshot, visually verify, or "see" a frontend change in the running app.
+description: Launch the Procela web app locally and screenshot authenticated pages (Dashboard, Get Started, Reports, any route) against seeded demo data. Use whenever asked to screenshot, visually verify, or "see" a frontend change in the running app.
 ---
 
 # Screenshot the Procela app
@@ -53,11 +53,11 @@ capture. Pass an output dir and one or more `name=route` pairs:
 ```bash
 node .claude/skills/screenshot-app/shoot.mjs /tmp/shots \
   dashboard=/ \
-  report=/reports?tab=executive
+  reports=/reports
 ```
 
-Common routes: Dashboard `/` · Executive Report `/reports?tab=executive` ·
-Scorecard `/reports?tab=scorecard` · Data Assets `/data-assets` · People
+Common routes: Dashboard `/` · Get Started `/setup` · Reports `/reports` ·
+Council Scorecard `/council-scorecard` · Data Assets `/data-assets` · People
 `/people`. Any authenticated route works.
 
 ### 3. Look at the output

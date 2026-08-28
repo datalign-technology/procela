@@ -7,7 +7,7 @@
 // Usage:
 //   node .claude/skills/screenshot-app/shoot.mjs <outDir> <name=route> [<name=route> ...]
 // Example:
-//   node .claude/skills/screenshot-app/shoot.mjs /tmp/shots dashboard=/ report=/reports?tab=executive
+//   node .claude/skills/screenshot-app/shoot.mjs /tmp/shots dashboard=/ reports=/reports
 //
 // This file lives inside the repo so `import '@playwright/test'` resolves
 // against the repo-root node_modules (Node walks parent dirs). A copy placed

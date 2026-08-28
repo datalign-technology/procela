@@ -111,8 +111,10 @@ export default function App() {
           <Route path="/roles" element={<Navigate to="/dama-roles" replace />} />
           <Route path="/raci" element={<Navigate to="/dama-roles?tab=raci" replace />} />
           <Route path="/control-tower" element={<Navigate to="/enterprise-view" replace />} />
-          <Route path="/scorecard" element={<Navigate to="/reports?tab=scorecard" replace />} />
-          <Route path="/report" element={<Navigate to="/reports?tab=executive" replace />} />
+          {/* The Governance Maturity Scorecard tab was removed; its data still
+              surfaces in the Executive Report. Old /scorecard links → Reports. */}
+          <Route path="/scorecard" element={<Navigate to="/reports" replace />} />
+          <Route path="/report" element={<Navigate to="/reports" replace />} />
           <Route path="/data-lineage" element={<DataLineagePage />} />
           {/* Data Quality folded into the Data Assets hub as the Quality /
               Rules tabs. Redirect preserves old links (digest, AI, bookmarks). */}
