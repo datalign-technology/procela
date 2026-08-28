@@ -143,10 +143,17 @@ export default function SetupHubPage() {
       { label: 'Tier & grade assets', done: !!s && s.dataAssets > 0 && s.gaps.ungovernedAssets === 0, to: '/data-assets', src: 'here' },
       { label: 'Governance foundation', done: !!ph?.phase1.completed, to: '/governance/foundation', src: 'here' },
     ];
+    // Operate reads strictly top-to-bottom: "Program launched" is gated
+    // behind the structure and roles/policies it depends on, so it never
+    // checks ahead of them even when the program's lifecycle is already
+    // ACTIVE (the lifecycle badge at the top still shows the true status).
+    const structureDone = !!ph?.phase2.completed;
+    const rolesPoliciesDone = !!(ph?.phase3.completed && ph?.phase4.completed);
+    const launched = prog?.status === 'ACTIVE' || prog?.status === 'COMPLETED';
     const operate: StageItem[] = [
-      { label: 'Governance structure', done: !!ph?.phase2.completed, to: '/governance-groups', src: 'auto' },
-      { label: 'Roles & policies', done: !!(ph?.phase3.completed && ph?.phase4.completed), to: '/governance-program', src: 'auto' },
-      { label: 'Program launched', done: prog?.status === 'ACTIVE' || prog?.status === 'COMPLETED', to: '/governance-program', src: 'auto' },
+      { label: 'Governance structure', done: structureDone, to: '/governance-groups', src: 'auto' },
+      { label: 'Roles & policies', done: rolesPoliciesDone, to: '/governance-program', src: 'auto' },
+      { label: 'Program launched', done: launched && structureDone && rolesPoliciesDone, to: '/governance-program', src: 'auto' },
     ];
 
     return [
