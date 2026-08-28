@@ -193,6 +193,20 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <rect x="7" y="16" width="10" height="4" rx="0.6" />
     </NavSvg>
   ),
+  // Governance Foundation: a classical base — columns standing on a
+  // foundation slab above the ground line. Reads as "the footing the
+  // whole program stands on" (scope, principles, operating model),
+  // distinct from the stacked-bars Program icon.
+  '/governance/foundation': (
+    <NavSvg>
+      <path d="M3 20.5 H21" />
+      <rect x="5.5" y="15" width="13" height="3.3" rx="0.6" />
+      <path d="M8 15 V10" />
+      <path d="M12 15 V10" />
+      <path d="M16 15 V10" />
+      <path d="M6.5 10 H17.5 L12 5.5 Z" />
+    </NavSvg>
+  ),
   '/governance-groups': (
     <NavSvg>
       <circle cx="7" cy="8.5" r="2.5" />
