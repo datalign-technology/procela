@@ -60,7 +60,6 @@ interface ProgStatus {
 }
 type ProgramStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
 interface Prog { id: string; status: ProgramStatus }
-interface Recommendation { phase: number; action: string; link: string; priority: 'HIGH' | 'MEDIUM' | 'LOW' }
 interface IncompletePhase { phase: number; name: string; missing: string[] }
 
 // Client mirror of the backend lifecycle state machine — the backend is
@@ -81,11 +80,12 @@ const STATUS_ACTION_LABEL: Record<string, string> = {
   'ACTIVE>COMPLETED': 'Complete program',
   'PAUSED>COMPLETED': 'Complete program',
 };
-const PHASE_COLORS: Record<number, string> = { 1: '#3b82f6', 2: '#8b5cf6', 3: '#22c55e', 4: '#f97316' };
-const priorityColor = (p: Recommendation['priority']): { bg: string; color: string } =>
-  p === 'HIGH' ? { bg: '#fef2f2', color: '#b91c1c' }
-    : p === 'MEDIUM' ? { bg: '#fffbeb', color: '#b45309' }
-    : { bg: '#f0f9ff', color: '#0369a1' };
+// Next Actions priority palette. Board-derived: items in the current stage
+// are HIGH (do these now), items in later stages are NEXT.
+const PRIORITY_PALETTE = {
+  HIGH: { bg: '#fef2f2', color: '#b91c1c', label: 'HIGH' },
+  NEXT: { bg: '#eff6ff', color: '#1d4ed8', label: 'NEXT' },
+} as const;
 
 type Src = 'here' | 'auto';
 interface StageItem { label: string; done: boolean; to: string; src: Src }
@@ -122,7 +122,6 @@ export default function SetupHubPage() {
   const [stats, setStats] = useState<DashStats | null>(null);
   const [prog, setProg] = useState<Prog | null>(null);
   const [status, setStatus] = useState<ProgStatus | null>(null);
-  const [recs, setRecs] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   // Locally bump to re-run the loader after a governed lifecycle transition.
   const [reload, setReload] = useState(0);
@@ -149,15 +148,11 @@ export default function SetupHubPage() {
       setProg(p);
       if (p) {
         try {
-          const [s, r] = await Promise.all([
-            apiClient.get<{ success: boolean; data: ProgStatus }>(`/governance-program/${p.id}/status`),
-            apiClient.get<{ success: boolean; data: Recommendation[] }>(`/governance-program/${p.id}/recommendations`).catch(() => ({ data: [] as Recommendation[] })),
-          ]);
-          if (alive) { setStatus(s.data); setRecs(Array.isArray(r.data) ? r.data : []); }
+          const s = await apiClient.get<{ success: boolean; data: ProgStatus }>(`/governance-program/${p.id}/status`);
+          if (alive) setStatus(s.data);
         } catch { /* status may not be available yet */ }
       } else if (alive) {
         setStatus(null);
-        setRecs([]);
       }
     }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -260,6 +255,19 @@ export default function SetupHubPage() {
     const idx = counts.findIndex((c) => c.done < c.total);
     return idx === -1 ? stages.length - 1 : idx;
   }, [counts, stages.length]);
+
+  // Next Actions are derived directly from the board's unchecked items, in
+  // stage order, so the two always agree. Items in the current stage are HIGH
+  // (do these now); items in later stages are NEXT.
+  const nextActions = useMemo(() => {
+    const out: { stage: Stage; item: StageItem; priority: 'HIGH' | 'NEXT' }[] = [];
+    stages.forEach((st, i) => {
+      st.items.forEach((it) => {
+        if (!it.done) out.push({ stage: st, item: it, priority: i === currentIdx ? 'HIGH' : 'NEXT' });
+      });
+    });
+    return out;
+  }, [stages, currentIdx]);
 
   // Sidebar ring / auto-hide track the full journey — all four stages
   // (Capture/Assign/Govern/Operate) — so the ring only fills, and the guide
@@ -460,27 +468,24 @@ export default function SetupHubPage() {
             </span>
           </div>
 
-          {/* Next Actions — the highest-priority pending items for the current
-              phase, from the governance-program recommendations (folded in
-              from the removed Program page). Each row deep-links to where the
-              work happens. */}
-          {recs.length > 0 && (
+          {/* Next Actions — the board's unchecked items, in stage order, so the
+              list always matches the board above. Each row is tagged by its
+              stage and deep-links to where the work happens. */}
+          {nextActions.length > 0 && (
             <div style={{ marginTop: 28, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, padding: 20 }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Next Actions</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {recs.map((r, idx) => {
-                  const pc = priorityColor(r.priority);
+                {nextActions.map(({ stage, item, priority }, idx) => {
+                  const pr = PRIORITY_PALETTE[priority];
                   return (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-bg)' }}>
-                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', background: pc.bg, color: pc.color, flexShrink: 0 }}>{r.priority}</span>
-                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: PHASE_COLORS[r.phase] + '20', color: PHASE_COLORS[r.phase], flexShrink: 0 }}>Phase {r.phase}</span>
-                      <span style={{ flex: 1, fontSize: 13, color: 'var(--color-text)' }}>{r.action}</span>
-                      {r.link && (
-                        <button
-                          onClick={() => r.link === '/setup' ? window.scrollTo({ top: 0, behavior: 'smooth' }) : navigate(r.link)}
-                          style={{ background: 'none', border: 'none', fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', flexShrink: 0, padding: 0 }}
-                        >Go &rarr;</button>
-                      )}
+                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', background: pr.bg, color: pr.color, flexShrink: 0, minWidth: 38, textAlign: 'center' }}>{pr.label}</span>
+                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: stage.color + '20', color: stage.color, flexShrink: 0 }}>{stage.name}</span>
+                      <span style={{ flex: 1, fontSize: 13, color: 'var(--color-text)' }}>{item.label}</span>
+                      <button
+                        onClick={() => item.to ? navigate(item.to) : window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        style={{ background: 'none', border: 'none', fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', flexShrink: 0, padding: 0 }}
+                      >Go &rarr;</button>
                     </div>
                   );
                 })}
