@@ -25,8 +25,6 @@ interface Program {
   id: string;
   scope: { inScope: string; outOfScope: string; boundaries: string; constraints: string };
   principles: { vision: string; principles: string[]; decisionRights: string; operatingModel: 'CENTRALIZED' | 'FEDERATED' | 'HYBRID' | '' };
-  targetStartDate: string | null;
-  targetLaunchDate: string | null;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -54,8 +52,6 @@ export default function GovernanceFoundationPage() {
   const [newPrinciple, setNewPrinciple] = useState('');
   const [decisionRights, setDecisionRights] = useState('');
   const [operatingModel, setOperatingModel] = useState<Program['principles']['operatingModel']>('');
-  const [targetStartDate, setTargetStartDate] = useState('');
-  const [targetLaunchDate, setTargetLaunchDate] = useState('');
 
   const hydrate = (p: Program) => {
     setInScope(p.scope?.inScope || '');
@@ -67,8 +63,6 @@ export default function GovernanceFoundationPage() {
     setPrinciples(Array.isArray(p.principles?.principles) ? p.principles.principles : []);
     setDecisionRights(p.principles?.decisionRights || '');
     setOperatingModel(p.principles?.operatingModel || '');
-    setTargetStartDate(p.targetStartDate ? p.targetStartDate.slice(0, 10) : '');
-    setTargetLaunchDate(p.targetLaunchDate ? p.targetLaunchDate.slice(0, 10) : '');
   };
 
   const fetchProgram = useCallback(async () => {
@@ -95,8 +89,6 @@ export default function GovernanceFoundationPage() {
         // can't drift back apart.
         scope: { inScope, outOfScope, boundaries, constraints: '' },
         principles: { vision, principles, decisionRights, operatingModel },
-        targetStartDate: targetStartDate || null,
-        targetLaunchDate: targetLaunchDate || null,
       };
       const res = await apiClient.put<{ success: boolean; data: Program }>(`/governance-program/${program.id}`, payload);
       if (res.data) { setProgram(res.data); hydrate(res.data); }
@@ -201,15 +193,7 @@ export default function GovernanceFoundationPage() {
             </div>
           )}
 
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
-            <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--color-text-secondary)' }}>Program Dates</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Start Date</label><input type="date" aria-label="Target Start Date" style={inputStyle} value={targetStartDate} onChange={(e) => setTargetStartDate(e.target.value)} /></div>
-              <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Launch Date</label><input type="date" aria-label="Target Launch Date" style={inputStyle} value={targetLaunchDate} onChange={(e) => setTargetLaunchDate(e.target.value)} /></div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
             <Button variant="secondary" onClick={() => navigate('/setup')}>Back to Setup</Button>
             <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
           </div>
