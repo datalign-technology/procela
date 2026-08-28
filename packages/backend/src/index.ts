@@ -66,7 +66,6 @@ import docsRouter from './routes/docs';
 import connectorsRouter from './routes/connectors';
 import connectorSyncRouter from './routes/connector-sync';
 import connectorDqRouter from './routes/connector-dq';
-import exportsRouter from './routes/exports';
 import digestRouter from './routes/digest';
 import tagsRouter from './routes/tags';
 import commentsRouter from './routes/comments';
@@ -258,7 +257,7 @@ app.use('/api/v1', (req, res, next) => {
 // docs/RBAC_PERMISSION_MATRIX.md.
 //
 // Mounts without a requireResource guard are intentionally
-// any-authenticated: dashboards, search, AI assistant, exports, and
+// any-authenticated: dashboards, search, AI assistant, and
 // per-user surfaces (notifications, saved views) where every write is
 // scoped to the caller's own records.
 
@@ -321,7 +320,6 @@ app.use('/api/v1/backup', authenticateToken, requireResource('backup'), backupRo
 app.use('/api/v1/dashboard', authenticateToken, dashboardRouter);
 app.use('/api/v1/ai', authenticateToken, enforceAiBudget, aiRouter);
 app.use('/api/v1/chat', authenticateToken, enforceAiBudget, chatRouter);
-app.use('/api/v1/exports', authenticateToken, exportsRouter);
 app.use('/api/v1/digest', authenticateToken, digestRouter);
 app.use('/api/v1/search', authenticateToken, searchRouter);
 app.use('/api/v1/notifications', authenticateToken, notificationsRouter);
