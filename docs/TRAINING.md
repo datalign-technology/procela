@@ -239,23 +239,41 @@ Electric**. You should see the electric-division roster only. Try:
 
 ### 2.5 The Get Started page
 
-Open **Get Started** in the sidebar. It's your onboarding hub — a
-resumable, data-driven journey through three phases: **Capture**,
-**Assign**, **Govern**. Each phase is an accordion you expand to
-work through checklist items with per-item Open links. The
-progress ring in the header aggregates the three phases so you
-can see how close you are to fully set up.
+Open **Get Started** in the sidebar (the page is titled **Set up
+Procela**). It's a resumable, data-driven journey from an empty org
+to a running governance program, in **one spine** of four stages:
+**Capture → Assign → Govern → Operate**. Onboarding the org (Capture,
+Assign) and standing up the program (Govern, Operate) are the same
+path, not two separate tracks.
 
-By default (the **Auto** setting) the sidebar entry auto-hides once
-you reach 100%, so the "you're done" state stays clean. You can
-change this under **Settings → Get Started guide** with an
-**Auto / Always / Hidden** control — *Always* keeps the entry
-pinned even after you finish, *Hidden* removes it entirely. That
-choice is a global, per-user preference: it follows you across
-every organization rather than being set per org. Nothing else on
-the platform is gated by finishing the phases — you can drive
-straight to the Process Catalog from a fresh org — but the hub
-makes it obvious what's still missing.
+Across the top, the program's **lifecycle** — Planning → Active →
+Paused → Completed — governs the whole arc, with a single *Launch
+program → / Open program →* action. Below it, a **stepper** marks the
+current stage with a *You are here* tag and shows each stage's own
+count; there's deliberately **no overall %** (one number mixing "added
+my systems" with "program launched" just oscillates). A **four-column
+board** then lists each stage's items with **HERE / AUTO** source
+badges — *Here* = you define it in Procela, *Auto* = derived from your
+catalog — and every row deep-links to where the work happens. *Operate*
+reads strictly top-to-bottom: *Program launched* only ticks once the
+structure and roles & policies it depends on are in place.
+
+There is no separate Governance Program page — the four-phase program
+tracker (Foundation → Structure → People → Operations), its lifecycle,
+and Next Actions all live here on Get Started, with **Governance →
+Foundation** for scope, principles, and operating model. (The old
+`/governance-program` URL redirects to `/setup`.)
+
+By default (the **Auto** setting) the sidebar entry auto-hides once you
+reach 100% across **all four stages** — i.e. once the program is stood
+up and running, not merely when the org is onboarded. You can change
+this under **Settings → Get Started guide** with an
+**Auto / Always / Hidden** control — *Always* keeps the entry pinned
+even after you finish, *Hidden* removes it entirely. That choice is a
+global, per-user preference: it follows you across every organization
+rather than being set per org. Nothing else on the platform is gated by
+finishing the stages — you can drive straight to the Process Catalog
+from a fresh org — but the hub makes it obvious what's still missing.
 
 ### 2.6 Where's Help?
 
@@ -944,19 +962,22 @@ you need to touch the enterprise governance program.
 
 ### 10.3 Governance Program Maturity
 
-**Governance → Program** is a **tracker** for the four-phase journey. The
-header shows two honest axes — a **lifecycle status** (Planning → Active →
-Paused → Completed, changed right there from the status strip) and the
-current **"Phase X of 4"** stage — and each phase card shows a plain
-**"n / m done"** count. There's deliberately no single overall percentage:
-that number rolled up every check and could slide *down* as your catalog
-changed, which looked like a regression.
+The governance program's four-phase tracker lives on **Get Started**
+(Module 2.5) — the **Govern** and **Operate** stages — not a page of its
+own. The **lifecycle status** (Planning → Active → Paused → Completed) is
+changed right there from the lifecycle bar, each stage shows a plain
+**"n / m done"** count, and **Next Actions** lists the highest-priority
+pending items with deep-links. There's deliberately no single overall
+percentage: that number rolled up every check and could slide *down* as
+your catalog changed, which looked like a regression. (The old
+`/governance-program` URL redirects to `/setup`.)
 
 **Phase 1** is Foundation Definition; its scope, guiding principles, and
-operating model are authored on **Governance → Foundation** (the Program
-page links to it). The program can't launch until Phase 1 is complete —
-the platform pops a confirmation if you try to advance early, listing
-exactly what's missing.
+operating model are authored on **Governance → Foundation** (the Govern
+stage links to it). The program can't launch until Phase 1 is complete —
+launching from the lifecycle bar pops a confirmation if you try to advance
+early, listing exactly what's missing, and records the reason in the audit
+log.
 
 ### 10.4 Council Scorecard + Exceptions
 

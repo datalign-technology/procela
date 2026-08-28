@@ -166,7 +166,7 @@ export default function Layout() {
         const map: Record<string, string> = {
           d: '/', o: '/organizations', p: '/people', c: '/processes', a: '/data-assets',
           s: '/systems', q: '/data-quality', l: '/data-lineage', m: '/mappings',
-          g: '/governance-program', r: '/reports', e: '/enterprise-view', h: '/help',
+          g: '/governance/foundation', r: '/reports', e: '/enterprise-view', h: '/help',
         };
         const route = map[e.key];
         if (route) {

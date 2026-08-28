@@ -42,7 +42,6 @@ const GovernancePoliciesPage     = lazy(() => import('@/pages/GovernancePolicies
 const GovernanceCalendarPage     = lazy(() => import('@/pages/GovernanceCalendarPage'));
 const DecisionRightsPage         = lazy(() => import('@/pages/DecisionRightsPage'));
 const BusinessGlossaryPage       = lazy(() => import('@/pages/BusinessGlossaryPage'));
-const GovernanceProgramPage      = lazy(() => import('@/pages/GovernanceProgramPage'));
 const GovernanceFoundationPage   = lazy(() => import('@/pages/GovernanceFoundationPage'));
 const EnterpriseViewPage         = lazy(() => import('@/pages/EnterpriseViewPage'));
 const AnalysisPage               = lazy(() => import('@/pages/AnalysisPage'));
@@ -132,7 +131,10 @@ export default function App() {
           <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
           <Route path="/decision-rights" element={<DecisionRightsPage />} />
           <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
-          <Route path="/governance-program" element={<GovernanceProgramPage />} />
+          {/* The Governance Program page was folded into Get Started (/setup):
+              its lifecycle transitions, per-phase progress, and Next Actions
+              now live there, with scope/principles on Governance → Foundation. */}
+          <Route path="/governance-program" element={<Navigate to="/setup" replace />} />
           <Route path="/governance/foundation" element={<GovernanceFoundationPage />} />
           <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
