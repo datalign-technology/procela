@@ -42,7 +42,7 @@ Widths:
 - `narrow` — 820px, centred. Long-form reading (HelpPage,
   HelpTrainingPage).
 - `wizard` — 820px, centred. Stepped flows (ValueStreamWizard,
-  AssignOwnersPage, SetupHubPage).
+  SetupHubPage).
 
 Bottom padding via `padding` prop when the page needs breathing room
 before the next screen: `<Page padding="8px 0 64px">`.
