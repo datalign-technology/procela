@@ -4,7 +4,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-import { computeDiscoveredAssetHealth } from '../lib/asset-health';
+import {
+  computeDiscoveredAssetHealth,
+  countMeasuredRulesByAsset,
+  effectiveHealthScore,
+} from '../lib/asset-health';
 
 const NOW = Date.UTC(2026, 7, 25, 12, 0, 0); // fixed clock
 const agoDays = (d: number) => new Date(NOW - d * 24 * 60 * 60 * 1000).toISOString();
@@ -47,5 +51,48 @@ describe('computeDiscoveredAssetHealth', () => {
     assert.ok(hi <= 100);
     const lo = computeDiscoveredAssetHealth({ lastWriteAt: agoDays(9999), rowCount: 0, nowMs: NOW });
     assert.ok(lo >= 0);
+  });
+});
+
+describe('countMeasuredRulesByAsset', () => {
+  it('counts only rules whose last run actually measured data', () => {
+    const counts = countMeasuredRulesByAsset([
+      { dataAssetId: 'a', lastRun: { simulated: false } }, // measured
+      { dataAssetId: 'a', lastRun: { simulated: false } }, // measured
+      { dataAssetId: 'a', lastRun: { simulated: true } },  // simulated — excluded
+      { dataAssetId: 'a' },                                 // never run — excluded
+      { dataAssetId: 'b', lastRun: { simulated: false } }, // measured
+      { dataAssetId: null, lastRun: { simulated: false } },// no asset — skipped
+    ]);
+    assert.strictEqual(counts.get('a'), 2);
+    assert.strictEqual(counts.get('b'), 1);
+    assert.strictEqual(counts.has('c'), false);
+  });
+
+  it('is empty for an empty rule list', () => {
+    assert.strictEqual(countMeasuredRulesByAsset([]).size, 0);
+  });
+});
+
+describe('effectiveHealthScore', () => {
+  it('is 0 when no measured rule backs the asset — no rules, or unmeasured only', () => {
+    assert.strictEqual(effectiveHealthScore(95, 0), 0);
+    assert.strictEqual(effectiveHealthScore(95, undefined as unknown as number), 0);
+    // A high stored (connector-freshness / manual) score is never surfaced
+    // as health without a measured rule behind it.
+    assert.strictEqual(effectiveHealthScore(100, 0), 0);
+  });
+
+  it('returns the stored (measured) score when ≥1 measured rule backs it', () => {
+    assert.strictEqual(effectiveHealthScore(88, 1), 88);
+    assert.strictEqual(effectiveHealthScore(0, 3), 0); // measured but all-failing
+    assert.strictEqual(effectiveHealthScore(73.6, 2), 74); // rounded
+  });
+
+  it('clamps to 0..100 and tolerates a missing stored score', () => {
+    assert.strictEqual(effectiveHealthScore(140, 1), 100);
+    assert.strictEqual(effectiveHealthScore(-20, 1), 0);
+    assert.strictEqual(effectiveHealthScore(null, 1), 0);
+    assert.strictEqual(effectiveHealthScore(undefined, 1), 0);
   });
 });

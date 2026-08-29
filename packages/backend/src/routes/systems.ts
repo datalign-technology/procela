@@ -4,6 +4,7 @@ import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { hasDatabase } from '../db/prisma';
 import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
+import { effectiveHealthScore } from '../lib/asset-health';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
 import { dataAssets } from './data-assets';
@@ -452,13 +453,17 @@ router.get('/:id/360', async (req: Request, res: Response) => {
     status: c.status,
   }));
 
+  // Effective health: measured DQ score, or 0 when no measured rule backs
+  // the asset — health is earned from measured quality, not a stand-in.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const measuredCounts = await (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset();
   const assetsHere = allAssets
     .filter((a) => a.systemId === sys.id)
     .map((a) => ({
       id: a.id,
       name: a.name,
       governanceTier: a.governanceTier,
-      healthScore: a.healthScore,
+      healthScore: effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0),
     }));
 
   // Activities that depend on any of the assets here — one hop through

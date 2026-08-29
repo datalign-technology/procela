@@ -42,7 +42,7 @@ import HealthBar from '../components/HealthBar';
 import TierBadge from '../components/TierBadge';
 import { useToastStore } from '../stores/toastStore';
 import { errorMessage, errorToast } from '../lib/errorToast';
-import { clickable, activateOnKeyStop } from '../lib/a11y';
+import { clickable } from '../lib/a11y';
 // Lazy: only renders when the user clicks "Link to connection" on a row.
 const LinkConnectionModal = lazy(() => import('../components/LinkConnectionModal'));
 import UnsavedBanner from '../components/UnsavedBanner';
@@ -353,65 +353,6 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
   { id: 'steward',     label: 'Steward',     defaultVisible: false },
 ];
 const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v1';
-
-function InlineCellEdit({ value, onSave, type = 'text', options, display }: {
-  value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
-  /** Custom read-state content (e.g. a HealthBar) shown in place of the raw
-   *  value. Editing still swaps in the input/select on click. */
-  display?: React.ReactNode;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-
-  if (!editing) {
-    return (
-      <span
-        role="button"
-        tabIndex={0}
-        aria-label="Edit field"
-        onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
-        onKeyDown={activateOnKeyStop(() => { setDraft(value); setEditing(true); })}
-        style={{ cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
-        title="Click to edit"
-      >
-        {display ?? (value || '—')}
-      </span>
-    );
-  }
-
-  if (type === 'select' && options) {
-    return (
-      <select
-        autoFocus
-        aria-label="Edit field"
-        value={draft}
-        onChange={(e) => { onSave(e.target.value); setEditing(false); }}
-        onBlur={() => setEditing(false)}
-        onClick={(e) => e.stopPropagation()}
-        style={{ fontSize: 'inherit', padding: '2px 4px', border: '1px solid var(--color-primary)', borderRadius: 3 }}
-      >
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    );
-  }
-
-  return (
-    <input
-      autoFocus
-      aria-label="Edit field"
-      type={type}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => { if (draft !== value) onSave(draft); setEditing(false); }}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') { if (draft !== value) onSave(draft); setEditing(false); }
-        if (e.key === 'Escape') setEditing(false);
-      }}
-      style={{ fontSize: 'inherit', padding: '2px 4px', width: type === 'number' ? 60 : '100%', border: '1px solid var(--color-primary)', borderRadius: 3 }}
-    />
-  );
-}
 
 export default function DataAssetsPage({
   embedded = false,
@@ -1229,17 +1170,19 @@ export default function DataAssetsPage({
     },
     isVisible('health') && {
       key: 'health', header: 'Health', sortable: true,
+      // Read-only: health is derived from measured data-quality rules, not
+      // hand-set. An asset with no measured rule reads 0% until a rule runs
+      // against it.
       render: (asset: DataAssetEntity) => {
-        const inherited = isInheritedAsset(asset.orgId, activeOrgId);
-        return canWrite && !inherited ? (
-          <InlineCellEdit
-            value={asset.healthScore != null ? String(asset.healthScore) : ''}
-            onSave={(v) => inlineSaveField(asset.id, 'healthScore', v)}
-            type="number"
-            display={<HealthBar score={asset.healthScore} />}
-          />
-        ) : (
-          <HealthBar score={asset.healthScore} />
+        const noMeasured = !asset.measuredRuleCount;
+        return (
+          <span
+            title={noMeasured
+              ? 'Health is measured from data-quality rules. This asset has no measured rule yet, so it reads 0% — add and run a rule to establish its health.'
+              : undefined}
+          >
+            <HealthBar score={asset.healthScore} />
+          </span>
         );
       },
     },

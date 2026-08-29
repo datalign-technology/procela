@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
+import { effectiveHealthScore } from '../lib/asset-health';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { processNodes } from './process-catalog';
@@ -89,15 +90,20 @@ interface EnrichContext {
   peopleById: Map<string, typeof people[number]>;
   policiesById: Map<string, typeof governancePolicies[number]>;
   attachmentsById: Map<string, typeof attachments[number]>;
+  /** Measured (non-simulated) DQ rule count per asset id — drives the
+   *  effective (measured-or-0) health a mapping row reports for its asset. */
+  measuredHealthByAsset: Map<string, number>;
 }
 
 async function buildEnrichContext(): Promise<EnrichContext> {
-  const [nodes, assets, ppl, policies, atts] = await Promise.all([
+  const [nodes, assets, ppl, policies, atts, measuredHealthByAsset] = await Promise.all([
     processNodesRepo().list(),
     dataAssetsRepo().list(),
     peopleRepo().list(),
     governancePoliciesRepo().list(),
     attachmentsRepo().list(),
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset(),
   ]);
   return {
     nodesById: new Map(nodes.map((n) => [n.id, n])),
@@ -105,6 +111,7 @@ async function buildEnrichContext(): Promise<EnrichContext> {
     peopleById: new Map(ppl.map((p) => [p.id, p])),
     policiesById: new Map(policies.map((p) => [p.id, p])),
     attachmentsById: new Map(atts.map((a) => [a.id, a])),
+    measuredHealthByAsset,
   };
 }
 
@@ -146,7 +153,7 @@ function findAssetInfo(assetId: string | undefined, ctx: EnrichContext) {
     assetName: asset.name,
     assetDescription: asset.description,
     governanceTier: asset.governanceTier,
-    healthScore: asset.healthScore,
+    healthScore: effectiveHealthScore(asset.healthScore, ctx.measuredHealthByAsset.get(asset.id) || 0),
     ownerName: owner?.name || null,
     stewardName,
   };

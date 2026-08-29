@@ -21,6 +21,7 @@ import { getMappingsRepository } from '../db/mappings.repo';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { countMeasuredRulesByAsset, effectiveHealthScore } from '../lib/asset-health';
 
 export interface StoredDataAsset {
   id: string;
@@ -562,17 +563,37 @@ const HEALTH_SCORE_THRESHOLD = 80;
  *
  * BRONZE is the floor; everyone is eligible for it.
  */
-function computeSuggestedTier(asset: StoredDataAsset, boundAssetIds: Set<string>): 'BRONZE' | 'SILVER' | 'GOLD' {
+function computeSuggestedTier(
+  asset: StoredDataAsset,
+  boundAssetIds: Set<string>,
+  effectiveHealth: number,
+): 'BRONZE' | 'SILVER' | 'GOLD' {
   const hasOwner = !!asset.ownerPersonId;
   const hasSteward = Array.isArray(asset.stewardIds) && asset.stewardIds.length > 0;
   const hasSensitivity = Array.isArray(asset.sensitivityTags) && asset.sensitivityTags.length > 0;
   const silverEligible = hasOwner && hasSteward && hasSensitivity;
   if (!silverEligible) return 'BRONZE';
 
+  // GOLD is quality-certified: it requires a measured health score at/above
+  // the threshold. An asset with no measured DQ rule has 0 effective health
+  // and can't reach GOLD on that basis, no matter its stored stand-in.
   const hasBinding = boundAssetIds.has(asset.id);
-  const healthOk = (asset.healthScore || 0) >= HEALTH_SCORE_THRESHOLD;
+  const healthOk = effectiveHealth >= HEALTH_SCORE_THRESHOLD;
   if (hasBinding && healthOk) return 'GOLD';
   return 'SILVER';
+}
+
+/**
+ * Effective (measured-or-0) health for a single asset, derived at read time.
+ * Loads the DQ rules through the repo (Postgres-aware) and returns the stored
+ * score only when a measured rule backs the asset — otherwise 0. Used by the
+ * single-asset endpoints so they agree with the list's Health column.
+ */
+async function effectiveHealthForAsset(asset: StoredDataAsset): Promise<number> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const rules = await getDataQualityRulesRepository(require('./data-quality').dataQualityRules).list();
+  const measured = countMeasuredRulesByAsset(rules).get(asset.id) || 0;
+  return effectiveHealthScore(asset.healthScore, measured);
 }
 
 const router = Router();
@@ -745,16 +766,22 @@ router.get('/', async (req: Request, res: Response) => {
         .join(', ') || null;
     }
     const systemName = asset.systemId ? filteredSystems.find((s) => s.id === asset.systemId)?.name || null : null;
-    const suggestedTier = computeSuggestedTier(asset, boundAssetIds);
+    // Effective health: the stored (rolled-up) score only when a measured DQ
+    // rule backs the asset, otherwise 0. Health is earned from measured
+    // quality, never a connector-freshness or manual stand-in.
+    const measuredRuleCount = measuredCountByAsset.get(asset.id) || 0;
+    const health = effectiveHealthScore(asset.healthScore, measuredRuleCount);
+    const suggestedTier = computeSuggestedTier(asset, boundAssetIds, health);
     return {
       ...asset,
+      healthScore: health,
       domainName,
       ownerName, ownerSource, domainOwnerId, domainOwnerName,
       stewardName, stewardSource, domainStewardIds, domainStewardNames,
       systemName, suggestedTier,
       isOrphan: !mappedAssetIds.has(asset.id),
       ruleCount: ruleCountByAsset.get(asset.id) || 0,
-      measuredRuleCount: measuredCountByAsset.get(asset.id) || 0,
+      measuredRuleCount,
     };
   });
 
@@ -833,10 +860,12 @@ router.get('/:id/360', async (req: Request, res: Response) => {
       }
     : null;
 
+  const assetHealth = await effectiveHealthForAsset(asset);
+
   res.json({
     success: true,
     data: {
-      asset,
+      asset: { ...asset, healthScore: assetHealth },
       system: system ? { id: system.id, name: system.name, systemType: system.systemType } : null,
       domain: domainInfo,
       mappings: assetMappings,
@@ -1015,7 +1044,8 @@ router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) =>
 router.get('/:id', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
-  res.json({ success: true, data: asset });
+  const healthScore = await effectiveHealthForAsset(asset);
+  res.json({ success: true, data: { ...asset, healthScore } });
 });
 
 /** POST /api/v1/data-assets */
