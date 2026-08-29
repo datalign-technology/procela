@@ -22,6 +22,7 @@ import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { countMeasuredRulesByAsset, effectiveHealthScore } from '../lib/asset-health';
+import { requireAiEnabled } from '../middleware/ai-enabled';
 
 export interface StoredDataAsset {
   id: string;
@@ -1430,7 +1431,7 @@ function similarity(a: string, b: string): number {
   return Math.min(1, jaccard + sub);
 }
 
-router.get('/:id/suggest-source', async (req: Request, res: Response) => {
+router.get('/:id/suggest-source', requireAiEnabled, async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
@@ -1674,7 +1675,7 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/data-assets/:id/suggest-sensitivity */
-router.post('/:id/suggest-sensitivity', async (req: Request, res: Response) => {
+router.post('/:id/suggest-sensitivity', requireAiEnabled, async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const [allColumns, allSystems] = await Promise.all([

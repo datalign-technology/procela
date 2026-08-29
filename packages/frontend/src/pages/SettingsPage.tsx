@@ -13,6 +13,7 @@ import SectionLabel from '../components/SectionLabel';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
+import { useAiEnabled } from '../stores/aiConfigStore';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
 import LoadDemoDataPanel from '../components/LoadDemoDataPanel';
@@ -65,6 +66,7 @@ const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ORG_ADMIN']);
 export default function SettingsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const aiEnabled = useAiEnabled();
   const isAdmin = !!user?.role && ADMIN_ROLES.has(user.role);
   if (!isAdmin) {
     return (
@@ -849,8 +851,9 @@ export default function SettingsPage() {
 
       {/* AI (Claude) — model + Anthropic-key config. Subsumes the old
           standalone "API Configuration" card, which only restated the same
-          key status this panel already surfaces. */}
-      <AiSettingsPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
+          key status this panel already surfaces. Hidden when AI integration
+          features are turned off for the deployment. */}
+      {aiEnabled && <AiSettingsPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />}
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />

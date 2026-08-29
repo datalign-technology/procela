@@ -10,6 +10,7 @@ import { useValueStreamScope } from '../hooks/useValueStreamScope';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
+import { useAiEnabled } from '../stores/aiConfigStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import IconButton from '../components/IconButton';
@@ -401,6 +402,7 @@ export default function ProcessCatalogPage() {
   // Tidewater Electric asset), pop a confirm before linking.
   const { getOrgName, isOrgInScope } = useOrgNameLookup();
   const { canWrite, canContribute } = usePermissions();
+  const aiEnabled = useAiEnabled();
   const addToast = useToastStore((s) => s.addToast);
   const currentUser = useAuthStore((s) => s.user);
   const [tree, setTree] = useState<ProcessNode[]>([]);
@@ -1192,7 +1194,7 @@ export default function ProcessCatalogPage() {
                 <IconButton icon="refresh" label="Compare value streams"
                   onClick={() => navigate('/processes/compare')} />
               )}
-              {canWrite && canCreateHere && (
+              {canWrite && canCreateHere && aiEnabled && (
                 <IconButton icon="wand"
                   label="Generate from industry template"
                   onClick={() => navigate('/processes/wizard')} />
@@ -1557,10 +1559,12 @@ export default function ProcessCatalogPage() {
 
             {canCreateHere ? (
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                {aiEnabled && (
                 <button onClick={() => navigate('/processes/wizard')}
                   style={{ padding: '10px 24px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
                   Generate from Industry Template
                 </button>
+                )}
                 <button onClick={() => setAddingTo('__root__')}
                   style={{ padding: '10px 24px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
                   Custom
@@ -1612,7 +1616,7 @@ export default function ProcessCatalogPage() {
               onRestoreMapping={restoreMapping}
               statusMode={statusMode}
               agentExecByActivity={agentExecByActivity}
-              onRunAgent={handleRunAgent}
+              onRunAgent={aiEnabled ? handleRunAgent : undefined}
               onReviewExecution={handleReviewExecution}
               onPromoteExecution={handlePromoteExecution}
               runningActivity={runningActivity}

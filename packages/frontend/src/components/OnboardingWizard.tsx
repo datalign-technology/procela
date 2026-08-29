@@ -5,6 +5,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
+import { useAiEnabled } from '../stores/aiConfigStore';
 import { INDUSTRIES } from '../types';
 import Button from './Button';
 
@@ -26,6 +27,7 @@ const PHASE_INFO = [
 
 export default function OnboardingWizard({ onComplete, mode = 'first-run' }: OnboardingWizardProps) {
   const isTour = mode === 'tour-only';
+  const aiEnabled = useAiEnabled();
   const navigate = useNavigate();
   const { setActiveOrg, triggerRefresh } = useOrgContext();
   const [step, setStep] = useState(0);
@@ -70,7 +72,7 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
   };
 
   const handleFinish = async () => {
-    if (generateTemplate && createdOrgId) {
+    if (aiEnabled && generateTemplate && createdOrgId) {
       setGenerating(true);
       try {
         await apiClient.post('/process-catalog/apply-governance-template', { orgId: createdOrgId });
@@ -219,11 +221,19 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
               <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>
                 {orgName} is ready
               </h2>
+              {aiEnabled ? (
               <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>
                 Your organization has been created. Would you like Procela to generate a starting
                 process hierarchy and data domains based on your industry?
               </p>
+              ) : (
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>
+                Your organization has been created. Continue to your dashboard, then build your
+                process hierarchy and data domains from the Process Catalog.
+              </p>
+              )}
 
+              {aiEnabled && (
               <div style={{
                 background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '14px 16px', marginBottom: 20,
               }}>
@@ -243,6 +253,7 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
                   </div>
                 </label>
               </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <Button
@@ -250,7 +261,7 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
                   disabled={generating}
                   onClick={handleFinish}
                 >
-                  {generating ? 'Setting up...' : generateTemplate ? 'Generate & Continue' : 'Continue to Dashboard'}
+                  {generating ? 'Setting up...' : (aiEnabled && generateTemplate) ? 'Generate & Continue' : 'Continue to Dashboard'}
                 </Button>
               </div>
             </>

@@ -25,6 +25,7 @@ import ActivityFeed from '../components/ActivityFeed';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
+import { useAiEnabled } from '../stores/aiConfigStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import Button from '../components/Button';
@@ -374,6 +375,7 @@ export default function DataAssetsPage({
   // division can.
   const canOwnHere = canCreateValueStreams;
   const { canWrite } = usePermissions();
+  const aiEnabled = useAiEnabled();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
   const tierLabel = useTierLabel();
@@ -1216,7 +1218,7 @@ export default function DataAssetsPage({
             ) : (
               <>
                 <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
-                <IconButton size="sm" icon="search" label="Suggest source" onClick={() => openSuggestSource(asset)} />
+                {aiEnabled && <IconButton size="sm" icon="search" label="Suggest source" onClick={() => openSuggestSource(asset)} />}
               </>
             )}
             {canWrite && (

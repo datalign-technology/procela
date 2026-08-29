@@ -47,6 +47,7 @@ import { runBootstrap } from './services/bootstrap.service';
 import scimRouter from './routes/scim';
 import aiRouter from './routes/ai';
 import { enforceAiBudget } from './middleware/ai-budget';
+import { requireAiEnabled } from './middleware/ai-enabled';
 import processCatalogRouter from './routes/process-catalog';
 import systemsRouter from './routes/systems';
 import dataAssetsRouter from './routes/data-assets';
@@ -318,8 +319,8 @@ app.use('/api/v1/backup', authenticateToken, requireResource('backup'), backupRo
 
 // Any-authenticated: read/dashboard/self surfaces (no role gate)
 app.use('/api/v1/dashboard', authenticateToken, dashboardRouter);
-app.use('/api/v1/ai', authenticateToken, enforceAiBudget, aiRouter);
-app.use('/api/v1/chat', authenticateToken, enforceAiBudget, chatRouter);
+app.use('/api/v1/ai', authenticateToken, requireAiEnabled, enforceAiBudget, aiRouter);
+app.use('/api/v1/chat', authenticateToken, requireAiEnabled, enforceAiBudget, chatRouter);
 app.use('/api/v1/digest', authenticateToken, digestRouter);
 app.use('/api/v1/search', authenticateToken, searchRouter);
 app.use('/api/v1/notifications', authenticateToken, notificationsRouter);
@@ -576,6 +577,10 @@ const SUGGESTED_MODEL_IDS = [
   'claude-haiku-4-5-20251001',
 ] as const;
 async function pingAiModel(): Promise<void> {
+  if (!config.aiFeaturesEnabled) {
+    logger.info('AI: features turned off (AI_FEATURES_ENABLED=false) — skipping startup model probe');
+    return;
+  }
   const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) {
     logger.info('AI: API key not configured — skipping startup model probe');

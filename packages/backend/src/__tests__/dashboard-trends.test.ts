@@ -26,6 +26,8 @@ const { dataAssets } = require('../routes/data-assets');
 const { processNodes } = require('../routes/process-catalog');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { mappings } = require('../routes/mappings');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { dataQualityRules } = require('../routes/data-quality');
 
 function request(port: number, method: string, path: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -58,6 +60,7 @@ describe('dashboard trends + snapshot', () => {
     sweep(dataAssets, (a) => a.id?.startsWith(P));
     sweep(processNodes, (n) => n.id?.startsWith(P));
     sweep(mappings, (m) => m.id?.startsWith(P));
+    sweep(dataQualityRules, (r) => r.id?.startsWith(P) || r.dataAssetId?.startsWith(P));
     sweep(statsSnapshots, (s) => s.orgId === orgId || s.id?.startsWith(P));
   };
 
@@ -87,6 +90,12 @@ describe('dashboard trends + snapshot', () => {
     );
     dataAssets.push(
       { id: P + 'asset', orgId, name: 'Asset', description: '', systemId: '', owner: '', ownerPersonId: null, stewardIds: [], governanceTier: 'GOLD', healthScore: 80, createdAt: now, updatedAt: now },
+    );
+    // Health is derived from MEASURED data-quality rules: the asset shows its
+    // stored 80 only because a measured (non-simulated) rule backs it. Without
+    // one its effective health would be 0.
+    dataQualityRules.push(
+      { id: P + 'rule', orgId, dataAssetId: P + 'asset', dimension: 'COMPLETENESS', name: 'Not null', description: '', threshold: 80, currentScore: 80, weight: 5, status: 'PASSING', lastMeasured: now, lastRun: { ranAt: now, simulated: false, totalRows: 100, passCount: 80, failCount: 20, passRate: 80, failureSamples: [], message: '' }, createdAt: now, updatedAt: now },
     );
     mappings.push(
       { id: P + 'map', orgId, processStepId: P + 'act', dataAssetId: P + 'asset', linkType: 'INPUT', notes: '', aiSuggested: false, userOverridden: false, createdAt: now, updatedAt: now, createdBy: null },

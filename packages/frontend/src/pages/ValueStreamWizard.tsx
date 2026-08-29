@@ -4,6 +4,7 @@ import PageHeader from '../components/PageHeader';
 import { INDUSTRIES } from '../types';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useAiEnabled } from '../stores/aiConfigStore';
 import { useValueStreamScope } from '../hooks/useValueStreamScope';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -52,6 +53,7 @@ interface GeneratedTemplate { valueStreams: TemplateValueStream[]; }
 
 export default function ValueStreamWizard() {
   const navigate = useNavigate();
+  const aiEnabled = useAiEnabled();
   const { activeOrgId, activeOrgName, activeOrgType, setActiveOrg } = useOrgContext();
   // parentName / divisions / blocked all come from the shared scope
   // hook so this surface and the Process Catalog's manual create
@@ -277,6 +279,27 @@ export default function ValueStreamWizard() {
   const totalActivities = template ? template.valueStreams.filter((vs) => vs.selected).reduce((sum, vs) => sum + vs.processes.reduce((s, p) => s + (p.activities || []).length, 0), 0) : 0;
 
   const prettyType = (t: string) => t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+
+  // The Process Wizard is an AI-only flow (it generates the hierarchy with
+  // Claude). When AI integration features are turned off, there's nothing to
+  // run here — point the user at the manual path instead of a dead form.
+  if (!aiEnabled) {
+    return (
+      <Page>
+        <PageHeader title="Process Wizard" subtitle="Generate a process hierarchy" />
+        <Card padding={24}>
+          <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
+            The Process Wizard uses AI to generate a starting hierarchy, and AI
+            features are turned off for this deployment. You can build your value
+            streams, processes, and activities directly in the Process Catalog.
+          </p>
+          <Button variant="primary" onClick={() => navigate('/processes')}>
+            Go to Process Catalog
+          </Button>
+        </Card>
+      </Page>
+    );
+  }
 
   return (
     <Page>

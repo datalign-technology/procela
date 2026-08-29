@@ -36,6 +36,14 @@ export const config = {
 
   // AI
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+  // Master switch for every AI integration feature (industry template
+  // generation, data-domain + asset suggestions, the sensitivity
+  // classifier, the AI assistant, and governance AI agents). Defaults
+  // ON; set AI_FEATURES_ENABLED=false to turn them off entirely —
+  // the backend refuses the AI endpoints and the frontend hides their
+  // UI. For deployments (on-prem / FedRAMP) that must not call an
+  // external model, this is the single knob.
+  aiFeaturesEnabled: process.env.AI_FEATURES_ENABLED !== 'false',
   // Anthropic model used for every server-side Claude call (process
   // template generation, data-domain suggestions, asset suggestions,
   // governance activity runs, chat). Override with ANTHROPIC_MODEL

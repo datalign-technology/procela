@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { config } from '../config';
 import logger from '../lib/logger';
 import { aiService, GovernanceActivityRun } from '../services/ai.service';
 import { agents } from './agents';
@@ -215,6 +216,11 @@ export async function runAgentExecution(params: {
   userId?: string | null;
 }): Promise<StoredAgentExecution> {
   const { orgId, agentId, activityId, roleType, triggeredBy = 'user', scheduleId = null, userId = null } = params;
+  // AI agents are an AI integration feature — refuse to run when AI is off,
+  // covering both the ad-hoc route and the scheduler which call this helper.
+  if (!config.aiFeaturesEnabled) {
+    throw Object.assign(new Error('AI features are turned off for this deployment.'), { status: 403, code: 'AI_DISABLED' });
+  }
   if (!orgId) throw Object.assign(new Error('orgId is required'), { status: 400 });
   if (!agentId) throw Object.assign(new Error('agentId is required'), { status: 400 });
   if (!activityId) throw Object.assign(new Error('activityId is required'), { status: 400 });
