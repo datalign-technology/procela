@@ -349,6 +349,12 @@ JWT_SECRET=
 
 # AI
 ANTHROPIC_API_KEY=
+# Master switch for every AI integration feature (template generation, data/
+# asset suggestions, sensitivity classifier, the assistant, AI agents).
+# Defaults on; set to false to turn them all off — the backend refuses the AI
+# endpoints and the frontend hides their UI. The single knob for on-prem /
+# FedRAMP deployments that must not call an external model.
+AI_FEATURES_ENABLED=true
 
 # Storage
 STORAGE_PROVIDER=s3|local|minio
@@ -455,6 +461,13 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
 - `<BulkActionBar>` — the selected-rows action bar (`count` + `onClear`,
   with `<BulkActionButton>` children). Do NOT hand-roll the off-brand
   blue selected-count bar.
+- `<OrgSidebarTree>` — the collapsible organization-hierarchy left rail
+  used to filter an entity list by org (People, Agents). Pass `nodes`
+  (the org `tree`), `selectedId`, `onSelect`, and a `counts` map for the
+  per-node badges. Compose it inside the standard sidebar `<Card>` with
+  an "ORGANIZATIONS" label and an "All (N)" row above it. Do NOT
+  hand-roll a per-page org tree or fall back to a plain org `<select>`
+  dropdown on a page that filters by org.
 
 **Interactive primitives:**
 

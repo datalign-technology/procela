@@ -874,9 +874,10 @@ page has a rules filter (*Has rules* / *No rules* / *Rules but
 unmeasured*, each with a live count). *No rules* is the same DQ-coverage
 gap Gap Detection surfaces, but filterable right on the registry;
 *Rules but unmeasured* catches the sneakier case — assets that *look*
-governed but whose health is only an **estimate** (badged *Est*) because
-no rule has produced a real measured result yet. Point a connector (or a
-CSV upload) at those next.
+governed but where no rule has produced a real measured result yet, so
+their **health reads 0%** (health is earned from measured quality) and
+they're flagged *Est* in the filter. Point a connector (or a CSV upload)
+at those next.
 
 ### 9.2 Data Mapping orphans
 
@@ -1029,6 +1030,16 @@ way a control gets waived instead of quietly going unmet.
 
 The platform has an AI assistant that's grounded in *your* catalog —
 not training data — so it answers about the org you just built.
+
+> **Admin note — turning AI off.** This assistant and every other AI
+> integration feature (template generation, data/asset suggestions, the
+> sensitivity classifier, and the AI governance agents) are gated behind a
+> single deployment switch, `AI_FEATURES_ENABLED` (default on). Set it to
+> `false` and the whole AI surface disappears — the backend refuses the AI
+> endpoints and the frontend hides their entry points, including the Ask AI
+> button. It's the one knob an on-prem or FedRAMP deployment flips to run
+> without calling an external model; everything else works unchanged. If AI
+> is off for your deployment, skip this module.
 
 ### 11.1 Open the panel
 

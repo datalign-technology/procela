@@ -80,6 +80,8 @@ To enable AI-driven features (industry template generation, data suggestions, th
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+To turn the AI features **off** entirely — for an on-prem or FedRAMP deployment that must not call an external model — set `AI_FEATURES_ENABLED=false`. The backend then refuses the AI endpoints and the frontend hides every AI entry point (the assistant, "Suggest" actions, template wizard, AI settings, and the "Perform with agent" trigger); the rest of the platform works unchanged.
+
 ### Email in local dev
 
 `docker compose up` bundles a [Mailpit](https://mailpit.axllent.org/) catcher, so transactional email — password resets and **Report a problem** submissions — actually delivers instead of falling back to the audit log. Read captured messages in the web inbox at **http://localhost:8025**; nothing leaves your machine. Running the backend on the host with `npm run dev`? Start just the catcher with `docker compose up mailpit` and uncomment the Mailpit block in `.env`.
