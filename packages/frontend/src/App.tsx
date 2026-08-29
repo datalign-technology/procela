@@ -13,7 +13,6 @@ import LoginPage from '@/pages/LoginPage';
 const OidcCompletePage           = lazy(() => import('@/pages/OidcCompletePage'));
 const DashboardPage              = lazy(() => import('@/pages/DashboardPage'));
 const SetupHubPage               = lazy(() => import('@/pages/SetupHubPage'));
-const AssignOwnersPage           = lazy(() => import('@/pages/AssignOwnersPage'));
 const ProcessCatalogPage         = lazy(() => import('@/pages/ProcessCatalogPage'));
 const ValueStreamWizard          = lazy(() => import('@/pages/ValueStreamWizard'));
 const ProcessVisualizationPage   = lazy(() => import('@/pages/ProcessVisualizationPage'));
@@ -73,7 +72,6 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/setup" element={<SetupHubPage />} />
-          <Route path="/setup/owners" element={<AssignOwnersPage />} />
           <Route path="/processes" element={<ProcessCatalogPage />} />
           <Route path="/processes/wizard" element={<ValueStreamWizard />} />
           <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />

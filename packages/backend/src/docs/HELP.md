@@ -11,7 +11,7 @@ The fastest way in is the Get Started hub (titled **Set up Procela**) — a resu
 ### The four stages
 
 - ① Capture — tell Procela about your business: organization structure, people, processes, systems, and data assets.
-- ② Assign — give every process, system, data domain, and data asset a clear owner. Each ownable type is its own board item (Process / System / Domain / Data-asset ownership), matching the four sections of the Assign-owners page they deep-link to, so the board and that page agree on what still needs an owner.
+- ② Assign — give every process, system, data domain, and data asset a clear owner. Each ownable type is its own board item (Process / System / Domain / Data-asset ownership), and each deep-links to that type's own page — the Process Catalog, Systems, Data Domains, and Data Assets — where you assign owners in context. A row ticks once that type has no ownerless items.
 - ③ Govern — connect data to processes, tier and grade assets, and define your governance foundation (scope, principles, operating model).
 - ④ Operate — stand up the governance structure and roles & policies, then launch and run the program.
 

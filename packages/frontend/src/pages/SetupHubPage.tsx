@@ -217,15 +217,15 @@ export default function SetupHubPage() {
       { label: 'Systems', done: gt(s?.systems), to: '/systems', src: 'here' },
       { label: 'Data assets', done: gt(s?.dataAssets), to: '/data-assets', src: 'here' },
     ];
-    // One row per ownable entity type, matching the four sections of the
-    // Assign-owners page (Processes, Systems, Domains, Data assets) so the
-    // board and that page agree on what still needs an owner. Each is "done"
-    // only once that type exists and none of its items are ownerless.
+    // One row per ownable entity type (Process, System, Domain, Data asset).
+    // Each deep-links to that type's own page — the Process Catalog, Systems,
+    // Data Domains, Data Assets — where you assign owners in context, and each
+    // is "done" only once that type exists and none of its items are ownerless.
     const assign: StageItem[] = [
-      { label: 'Process ownership', done: !!s && s.valueStreams > 0 && s.gaps.ownerlessItems === 0, to: '/setup/owners', src: 'auto' },
-      { label: 'System ownership', done: !!s && s.systems > 0 && s.gaps.ownerlessSystems === 0, to: '/setup/owners', src: 'auto' },
-      { label: 'Domain ownership', done: !!s && s.dataDomains > 0 && s.gaps.ungovernedDomains === 0, to: '/setup/owners', src: 'auto' },
-      { label: 'Data asset ownership', done: !!s && s.dataAssets > 0 && s.gaps.ownerlessAssets === 0, to: '/setup/owners', src: 'auto' },
+      { label: 'Process ownership', done: !!s && s.valueStreams > 0 && s.gaps.ownerlessItems === 0, to: '/processes', src: 'auto' },
+      { label: 'System ownership', done: !!s && s.systems > 0 && s.gaps.ownerlessSystems === 0, to: '/systems', src: 'auto' },
+      { label: 'Domain ownership', done: !!s && s.dataDomains > 0 && s.gaps.ungovernedDomains === 0, to: '/data-domains', src: 'auto' },
+      { label: 'Data asset ownership', done: !!s && s.dataAssets > 0 && s.gaps.ownerlessAssets === 0, to: '/data-assets', src: 'auto' },
     ];
     const govern: StageItem[] = [
       { label: 'Connect data to processes', done: !!s && s.activities > 0 && s.coverage.percentage >= COVERAGE_DONE_THRESHOLD, to: '/mappings', src: 'here' },

@@ -136,7 +136,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>The four stages</h3>
         <ul style={listStyle}>
           <li><strong>① Capture</strong> &mdash; tell Procela about your business: organization structure, people, processes, systems, and data assets.</li>
-          <li><strong>② Assign</strong> &mdash; give every process, system, data domain, and data asset a clear owner. Each ownable type is its own board item (Process / System / Domain / Data-asset ownership), matching the four sections of the Assign-owners page they deep-link to, so the board and that page agree on what still needs an owner.</li>
+          <li><strong>② Assign</strong> &mdash; give every process, system, data domain, and data asset a clear owner. Each ownable type is its own board item (Process / System / Domain / Data-asset ownership), and each deep-links to that type&rsquo;s own page &mdash; the Process Catalog, Systems, Data Domains, and Data Assets &mdash; where you assign owners in context. A row ticks once that type has no ownerless items.</li>
           <li><strong>③ Govern</strong> &mdash; connect data to processes, tier and grade assets, and define your governance foundation (scope, principles, operating model).</li>
           <li><strong>④ Operate</strong> &mdash; stand up the governance structure and roles &amp; policies, then launch and run the program.</li>
         </ul>
