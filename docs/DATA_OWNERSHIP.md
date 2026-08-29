@@ -107,6 +107,14 @@ additionally runs **measured** DQ on-prem for the five pushdown-safe rule types
 Connection currently only simulates. Aggregate pass/fail counts cross the wire;
 row values never do.
 
+> **Displayed health is measured-DQ only.** The `healthScore` a scan writes is
+> the connector's freshness signal and is kept as stored state, but it is **not**
+> what the UI shows as the asset's health. Displayed health is derived at read
+> time from *measured* (non-simulated) DQ rules: an asset shows its rolled-up
+> score only when a measured rule backs it, and **0%** otherwise. So a
+> freshly-synced asset with no measured rule reads 0% health until a rule runs
+> against it — freshness drives the "Synced N ago" chip, not the health number.
+
 **Neither path copies raw rows into Procela.** Both persist *metadata about* the
 data; the actual records stay in the source system.
 
