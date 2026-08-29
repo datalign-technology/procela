@@ -272,6 +272,11 @@ router.get('/stats', async (req: Request, res: Response) => {
   const ownerlessItems = filteredNodes.filter(
     (n) => ['VALUE_STREAM', 'PROCESS'].includes(n.level) && !n.ownerId
   ).length;
+  // Ownership gaps for systems and data assets, matching the Assign-owners
+  // page's filters (an entity's OWN ownerPersonId, not a domain-inherited one)
+  // so the Get Started board and that page agree row-for-row.
+  const ownerlessSystems = filteredSystems.filter((s) => !(s as { ownerPersonId?: string | null }).ownerPersonId).length;
+  const ownerlessAssets = filteredAssets.filter((a) => !(a as { ownerPersonId?: string | null }).ownerPersonId).length;
 
   // Orphan assets — present in the catalog but no mapping row points
   // at them. Pairs with the new /data-assets/orphans page.
@@ -344,6 +349,8 @@ router.get('/stats', async (req: Request, res: Response) => {
         unmappedActivities: unmappedCount,
         ungovernedAssets,
         ownerlessItems,
+        ownerlessSystems,
+        ownerlessAssets,
         ungovernedDomains,
         orphanAssets,
       },

@@ -7,6 +7,8 @@ import PersonPicker from '@/components/PersonPicker';
 import EmptyState from '@/components/EmptyState';
 import Page from '@/components/Page';
 import PageHeader from '@/components/PageHeader';
+import Card from '@/components/Card';
+import Button from '@/components/Button';
 import Spinner from '@/components/Spinner';
 import { CheckCircle2 } from 'lucide-react';
 
@@ -212,7 +214,7 @@ export default function AssignOwnersPage() {
                 {/* Bulk assign to all remaining in this section */}
                 <div style={{
                   display: 'flex', alignItems: 'flex-end', gap: 10, padding: '10px 14px', marginBottom: 8,
-                  background: 'var(--color-bg)', border: '1px dashed var(--color-border)', borderRadius: 8,
+                  background: 'var(--color-bg)', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)',
                 }}>
                   <div style={{ width: 280 }}>
                     <PersonPicker
@@ -222,21 +224,17 @@ export default function AssignOwnersPage() {
                       onChange={(v) => setBulkPick((p) => ({ ...p, [section.key]: v || '' }))}
                     />
                   </div>
-                  <button onClick={() => assignAll(section)} disabled={!bulkPick[section.key]}
-                    style={{ ...primaryBtn, opacity: bulkPick[section.key] ? 1 : 0.5, cursor: bulkPick[section.key] ? 'pointer' : 'not-allowed' }}>
+                  <Button variant="primary" onClick={() => assignAll(section)} disabled={!bulkPick[section.key]}>
                     Apply to all
-                  </button>
+                  </Button>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {section.items.map((item) => {
                     const busyKey = `${section.key}:${item.id}`;
                     return (
-                      <div key={item.id} style={{
-                        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                        background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8,
-                        opacity: busy.has(busyKey) ? 0.6 : 1,
-                      }}>
+                      <Card key={item.id} padding="10px 14px" marginBottom={0}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: busy.has(busyKey) ? 0.6 : 1 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <span style={{ fontSize: 14, fontWeight: 500 }}>{item.name}</span>
                           {item.sub && (
@@ -252,7 +250,7 @@ export default function AssignOwnersPage() {
                             onChange={(v) => v && assignOne(section, item, v)}
                           />
                         </div>
-                      </div>
+                      </Card>
                     );
                   })}
                 </div>
@@ -264,8 +262,3 @@ export default function AssignOwnersPage() {
     </Page>
   );
 }
-
-const primaryBtn: React.CSSProperties = {
-  padding: '7px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none',
-  borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-};

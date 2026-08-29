@@ -22,12 +22,16 @@ function makeRes() {
   return res;
 }
 
+// config's fields are readonly at the type level; the flag is a plain
+// runtime property, so flip it through a mutable alias for the test.
+const mutableConfig = config as { aiFeaturesEnabled: boolean };
+
 describe('requireAiEnabled', () => {
-  const original = config.aiFeaturesEnabled;
-  afterEach(() => { config.aiFeaturesEnabled = original; });
+  const original = mutableConfig.aiFeaturesEnabled;
+  afterEach(() => { mutableConfig.aiFeaturesEnabled = original; });
 
   it('calls next() when AI features are enabled', () => {
-    config.aiFeaturesEnabled = true;
+    mutableConfig.aiFeaturesEnabled = true;
     let called = false;
     const res = makeRes();
     requireAiEnabled({} as never, res as never, () => { called = true; });
@@ -36,7 +40,7 @@ describe('requireAiEnabled', () => {
   });
 
   it('refuses with 403 AI_DISABLED when AI features are off', () => {
-    config.aiFeaturesEnabled = false;
+    mutableConfig.aiFeaturesEnabled = false;
     let called = false;
     const res = makeRes();
     requireAiEnabled({} as never, res as never, () => { called = true; });
