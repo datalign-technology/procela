@@ -28,6 +28,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { signOutLocal } from '@/lib/signOut';
 import { useBrandingStore } from '@/stores/brandingStore';
+import { useAiConfigStore } from '@/stores/aiConfigStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { useIsMobile } from '@/hooks/useMediaQuery';
@@ -39,12 +40,17 @@ export default function Layout() {
   const { isAuthenticated } = useAuthStore();
   const { activeOrgId, setActiveOrg, setOrgs, clearActiveOrg, refreshKey, triggerRefresh } = useOrgContext();
   const { branding, fetch: fetchBranding } = useBrandingStore();
+  const aiEnabled = useAiConfigStore((s) => s.aiEnabled);
+  const fetchAiConfig = useAiConfigStore((s) => s.fetch);
 
   // Apply the customer's theme (company name, logo, colors) as early as
   // possible. The store also fetches from /login via brandingStore bootstrap;
   // re-fetching on mount here keeps the shell in sync when an admin updates
   // branding without requiring a full reload.
   useEffect(() => { fetchBranding(); }, [fetchBranding]);
+  // Learn whether AI integration features are on for this deployment so the
+  // shell can hide every AI surface when they're off.
+  useEffect(() => { fetchAiConfig(); }, [fetchAiConfig]);
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; parentId: string | null; label: string }>>([]);
 
   const isMobile = useIsMobile();
@@ -462,12 +468,14 @@ export default function Layout() {
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {/* Ask AI — the only entry point to the ChatPanel. The
-                floating bottom-right bubble was retired: two
-                affordances for the same thing was clutter, and the
-                button here is always visible in the same place. The
-                message-count badge appears when a conversation is
+            {/* Ask AI — the only entry point to the ChatPanel. Hidden
+                entirely when AI integration features are turned off for
+                the deployment. The floating bottom-right bubble was
+                retired: two affordances for the same thing was clutter,
+                and the button here is always visible in the same place.
+                The message-count badge appears when a conversation is
                 minimized and waiting to be resumed. */}
+            {aiEnabled && (
             <button
               onClick={() => window.dispatchEvent(new Event('procela:toggle-chat'))}
               aria-label={
@@ -517,6 +525,7 @@ export default function Layout() {
                 </span>
               )}
             </button>
+            )}
             {/* Help — opens the Help guide in a separate window so the
                 user can keep it open beside whatever they're doing. A
                 named target means repeated clicks focus the same Help
@@ -590,7 +599,7 @@ export default function Layout() {
             <Outlet />
           )}
         </main>
-        <ChatPanel />
+        {aiEnabled && <ChatPanel />}
         {isMobile && mobileDrawerOpen && (
           <MobileNavDrawer
             bottomItems={bottomNavItems}

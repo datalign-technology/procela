@@ -26,6 +26,7 @@ import { renderNavIcon } from '../components/navIcons';
 import SkillGapsWidget from '../components/SkillGapsWidget';
 import { useDomainLens } from '../stores/domainLensStore';
 import { useAuthStore } from '../stores/authStore';
+import { useAiEnabled } from '../stores/aiConfigStore';
 import { usePolling } from '../hooks/usePolling';
 
 interface DashboardStats {
@@ -84,6 +85,7 @@ const cardStyle: React.CSSProperties = {
 // ──────────────────────────────────────────────────────────────────────────
 
 function GettingStartedCard({ stats }: { stats: DashboardStats }) {
+  const aiEnabled = useAiEnabled();
   // Steps use the same icon set as the sidebar so the numbered
   // rows here read as "open the Processes / Systems / Data Assets /
   // People page". Sized down to 16px to sit inline with the title.
@@ -93,10 +95,11 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
       title: 'Define your business processes',
       description: 'Map how your organization works — value streams, processes, sub-processes, and activities. Plain business language, no technical knowledge required.',
       done: stats.processes > 0,
-      ctaLabel: 'Generate processes',
+      ctaLabel: aiEnabled ? 'Generate processes' : 'Define processes',
       // Send first-timers to the AI wizard, not the empty catalog
-      // table — the wizard is the fast path to a real hierarchy.
-      ctaTo: '/processes/wizard',
+      // table — the wizard is the fast path to a real hierarchy. With AI
+      // off there's no wizard, so point straight at the catalog.
+      ctaTo: aiEnabled ? '/processes/wizard' : '/processes',
       doneLabel: `${stats.processes} ${stats.processes === 1 ? 'process' : 'processes'}`,
     },
     {
@@ -914,6 +917,9 @@ const quickActions = [
 ];
 
 function QuickActions() {
+  const aiEnabled = useAiEnabled();
+  // Drop the AI-only "Run Wizard" action when AI features are turned off.
+  const actions = aiEnabled ? quickActions : quickActions.filter((a) => a.link !== '/processes/wizard');
   return (
     <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Quick Actions" />
@@ -922,7 +928,7 @@ function QuickActions() {
         gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
         gap: 12,
       }}>
-        {quickActions.map((action) => (
+        {actions.map((action) => (
           <Link
             key={action.label}
             to={action.link}
@@ -963,6 +969,7 @@ function QuickActions() {
 
 
 function WhatsNext({ stats }: { stats: DashboardStats }) {
+  const aiEnabled = useAiEnabled();
   // Build suggestions based on current state
   const suggestions: Array<{ icon: React.ReactNode; title: string; description: string; link: string }> = [];
 
@@ -973,8 +980,10 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
     suggestions.push({
       icon: <ListTree {...sIcon} />,
       title: 'Define your first value stream',
-      description: 'Start by mapping out how your organization delivers value. Use the AI wizard to generate a process hierarchy from your industry.',
-      link: '/processes/wizard',
+      description: aiEnabled
+        ? 'Start by mapping out how your organization delivers value. Use the AI wizard to generate a process hierarchy from your industry.'
+        : 'Start by mapping out how your organization delivers value in the Process Catalog.',
+      link: aiEnabled ? '/processes/wizard' : '/processes',
     });
   }
 

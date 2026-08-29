@@ -9,6 +9,7 @@ import { clickable } from '../lib/a11y';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { usePermissions } from '../hooks/usePermissions';
+import { useAiEnabled } from '../stores/aiConfigStore';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { errorMessage, errorToast } from '../lib/errorToast';
@@ -76,6 +77,7 @@ export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const { canWrite } = usePermissions();
+  const aiEnabled = useAiEnabled();
   const { addToast } = useToastStore();
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -400,7 +402,7 @@ export default function DataDomainsPage() {
         subtitle="Organize data assets into governed domains with assigned owners and stewards."
         actions={
           <>
-            {canWrite && domains.length === 0 && (
+            {canWrite && aiEnabled && domains.length === 0 && (
               <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
             )}
             {domains.length > 0 && (
@@ -517,7 +519,7 @@ export default function DataDomainsPage() {
         <EmptyState icon={renderNavIcon('/data-domains')} title="No data domains defined yet"
           description="Data domains group related data assets under a single governance umbrella — owner, stewards, policies."
           action={{ label: 'Add Domain', onClick: openAdd }}
-          secondaryAction={canWrite ? { label: 'Generate from Industry', onClick: handleGenerate, variant: 'secondary' } : undefined} />
+          secondaryAction={canWrite && aiEnabled ? { label: 'Generate from Industry', onClick: handleGenerate, variant: 'secondary' } : undefined} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' }}>
           {/* Left: Domain index */}

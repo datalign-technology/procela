@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import OrgSidebarTree, { type OrgTreeNode } from '../components/OrgSidebarTree';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Button from '../components/Button';
@@ -142,6 +143,8 @@ export default function AgentsPage() {
   const agentCols = useColumnPicker<AgentColId>('procela.agents.visibleCols.v1', AGENT_COLUMN_DEFS);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [orgs, setOrgs] = useState<OrganizationRef[]>([]);
+  const [orgTree, setOrgTree] = useState<OrgTreeNode[]>([]);
+  const [govRoleFilter, setGovRoleFilter] = useState('');
   const [people, setPeople] = useState<Person[]>([]);
   const [agentTypes, setAgentTypes] = useState<string[]>(['AI', 'SERVICE_ACCOUNT', 'PIPELINE', 'BOT', 'OTHER']);
   const [agentStatuses, setAgentStatuses] = useState<string[]>(['ACTIVE', 'PAUSED', 'RETIRED']);
@@ -196,7 +199,7 @@ export default function AgentsPage() {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [agentRes, orgRes, peopleRes, rolesRes, execsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Agent[]; agentTypes: string[]; agentStatuses: string[] }>('/agents'),
-        apiClient.get<{ success: boolean; data: OrganizationRef[] }>('/organizations'),
+        apiClient.get<{ success: boolean; data: OrganizationRef[]; tree: OrgTreeNode[] }>('/organizations'),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[] }>(`/dama-roles${query}`),
         apiClient.get<{ success: boolean; data: AgentExecution[] }>(`/agent-executions${query}`),
@@ -205,6 +208,7 @@ export default function AgentsPage() {
       if (agentRes.agentTypes) setAgentTypes(agentRes.agentTypes);
       if (agentRes.agentStatuses) setAgentStatuses(agentRes.agentStatuses);
       setOrgs(orgRes.data || []);
+      setOrgTree(orgRes.tree || []);
       setPeople(peopleRes.data || []);
       setAgentRoles((rolesRes.data || []).filter((r) => r.agentId));
       setAgentExecutions(execsRes.data || []);
@@ -220,9 +224,24 @@ export default function AgentsPage() {
   const personNameById: Record<string, string> = {};
   for (const p of people) personNameById[p.id] = p.name;
 
-  const filtered = (selectedOrgId || searchQuery.trim())
+  // Per-org agent counts for the org-tree sidebar badges.
+  const agentCountByOrg: Record<string, number> = {};
+  for (const o of orgs) agentCountByOrg[o.id] = agents.filter((a) => a.orgIds.includes(o.id)).length;
+
+  // Governance (DAMA) roles per agent, and the set of role types actually in
+  // use — agents have governance roles but no application/RBAC role, so the
+  // page filters by governance role only (no "App role" filter like People).
+  const govRolesByAgent = new Map<string, Set<string>>();
+  for (const r of agentRoles) {
+    if (!r.agentId) continue;
+    if (!govRolesByAgent.has(r.agentId)) govRolesByAgent.set(r.agentId, new Set());
+    govRolesByAgent.get(r.agentId)!.add(r.roleType);
+  }
+
+  const filtered = (selectedOrgId || searchQuery.trim() || govRoleFilter)
     ? agents.filter((a) => {
         if (selectedOrgId && !a.orgIds.includes(selectedOrgId)) return false;
+        if (govRoleFilter && !govRolesByAgent.get(a.id)?.has(govRoleFilter)) return false;
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           if (!a.name.toLowerCase().includes(q) && !(a.description || '').toLowerCase().includes(q)) return false;
@@ -590,6 +609,34 @@ export default function AgentsPage() {
         </Card>
       )}
 
+      {/* Org tree (left) + toolbar & agent list (right), mirroring People. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' }}>
+        {/* Org tree sidebar */}
+        <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>Organizations</div>
+          <div
+            onClick={() => applyOrgFilter('')}
+            style={{
+              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+              fontWeight: !selectedOrgId ? 600 : 400,
+              background: !selectedOrgId ? 'var(--color-primary-light)' : 'transparent',
+              color: !selectedOrgId ? 'var(--color-primary)' : 'var(--color-text)',
+            }}
+            onMouseEnter={(e) => { if (selectedOrgId) e.currentTarget.style.background = 'var(--color-bg)'; }}
+            onMouseLeave={(e) => { if (selectedOrgId) e.currentTarget.style.background = 'transparent'; }}
+          >
+            All ({agents.length})
+          </div>
+          <OrgSidebarTree
+            nodes={orgTree}
+            selectedId={selectedOrgId}
+            onSelect={applyOrgFilter}
+            counts={agentCountByOrg}
+          />
+        </Card>
+
+        {/* Toolbar + agent list */}
+        <div>
       {/* Filters (left-aligned, mirrors Data Assets) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
@@ -600,20 +647,22 @@ export default function AgentsPage() {
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
         />
         <select
-          aria-label="Filter by organization"
-          value={selectedOrgId}
-          onChange={(e) => applyOrgFilter(e.target.value)}
+          aria-label="Filter by governance role"
+          value={govRoleFilter}
+          onChange={(e) => setGovRoleFilter(e.target.value)}
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 160, appearance: 'auto' as any }}
         >
-          <option value="">All Organizations</option>
-          {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          <option value="">All Governance Roles</option>
+          {Object.entries(DAMA_ROLE_LABELS as Record<string, string>).map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
         </select>
-        {(selectedOrgId || searchQuery) && (
+        {(selectedOrgId || searchQuery || govRoleFilter) && (
           <>
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => { applyOrgFilter(''); setSearchQuery(''); }}
+              onClick={() => { applyOrgFilter(''); setSearchQuery(''); setGovRoleFilter(''); }}
             >
               Clear Filters
             </Button>
@@ -857,6 +906,8 @@ export default function AgentsPage() {
           />
         )}
       </Card>
+        </div>
+      </div>{/* /org tree + agent list */}
 
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setConfirmDelete(null)}>

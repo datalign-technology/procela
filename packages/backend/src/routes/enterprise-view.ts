@@ -7,6 +7,7 @@ import { dataDomains } from './data-domains';
 import { dataLineageLinks } from './data-lineage';
 import { dataQualityRules } from './data-quality';
 import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
+import { effectiveHealthScore } from '../lib/asset-health';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getSystemsRepository } from '../db/systems.repo';
@@ -126,12 +127,14 @@ router.get('/', async (req: Request, res: Response) => {
     ? filterByOrgScope(allAssets, orgId as string) : allAssets;
   for (const a of filteredAssets) {
     const assetRules = allRules.filter((r) => r.dataAssetId === a.id);
+    // Effective health: measured DQ score, or 0 when no measured rule backs it.
+    const measuredRuleCount = assetRules.filter((r) => r.lastRun && r.lastRun.simulated === false).length;
     addNode({
       id: a.id, type: 'data-asset',
       label: a.name, status: undefined,
       meta: {
         governanceTier: a.governanceTier,
-        healthScore: a.healthScore,
+        healthScore: effectiveHealthScore(a.healthScore, measuredRuleCount),
         systemId: a.systemId,
         rulesCount: assetRules.length,
         description: a.description,

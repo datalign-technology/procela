@@ -15,6 +15,7 @@ import { governanceTasks } from './governance-tasks';
 import { dataQualityRules } from './data-quality';
 import { connections, connectionSystemLinks } from './connections';
 import { filterByOrgScope, getCachedOrgList } from '../lib/org-scope';
+import { countMeasuredRulesByAsset, effectiveHealthScore } from '../lib/asset-health';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getSystemsRepository } from '../db/systems.repo';
@@ -104,6 +105,12 @@ export async function buildOrgSnapshot(orgId: string): Promise<string | undefine
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const personById = new Map(ppl.map((p) => [p.id, p]));
   const systemById = new Map(sys.map((s) => [s.id, s]));
+  // Effective health for the AI context: measured DQ score, or 0 when no
+  // measured rule backs the asset. The assistant should never present a
+  // connector-freshness or manual stand-in as an asset's quality.
+  const measuredHealthByAsset = countMeasuredRulesByAsset(dqRules);
+  const effHealth = (a: { id: string; healthScore?: number }) =>
+    effectiveHealthScore(a.healthScore, measuredHealthByAsset.get(a.id) || 0);
   const assetById = new Map(assets.map((a) => [a.id, a]));
   const ownerName = (id: string | null | undefined) =>
     id ? (personById.get(id)?.name ?? 'unknown') : null;
@@ -177,7 +184,7 @@ export async function buildOrgSnapshot(orgId: string): Promise<string | undefine
     const sysName = a.systemId ? systemById.get(a.systemId)?.name : null;
     lines.push(
       `  - ${a.name} (tier:${a.governanceTier?.toLowerCase() ?? 'bronze'}, `
-        + `health:${a.healthScore ?? 0}%${sysName ? `, system:${sysName}` : ''})`,
+        + `health:${effHealth(a)}%${sysName ? `, system:${sysName}` : ''})`,
     );
   });
   if (assets.length > MAX_ASSET_LINES) lines.push(`  …(${assets.length - MAX_ASSET_LINES} more)`);
@@ -237,7 +244,12 @@ export async function buildOrgSnapshot(orgId: string): Promise<string | undefine
   const ungovernedAssets = assets.filter(
     (a) => a.governanceTier === 'BRONZE' && linkedAssetIds.has(a.id),
   );
-  const lowHealthAssets = assets.filter((a) => (a.healthScore ?? 0) < 80);
+  // Only assets with a measured rule can be "below 80% health" — an
+  // unmeasured asset (0 effective health) is a coverage gap, not a
+  // low-quality signal, and is surfaced by the orphan/mapping gaps instead.
+  const lowHealthAssets = assets.filter(
+    (a) => (measuredHealthByAsset.get(a.id) || 0) > 0 && effHealth(a) < 80,
+  );
   const ownerlessDomains = domains.filter((d) => !d.ownerId);
   // Phase 3 reverse-view signal: assets that exist in the catalog
   // but aren't referenced by any mapping. These are candidates to
@@ -251,7 +263,7 @@ export async function buildOrgSnapshot(orgId: string): Promise<string | undefine
   lines.push(`  - Mapped data assets still at Bronze/uncertified tier (${ungovernedAssets.length}): `
     + (ungovernedAssets.slice(0, 25).map((a) => a.name).join('; ') || 'none'));
   lines.push(`  - Data assets below 80% health (${lowHealthAssets.length}): `
-    + (lowHealthAssets.slice(0, 25).map((a) => `${a.name} ${a.healthScore ?? 0}%`).join('; ') || 'none'));
+    + (lowHealthAssets.slice(0, 25).map((a) => `${a.name} ${effHealth(a)}%`).join('; ') || 'none'));
   lines.push(`  - Data domains with no owner (${ownerlessDomains.length}): `
     + (ownerlessDomains.slice(0, 25).map((d) => d.name).join('; ') || 'none'));
   lines.push(`  - Orphan data assets — exist in the catalog but no process step uses them (${orphanAssets.length}): `

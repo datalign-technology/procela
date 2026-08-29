@@ -9,6 +9,7 @@ import { connections, connectionSystemLinks } from './connections';
 import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
 import { systems } from './systems';
 import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
+import { effectiveHealthScore } from '../lib/asset-health';
 // Gap detection is a read aggregator across 7 stores; each is read through
 // its repository so gaps are computed from Postgres in DB mode and the
 // in-memory array in JSON mode (the factory wraps the same array these
@@ -83,6 +84,13 @@ router.get('/', async (req: Request, res: Response) => {
   const mappedStepIds = new Set(filteredMappings.map((m: any) => m.processStepId));
   const mappedAssetIds = new Set(filteredMappings.map((m: any) => m.dataAssetId));
 
+  // Effective health: measured DQ score, or 0 when no measured rule backs the
+  // asset. Low-health gaps and reported health both derive from this so a
+  // connector-freshness or manual stand-in never counts as real quality.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const measuredCounts = await (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset();
+  const effHealth = (a: { id: string; healthScore: number }) => effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0);
+
   // 1. Unmapped activities — process nodes at mappable levels with no mapping
   const unmappedSteps = nodes
     .filter((n) => MAPPABLE_LEVELS.has(n.level) && !mappedStepIds.has(n.id))
@@ -104,16 +112,18 @@ router.get('/', async (req: Request, res: Response) => {
       id: a.id,
       name: a.name,
       governanceTier: a.governanceTier,
-      healthScore: a.healthScore,
+      healthScore: effHealth(a),
     }));
 
-  // 3. Low-health assets — assets with health < 50 that are linked to processes
+  // 3. Low-health assets — assets with measured health < 50 that are linked to
+  // processes. The `> 0` guard excludes unmeasured assets (0 effective health):
+  // "no quality rules yet" is a coverage gap, not a low-health signal.
   const lowHealthAssets = assets
-    .filter((a) => a.healthScore < 50 && a.healthScore > 0 && mappedAssetIds.has(a.id))
+    .filter((a) => { const h = effHealth(a); return h < 50 && h > 0 && mappedAssetIds.has(a.id); })
     .map((a) => ({
       id: a.id,
       name: a.name,
-      healthScore: a.healthScore,
+      healthScore: effHealth(a),
       governanceTier: a.governanceTier,
     }));
 
@@ -145,7 +155,7 @@ router.get('/', async (req: Request, res: Response) => {
       id: a.id,
       name: a.name,
       governanceTier: a.governanceTier,
-      healthScore: a.healthScore,
+      healthScore: effHealth(a),
     }));
 
   // 7. Unlinked assets — assets with no mapping to any process

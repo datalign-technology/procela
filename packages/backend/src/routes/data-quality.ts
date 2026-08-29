@@ -24,6 +24,7 @@ import {
   RuleRunResult,
   DescribeContext,
 } from '../services/dq-engine';
+import { countMeasuredRulesByAsset } from '../lib/asset-health';
 
 export interface DataQualityRule {
   id: string;
@@ -146,6 +147,18 @@ function computeStatus(currentScore: number, threshold: number): DataQualityRule
   if (currentScore >= threshold) return 'PASSING';
   if (currentScore >= threshold - 10) return 'WARNING';
   return 'FAILING';
+}
+
+/**
+ * Measured (real, non-simulated) DQ rule count per asset id, across all
+ * rules. Effective asset health is 0 unless an asset has ≥1 measured rule,
+ * so display surfaces (dashboard, gaps, lists, AI context) call this to
+ * derive the health they show. Reads through the repo so it's correct in
+ * both Postgres and JSON modes.
+ */
+export async function measuredRuleCountsByAsset(): Promise<Map<string, number>> {
+  const rules = await dataQualityRulesRepo.list();
+  return countMeasuredRulesByAsset(rules);
 }
 
 const router = Router();

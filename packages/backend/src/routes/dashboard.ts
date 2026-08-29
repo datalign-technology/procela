@@ -35,6 +35,7 @@ import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
 import { getCalendarEventsRepository } from '../db/calendar-events.repo';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 import { getStatsSnapshotsRepository } from '../db/stats-snapshots.repo';
+import { effectiveHealthScore } from '../lib/asset-health';
 
 const processNodesRepo = getProcessNodesRepository(processNodes);
 const dataAssetsRepo = getDataAssetsRepository(dataAssets);
@@ -114,9 +115,13 @@ async function computeCoreStats(oid: string | undefined): Promise<Pick<StatsSnap
   const unmappedCount = activityIds.length - mappedCount;
   const coverage = activityIds.length > 0 ? Math.round((mappedCount / activityIds.length) * 100) : 0;
 
-  // Average health across in-scope assets.
+  // Average health across in-scope assets. Health is measured DQ or 0 — an
+  // asset with no measured rule contributes 0, not a connector/manual stand-in.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const measuredCounts = await (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset();
+  const effHealth = (a: { id: string; healthScore: number }) => effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0);
   const avgHealth = filteredAssets.length > 0
-    ? Math.round(filteredAssets.reduce((sum, a) => sum + a.healthScore, 0) / filteredAssets.length)
+    ? Math.round(filteredAssets.reduce((sum, a) => sum + effHealth(a), 0) / filteredAssets.length)
     : 0;
 
   // Gap signals — same definitions as /stats.
@@ -247,10 +252,14 @@ router.get('/stats', async (req: Request, res: Response) => {
   const silver = filteredAssets.filter((a) => a.governanceTier === 'SILVER').length;
   const gold = filteredAssets.filter((a) => a.governanceTier === 'GOLD').length;
 
-  // Average health
+  // Average health. Health is measured DQ or 0 — an asset with no measured
+  // rule contributes 0, never a connector-freshness or manual stand-in.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const measuredCounts = await (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset();
+  const effHealth = (a: { id: string; healthScore: number }) => effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0);
   const averageHealth =
     filteredAssets.length > 0
-      ? Math.round(filteredAssets.reduce((sum, a) => sum + a.healthScore, 0) / filteredAssets.length)
+      ? Math.round(filteredAssets.reduce((sum, a) => sum + effHealth(a), 0) / filteredAssets.length)
       : 0;
 
   // Gaps. Only data-asset-shaped mapping rows count here; policy
@@ -263,6 +272,11 @@ router.get('/stats', async (req: Request, res: Response) => {
   const ownerlessItems = filteredNodes.filter(
     (n) => ['VALUE_STREAM', 'PROCESS'].includes(n.level) && !n.ownerId
   ).length;
+  // Ownership gaps for systems and data assets, matching the Assign-owners
+  // page's filters (an entity's OWN ownerPersonId, not a domain-inherited one)
+  // so the Get Started board and that page agree row-for-row.
+  const ownerlessSystems = filteredSystems.filter((s) => !(s as { ownerPersonId?: string | null }).ownerPersonId).length;
+  const ownerlessAssets = filteredAssets.filter((a) => !(a as { ownerPersonId?: string | null }).ownerPersonId).length;
 
   // Orphan assets — present in the catalog but no mapping row points
   // at them. Pairs with the new /data-assets/orphans page.
@@ -335,6 +349,8 @@ router.get('/stats', async (req: Request, res: Response) => {
         unmappedActivities: unmappedCount,
         ungovernedAssets,
         ownerlessItems,
+        ownerlessSystems,
+        ownerlessAssets,
         ungovernedDomains,
         orphanAssets,
       },
@@ -774,11 +790,16 @@ router.get('/my-items', async (req: AuthenticatedRequest, res: Response) => {
     .filter((n) => n.ownerId === person.id)
     .map((n) => ({ id: n.id, name: n.name, level: n.level, status: n.status }));
 
+  // Effective health for the assets on this view — measured DQ or 0.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const measuredCounts = await (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset();
+  const effHealth = (a: { id: string; healthScore: number }) => effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0);
+
   // Owned / stewarded data assets.
   const myAssets = dataAssets
     .filter((a) => a.owner === person.id || a.owner === person.name || (a.stewardIds || []).includes(person.id))
     .map((a) => ({
-      id: a.id, name: a.name, governanceTier: a.governanceTier, healthScore: a.healthScore,
+      id: a.id, name: a.name, governanceTier: a.governanceTier, healthScore: effHealth(a),
       relation: (a.owner === person.id || a.owner === person.name) ? 'owner' : 'steward',
     }));
 
@@ -978,11 +999,15 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
     });
 
   // ── Domains I own or steward ──
+  // Effective health: measured DQ score, or 0 when no measured rule backs it.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const measuredCounts = await (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset();
+  const effHealth = (a: { id: string; healthScore: number }) => effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0);
   const myDomains = dataDomains
     .filter((d) => d.ownerId === person.id || (d.stewardIds || []).includes(person.id))
     .map((d) => {
       const domainAssets = dataAssets.filter((a) => d.dataAssetIds.includes(a.id));
-      const healthyAssets = domainAssets.filter((a) => a.healthScore >= 80).length;
+      const healthyAssets = domainAssets.filter((a) => effHealth(a) >= 80).length;
       return {
         id: d.id,
         name: d.name,

@@ -13,6 +13,7 @@ import SectionLabel from '../components/SectionLabel';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
+import { useAiEnabled } from '../stores/aiConfigStore';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
 import LoadDemoDataPanel from '../components/LoadDemoDataPanel';
@@ -65,6 +66,7 @@ const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ORG_ADMIN']);
 export default function SettingsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const aiEnabled = useAiEnabled();
   const isAdmin = !!user?.role && ADMIN_ROLES.has(user.role);
   if (!isAdmin) {
     return (
@@ -543,7 +545,7 @@ export default function SettingsPage() {
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
           Customises the sign-in card for users landing at your tenant URL — <code>/login?tenant=&lt;slug&gt;</code> or your subdomain — so the login page reads as <strong>{branding.brandDisplayName || activeOrgName || 'your company'}</strong> rather than generic Procela. Fields below stay optional; empty ones fall back to platform defaults.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginBottom: 12, alignItems: 'start' }}>
           <div>
             <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Tenant slug</label>
             <input
@@ -590,7 +592,7 @@ export default function SettingsPage() {
               style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }}
             />
           </div>
-          <div style={{ gridColumn: '1 / -1' }}>
+          <div>
             <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>SSO button label</label>
             <input
               aria-label="SSO button label"
@@ -648,7 +650,12 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* Authentication Section */}
+      {/* Authentication + account-security controls in a two-column layout:
+          the tall Authentication card fills the left column, and the two
+          short security cards (Two-step verification, Active sessions) stack
+          in the right column instead of sitting in a full-width row below —
+          reclaiming the empty space beside Authentication. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
       <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>Authentication</h2>
 
@@ -813,12 +820,9 @@ export default function SettingsPage() {
         )}
       </Card>
 
-      {/* Spacer */}
-      <div style={{ height: '1.5rem' }} />
-
-      {/* Two-step verification and Active sessions are both short account-
-          security controls — pair them side-by-side to save vertical space. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+      {/* Right column — the two short account-security controls stacked so
+          they fill the height beside the taller Authentication card. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {/* Two-step verification (MFA / TOTP) */}
         <Card padding="1.5rem">
           <h2 style={sectionTitleStyle}>Two-step verification</h2>
@@ -841,6 +845,7 @@ export default function SettingsPage() {
           <ActiveSessionsPanel />
         </Card>
       </div>
+      </div>{/* /auth + security two-column */}
 
       </div>{/* ══ /Sign-in & Security ══ */}
 
@@ -849,8 +854,9 @@ export default function SettingsPage() {
 
       {/* AI (Claude) — model + Anthropic-key config. Subsumes the old
           standalone "API Configuration" card, which only restated the same
-          key status this panel already surfaces. */}
-      <AiSettingsPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
+          key status this panel already surfaces. Hidden when AI integration
+          features are turned off for the deployment. */}
+      {aiEnabled && <AiSettingsPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />}
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />

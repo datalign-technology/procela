@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { apiClient } from '../api/client';
 import { successToast, errorToast } from '../lib/errorToast';
 import SectionLabel from './SectionLabel';
+import { useAiEnabled } from '../stores/aiConfigStore';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SensitivityPanel — the Suggest & Review flow for AI-generated data
@@ -67,6 +68,13 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const aiEnabled = useAiEnabled();
+
+  // Classification here is driven by the AI classifier (there's no manual
+  // tag entry). When AI is off, keep any already-accepted tags visible and
+  // removable, but drop the Suggest action. With nothing to show, render
+  // nothing rather than an empty box that offers no action.
+  if (!aiEnabled && committed.length === 0) return null;
 
   const runSuggest = async () => {
     setBusy(true);
@@ -132,13 +140,17 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
           </SectionLabel>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 3 }}>
             {committed.length === 0 && !suggestions
-              ? 'Not classified. Ask the AI to suggest tags, then Accept the ones that fit.'
+              ? (aiEnabled
+                  ? 'Not classified. Ask the AI to suggest tags, then Accept the ones that fit.'
+                  : 'Not classified.')
               : committed.length === 0
                 ? 'Choose from the suggestions below.'
-                : 'Accepted tags. Remove with × or add more via Suggest.'}
+                : aiEnabled
+                  ? 'Accepted tags. Remove with × or add more via Suggest.'
+                  : 'Accepted tags. Remove with ×.'}
           </div>
         </div>
-        {!disabled && (
+        {!disabled && aiEnabled && (
           <button
             onClick={runSuggest}
             disabled={busy || saving}

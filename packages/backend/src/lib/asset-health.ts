@@ -65,3 +65,49 @@ export function computeDiscoveredAssetHealth(input: DiscoveredAssetHealthInput):
 
   return Math.round(score);
 }
+
+// ── Effective (display-facing) asset health ────────────────────────────────
+//
+// Health is earned from measured data quality, not asserted. The number an
+// asset SHOWS across the app (list, 360, dashboard, gaps, AI context) is its
+// rolled-up DQ score only when at least one measured (non-simulated) rule
+// backs it; otherwise it is 0 — an asset with no measured quality has no
+// established health, so a connector-freshness or manual stand-in is never
+// surfaced as "health". The stored `healthScore` field is left untouched;
+// this derivation happens at read time.
+
+/** Minimal shape a DQ rule contributes to the measured-health test. */
+export interface MeasuredRuleInput {
+  dataAssetId?: string | null;
+  lastRun?: { simulated?: boolean } | null;
+}
+
+/**
+ * Count the MEASURED (real, non-simulated) DQ rules backing each asset id.
+ * A rule counts only when its last run actually measured data — a simulated
+ * run carries a fabricated pass rate and must not establish health. Mirrors
+ * the measured test in `rollupAssetHealth` (dq-engine).
+ */
+export function countMeasuredRulesByAsset(rules: MeasuredRuleInput[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const r of rules) {
+    if (!r.dataAssetId) continue;
+    if (r.lastRun && r.lastRun.simulated === false) {
+      counts.set(r.dataAssetId, (counts.get(r.dataAssetId) || 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/**
+ * The health to SHOW for a data asset: its stored (rolled-up) score when at
+ * least one measured DQ rule backs it, otherwise 0.
+ */
+export function effectiveHealthScore(
+  storedScore: number | null | undefined,
+  measuredRuleCount: number,
+): number {
+  if (!measuredRuleCount || measuredRuleCount <= 0) return 0;
+  const s = typeof storedScore === 'number' ? storedScore : 0;
+  return Math.max(0, Math.min(100, Math.round(s)));
+}
