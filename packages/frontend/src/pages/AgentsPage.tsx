@@ -237,7 +237,6 @@ export default function AgentsPage() {
     if (!govRolesByAgent.has(r.agentId)) govRolesByAgent.set(r.agentId, new Set());
     govRolesByAgent.get(r.agentId)!.add(r.roleType);
   }
-  const govRoleOptions = Array.from(new Set(agentRoles.map((r) => r.roleType))).sort();
 
   const filtered = (selectedOrgId || searchQuery.trim() || govRoleFilter)
     ? agents.filter((a) => {
@@ -647,19 +646,17 @@ export default function AgentsPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
         />
-        {govRoleOptions.length > 0 && (
-          <select
-            aria-label="Filter by governance role"
-            value={govRoleFilter}
-            onChange={(e) => setGovRoleFilter(e.target.value)}
-            style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 160, appearance: 'auto' as any }}
-          >
-            <option value="">All Governance Roles</option>
-            {govRoleOptions.map((rt) => (
-              <option key={rt} value={rt}>{(DAMA_ROLE_LABELS as Record<string, string>)[rt] || rt}</option>
-            ))}
-          </select>
-        )}
+        <select
+          aria-label="Filter by governance role"
+          value={govRoleFilter}
+          onChange={(e) => setGovRoleFilter(e.target.value)}
+          style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 160, appearance: 'auto' as any }}
+        >
+          <option value="">All Governance Roles</option>
+          {Object.entries(DAMA_ROLE_LABELS as Record<string, string>).map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
         {(selectedOrgId || searchQuery || govRoleFilter) && (
           <>
             <Button
