@@ -51,7 +51,7 @@ export default function SupportModal({ open, onClose }: SupportModalProps) {
     if (!trimmed || submitting) return;
     setSubmitting(true);
     try {
-      const res = await apiClient.post<{ delivered: boolean }>('/support', {
+      const res = await apiClient.post<{ success: boolean; data: { delivered: boolean } }>('/support', {
         message: trimmed,
         category,
         context: {
@@ -62,9 +62,9 @@ export default function SupportModal({ open, onClose }: SupportModalProps) {
       });
       addToast(
         'success',
-        res?.delivered
+        res?.data?.delivered
           ? 'Thanks — your report was sent to the Procela team.'
-          : 'Thanks — your report was recorded and the team will see it.',
+          : 'Thanks — your report was recorded. An admin can review it in the Audit Log.',
       );
       reset();
       onClose();

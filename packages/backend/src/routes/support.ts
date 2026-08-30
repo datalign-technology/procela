@@ -111,6 +111,17 @@ router.post('/', authenticateToken, supportLimiter, async (req: AuthenticatedReq
     }
   }
 
+  // When nothing was emailed (no SMTP — the default on a local `npm run dev`,
+  // or any deployment that hasn't wired mail), the report would otherwise be
+  // invisible unless someone opens the Audit Log. Echo the full report to the
+  // server log so it lands somewhere a developer/operator actually watches.
+  if (!delivered) {
+    logger.info(
+      { orgId, userId, category, reporterName, reporterEmail: email, context, message },
+      'Support report recorded (not emailed — no support inbox / SMTP configured). Also in the Audit Log.',
+    );
+  }
+
   logger.info({ orgId, userId, category, delivered }, 'Support report received');
   res.status(202).json({ success: true, data: { delivered } });
 });
