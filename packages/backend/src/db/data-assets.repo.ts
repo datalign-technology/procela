@@ -50,7 +50,7 @@ type PrismaAssetRow = {
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore: number;
   healthScoreAt: Date | null;
-  isSystemOfRecord: boolean;
+  isSystemOfRecord?: boolean;
   sensitivityTags: string[];
   dataType: string | null;
   refreshFrequency: string | null;
