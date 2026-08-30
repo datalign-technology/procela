@@ -416,6 +416,10 @@ export default function DataAssetsPage({
   const [filterMapping, setFilterMapping] = useState<'' | 'mapped' | 'unmapped'>(
     () => { const m = searchParams.get('mapping'); return m === 'mapped' || m === 'unmapped' ? m : ''; },
   );
+  // Owner / Domain filters — match by the effective owner/domain name shown in
+  // the list columns; '__none__' isolates the unassigned buckets.
+  const [filterOwner, setFilterOwner] = useState('');
+  const [filterDomain, setFilterDomain] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Keep the URL in sync with the mapping filter so the view is
@@ -627,6 +631,14 @@ export default function DataAssetsPage({
     }
     if (filterTier && (a.governanceTier || 'BRONZE') !== filterTier) return false;
     if (filterSystemId && a.systemId !== filterSystemId) return false;
+    if (filterOwner) {
+      if (filterOwner === '__none__') { if (a.ownerName) return false; }
+      else if ((a.ownerName || '') !== filterOwner) return false;
+    }
+    if (filterDomain) {
+      if (filterDomain === '__none__') { if (a.domainName) return false; }
+      else if ((a.domainName || '') !== filterDomain) return false;
+    }
     if (filterOrigin && (a.origin || 'MANUAL') !== filterOrigin) return false;
     if (filterMapping === 'unmapped' && !a.isOrphan) return false;
     if (filterMapping === 'mapped' && a.isOrphan) return false;
@@ -646,7 +658,12 @@ export default function DataAssetsPage({
     return true;
   });
 
-  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOrigin || filterMapping || filterCoverage || searchQuery);
+  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOwner || filterDomain || filterOrigin || filterMapping || filterCoverage || searchQuery);
+
+  // Distinct owner / domain names present in the current asset set, for the
+  // filter dropdowns.
+  const ownerOptions = Array.from(new Set(assets.map((a) => a.ownerName).filter(Boolean))).sort() as string[];
+  const domainOptions = Array.from(new Set(assets.map((a) => a.domainName).filter(Boolean))).sort() as string[];
 
   // URL-persisted sort.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -1355,11 +1372,13 @@ export default function DataAssetsPage({
     <>
       <SavedViewsMenu
         pageKey="data-assets"
-        currentFilters={{ filterCategory, filterTier, filterSystemId, filterOrigin, filterMapping, searchQuery }}
+        currentFilters={{ filterCategory, filterTier, filterSystemId, filterOwner, filterDomain, filterOrigin, filterMapping, searchQuery }}
         onApply={(f) => {
           setFilterCategory((f.filterCategory as string) || '');
           setFilterTier((f.filterTier as string) || '');
           setFilterSystemId((f.filterSystemId as string) || '');
+          setFilterOwner((f.filterOwner as string) || '');
+          setFilterDomain((f.filterDomain as string) || '');
           setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
           setFilterMapping((f.filterMapping as '' | 'mapped' | 'unmapped') || '');
           setSearchQuery((f.searchQuery as string) || '');
@@ -1560,6 +1579,16 @@ export default function DataAssetsPage({
             {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
+        <select aria-label="Filter by owner" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+          <option value="">All Owners</option>
+          {ownerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+          <option value="__none__">No owner ({assets.filter((a) => !a.ownerName).length})</option>
+        </select>
+        <select aria-label="Filter by domain" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
+          <option value="">All Domains</option>
+          {domainOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+          <option value="__none__">No domain ({assets.filter((a) => !a.domainName).length})</option>
+        </select>
         <select
           aria-label="Filter by mapping status"
           title="Whether the asset is mapped to any process step"
@@ -1587,7 +1616,7 @@ export default function DataAssetsPage({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOrigin(''); setFilterMapping(''); setFilterCoverage(''); setSearchQuery(''); }}
+            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOwner(''); setFilterDomain(''); setFilterOrigin(''); setFilterMapping(''); setFilterCoverage(''); setSearchQuery(''); }}
           >
             Clear Filters
           </Button>

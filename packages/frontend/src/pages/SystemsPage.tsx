@@ -488,6 +488,7 @@ export default function SystemsPage({
   const [peopleList, setPeopleList] = useState<{ id: string; name: string; title?: string; orgPaths?: string[]; orgNames?: string[] }[]>([]);
   const [filterType, setFilterType] = useState('');
   const [filterCriticality, setFilterCriticality] = useState('');
+  const [filterOwner, setFilterOwner] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -770,6 +771,10 @@ export default function SystemsPage({
     if (filterType === '__none__' && s.systemType) return false;
     if (filterType && filterType !== '__none__' && s.systemType !== filterType) return false;
     if (filterCriticality && (s.businessCriticality || '') !== filterCriticality) return false;
+    if (filterOwner) {
+      if (filterOwner === '__none__') { if (s.ownerName) return false; }
+      else if ((s.ownerName || '') !== filterOwner) return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       if (
@@ -781,6 +786,10 @@ export default function SystemsPage({
     }
     return true;
   });
+
+  // Distinct owner names for the Owner filter (sorted; blank owners excluded —
+  // the "No owner" option covers those).
+  const ownerOptions = Array.from(new Set(systems.map((s) => s.ownerName).filter(Boolean))).sort() as string[];
 
   // Sort: comparators keyed by column name; URL persists ?sort=&dir=
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -927,10 +936,11 @@ export default function SystemsPage({
           <>
             <SavedViewsMenu
               pageKey="systems"
-              currentFilters={{ filterType, filterCriticality, searchQuery }}
+              currentFilters={{ filterType, filterCriticality, filterOwner, searchQuery }}
               onApply={(f) => {
                 setFilterType((f.filterType as string) || '');
                 setFilterCriticality((f.filterCriticality as string) || '');
+                setFilterOwner((f.filterOwner as string) || '');
                 setSearchQuery((f.searchQuery as string) || '');
               }}
             />
@@ -1065,16 +1075,21 @@ export default function SystemsPage({
               <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
               <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
             </select>
-            {(filterCriticality || searchQuery || filterType) && (
+            <select aria-label="Filter by owner" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+              <option value="">All Owners</option>
+              {ownerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+              <option value="__none__">No owner ({systems.filter((s) => !s.ownerName).length})</option>
+            </select>
+            {(filterCriticality || searchQuery || filterType || filterOwner) && (
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => { setFilterCriticality(''); setSearchQuery(''); setFilterType(''); }}
+                onClick={() => { setFilterCriticality(''); setSearchQuery(''); setFilterType(''); setFilterOwner(''); }}
               >
                 Clear Filters
               </Button>
             )}
-            {(filterCriticality || searchQuery || filterType) && (
+            {(filterCriticality || searchQuery || filterType || filterOwner) && (
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                 Showing {filteredSystems.length} of {systems.length}
               </span>

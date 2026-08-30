@@ -258,6 +258,8 @@ export default function DataQualityPage({
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterAssetId, setFilterAssetId] = useState('');
   const [filterDimension, setFilterDimension] = useState('');
+  const [filterOwner, setFilterOwner] = useState('');
+  const [filterDomain, setFilterDomain] = useState('');
   const [search, setSearch] = useState('');
   // New: per-asset view with Manage Rules modal lives under the Assets tab.
   // When embedded in the Data Assets hub the parent owns the active tab
@@ -290,10 +292,29 @@ export default function DataQualityPage({
   useEffect(() => { fetchData(); }, [fetchData]);
   usePolling(fetchData, 30000);
 
+  // Owner / domain of a rule are inherited from its data asset — map by
+  // asset id so the Rules tab can filter on the same two dimensions the
+  // Registry and Quality (Assets) tabs do.
+  const assetById = new Map(fullAssets.map((a) => [a.id, a] as const));
+  const ruleOwnerOptions = Array.from(new Set(fullAssets.map((a) => a.ownerName).filter(Boolean))).sort() as string[];
+  const ruleDomainOptions = Array.from(new Set(fullAssets.map((a) => a.domainName).filter(Boolean))).sort() as string[];
+
   // Apply local filters
   let filteredRules = rules;
   if (filterAssetId) filteredRules = filteredRules.filter((r) => r.dataAssetId === filterAssetId);
   if (filterDimension) filteredRules = filteredRules.filter((r) => r.dimension === filterDimension);
+  if (filterOwner) {
+    filteredRules = filteredRules.filter((r) => {
+      const own = assetById.get(r.dataAssetId)?.ownerName || '';
+      return filterOwner === '__none__' ? !own : own === filterOwner;
+    });
+  }
+  if (filterDomain) {
+    filteredRules = filteredRules.filter((r) => {
+      const dom = assetById.get(r.dataAssetId)?.domainName || '';
+      return filterDomain === '__none__' ? !dom : dom === filterDomain;
+    });
+  }
   if (search.trim()) {
     // Free-text over the fields a user is likely to remember: the rule name,
     // its asset, and its column.
@@ -764,28 +785,34 @@ export default function DataQualityPage({
               ariaLabel="Search rules"
               width={230}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Data Asset:</label>
-              <select aria-label="Data Asset" style={{ ...selectStyle, width: 'auto', minWidth: 180 }} value={filterAssetId} onChange={(e) => setFilterAssetId(e.target.value)}>
-                <option value="">All</option>
-                {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Dimension:</label>
-              <select aria-label="Dimension" style={{ ...selectStyle, width: 'auto', minWidth: 150 }} value={filterDimension} onChange={(e) => setFilterDimension(e.target.value)}>
-                <option value="">All</option>
-                {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
+            <select aria-label="Filter by asset" style={{ ...selectStyle, width: 'auto', minWidth: 180 }} value={filterAssetId} onChange={(e) => setFilterAssetId(e.target.value)}>
+              <option value="">All Assets</option>
+              {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <select aria-label="Filter by owner" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+              <option value="">All Owners</option>
+              {ruleOwnerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+              <option value="__none__">No owner ({rules.filter((r) => !(assetById.get(r.dataAssetId)?.ownerName)).length})</option>
+            </select>
+            <select aria-label="Filter by domain" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
+              <option value="">All Domains</option>
+              {ruleDomainOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+              <option value="__none__">No domain ({rules.filter((r) => !(assetById.get(r.dataAssetId)?.domainName)).length})</option>
+            </select>
+            <select aria-label="Filter by dimension" style={{ ...selectStyle, width: 'auto', minWidth: 150 }} value={filterDimension} onChange={(e) => setFilterDimension(e.target.value)}>
+              <option value="">All Dimensions</option>
+              {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
+            </select>
           </div>
           <ActiveFiltersBar
             filters={[
               search.trim() && { label: 'Search', value: search.trim(), onClear: () => setSearch('') },
               filterAssetId && { label: 'Asset', value: assetsList.find((a) => a.id === filterAssetId)?.name || filterAssetId, onClear: () => setFilterAssetId('') },
+              filterOwner && { label: 'Owner', value: filterOwner === '__none__' ? 'No owner' : filterOwner, onClear: () => setFilterOwner('') },
+              filterDomain && { label: 'Domain', value: filterDomain === '__none__' ? 'No domain' : filterDomain, onClear: () => setFilterDomain('') },
               filterDimension && { label: 'Dimension', value: filterDimension.replace(/_/g, ' '), onClear: () => setFilterDimension('') },
             ].filter(Boolean) as any}
-            onClearAll={() => { setFilterAssetId(''); setFilterDimension(''); setSearch(''); }}
+            onClearAll={() => { setFilterAssetId(''); setFilterOwner(''); setFilterDomain(''); setFilterDimension(''); setSearch(''); }}
           />
         </>
       )}
@@ -1086,17 +1113,26 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
   const [runningAll, setRunningAll] = useState<string | null>(null);
   const [filterSystem, setFilterSystem] = useState('');
   const [filterOwner, setFilterOwner] = useState('');
+  const [filterDomain, setFilterDomain] = useState('');
   const [filterText, setFilterText] = useState('');
 
   const systemOptions = [...new Set(assets.map((a) => a.systemId).filter(Boolean))].map((id) => ({
     id, name: systemNameById[id] || id,
   }));
-  const ownerOptions = [...new Set(assets.map((a) => a.ownerName).filter(Boolean))] as string[];
+  const ownerOptions = ([...new Set(assets.map((a) => a.ownerName).filter(Boolean))] as string[]).sort();
+  const domainOptions = ([...new Set(assets.map((a) => a.domainName).filter(Boolean))] as string[]).sort();
 
   const searchQ = filterText.trim().toLowerCase();
   const filteredAssets = assets.filter((a) => {
     if (filterSystem && a.systemId !== filterSystem) return false;
-    if (filterOwner && a.ownerName !== filterOwner) return false;
+    if (filterOwner) {
+      if (filterOwner === '__none__') { if (a.ownerName) return false; }
+      else if ((a.ownerName || '') !== filterOwner) return false;
+    }
+    if (filterDomain) {
+      if (filterDomain === '__none__') { if (a.domainName) return false; }
+      else if ((a.domainName || '') !== filterDomain) return false;
+    }
     if (searchQ && !(
       a.name.toLowerCase().includes(searchQ) ||
       (a.description || '').toLowerCase().includes(searchQ)
@@ -1407,26 +1443,26 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
           ariaLabel="Search assets"
           width={200}
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>System:</label>
-          <select aria-label="System" style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterSystem} onChange={(e) => setFilterSystem(e.target.value)}>
-            <option value="">All</option>
-            {systemOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Owner:</label>
-          <select aria-label="Owner" style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
-            <option value="">All</option>
-            {ownerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-        {(filterSystem || filterOwner || filterText) && (
-          <button onClick={() => { setFilterSystem(''); setFilterOwner(''); setFilterText(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+        <select aria-label="Filter by system" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterSystem} onChange={(e) => setFilterSystem(e.target.value)}>
+          <option value="">All Systems</option>
+          {systemOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select aria-label="Filter by owner" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+          <option value="">All Owners</option>
+          {ownerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+          <option value="__none__">No owner ({assets.filter((a) => !a.ownerName).length})</option>
+        </select>
+        <select aria-label="Filter by domain" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
+          <option value="">All Domains</option>
+          {domainOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+          <option value="__none__">No domain ({assets.filter((a) => !a.domainName).length})</option>
+        </select>
+        {(filterSystem || filterOwner || filterDomain || filterText) && (
+          <button onClick={() => { setFilterSystem(''); setFilterOwner(''); setFilterDomain(''); setFilterText(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
             Clear filters
           </button>
         )}
-        {(filterSystem || filterOwner || filterText) && (
+        {(filterSystem || filterOwner || filterDomain || filterText) && (
           <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
             Showing {filteredAssets.length} of {assets.length}
           </span>

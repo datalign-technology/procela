@@ -320,6 +320,28 @@ export default function OrgDeleteCleanupDialog({
 
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+          {/* Council Scorecard impact — the scorecard renders each division
+              as a live-derived row and keeps saved monthly versions per org,
+              and neither is part of the cascade below. Warn unconditionally
+              so a division delete never silently changes governance reporting. */}
+          <div style={{
+            display: 'flex', gap: 10, padding: '10px 12px',
+            background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8,
+            marginBottom: 16,
+          }}>
+            <span aria-hidden style={{ display: 'inline-flex', color: '#b45309', flexShrink: 0, marginTop: 1 }}>
+              <AlertTriangle size={16} strokeWidth={2.2} />
+            </span>
+            <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
+              <strong>Council Scorecard will be affected.</strong> This organization is
+              scored in the Council Scorecard. Deleting it removes its division row
+              from the parent scorecard and recomputes every roll-up (domain
+              coverage, tier-1 ownership, open issues, expired exceptions). Any
+              saved monthly scorecard versions for this organization will be left
+              referencing data that no longer exists.
+            </div>
+          </div>
+
           {/* Default-for-everything picker */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',

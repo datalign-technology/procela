@@ -545,7 +545,12 @@ export default function SettingsPage() {
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
           Customises the sign-in card for users landing at your tenant URL — <code>/login?tenant=&lt;slug&gt;</code> or your subdomain — so the login page reads as <strong>{branding.brandDisplayName || activeOrgName || 'your company'}</strong> rather than generic Procela. Fields below stay optional; empty ones fall back to platform defaults.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginBottom: 12, alignItems: 'start' }}>
+        {/* Two-column layout: the editable fields fill column 1, the live
+            preview sits alongside in column 2. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: 20, alignItems: 'start' }}>
+          {/* Column 1 — editable branding fields + save action. */}
+          <div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 12, alignItems: 'start' }}>
           <div>
             <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Tenant slug</label>
             <input
@@ -604,8 +609,7 @@ export default function SettingsPage() {
             />
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
+        <div>
             <button
               onClick={applyBranding}
               disabled={!activeOrgId || brandingBusy}
@@ -627,10 +631,11 @@ export default function SettingsPage() {
                 Test URL: <code>/login?tenant={branding.tenantSlug}</code>
               </p>
             )}
-          </div>
-          {/* Preview panel — a scaled-down mock of the sign-in card
-              rendered from the same fields the login page reads. */}
-          <div style={{ width: 260, padding: 14, border: '1px solid var(--color-border)', borderRadius: 8, background: 'var(--color-bg)' }}>
+          </div>{/* /save block */}
+          </div>{/* /column 1 */}
+          {/* Column 2 — live preview, a scaled-down mock of the sign-in
+              card rendered from the same fields the login page reads. */}
+          <div style={{ padding: 14, border: '1px solid var(--color-border)', borderRadius: 8, background: 'var(--color-bg)' }}>
             <SectionLabel>Preview</SectionLabel>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 24 }}>{branding.brandGlyph || '⬛'}</span>
@@ -650,11 +655,10 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* Authentication + account-security controls in a two-column layout:
-          the tall Authentication card fills the left column, and the two
-          short security cards (Two-step verification, Active sessions) stack
-          in the right column instead of sitting in a full-width row below —
-          reclaiming the empty space beside Authentication. */}
+      {/* Authentication + two-step verification in a two-column layout:
+          the tall Authentication card fills the left column, and the
+          short Two-step verification card sits in the right column.
+          Active sessions renders full-width below the row. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
       <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>Authentication</h2>
@@ -820,32 +824,32 @@ export default function SettingsPage() {
         )}
       </Card>
 
-      {/* Right column — the two short account-security controls stacked so
-          they fill the height beside the taller Authentication card. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {/* Two-step verification (MFA / TOTP) */}
-        <Card padding="1.5rem">
-          <h2 style={sectionTitleStyle}>Two-step verification</h2>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
-            Use an authenticator app (Google Authenticator, 1Password, Authy)
-            to generate a one-time code at sign-in. When enabled, your
-            password alone won't be enough to sign in.
-          </p>
-          <MfaPanel />
-        </Card>
-
-        {/* Active sessions */}
-        <Card padding="1.5rem">
-          <h2 style={sectionTitleStyle}>Active sessions</h2>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
-            Every device or browser you're signed in from has its own refresh
-            token. Revoke one if you've finished with a public computer, lost a
-            device, or want to force a fresh login from somewhere.
-          </p>
-          <ActiveSessionsPanel />
-        </Card>
-      </div>
+      {/* Two-step verification (MFA / TOTP) — the sole occupant of the
+          right column beside the taller Authentication card. */}
+      <Card padding="1.5rem">
+        <h2 style={sectionTitleStyle}>Two-step verification</h2>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          Use an authenticator app (Google Authenticator, 1Password, Authy)
+          to generate a one-time code at sign-in. When enabled, your
+          password alone won't be enough to sign in.
+        </p>
+        <MfaPanel />
+      </Card>
       </div>{/* /auth + security two-column */}
+
+      <div style={{ height: '1.5rem' }} />
+
+      {/* Active sessions — full-width below the two-column row so the
+          session list has room to breathe across the whole page. */}
+      <Card padding="1.5rem">
+        <h2 style={sectionTitleStyle}>Active sessions</h2>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          Every device or browser you're signed in from has its own refresh
+          token. Revoke one if you've finished with a public computer, lost a
+          device, or want to force a fresh login from somewhere.
+        </p>
+        <ActiveSessionsPanel />
+      </Card>
 
       </div>{/* ══ /Sign-in & Security ══ */}
 

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
@@ -626,7 +627,23 @@ export default function OrganizationsPage() {
         confirmLabel="Delete Selected"
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDeleteOrgs(); }}
         onCancel={() => setConfirmBulkDelete(false)}
-      />
+      >
+        <div style={{
+          display: 'flex', gap: 10, padding: '10px 12px', marginBottom: 16,
+          background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8,
+        }}>
+          <span aria-hidden style={{ display: 'inline-flex', color: '#b45309', flexShrink: 0, marginTop: 1 }}>
+            <AlertTriangle size={16} strokeWidth={2.2} />
+          </span>
+          <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
+            <strong>Council Scorecard will be affected.</strong> Any selected divisions
+            are scored in the Council Scorecard. Deleting them removes their rows and
+            recomputes every roll-up (domain coverage, tier-1 ownership, open issues,
+            expired exceptions). Saved monthly scorecard versions for these
+            organizations will be left referencing data that no longer exists.
+          </div>
+        </div>
+      </ConfirmDialog>
 
       {confirmDeleteOrg !== null && (
         <Suspense fallback={null}>
