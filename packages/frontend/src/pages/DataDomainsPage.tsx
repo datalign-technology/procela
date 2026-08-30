@@ -202,6 +202,11 @@ export default function DataDomainsPage() {
   }, [filteredDomains]);
 
   const selectedDomain = selectedDomainId ? domains.find((d) => d.id === selectedDomainId) || null : null;
+  // Parent of the selected sub-domain (if any) — used to offer an explicit
+  // "inherit owner from parent" assignment when a sub-domain has none.
+  const selectedParentDomain = selectedDomain?.parentDomainId
+    ? (domains.find((d) => d.id === selectedDomain.parentDomainId) || null)
+    : null;
 
   useEffect(() => {
     if (!selectedDomainId && filteredDomains.length > 0) setSelectedDomainId(filteredDomains[0].id);
@@ -286,6 +291,22 @@ export default function DataDomainsPage() {
     if (!selectedDomain) return;
     await apiClient.put(`/data-domains/${selectedDomain.id}`, { ownerId: detailOwnerId || null, stewardIds: detailStewardIds, dataAssetIds: detailAssetIds });
     addToast('success', 'Governance details saved'); fetchData();
+  };
+
+  // Explicitly assign the parent domain's owner to this sub-domain. Not a
+  // display fallback — it writes a real ownerId so the field never disagrees
+  // with the "no owner" gap. Stewardship stays deliberately manual (each
+  // sub-domain gets its own steward).
+  const inheritOwnerFromParent = async () => {
+    if (!selectedDomain) return;
+    const parent = selectedDomain.parentDomainId ? domains.find((d) => d.id === selectedDomain.parentDomainId) : null;
+    if (!parent?.ownerId) return;
+    try {
+      await apiClient.put(`/data-domains/${selectedDomain.id}`, { ownerId: parent.ownerId, stewardIds: detailStewardIds, dataAssetIds: detailAssetIds });
+      setDetailOwnerId(parent.ownerId);
+      addToast('success', `Owner set to ${parent.ownerName || 'the parent owner'} — inherited from ${parent.name}`);
+      fetchData();
+    } catch (err) { errorToast(err, 'Failed to inherit owner from parent'); }
   };
 
   const handleBulkApply = async () => {
@@ -829,6 +850,19 @@ export default function DataDomainsPage() {
                     onChange={(pid) => setDetailOwnerId(pid || '')}
                     placeholder="-- Unassigned --"
                   />
+                  {/* One-click explicit inheritance — only for a sub-domain that
+                      has no owner of its own but whose parent does. Writes a real
+                      ownerId (not a display fallback), so the gap clears honestly. */}
+                  {canWrite && !detailOwnerId && selectedParentDomain?.ownerId && selectedParentDomain.ownerName && (
+                    <button
+                      type="button"
+                      onClick={inheritOwnerFromParent}
+                      style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                      title={`Assign ${selectedParentDomain.ownerName} — the owner of the parent domain "${selectedParentDomain.name}" — as this sub-domain's owner`}
+                    >
+                      ↰ Inherit owner from {selectedParentDomain.name}: {selectedParentDomain.ownerName}
+                    </button>
+                  )}
                 </div>
 
                 {/* Stewards */}
