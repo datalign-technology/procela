@@ -68,6 +68,8 @@ interface DataAssetEntity {
   governanceTier?: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore?: number;
   healthScoreAt?: string | null;
+  /** True when this asset is the authoritative system-of-record (golden copy). */
+  isSystemOfRecord?: boolean;
   /** Content classification (Master/Reference/Transactional/Analytical/Metadata). */
   dataType?: string;
   /** @deprecated mixed-axis legacy enum; replaced by dataType. */
@@ -81,7 +83,7 @@ interface DataAssetEntity {
   /** Human-accepted sensitivity classification. Populated via the
    *  Suggest & Review flow (POST /:id/suggest-sensitivity → user
    *  Accept/Reject → PUT /:id/sensitivity). Empty means untagged. */
-  sensitivityTags?: Array<'PII' | 'PHI' | 'PCI' | 'FINANCIAL' | 'CREDENTIAL' | 'CONFIDENTIAL' | 'PUBLIC'>;
+  sensitivityTags?: Array<'PII' | 'PHI' | 'PCI' | 'FINANCIAL' | 'CREDENTIAL' | 'CONFIDENTIAL' | 'PUBLIC' | 'CUI' | 'ITAR' | 'EXPORT_CONTROLLED'>;
   /** Set by the on-prem connector when it last refreshed this asset.
    *  Drives the freshness chip on the row so users can tell at a
    *  glance whether the metadata reflects reality. */
@@ -188,6 +190,7 @@ interface FormData {
   ownerPersonId: string;
   stewardIds: string[];
   governanceTier: string;
+  isSystemOfRecord: boolean;
   domainId: string;
   dataType: string;
   retentionDurationValue: string;
@@ -206,6 +209,7 @@ const emptyForm: FormData = {
   ownerPersonId: '',
   stewardIds: [],
   governanceTier: 'BRONZE',
+  isSystemOfRecord: false,
   domainId: '',
   dataType: '',
   retentionDurationValue: '',
@@ -797,6 +801,7 @@ export default function DataAssetsPage({
       ownerPersonId: asset.ownerPersonId || '',
       stewardIds: asset.stewardIds || [],
       governanceTier: asset.governanceTier || 'BRONZE',
+      isSystemOfRecord: !!asset.isSystemOfRecord,
       domainId: dom?.id || '',
       dataType: asset.dataType || '',
       retentionDurationValue: asset.retentionDuration?.value ? String(asset.retentionDuration.value) : '',
@@ -819,6 +824,7 @@ export default function DataAssetsPage({
       ownerPersonId: asset.ownerPersonId || '',
       stewardIds: asset.stewardIds || [],
       governanceTier: asset.governanceTier || 'BRONZE',
+      isSystemOfRecord: !!asset.isSystemOfRecord,
       domainId: '',
       dataType: asset.dataType || '',
       retentionDurationValue: asset.retentionDuration?.value ? String(asset.retentionDuration.value) : '',
@@ -1109,6 +1115,14 @@ export default function DataAssetsPage({
             </button>
             <OriginBadge origin={asset.origin} />
             <UnmappedBadge isOrphan={asset.isOrphan} />
+            {asset.isSystemOfRecord && (
+              <span
+                title="System of record — the authoritative golden copy"
+                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: 3 }}
+              >
+                SOR
+              </span>
+            )}
             <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
             <RowCountChip rowCount={asset.rowCount} />
             {asset.sensitivityTags && asset.sensitivityTags.length > 0 && (
@@ -1691,6 +1705,21 @@ export default function DataAssetsPage({
               <select aria-label="Governance Tier" style={selectStyle} value={form.governanceTier} onChange={(e) => updateField('governanceTier', e.target.value)}>
                 {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
               </select>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  aria-label="System of record"
+                  checked={form.isSystemOfRecord}
+                  onChange={(e) => setForm((f) => ({ ...f, isSystemOfRecord: e.target.checked }))}
+                  style={{ marginTop: 2, cursor: 'pointer' }}
+                />
+                <span>
+                  <span style={{ fontSize: 12, fontWeight: 500 }}>System of record</span>
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>This asset is the authoritative golden copy others reconcile to. Mark exactly one when the same data lives in several systems.</span>
+                </span>
+              </label>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>

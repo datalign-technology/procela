@@ -31,6 +31,9 @@ interface DataDomain {
   stewardIds: string[]; stewards: { id: string; name: string }[];
   dataAssetIds: string[]; assets: { id: string; name: string }[];
   status: string; scopeDefinition?: string; criticality?: string;
+  // Sub-domain nesting + master/reference governance signals (backend-derived).
+  parentDomainId?: string | null; parentDomainName?: string | null; subDomainCount?: number;
+  containsMasterData?: boolean; containsReferenceData?: boolean; suggestedCriticality?: string;
   createdAt: string; updatedAt: string;
 }
 interface Person { id: string; name: string; }
@@ -40,8 +43,8 @@ const inputStyle: React.CSSProperties = { border: '1px solid var(--color-border)
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
 
-interface FormData { name: string; description: string; status: string; criticality: string; }
-const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', criticality: '' };
+interface FormData { name: string; description: string; status: string; criticality: string; parentDomainId: string; }
+const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', criticality: '', parentDomainId: '' };
 
 const SIMPLE_TRANSITIONS: Record<string, string[]> = { DRAFT: ['ACTIVE'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 const ADVANCED_TRANSITIONS: Record<string, string[]> = { DRAFT: ['PROPOSED'], PROPOSED: ['UNDER_REVIEW', 'DRAFT'], UNDER_REVIEW: ['APPROVED', 'DRAFT'], APPROVED: ['ACTIVE', 'DRAFT'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
@@ -177,6 +180,21 @@ export default function DataDomainsPage() {
     return domains.filter((d) => d.name.toLowerCase().includes(q) || d.description.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
   }, [domains, searchQuery]);
 
+  // Order the (filtered) list so each parent domain is immediately followed by
+  // its sub-domains — a flat list the render indents by one level. Children
+  // whose parent isn't in the filtered set fall back to top-level position.
+  const orderedDomains = useMemo(() => {
+    const present = new Set(filteredDomains.map((d) => d.id));
+    const byName = (a: DataDomain, b: DataDomain) => a.name.localeCompare(b.name);
+    const tops = filteredDomains.filter((d) => !d.parentDomainId || !present.has(d.parentDomainId)).sort(byName);
+    const out: DataDomain[] = [];
+    for (const t of tops) {
+      out.push(t);
+      for (const c of filteredDomains.filter((d) => d.parentDomainId === t.id).sort(byName)) out.push(c);
+    }
+    return out;
+  }, [filteredDomains]);
+
   const selectedDomain = selectedDomainId ? domains.find((d) => d.id === selectedDomainId) || null : null;
 
   useEffect(() => {
@@ -207,7 +225,7 @@ export default function DataDomainsPage() {
     setForm(emptyForm); setEditingId(null); setCreateStewardshipTeam(true); setShowForm(true);
   };
   const openEdit = (domain: DataDomain) => {
-    setForm({ name: domain.name, description: domain.description, status: domain.status, criticality: domain.criticality || '' });
+    setForm({ name: domain.name, description: domain.description, status: domain.status, criticality: domain.criticality || '', parentDomainId: domain.parentDomainId || '' });
     setEditingId(domain.id); setShowForm(true);
   };
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
@@ -480,6 +498,20 @@ export default function DataDomainsPage() {
               </select>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Tier-1 domains drive the Council Scorecard's coverage measure.</div>
             </div>
+            <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent domain</label>
+              <select
+                aria-label="Parent domain"
+                style={selectStyle}
+                value={form.parentDomainId}
+                onChange={(e) => setForm({ ...form, parentDomainId: e.target.value })}
+              >
+                <option value="">— None (top-level domain)</option>
+                {domains
+                  .filter((d) => !d.parentDomainId && d.id !== editingId)
+                  .map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Nest this under a parent to make it a sub-domain. One level deep.</div>
+            </div>
             {/* Description absorbed the former "Scope Definition" field. */}
             <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" /></div>
@@ -560,12 +592,13 @@ export default function DataDomainsPage() {
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {filteredDomains.length === 0 ? (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No domains match.</div>
-              ) : filteredDomains.map((d) => {
+              ) : orderedDomains.map((d) => {
                 const isActive = selectedDomainId === d.id;
                 const isChecked = bulkSelectedIds.has(d.id);
+                const isSub = !!d.parentDomainId;
                 return (
                   <div key={d.id} {...clickable(() => openDetail(d), { label: `Open domain ${d.name}` })} style={{
-                    padding: '10px 12px', cursor: 'pointer',
+                    padding: '10px 12px', paddingLeft: isSub ? 30 : 12, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 8,
                     background: isActive ? '#dbeafe' : isChecked ? '#f0f9ff' : 'transparent',
                     borderBottom: '1px solid var(--color-border)',
@@ -584,15 +617,8 @@ export default function DataDomainsPage() {
                         style={{ cursor: 'pointer' }}
                       />
                     )}
+                    {isSub && <span title="Sub-domain" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>}
                     <span style={statusDot(d.status)} title={d.status} />
-                    {/* Domain name only — matches the flat one-line
-                        list style on Systems / Data Assets / People.
-                        Asset count and owner used to sit under the
-                        name; they added row height and pushed rows
-                        out of alignment for the row-height-uniform
-                        rule the rest of the app follows. Both signals
-                        are still visible on the detail panel to the
-                        right when a domain is selected. */}
                     <div
                       style={{
                         flex: 1, minWidth: 0,
@@ -602,6 +628,20 @@ export default function DataDomainsPage() {
                     >
                       {d.name}
                     </div>
+                    {/* Governance signal chips: sub-domain count on parents,
+                        master/reference-data markers. Kept compact to preserve
+                        the uniform row height. */}
+                    {!isSub && (d.subDomainCount ?? 0) > 0 && (
+                      <span title={`${d.subDomainCount} sub-domain${d.subDomainCount === 1 ? '' : 's'}`} style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>
+                        {d.subDomainCount} sub
+                      </span>
+                    )}
+                    {d.containsMasterData && (
+                      <span title="Contains master data" style={{ fontSize: 10, fontWeight: 700, color: '#7c2d12', background: '#ffedd5', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>MD</span>
+                    )}
+                    {!d.criticality && d.suggestedCriticality === 'TIER_1' && (
+                      <span title="Holds master data — suggest Tier-1 criticality" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-warning)', border: '1px dashed var(--color-warning)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>Tier-1?</span>
+                    )}
                     {healthDots(d)}
                   </div>
                 );

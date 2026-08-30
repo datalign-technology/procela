@@ -231,6 +231,29 @@ router.get('/', async (req: Request, res: Response) => {
     }
   }
 
+  // 11b. Copies without a declared system of record — the same asset name
+  // spans two or more distinct systems and none of those copies is marked the
+  // authoritative system of record. That is an unresolved "which is the golden
+  // source?" — exactly the reconciliation the SOR designation exists to close.
+  const copiesWithoutSor: Array<{ name: string; systemCount: number; assets: Array<{ id: string; name: string; systemId: string }> }> = [];
+  const fullNameGroups = new Map<string, typeof assets>();
+  for (const a of assets) {
+    const key = (a.name || '').trim().toLowerCase();
+    if (!key) continue;
+    if (!fullNameGroups.has(key)) fullNameGroups.set(key, []);
+    fullNameGroups.get(key)!.push(a);
+  }
+  for (const [, members] of fullNameGroups) {
+    const distinctSystems = new Set(members.map((m) => m.systemId).filter(Boolean));
+    if (distinctSystems.size >= 2 && !members.some((m) => m.isSystemOfRecord)) {
+      copiesWithoutSor.push({
+        name: members[0].name,
+        systemCount: distinctSystems.size,
+        assets: members.map((m) => ({ id: m.id, name: m.name, systemId: m.systemId })),
+      });
+    }
+  }
+
   // 12. Ungoverned bound columns — a column that carries a physical source
   // pointer (i.e. the asset was bound to it) but has NO data-quality rule.
   // Binding a column declares "this matters"; a bound column with no rule is
@@ -275,10 +298,11 @@ router.get('/', async (req: Request, res: Response) => {
     unassignedConnections: unassignedConnections.length,
     ownerlessSystems: ownerlessSystems.length,
     duplicateAssetNames: duplicateAssetNames.length,
+    copiesWithoutSor: copiesWithoutSor.length,
     totalGaps: unmappedSteps.length + ungovernedAssets.length + ownerlessProcesses.length
       + unownedDomains.length + orphanedAssets.length + unlinkedAssets.length
       + unassignedConnections.length + ownerlessSystems.length
-      + duplicateAssetNames.length
+      + duplicateAssetNames.length + copiesWithoutSor.length
       + ungovernedColumns.reduce((s, g) => s + g.count, 0),
   };
 
@@ -296,6 +320,7 @@ router.get('/', async (req: Request, res: Response) => {
       unassignedConnections,
       ownerlessSystems,
       duplicateAssetNames,
+      copiesWithoutSor,
       ungovernedColumns,
     },
     summary,

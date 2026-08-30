@@ -27,7 +27,8 @@ import { useAiEnabled } from '../stores/aiConfigStore';
 type SensitivityTag =
   | 'PII' | 'PHI' | 'PCI'
   | 'FINANCIAL' | 'CREDENTIAL'
-  | 'CONFIDENTIAL' | 'PUBLIC';
+  | 'CONFIDENTIAL' | 'PUBLIC'
+  | 'CUI' | 'ITAR' | 'EXPORT_CONTROLLED';
 
 interface Suggestion {
   tag: SensitivityTag;
@@ -46,7 +47,17 @@ const TAG_PALETTE: Record<SensitivityTag, { bg: string; color: string; label: st
   CREDENTIAL:   { bg: '#f5d0fe', color: '#701a75', label: 'Credential' },
   CONFIDENTIAL: { bg: '#e0e7ff', color: '#3730a3', label: 'Confidential' },
   PUBLIC:       { bg: '#dcfce7', color: '#166534', label: 'Public' },
+  // Regulatory / export-control regimes — slate/indigo family to read as a
+  // distinct group from the privacy/financial data-sensitivity chips.
+  CUI:              { bg: '#e2e8f0', color: '#1e293b', label: 'CUI' },
+  ITAR:             { bg: '#dbeafe', color: '#1e3a8a', label: 'ITAR' },
+  EXPORT_CONTROLLED:{ bg: '#cffafe', color: '#155e75', label: 'Export-Controlled' },
 };
+
+// Regulatory / export-control tags render together, apart from the
+// data-sensitivity categories, since they express a statutory handling
+// regime rather than a data-content category.
+const REGULATORY_TAGS: SensitivityTag[] = ['CUI', 'ITAR', 'EXPORT_CONTROLLED'];
 
 const CONFIDENCE_STYLES: Record<Suggestion['confidence'], { color: string; label: string }> = {
   HIGH:   { color: '#065f46', label: 'HIGH' },
@@ -70,11 +81,12 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
   const [saving, setSaving] = useState(false);
   const aiEnabled = useAiEnabled();
 
-  // Classification here is driven by the AI classifier (there's no manual
-  // tag entry). When AI is off, keep any already-accepted tags visible and
-  // removable, but drop the Suggest action. With nothing to show, render
-  // nothing rather than an empty box that offers no action.
-  if (!aiEnabled && committed.length === 0) return null;
+  // Classification can be set two ways: the AI classifier (Suggest → Accept)
+  // and a manual picker. The manual picker matters most for regulatory tags
+  // (CUI / ITAR / export) on AI-off deployments — exactly the FedRAMP / on-prem
+  // customers who need them. When read-only (disabled) with nothing to show,
+  // render nothing rather than an empty box that offers no action.
+  if (disabled && committed.length === 0) return null;
 
   const runSuggest = async () => {
     setBusy(true);
@@ -126,6 +138,21 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
     } catch { /* toast handled */ }
   };
 
+  const addManual = async (tag: SensitivityTag) => {
+    if (!tag || committed.includes(tag)) return;
+    const next = [...committed, tag];
+    try {
+      await persist(next);
+      successToast(`Added ${TAG_PALETTE[tag].label}`);
+    } catch { /* toast handled */ }
+  };
+
+  // Tags not yet applied, split into the two groups for the manual picker's
+  // optgroups (data-sensitivity vs regulatory / export-control).
+  const committedSet = new Set(committed);
+  const dataSensitivityChoices = (['PII','PHI','PCI','FINANCIAL','CREDENTIAL','CONFIDENTIAL','PUBLIC'] as SensitivityTag[]).filter((t) => !committedSet.has(t));
+  const regulatoryChoices = REGULATORY_TAGS.filter((t) => !committedSet.has(t));
+
   return (
     <div style={{
       marginBottom: 20, padding: 14,
@@ -150,21 +177,51 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
                   : 'Accepted tags. Remove with ×.'}
           </div>
         </div>
-        {!disabled && aiEnabled && (
-          <button
-            onClick={runSuggest}
-            disabled={busy || saving}
-            style={{
-              padding: '6px 12px', fontSize: 12, fontWeight: 500,
-              background: busy ? 'var(--color-bg)' : 'var(--color-primary)',
-              color: busy ? 'var(--color-text-muted)' : '#fff',
-              border: 'none', borderRadius: 4,
-              cursor: busy || saving ? 'not-allowed' : 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {busy ? 'Asking Claude…' : suggestions ? 'Re-suggest' : 'Suggest sensitivity'}
-          </button>
+        {!disabled && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {(dataSensitivityChoices.length > 0 || regulatoryChoices.length > 0) && (
+              <select
+                aria-label="Add classification"
+                value=""
+                disabled={saving}
+                onChange={(e) => { const v = e.target.value as SensitivityTag; if (v) void addManual(v); e.currentTarget.selectedIndex = 0; }}
+                style={{
+                  padding: '6px 8px', fontSize: 12,
+                  border: '1px solid var(--color-border)', borderRadius: 4,
+                  background: 'var(--color-surface)', color: 'var(--color-text)',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <option value="">+ Add classification…</option>
+                {dataSensitivityChoices.length > 0 && (
+                  <optgroup label="Data sensitivity">
+                    {dataSensitivityChoices.map((t) => <option key={t} value={t}>{TAG_PALETTE[t].label}</option>)}
+                  </optgroup>
+                )}
+                {regulatoryChoices.length > 0 && (
+                  <optgroup label="Regulatory / export control">
+                    {regulatoryChoices.map((t) => <option key={t} value={t}>{TAG_PALETTE[t].label}</option>)}
+                  </optgroup>
+                )}
+              </select>
+            )}
+            {aiEnabled && (
+              <button
+                onClick={runSuggest}
+                disabled={busy || saving}
+                style={{
+                  padding: '6px 12px', fontSize: 12, fontWeight: 500,
+                  background: busy ? 'var(--color-bg)' : 'var(--color-primary)',
+                  color: busy ? 'var(--color-text-muted)' : '#fff',
+                  border: 'none', borderRadius: 4,
+                  cursor: busy || saving ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {busy ? 'Asking Claude…' : suggestions ? 'Re-suggest' : 'Suggest sensitivity'}
+              </button>
+            )}
+          </div>
         )}
       </div>
 

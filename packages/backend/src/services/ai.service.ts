@@ -139,8 +139,12 @@ export interface IndustryTemplateSpecialization {
 }
 
 /** The canonical set of sensitivity tags the classifier can suggest.
+ *  Two groups: data-sensitivity categories (privacy/financial/security)
+ *  and regulatory / export-control regimes (defense & government). The
+ *  regulatory tags carry statutory handling obligations rather than a
+ *  data-content category, so they're grouped separately in the UI.
  *  Deliberately compact — a longer list dilutes precision. Adding
- *  new tags means updating the prompt too. */
+ *  new tags means updating the prompt (SENSITIVITY_PROMPT_TAGS) too. */
 export type SensitivityTag =
   | 'PII'
   | 'PHI'
@@ -148,10 +152,23 @@ export type SensitivityTag =
   | 'FINANCIAL'
   | 'CREDENTIAL'
   | 'CONFIDENTIAL'
-  | 'PUBLIC';
+  | 'PUBLIC'
+  // Regulatory / export-control regimes
+  | 'CUI'
+  | 'ITAR'
+  | 'EXPORT_CONTROLLED';
 
 export const SENSITIVITY_TAGS: readonly SensitivityTag[] = [
   'PII', 'PHI', 'PCI', 'FINANCIAL', 'CREDENTIAL', 'CONFIDENTIAL', 'PUBLIC',
+  'CUI', 'ITAR', 'EXPORT_CONTROLLED',
+] as const;
+
+/** Regulatory / export-control regimes — a subset of SENSITIVITY_TAGS that
+ *  express a statutory handling regime (defense / government / export)
+ *  rather than a data-content category. Grouped apart in the classifier
+ *  prompt and the UI. */
+export const REGULATORY_SENSITIVITY_TAGS: readonly SensitivityTag[] = [
+  'CUI', 'ITAR', 'EXPORT_CONTROLLED',
 ] as const;
 
 export interface SensitivitySuggestion {
@@ -440,6 +457,9 @@ Tags (only use these — exact spelling):
 - CREDENTIAL  — passwords, API keys, tokens, secrets, private keys
 - CONFIDENTIAL— business confidential (unreleased plans, negotiations, competitive analysis) that isn't covered by another tag
 - PUBLIC      — deliberately public/open data (e.g. published reference data, public catalog)
+- CUI         — Controlled Unclassified Information subject to NARA CUI / DFARS 252.204-7012 (e.g. controlled technical data, procurement-sensitive, export-controlled markings, government contract data)
+- ITAR        — technical data on the US Munitions List subject to ITAR export control (defense articles, munitions, weapons-system technical data)
+- EXPORT_CONTROLLED — dual-use technical data subject to EAR / the Commerce Control List that is not ITAR
 
 Rules:
 - Be conservative. Only apply a tag when the metadata gives clear signal — a column named "email", a table called "patient_encounters", a description mentioning "credit card numbers", etc. If you can't tell, don't tag.
