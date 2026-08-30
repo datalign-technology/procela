@@ -21,6 +21,11 @@ export interface StoredDataDomain {
   ownerId: string | null;       // personId of the Data Owner
   stewardIds: string[];          // personIds of Data Stewards
   dataAssetIds: string[];
+  // Optional parent domain — turns a flat catalog into Domain → Sub-Domain.
+  // A domain with a parentDomainId IS a sub-domain; nesting is one level
+  // deep only (a parent must itself be top-level), so the tree never exceeds
+  // Domain → Sub-Domain → Asset. null / undefined = top-level domain.
+  parentDomainId?: string | null;
   scopeDefinition?: string;
   // Business-criticality tier. TIER_1 = the domains the council watches most
   // closely; drives the Council Scorecard's tier-1 coverage measure. null =
@@ -81,22 +86,43 @@ function enrichDomain(
   domain: StoredDataDomain,
   allPeople: typeof people,
   allAssets: typeof dataAssets,
+  allDomains: StoredDataDomain[] = [],
 ) {
   const owner = domain.ownerId ? allPeople.find((p) => p.id === domain.ownerId) : null;
   const stewards = domain.stewardIds
     .map((sid) => allPeople.find((p) => p.id === sid))
     .filter(Boolean)
     .map((p) => ({ id: p!.id, name: p!.name }));
-  const assets = domain.dataAssetIds
+  const memberAssets = domain.dataAssetIds
     .map((aid) => allAssets.find((a) => a.id === aid))
-    .filter(Boolean)
-    .map((a) => ({ id: a!.id, name: a!.name }));
+    .filter(Boolean) as typeof allAssets;
+  const assets = memberAssets.map((a) => ({ id: a.id, name: a.name }));
+
+  // Master/reference governance signal. A domain that holds master data is,
+  // per canonical-EDM practice, always council-critical (Tier 1) — MDM
+  // duplicates and sync errors ripple across every system that reuses it.
+  // Reference data needs version/change governance but not automatically
+  // Tier 1. We surface a non-binding suggestedCriticality the UI can offer
+  // to apply, without overwriting an explicit criticality the user has set.
+  const containsMasterData = memberAssets.some((a) => a.dataType === 'MASTER');
+  const containsReferenceData = memberAssets.some((a) => a.dataType === 'REFERENCE');
+  const suggestedCriticality = containsMasterData && !domain.criticality ? 'TIER_1' : undefined;
+
+  // Sub-domain relationships: resolve the parent's name (for a breadcrumb /
+  // "under X" label) and count this domain's own children.
+  const parent = domain.parentDomainId ? allDomains.find((d) => d.id === domain.parentDomainId) : null;
+  const subDomainCount = allDomains.filter((d) => d.parentDomainId === domain.id).length;
 
   return {
     ...domain,
     ownerName: owner?.name || null,
     stewards,
     assets,
+    containsMasterData,
+    containsReferenceData,
+    suggestedCriticality,
+    parentDomainName: parent?.name || null,
+    subDomainCount,
   };
 }
 
@@ -175,7 +201,7 @@ router.get('/', async (req: Request, res: Response) => {
     dataAssetsRepo().list(),
   ]);
   const filtered = filterByOrgScope(allDomains, orgId as string | undefined);
-  const enriched = filtered.map((d) => enrichDomain(d, allPeople, allAssets));
+  const enriched = filtered.map((d) => enrichDomain(d, allPeople, allAssets, allDomains));
   res.json({ success: true, data: enriched });
 });
 
@@ -197,14 +223,44 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 /** GET /api/v1/data-domains/:id — single domain with enriched data */
 router.get('/:id', async (req: Request, res: Response) => {
-  const [domain, allPeople, allAssets] = await Promise.all([
+  const [domain, allPeople, allAssets, allDomains] = await Promise.all([
     dataDomainsRepo.get(String(req.params.id)),
     peopleRepo().list(),
     dataAssetsRepo().list(),
+    dataDomainsRepo.list(),
   ]);
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
-  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets) });
+  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets, allDomains) });
 });
+
+/**
+ * Validate & resolve an inbound parentDomainId for a domain in `orgId`.
+ * Enforces single-level nesting (Domain → Sub-Domain only): the parent must
+ * exist in the same org, must not be the domain itself, and must itself be a
+ * top-level domain. A domain that already has its own sub-domains cannot be
+ * turned into a sub-domain (that would create a third level).
+ * Returns { skip:true } when the field wasn't provided (leave unchanged),
+ * { value } on success (null = make top-level), or { error }.
+ */
+function resolveParentDomainId(
+  raw: unknown,
+  orgId: string,
+  selfId: string | null,
+  allDomains: StoredDataDomain[],
+): { skip?: boolean; value?: string | null; error?: string } {
+  if (raw === undefined) return { skip: true };
+  if (raw === null || raw === '') return { value: null };
+  if (typeof raw !== 'string') return { error: 'parentDomainId must be a domain id or null' };
+  if (selfId && raw === selfId) return { error: 'A domain cannot be its own parent' };
+  const parent = allDomains.find((d) => d.id === raw);
+  if (!parent) return { error: 'Parent domain not found' };
+  if (parent.orgId !== orgId) return { error: 'Parent domain belongs to a different organization' };
+  if (parent.parentDomainId) return { error: `"${parent.name}" is already a sub-domain — nesting is one level deep` };
+  if (selfId && allDomains.some((d) => d.parentDomainId === selfId)) {
+    return { error: 'This domain has its own sub-domains, so it cannot become a sub-domain itself' };
+  }
+  return { value: raw };
+}
 
 /**
  * Scope Definition was merged into Description (they overlapped — both
@@ -226,13 +282,17 @@ router.post('/', async (req: Request, res: Response) => {
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 
-  const duplicate = (await dataDomainsRepo.list()).find(
+  const allDomains = await dataDomainsRepo.list();
+  const duplicate = allDomains.find(
     (d) => d.orgId === orgId && d.name.trim().toLowerCase() === name.trim().toLowerCase(),
   );
   if (duplicate) {
     res.status(409).json({ success: false, error: `A data domain named "${name}" already exists in this organization` });
     return;
   }
+
+  const parentResult = resolveParentDomainId(req.body?.parentDomainId, orgId, null, allDomains);
+  if (parentResult.error) { res.status(400).json({ success: false, error: parentResult.error }); return; }
 
   const now = new Date().toISOString();
   const domain: StoredDataDomain = {
@@ -244,6 +304,7 @@ router.post('/', async (req: Request, res: Response) => {
     ownerId: null,
     stewardIds: [],
     dataAssetIds: [],
+    parentDomainId: parentResult.skip ? null : (parentResult.value ?? null),
     criticality: VALID_CRITICALITY.includes(req.body?.criticality) ? req.body.criticality : undefined,
     status: status && VALID_STATUSES.includes(status) ? status : 'DRAFT',
     createdAt: now,
@@ -251,7 +312,7 @@ router.post('/', async (req: Request, res: Response) => {
   };
   await dataDomainsRepo.create(domain);
   const [allPeople, allAssets] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list()]);
-  res.status(201).json({ success: true, data: enrichDomain(domain, allPeople, allAssets) });
+  res.status(201).json({ success: true, data: enrichDomain(domain, allPeople, allAssets, [...allDomains, domain]) });
 });
 
 /** PUT /api/v1/data-domains/:id — update fields */
@@ -283,6 +344,11 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (req.body?.criticality !== undefined) {
     domain.criticality = VALID_CRITICALITY.includes(req.body.criticality) ? req.body.criticality : undefined;
   }
+  // Parent domain (sub-domain nesting). Validated against the full list.
+  const allDomainsForParent = await dataDomainsRepo.list();
+  const parentResult = resolveParentDomainId(req.body?.parentDomainId, domain.orgId, domain.id, allDomainsForParent);
+  if (parentResult.error) { res.status(400).json({ success: false, error: parentResult.error }); return; }
+  if (!parentResult.skip) domain.parentDomainId = parentResult.value ?? null;
   // Scope Definition merged into Description: fold any incoming value in.
   if (scopeDefinition !== undefined) {
     domain.description = combineDescription(domain.description, scopeDefinition) || '';
@@ -304,8 +370,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   domain.updatedAt = new Date().toISOString();
   await dataDomainsRepo.update(domain.id, domain);
 
-  const [allPeople, allAssets] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list()]);
-  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets) });
+  const [allPeople, allAssets, allDomains] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list(), dataDomainsRepo.list()]);
+  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets, allDomains) });
 });
 
 /** GET /api/v1/data-domains/:id/impact — preview what would be affected by deleting this domain */
@@ -326,6 +392,16 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await dataDomainsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+  // Re-home any sub-domains to top-level before deleting the parent so they
+  // aren't orphaned onto a dangling id. In Postgres the FK's onDelete:SetNull
+  // handles this, but the JSON store has no cascade — do it explicitly so both
+  // backends behave the same.
+  const children = (await dataDomainsRepo.list()).filter((d) => d.parentDomainId === removed.id);
+  for (const child of children) {
+    child.parentDomainId = null;
+    child.updatedAt = new Date().toISOString();
+    await dataDomainsRepo.update(child.id, child);
+  }
   await dataDomainsRepo.delete(removed.id);
   res.status(204).send();
 });

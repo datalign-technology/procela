@@ -111,23 +111,23 @@ model Organization {
   parent   Organization?  @relation("OrgHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children Organization[] @relation("OrgHierarchy")
 
-  personLinks        PersonOrg[]
-  processNodes       ProcessNode[]       @relation("ProcessNodeCanonicalOrg")
-  processNodeOrgs    ProcessNodeOrg[]
-  systems            System[]
-  dataDomains        DataDomain[]
-  dataAssets         DataAsset[]
-  dataAssetBindings  DataAssetBinding[]
-  mappings           Mapping[]
-  skills             Skill[]
-  notifications      Notification[]
-  governanceTasks    GovernanceTask[]
-  governanceIssues   GovernanceIssue[]
-  governancePolicies GovernancePolicy[]
-  governanceControls GovernanceControl[]
+  personLinks          PersonOrg[]
+  processNodes         ProcessNode[]         @relation("ProcessNodeCanonicalOrg")
+  processNodeOrgs      ProcessNodeOrg[]
+  systems              System[]
+  dataDomains          DataDomain[]
+  dataAssets           DataAsset[]
+  dataAssetBindings    DataAssetBinding[]
+  mappings             Mapping[]
+  skills               Skill[]
+  notifications        Notification[]
+  governanceTasks      GovernanceTask[]
+  governanceIssues     GovernanceIssue[]
+  governancePolicies   GovernancePolicy[]
+  governanceControls   GovernanceControl[]
   governanceExceptions GovernanceException[]
-  governanceGroups   GovernanceGroup[]
-  comments           Comment[]
+  governanceGroups     GovernanceGroup[]
+  comments             Comment[]
   // FlowRelationship no longer carries an orgId — see the comment on
   // that model. Its org scope resolves via its fromNode / toNode.
 
@@ -413,26 +413,33 @@ model SystemCustodian {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model DataDomain {
-  id              String   @id @default(uuid()) @db.Uuid
-  orgId           String   @db.Uuid
+  id              String           @id @default(uuid()) @db.Uuid
+  orgId           String           @db.Uuid
   name            String
-  description     String?  @db.Text
-  ownerId         String?  @db.Uuid
-  scopeDefinition String?  @db.Text
+  description     String?          @db.Text
+  ownerId         String?          @db.Uuid
+  // Optional parent domain — turns a flat catalog into Domain → Sub-Domain.
+  // Nesting is one level deep (enforced in the route layer). onDelete:
+  // SetNull re-homes children to top-level if the parent is removed.
+  parentDomainId  String?          @db.Uuid
+  scopeDefinition String?          @db.Text
   // Business-criticality tier (TIER_1 = council-critical). Drives the Council
   // Scorecard's tier-1 coverage measure; null = unclassified.
   criticality     CriticalityTier?
-  status          String   @default("DRAFT")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  status          String           @default("DRAFT")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   owner        Person?      @relation("DataDomainOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  parent       DataDomain?  @relation("DataDomainParent", fields: [parentDomainId], references: [id], onDelete: SetNull)
+  subDomains   DataDomain[] @relation("DataDomainParent")
 
   stewards   DataDomainSteward[]
   dataAssets DataAsset[]
 
   @@index([orgId])
+  @@index([parentDomainId])
   @@map("data_domains")
 }
 
@@ -465,6 +472,10 @@ model DataAsset {
   governanceTier          GovernanceTier @default(BRONZE)
   healthScore             Float          @default(0)
   healthScoreAt           DateTime?
+  // True when this asset is the authoritative system-of-record for its data
+  // (the golden copy others reconcile to). Default false = a copy / replica
+  // or simply undeclared. Powers the "copies with no declared SOR" gap.
+  isSystemOfRecord        Boolean        @default(false)
   sensitivityTags         String[]       @default([])
   // String-typed classifiers rather than enums so a customer can
   // extend the taxonomy on their side without a schema migration.
@@ -1162,17 +1173,17 @@ model CalendarEvent {
 }
 
 model GovernanceProgram {
-  id               String   @id @default(uuid()) @db.Uuid
-  orgId            String   @db.Uuid
+  id               String    @id @default(uuid()) @db.Uuid
+  orgId            String    @db.Uuid
   name             String
-  scope            Json     @default("{}")
-  principles       Json     @default("{}")
+  scope            Json      @default("{}")
+  principles       Json      @default("{}")
   targetStartDate  String?
   targetLaunchDate String?
-  status           String   @default("PLANNING")
+  status           String    @default("PLANNING")
   launchedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([orgId])
   @@map("governance_programs")

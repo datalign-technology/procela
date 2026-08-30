@@ -39,6 +39,11 @@ export interface StoredDataAsset {
   ownerPersonId?: string | null;
   stewardIds: string[];
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
+  /** True when this asset is the authoritative system-of-record — the golden
+   *  copy other systems reconcile to. When several systems hold the same data,
+   *  exactly one copy should carry this. Default false = a copy / replica or
+   *  simply undeclared. Drives the "copies with no declared SOR" gap. */
+  isSystemOfRecord?: boolean;
   /** Manual snapshot. When DQ rules are configured the engine derives a
    *  live score per column and rolls up to the asset; treat this field as
    *  the last manual override and use `healthScoreAt` for its provenance. */
@@ -52,13 +57,15 @@ export interface StoredDataAsset {
   sourceAsset?: string;
   /** @deprecated see `bindings` */
   sourceColumn?: string;
-  /** Sensitivity classifications (PII/PHI/PCI/FINANCIAL/CREDENTIAL/…).
-   *  The single sensitivity axis for a data asset: the tags express both
-   *  regulatory categories (PII/PHI/PCI/FINANCIAL/CREDENTIAL) and the
-   *  broad confidentiality level (CONFIDENTIAL / PUBLIC). Populated by the
-   *  AI classifier route (POST /suggest-sensitivity → user accept →
-   *  PUT /sensitivity). Empty / undefined = untagged. */
-  sensitivityTags?: Array<'PII' | 'PHI' | 'PCI' | 'FINANCIAL' | 'CREDENTIAL' | 'CONFIDENTIAL' | 'PUBLIC'>;
+  /** Sensitivity classifications. The single sensitivity axis for a data
+   *  asset: the tags express data-sensitivity categories (PII/PHI/PCI/
+   *  FINANCIAL/CREDENTIAL), the broad confidentiality level (CONFIDENTIAL /
+   *  PUBLIC), and regulatory / export-control regimes (CUI / ITAR /
+   *  EXPORT_CONTROLLED). Populated by the AI classifier route
+   *  (POST /suggest-sensitivity → user accept → PUT /sensitivity), and
+   *  validated server-side against the canonical SENSITIVITY_TAGS set.
+   *  Empty / undefined = untagged. */
+  sensitivityTags?: SensitivityTag[];
   /** Content classification of the data, not how it's used.
    *  Replaces the legacy mixed-axis `category`. */
   dataType?: 'MASTER' | 'REFERENCE' | 'TRANSACTIONAL' | 'ANALYTICAL' | 'METADATA';
@@ -213,6 +220,7 @@ const createDataAssetBodySchema = z.object({
   stewardIds: z.array(z.string()).optional(),
   governanceTier: z.enum(VALID_TIERS).optional().catch(undefined),
   healthScore: z.number().optional(),
+  isSystemOfRecord: z.boolean().optional(),
   orgId: z.string().optional(),
   sourceConnectionId: z.string().optional(),
   sourceAsset: z.string().optional(),
@@ -237,6 +245,7 @@ const updateDataAssetBodySchema = z.object({
   stewardIds: z.array(z.string()).optional(),
   governanceTier: z.enum(VALID_TIERS).optional().catch(undefined),
   healthScore: z.number().optional(),
+  isSystemOfRecord: z.boolean().optional(),
   sourceConnectionId: z.string().optional(),
   sourceAsset: z.string().optional(),
   sourceColumn: z.string().optional(),
@@ -1057,7 +1066,7 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore, orgId,
+  const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore, isSystemOfRecord, orgId,
     sourceConnectionId, sourceAsset, sourceColumn,
     dataType, category,
     retentionPolicy, retentionDuration, retentionReason,
@@ -1097,6 +1106,7 @@ router.post('/', async (req: Request, res: Response) => {
     stewardIds: Array.isArray(stewardIds) ? stewardIds : [],
     governanceTier: tier,
     healthScore: score,
+    ...(isSystemOfRecord ? { isSystemOfRecord: true } : {}),
     ...(score > 0 ? { healthScoreAt: now } : { healthScoreAt: null }),
     ...(sourceConnectionId ? { sourceConnectionId } : {}),
     ...(sourceAsset ? { sourceAsset } : {}),
@@ -1127,7 +1137,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     return;
   }
   const rawBody = req.body as Record<string, unknown> | undefined;
-  const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore,
+  const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore, isSystemOfRecord,
     sourceConnectionId, sourceAsset, sourceColumn,
     dataType, category,
     retentionPolicy, retentionDuration, retentionReason,
@@ -1141,6 +1151,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (ownerPersonId !== undefined) asset.ownerPersonId = ownerPersonId || null;
   if (stewardIds !== undefined && Array.isArray(stewardIds)) asset.stewardIds = stewardIds;
   if (governanceTier !== undefined) asset.governanceTier = governanceTier;
+  if (isSystemOfRecord !== undefined) asset.isSystemOfRecord = isSystemOfRecord;
   if (healthScore !== undefined && typeof healthScore === 'number') {
     const clamped = Math.max(0, Math.min(100, healthScore));
     if (clamped !== asset.healthScore) {

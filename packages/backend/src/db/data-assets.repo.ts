@@ -50,6 +50,7 @@ type PrismaAssetRow = {
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore: number;
   healthScoreAt: Date | null;
+  isSystemOfRecord: boolean;
   sensitivityTags: string[];
   dataType: string | null;
   refreshFrequency: string | null;
@@ -95,6 +96,7 @@ function fromPrisma(r: PrismaAssetRow): StoredDataAsset {
     governanceTier: r.governanceTier,
     healthScore: r.healthScore,
     ...(r.healthScoreAt ? { healthScoreAt: r.healthScoreAt.toISOString() } : {}),
+    ...(r.isSystemOfRecord ? { isSystemOfRecord: true } : {}),
     ...(r.sensitivityTags.length > 0 ? { sensitivityTags: r.sensitivityTags as StoredDataAsset['sensitivityTags'] } : {}),
     ...(r.dataType ? { dataType: r.dataType as StoredDataAsset['dataType'] } : {}),
     ...(r.refreshFrequency ? { refreshFrequency: r.refreshFrequency as StoredDataAsset['refreshFrequency'] } : {}),
@@ -124,6 +126,7 @@ function toPrismaData(row: Partial<StoredDataAsset>): Record<string, unknown> {
   if (row.healthScoreAt !== undefined) {
     data.healthScoreAt = row.healthScoreAt ? new Date(row.healthScoreAt) : null;
   }
+  if (row.isSystemOfRecord !== undefined) data.isSystemOfRecord = !!row.isSystemOfRecord;
   if (row.sensitivityTags !== undefined) data.sensitivityTags = row.sensitivityTags ?? [];
   if (row.dataType !== undefined) data.dataType = row.dataType ?? null;
   if (row.refreshFrequency !== undefined) data.refreshFrequency = row.refreshFrequency ?? null;
