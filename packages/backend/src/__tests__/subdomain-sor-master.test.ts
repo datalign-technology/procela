@@ -25,6 +25,8 @@ const dataAssetsRouter = require('../routes/data-assets').default;
 const { dataAssets } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const gapRouter = require('../routes/gap-detection').default;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { aiService } = require('../services/ai.service');
 
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -53,8 +55,13 @@ describe('sub-domains, master-data signal, SOR gap', () => {
   const orgId = PREFIX + 'org';
 
   const sweep = (arr: any[], pred: (r: any) => boolean) => { for (let i = arr.length - 1; i >= 0; i--) if (pred(arr[i])) arr.splice(i, 1); };
+  const originalGenerateSubs = aiService.generateSubDomains?.bind(aiService);
 
   before(async () => {
+    // Stub the AI so the generate-subdomains route doesn't hit Anthropic.
+    aiService.generateSubDomains = async (_industry: string, parentName: string) =>
+      [{ name: `${parentName} — A`, description: 'sub A' }, { name: `${parentName} — B`, description: 'sub B' }];
+
     // Clear any rows left by a prior aborted run — the JSON store persists to
     // disk, so a mid-run failure can leave this org's fixtures behind.
     sweep(dataDomains, (d: any) => d.orgId === orgId);
@@ -71,9 +78,22 @@ describe('sub-domains, master-data signal, SOR gap', () => {
   });
 
   after(async () => {
+    if (originalGenerateSubs) aiService.generateSubDomains = originalGenerateSubs;
     sweep(dataDomains, (d: any) => d.orgId === orgId);
     sweep(dataAssets, (a: any) => (a.name || '').startsWith(PREFIX));
     await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('generates sub-domain suggestions for a parent, and validates input', async () => {
+    const ok = await request(port, 'POST', '/data-domains/generate-subdomains', { industry: 'utilities', parentName: 'Operational Data' });
+    assert.strictEqual(ok.status, 200);
+    assert.strictEqual(ok.body.success, true);
+    assert.ok(Array.isArray(ok.body.data) && ok.body.data.length === 2);
+    assert.strictEqual(ok.body.data[0].name, 'Operational Data — A');
+
+    const missing = await request(port, 'POST', '/data-domains/generate-subdomains', { industry: 'utilities' });
+    assert.strictEqual(missing.status, 400);
+    assert.match(missing.body.error, /parentName is required/);
   });
 
   it('nests a sub-domain under a parent, one level deep', async () => {

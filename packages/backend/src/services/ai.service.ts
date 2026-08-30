@@ -219,6 +219,7 @@ export interface AiService {
    *  delivery shape differs. */
   generateIndustryTemplateStream(industry: string, specialization?: IndustryTemplateSpecialization): AsyncIterable<TemplateStreamEvent>;
   generateDataDomains(industry: string): Promise<object>;
+  generateSubDomains(industry: string, parentName: string, parentDescription?: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
   /** Suggest sensitivity tags (PII/PHI/PCI/FINANCIAL/CREDENTIAL/etc.)
    *  for a data asset based on its name, description, and column
@@ -392,6 +393,45 @@ Guidelines:
         {
           role: 'user',
           content: `Generate standard data domains for the "${industry}" industry.`,
+        },
+      ],
+    });
+
+    const text = textFromResponse(response);
+    return extractJson(text) as object;
+  }
+
+  /**
+   * Suggest sub-domains for one parent data domain — the second level of the
+   * Domain → Sub-Domain hierarchy. Seeded with the parent's name + description
+   * so, e.g., a "Manufacturing" domain yields Welding / Fabrication / Assembly.
+   */
+  async generateSubDomains(industry: string, parentName: string, parentDescription?: string): Promise<object> {
+    const response = await getClient().messages.create({
+      model: getConfiguredModel(),
+      max_tokens: 4096,
+      system: `You are a data governance expert for the Procela platform. Given an industry and a top-level data domain, suggest the sub-domains that break that domain down into more granular, separately-stewarded subject areas.
+
+A sub-domain is the second level of the taxonomy — Data Domain → Sub-Domain. For example, a "Manufacturing" domain divides into sub-domains like "Welding", "Fabrication", "Assembly", "Outfitting"; a "Customer Data" domain divides into "Accounts", "Billing", "Service History".
+
+Return ONLY a valid JSON array — no markdown, no code fences, no explanation:
+[
+  {
+    "name": "Sub-Domain Name",
+    "description": "1-2 sentence description of what data this sub-domain governs within the parent domain"
+  }
+]
+
+Guidelines:
+- Suggest 3-8 sub-domains that are standard for this domain in this industry
+- Each sub-domain must be a distinct subject area WITHIN the parent domain — not a sibling of the parent, and not a restatement of it
+- Use clear business language accessible to non-technical users
+- Order from most foundational to most specialized
+- Descriptions should explain scope within the parent domain`,
+      messages: [
+        {
+          role: 'user',
+          content: `Industry: "${industry}"\nParent data domain: "${parentName}"${parentDescription ? `\nParent description: ${parentDescription}` : ''}\n\nGenerate the sub-domains for this domain.`,
         },
       ],
     });

@@ -261,7 +261,7 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(people), 24, 'people');
     assert.strictEqual(demoCount(systems), 8, 'systems');
     assert.strictEqual(demoCount(agents), 5, 'agents');
-    assert.strictEqual(demoCount(dataDomains), 3, 'domains');
+    assert.strictEqual(demoCount(dataDomains), 6, 'domains');
     assert.strictEqual(demoCount(dataAssets), 9, 'assets');
     assert.strictEqual(demoCount(processNodes), 15, 'process nodes');
     assert.strictEqual(demoCount(mappings), 7, 'mappings');
@@ -391,7 +391,7 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(people), 24, 'people');
     assert.strictEqual(demoCount(systems), 8, 'systems');
     assert.strictEqual(demoCount(agents), 5, 'agents');
-    assert.strictEqual(demoCount(dataDomains), 3, 'domains');
+    assert.strictEqual(demoCount(dataDomains), 6, 'domains');
     assert.strictEqual(demoCount(dataAssets), 9, 'assets');
     assert.strictEqual(demoCount(processNodes), 15, 'process nodes');
     assert.strictEqual(demoCount(mappings), 7, 'mappings');
