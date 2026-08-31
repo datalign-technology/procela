@@ -19,6 +19,7 @@ import { dataDomains } from '../routes/data-domains';
 import { dataAssets } from '../routes/data-assets';
 import { people } from '../routes/people';
 import { governancePolicies } from '../routes/governance-policies';
+import { attachments } from '../routes/attachments';
 
 const P = 'bkT-';
 const A = P + 'A';        // tenant A (company)
@@ -58,7 +59,7 @@ describe('per-tenant backup export/import', () => {
 
   const clearFixtures = () => {
     sweep(organizations, byPrefixId); sweep(dataDomains, byPrefixId); sweep(dataAssets, byPrefixId);
-    sweep(people, byPrefixId); sweep(governancePolicies, byPrefixId);
+    sweep(people, byPrefixId); sweep(governancePolicies, byPrefixId); sweep(attachments, byPrefixId);
   };
 
   const seed = () => {
@@ -84,6 +85,10 @@ describe('per-tenant backup export/import', () => {
     governancePolicies.push(
       { id: P + 'gpA', orgId: A, code: 'POL-A', name: 'Policy A', description: '', content: '', status: 'ACTIVE' } as any,
       { id: P + 'gpB', orgId: B, code: 'POL-B', name: 'Policy B', description: '', content: '', status: 'ACTIVE' } as any,
+    );
+    attachments.push(
+      { id: P + 'atA', orgId: A, entityType: 'ProcessNode', entityId: 'n', type: 'URL', name: 'Link A', description: '', url: 'https://x/a', uploadedBy: null } as any,
+      { id: P + 'atB', orgId: B, entityType: 'ProcessNode', entityId: 'n', type: 'URL', name: 'Link B', description: '', url: 'https://x/b', uploadedBy: null } as any,
     );
   };
 
@@ -120,10 +125,12 @@ describe('per-tenant backup export/import', () => {
     assert.deepStrictEqual(d.dataAssets.map((x: any) => x.id), [P + 'aA']);
     assert.deepStrictEqual(d.people.map((x: any) => x.id), [P + 'pA']);
     assert.deepStrictEqual(d.governancePolicies.map((x: any) => x.id), [P + 'gpA']);
+    assert.deepStrictEqual(d.attachments.map((x: any) => x.id), [P + 'atA']);
     // Tenant B leaks nowhere.
     assert.ok(!JSON.stringify(d).includes(P + 'dB'));
     assert.ok(!JSON.stringify(d).includes(P + 'aB'));
     assert.ok(!JSON.stringify(d).includes(P + 'gpB'));
+    assert.ok(!JSON.stringify(d).includes(P + 'atB'));
   });
 
   it('round-trips: import restores the scope and leaves other tenants untouched', async () => {

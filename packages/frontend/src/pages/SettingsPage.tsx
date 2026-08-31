@@ -945,7 +945,7 @@ export default function SettingsPage() {
         <div style={{ marginBottom: '1.5rem' }}>
           <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Export Backup</h3>
           <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-            Download a backup of <strong>{activeOrgName || 'this tenant'}</strong> and everything beneath it as a JSON file.
+            Download a backup of <strong>{activeOrgName || 'this tenant'}</strong> and everything beneath it as a JSON file. Records and attachment links are included; uploaded file contents are stored separately and are not part of this file.
           </p>
           <button
             onClick={handleExportBackup}
