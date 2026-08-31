@@ -22,6 +22,7 @@ import { dataDomains } from './data-domains';
 import { tags } from './tags';
 import { comments } from './comments';
 import { governancePolicies } from './governance-policies';
+import { attachments } from './attachments';
 
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
@@ -37,6 +38,7 @@ import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { getTagsRepository } from '../db/tags.repo';
 import { getCommentsRepository } from '../db/comments.repo';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getAttachmentsRepository } from '../db/attachments.repo';
 
 const router = Router();
 
@@ -95,8 +97,14 @@ const STORES: StoreDef[] = [
       ? ctx.orgIds.has(row.scopeId)
       : row.scopeType === 'DOMAIN' ? ctx.domainIds.has(row.scopeId) : false,
     mode: 'replace' },
-  // Before mappings: a mapping's policyId FK references a governance policy.
+  // Before mappings: a mapping's policyId / attachmentId points at these.
+  // Attachment rows are metadata only (filePath, size, mime); the uploaded
+  // bytes live on the filesystem / object store and are NOT in a data backup.
+  // URL-type attachments are fully captured; FILE-type rows restore their
+  // metadata but their content must be moved separately for a cross-host
+  // restore.
   { key: 'governancePolicies', makeRepo: () => getGovernancePoliciesRepository(governancePolicies), inScope: inByOrgId, mode: 'replace' },
+  { key: 'attachments', makeRepo: () => getAttachmentsRepository(attachments), inScope: inByOrgId, mode: 'replace' },
   { key: 'mappings', makeRepo: () => getMappingsRepository(mappings), inScope: inByOrgId, mode: 'replace' },
   { key: 'flowRelationships', makeRepo: () => getFlowRelationshipsRepository(flowRelationships),
     inScope: (row, ctx) => ctx.nodeIds.has(row.fromNodeId) || ctx.nodeIds.has(row.toNodeId), mode: 'replace' },
