@@ -1535,6 +1535,141 @@ router.get('/:id/suggest-source', requireAiEnabled, async (req: Request, res: Re
   res.json({ success: true, data: candidates.slice(0, 10) });
 });
 
+// ── Discovery reconciliation (Phase 3, A2) ────────────────────────────────
+//
+// After a connection is discovered, reconcile each discovered table/file
+// against the business catalog: suggest the best-matching existing Data Asset
+// by name (reusing `similarity`), flag ones already bound, and let the user
+// confirm the suggestion, link to a different asset, or create a new Bronze
+// asset. Connection-rooted (mirrors the Discover flow), the inverse of the
+// asset-rooted `/:id/suggest-source`.
+
+const RECONCILE_MATCH_THRESHOLD = 0.4;
+
+function loadConnectionById(connectionId: string): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { connections } = require('./connections');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getConnectionsRepository } = require('../db/connections.repo');
+  return getConnectionsRepository(connections).get(connectionId);
+}
+
+/** GET /api/v1/data-assets/reconcile/:connectionId — discovered assets +
+ *  their reconciliation status against the catalog. */
+router.get('/reconcile/:connectionId', async (req: Request, res: Response) => {
+  const connectionId = String(req.params.connectionId);
+  const conn = await loadConnectionById(connectionId);
+  if (!conn) { res.status(404).json({ success: false, error: 'Connection not found' }); return; }
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { discoverAssets } = require('../services/connector.service');
+  const result = await discoverAssets(conn);
+  if (!result.success) { res.status(502).json({ success: false, error: result.message || 'Discovery failed' }); return; }
+  const discovered = (result.details?.assets || []) as Array<{ name: string; type?: string; columns?: string[] }>;
+
+  const orgAssets = (await dataAssetsRepo.list()).filter((a) => a.orgId === conn.orgId);
+  const bindings = await dataAssetBindingsRepo.list();
+  // Source keys already bound on THIS connection: lower(sourceAsset) → assetId.
+  const linkedBySource = new Map<string, string>();
+  for (const b of bindings) {
+    if (b.connectionId === connectionId && b.sourceAsset) linkedBySource.set(b.sourceAsset.toLowerCase(), b.dataAssetId);
+  }
+  const nameOf = (id: string) => orgAssets.find((a) => a.id === id)?.name || 'Unknown asset';
+
+  const items = discovered.map((d) => {
+    const base = { sourceAsset: d.name, type: d.type || 'TABLE', columns: d.columns || [] };
+    const linkedId = linkedBySource.get(d.name.toLowerCase());
+    if (linkedId) {
+      return { ...base, status: 'linked', linkedAssetId: linkedId, linkedAssetName: nameOf(linkedId) };
+    }
+    let best: { dataAssetId: string; dataAssetName: string; score: number } | null = null;
+    for (const a of orgAssets) {
+      const score = similarity(d.name, `${a.name} ${a.description || ''}`);
+      if (!best || score > best.score) best = { dataAssetId: a.id, dataAssetName: a.name, score };
+    }
+    if (best && best.score >= RECONCILE_MATCH_THRESHOLD) {
+      return {
+        ...base, status: 'suggested',
+        suggestion: { dataAssetId: best.dataAssetId, dataAssetName: best.dataAssetName, score: Math.round(best.score * 100), reason: `Name matches "${best.dataAssetName}"` },
+      };
+    }
+    return { ...base, status: 'new' };
+  });
+
+  res.json({ success: true, data: { connectionId, connectionName: conn.name, simulated: !!result.simulated, items } });
+});
+
+/**
+ * POST /api/v1/data-assets/reconcile/:connectionId
+ * Body: { decisions: [{ sourceAsset, action: 'link'|'create'|'skip',
+ *                       dataAssetId?, dataAssetName?, columns?: string[] }] }
+ *
+ * Apply the user's confirmed reconciliation. 'link' binds the source to an
+ * existing asset; 'create' makes a new Bronze DISCOVERED asset and binds it;
+ * both materialize the named columns so DQ rules can attach. 'skip' is a no-op.
+ */
+router.post('/reconcile/:connectionId', async (req: Request, res: Response) => {
+  const connectionId = String(req.params.connectionId);
+  const conn = await loadConnectionById(connectionId);
+  if (!conn) { res.status(404).json({ success: false, error: 'Connection not found' }); return; }
+
+  const decisions = Array.isArray(req.body?.decisions) ? req.body.decisions : [];
+  if (decisions.length === 0) { res.status(400).json({ success: false, error: 'No decisions provided' }); return; }
+
+  const bindings = await dataAssetBindingsRepo.list();
+  const hasBinding = (assetId: string) => bindings.some((b) => b.dataAssetId === assetId);
+  const iso = () => new Date().toISOString();
+
+  const bindSource = async (asset: StoredDataAsset, sourceAsset: string, columns?: string[]): Promise<void> => {
+    const cols = normalizeColumnSet(columns);
+    const binding: StoredDataAssetBinding = {
+      id: uuid(), orgId: asset.orgId, dataAssetId: asset.id, connectionId,
+      sourceAsset, sourceColumn: cols[0], sourceColumns: cols.length ? cols : undefined,
+      isPrimary: !hasBinding(asset.id), createdAt: iso(), updatedAt: iso(),
+    };
+    await dataAssetBindingsRepo.create(binding);
+    bindings.push(binding);
+    await materializeColumnsFromBinding(asset, binding);
+    auditService.log(asset.orgId, null, 'DataAssetBinding', binding.id, 'CREATE', null, binding);
+  };
+
+  const summary = { linked: 0, created: 0, skipped: 0, errors: [] as string[] };
+  for (const d of decisions) {
+    const sourceAsset = String(d?.sourceAsset || '').trim();
+    const action = String(d?.action || 'skip');
+    if (!sourceAsset || action === 'skip') { summary.skipped++; continue; }
+    try {
+      if (action === 'link') {
+        const asset = await dataAssetsRepo.get(String(d.dataAssetId || ''));
+        if (!asset || asset.orgId !== conn.orgId) { summary.errors.push(`${sourceAsset}: target asset not found`); continue; }
+        await bindSource(asset, sourceAsset, d.columns);
+        summary.linked++;
+      } else if (action === 'create') {
+        const name = (String(d.dataAssetName || '').trim()) || sourceAsset;
+        const asset: StoredDataAsset = {
+          id: uuid(), orgId: conn.orgId, name, description: '',
+          systemId: (Array.isArray(conn.systemIds) && conn.systemIds[0]) || '',
+          owner: '', stewardIds: [], governanceTier: 'BRONZE',
+          healthScore: 0, origin: 'DISCOVERED',
+          sourceConnectionId: connectionId, sourceAsset,
+          createdAt: iso(), updatedAt: iso(),
+        };
+        await dataAssetsRepo.create(asset);
+        auditService.log(asset.orgId, null, 'DataAsset', asset.id, 'CREATE', null, asset);
+        await bindSource(asset, sourceAsset, d.columns);
+        summary.created++;
+      } else {
+        summary.skipped++;
+      }
+    } catch (err) {
+      summary.errors.push(`${sourceAsset}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  auditService.log(conn.orgId, null, 'ConnectionProfile', connectionId, 'RECONCILE', null, summary);
+  res.json({ success: true, data: summary });
+});
+
 // ── Sensitivity classification ──
 //
 // Two-step flow so the user reviews before we tag anything:

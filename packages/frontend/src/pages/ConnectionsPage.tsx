@@ -234,7 +234,7 @@ export default function ConnectionsPage({
   useEffect(() => {
     if (!discoverModal) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); }
+      if (e.key === 'Escape') { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); setReconcileMode(false); setReconcileItems([]); setReconcileDecisions({}); }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -247,6 +247,24 @@ export default function ConnectionsPage({
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   // Which assets in the Discover modal are expanded to show their columns.
   const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
+
+  // ── Reconciliation (Phase 3, A2): match discovered assets to the catalog ──
+  interface ReconcileItem {
+    sourceAsset: string;
+    type: string;
+    columns: string[];
+    status: 'linked' | 'suggested' | 'new';
+    linkedAssetId?: string;
+    linkedAssetName?: string;
+    suggestion?: { dataAssetId: string; dataAssetName: string; score: number; reason: string };
+  }
+  interface ReconcileDecision { action: 'link' | 'create' | 'skip'; dataAssetId?: string }
+  const [reconcileMode, setReconcileMode] = useState(false);
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileApplying, setReconcileApplying] = useState(false);
+  const [reconcileItems, setReconcileItems] = useState<ReconcileItem[]>([]);
+  const [reconcileDecisions, setReconcileDecisions] = useState<Record<string, ReconcileDecision>>({});
+  const [catalogAssets, setCatalogAssets] = useState<Array<{ id: string; name: string }>>([]);
 
   // Connection type options from server
   const [connectionTypes, setConnectionTypes] = useState<string[]>([]);
@@ -529,6 +547,71 @@ export default function ConnectionsPage({
       if (next.has(assetName)) next.delete(assetName); else next.add(assetName);
       return next;
     });
+  };
+
+  // Switch the Discover modal into reconciliation mode: fetch the catalog
+  // match for each discovered asset and seed a default decision (confirm the
+  // suggestion, else create a new asset). Linked ones stay as-is.
+  const openReconcile = async (connId: string) => {
+    setReconcileMode(true);
+    setReconcileLoading(true);
+    try {
+      const [recon, assetsRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: { items: ReconcileItem[] } }>(`/data-assets/reconcile/${connId}`),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/data-assets`),
+      ]);
+      const items = recon.data.items || [];
+      setReconcileItems(items);
+      setCatalogAssets((assetsRes.data || []).map((a) => ({ id: a.id, name: a.name })));
+      const seed: Record<string, ReconcileDecision> = {};
+      for (const it of items) {
+        if (it.status === 'linked') seed[it.sourceAsset] = { action: 'skip' };
+        else if (it.status === 'suggested') seed[it.sourceAsset] = { action: 'link', dataAssetId: it.suggestion!.dataAssetId };
+        else seed[it.sourceAsset] = { action: 'create' };
+      }
+      setReconcileDecisions(seed);
+    } catch {
+      addToast('error', 'Could not load reconciliation');
+      setReconcileMode(false);
+    } finally {
+      setReconcileLoading(false);
+    }
+  };
+
+  const setDecision = (sourceAsset: string, value: string) => {
+    // value is 'create', 'skip', or an existing asset id (link).
+    setReconcileDecisions((prev) => ({
+      ...prev,
+      [sourceAsset]: value === 'create' || value === 'skip'
+        ? { action: value }
+        : { action: 'link', dataAssetId: value },
+    }));
+  };
+
+  const applyReconcile = async (connId: string) => {
+    setReconcileApplying(true);
+    try {
+      const decisions = reconcileItems
+        .filter((it) => it.status !== 'linked')
+        .map((it) => {
+          const d = reconcileDecisions[it.sourceAsset] || { action: 'skip' };
+          return { sourceAsset: it.sourceAsset, action: d.action, dataAssetId: d.dataAssetId, columns: it.columns };
+        });
+      const res = await apiClient.post<{ success: boolean; data: { linked: number; created: number; skipped: number; errors: string[] } }>(`/data-assets/reconcile/${connId}`, { decisions });
+      const s = res.data;
+      addToast('success', `Reconciled: ${s.linked} linked, ${s.created} created${s.skipped ? `, ${s.skipped} skipped` : ''}`);
+      if (s.errors && s.errors.length) addToast('error', `${s.errors.length} item(s) failed`);
+      await openReconcile(connId); // refresh statuses (bound ones now read "linked")
+    } catch {
+      addToast('error', 'Reconciliation failed');
+    } finally {
+      setReconcileApplying(false);
+    }
+  };
+
+  const closeDiscover = () => {
+    setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set());
+    setReconcileMode(false); setReconcileItems([]); setReconcileDecisions({});
   };
 
   // -----------------------------------------------------------------------
@@ -1195,7 +1278,7 @@ export default function ConnectionsPage({
       {discoverModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); }}
+          onClick={closeDiscover}
         >
           <div
             ref={discoverModalRef}
@@ -1208,13 +1291,82 @@ export default function ConnectionsPage({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 600 }}>Discovered Assets — {discoverModal.systemName}</h3>
               <button
-                onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); }}
+                onClick={closeDiscover}
                 aria-label="Close"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}
               >
                 &times;
               </button>
             </div>
+
+            {reconcileMode ? (
+              <div>
+                {reconcileLoading ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>Loading reconciliation…</div>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                      Confirm the suggested Data Asset for each discovered table, link it to a different one, or create a new Bronze asset. Already-linked tables are left as they are.
+                    </p>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--color-bg)' }}>
+                            <th scope="col" style={thStyle}>Discovered</th>
+                            <th scope="col" style={thStyle}>Reconcile to</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reconcileItems.map((it) => {
+                            const d = reconcileDecisions[it.sourceAsset];
+                            const value = it.status === 'linked' ? '' : (d?.action === 'link' ? (d.dataAssetId || '') : (d?.action || 'create'));
+                            return (
+                              <tr key={it.sourceAsset}>
+                                <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                                  <span style={{ fontWeight: 500 }}>{it.sourceAsset}</span>
+                                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>{it.columns.length} col{it.columns.length === 1 ? '' : 's'}</span>
+                                </td>
+                                <td style={tdStyle}>
+                                  {it.status === 'linked' ? (
+                                    <StatusBadge variant="success" size="md">Linked to {it.linkedAssetName}</StatusBadge>
+                                  ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                      <select
+                                        aria-label={`Reconcile ${it.sourceAsset}`}
+                                        value={value}
+                                        onChange={(e) => setDecision(it.sourceAsset, e.target.value)}
+                                        style={{ fontSize: 12, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', maxWidth: 320 }}
+                                      >
+                                        <option value="create">＋ Create new asset</option>
+                                        <option value="skip">Skip</option>
+                                        <optgroup label="Link to existing asset">
+                                          {catalogAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                        </optgroup>
+                                      </select>
+                                      {it.suggestion && (
+                                        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                                          Suggested: {it.suggestion.dataAssetName} ({it.suggestion.score}% name match)
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                      <Button variant="secondary" onClick={() => setReconcileMode(false)}>Back</Button>
+                      <Button onClick={() => discoverModal && applyReconcile(discoverModal.connId)} disabled={reconcileApplying}>
+                        {reconcileApplying ? 'Applying…' : 'Apply'}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (<>
 
             {!discoveringId && discoverSimulated && (
               <div style={{
@@ -1305,9 +1457,13 @@ export default function ConnectionsPage({
               </>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-              <Button variant="secondary" onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); }}>Close</Button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <Button variant="secondary" onClick={closeDiscover}>Close</Button>
+              {!discoveringId && !discoverSimulated && discoveredAssets.length > 0 && (
+                <Button onClick={() => discoverModal && openReconcile(discoverModal.connId)}>Reconcile to catalog</Button>
+              )}
             </div>
+            </>)}
           </div>
         </div>
       )}
