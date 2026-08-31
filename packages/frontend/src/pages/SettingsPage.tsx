@@ -342,6 +342,7 @@ export default function SettingsPage() {
               counts[key] = value.length;
             }
           }
+          if (Array.isArray(parsed.files) && parsed.files.length) counts['attachment files'] = parsed.files.length;
           setImportPreview(counts);
         } catch {
           setImportError('Invalid JSON file. Please select a valid Procela backup file.');
@@ -357,8 +358,8 @@ export default function SettingsPage() {
     setImportError('');
     setImportResult(null);
     try {
-      const res = await apiClient.post<{ success: boolean; imported: Record<string, number> }>('/backup/import', importParsedData.current);
-      setImportResult(res.imported);
+      const res = await apiClient.post<{ success: boolean; imported: Record<string, number>; filesRestored?: number }>('/backup/import', importParsedData.current);
+      setImportResult({ ...res.imported, ...(res.filesRestored ? { 'attachment files': res.filesRestored } : {}) });
       setImportFile(null);
       setImportPreview(null);
       importParsedData.current = null;
@@ -945,7 +946,7 @@ export default function SettingsPage() {
         <div style={{ marginBottom: '1.5rem' }}>
           <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Export Backup</h3>
           <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-            Download a backup of <strong>{activeOrgName || 'this tenant'}</strong> and everything beneath it as a JSON file. Records and attachment links are included; uploaded file contents are stored separately and are not part of this file.
+            Download a full backup of <strong>{activeOrgName || 'this tenant'}</strong> and everything beneath it as a JSON file — records, attachment links, and the contents of uploaded files, so it restores completely on another host.
           </p>
           <button
             onClick={handleExportBackup}

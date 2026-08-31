@@ -193,6 +193,11 @@ app.use(helmet({
 }));
 app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
 app.use(compression());
+// A full-fidelity backup import carries base64-embedded attachment bytes, so
+// its JSON body can be large. Give that one route a high limit; it runs before
+// the global parser and marks the body parsed, so the global 2MB parser skips
+// it while every other route stays capped at 2MB.
+app.use('/api/v1/backup/import', express.json({ limit: '64mb' }));
 // Default JSON body limit is 100kb — too small for branding logos uploaded
 // as data: URLs. Raise to 2MB so customers can inline a reasonable PNG.
 app.use(express.json({ limit: '2mb' }));

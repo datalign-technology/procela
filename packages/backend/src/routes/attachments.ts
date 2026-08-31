@@ -89,6 +89,27 @@ function guessMimeType(filename: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
+/**
+ * Restore an attachment's bytes to disk during a full-fidelity backup import.
+ * Sanitizes the id + filename, rejects disallowed types (so a hostile backup
+ * can't drop an executable), and confines the write under ATTACHMENTS_ROOT.
+ * Returns the new absolute path, or null if rejected. Exported for the backup
+ * route so both the upload path and the restore path share one write scheme.
+ */
+export function restoreAttachmentFile(attachmentId: string, fileName: string, buffer: Buffer): string | null {
+  const safeId = String(attachmentId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const safeName = path.basename(String(fileName || '')).replace(/[^\w.\-]+/g, '_');
+  if (!safeId || !safeName) return null;
+  if (!ALLOWED_MIME_TYPES.has(guessMimeType(safeName))) return null;
+  const dir = path.join(ATTACHMENTS_ROOT, safeId);
+  const absPath = path.join(dir, safeName);
+  // Containment: the resolved path must stay under ATTACHMENTS_ROOT.
+  if (!path.resolve(absPath).startsWith(path.resolve(ATTACHMENTS_ROOT) + path.sep)) return null;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(absPath, buffer);
+  return absPath;
+}
+
 const router = Router();
 
 /** GET /api/v1/attachments?entityId=X&entityType=Y */
