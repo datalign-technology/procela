@@ -18,6 +18,7 @@ import { organizations } from '../routes/organizations';
 import { dataDomains } from '../routes/data-domains';
 import { dataAssets } from '../routes/data-assets';
 import { people } from '../routes/people';
+import { governancePolicies } from '../routes/governance-policies';
 
 const P = 'bkT-';
 const A = P + 'A';        // tenant A (company)
@@ -55,8 +56,13 @@ describe('per-tenant backup export/import', () => {
   let server: http.Server;
   let port: number;
 
+  const clearFixtures = () => {
+    sweep(organizations, byPrefixId); sweep(dataDomains, byPrefixId); sweep(dataAssets, byPrefixId);
+    sweep(people, byPrefixId); sweep(governancePolicies, byPrefixId);
+  };
+
   const seed = () => {
-    sweep(organizations, byPrefixId); sweep(dataDomains, byPrefixId); sweep(dataAssets, byPrefixId); sweep(people, byPrefixId);
+    clearFixtures();
     organizations.push(
       { id: A, name: 'Tenant A', parentId: null, type: 'company' } as any,
       { id: A1, name: 'Div A1', parentId: A, type: 'division' } as any,
@@ -75,6 +81,10 @@ describe('per-tenant backup export/import', () => {
       { id: P + 'pA', orgIds: [A], accessibleOrgIds: [A], name: 'Person A', email: 'pa@x.io' } as any,
       { id: P + 'pB', orgIds: [B], accessibleOrgIds: [B], name: 'Person B', email: 'pb@x.io' } as any,
     );
+    governancePolicies.push(
+      { id: P + 'gpA', orgId: A, code: 'POL-A', name: 'Policy A', description: '', content: '', status: 'ACTIVE' } as any,
+      { id: P + 'gpB', orgId: B, code: 'POL-B', name: 'Policy B', description: '', content: '', status: 'ACTIVE' } as any,
+    );
   };
 
   before(async () => {
@@ -88,7 +98,7 @@ describe('per-tenant backup export/import', () => {
   });
 
   after(async () => {
-    sweep(organizations, byPrefixId); sweep(dataDomains, byPrefixId); sweep(dataAssets, byPrefixId); sweep(people, byPrefixId);
+    clearFixtures();
     await new Promise<void>((r) => server.close(() => r()));
   });
 
@@ -109,9 +119,11 @@ describe('per-tenant backup export/import', () => {
     assert.deepStrictEqual(d.dataDomains.map((x: any) => x.id).sort(), [P + 'dA', P + 'dA1'].sort());
     assert.deepStrictEqual(d.dataAssets.map((x: any) => x.id), [P + 'aA']);
     assert.deepStrictEqual(d.people.map((x: any) => x.id), [P + 'pA']);
+    assert.deepStrictEqual(d.governancePolicies.map((x: any) => x.id), [P + 'gpA']);
     // Tenant B leaks nowhere.
     assert.ok(!JSON.stringify(d).includes(P + 'dB'));
     assert.ok(!JSON.stringify(d).includes(P + 'aB'));
+    assert.ok(!JSON.stringify(d).includes(P + 'gpB'));
   });
 
   it('round-trips: import restores the scope and leaves other tenants untouched', async () => {

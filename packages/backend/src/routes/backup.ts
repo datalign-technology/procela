@@ -21,6 +21,7 @@ import { damaRoles } from './dama-roles';
 import { dataDomains } from './data-domains';
 import { tags } from './tags';
 import { comments } from './comments';
+import { governancePolicies } from './governance-policies';
 
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
@@ -35,6 +36,7 @@ import { getDamaRolesRepository } from '../db/dama-roles.repo';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { getTagsRepository } from '../db/tags.repo';
 import { getCommentsRepository } from '../db/comments.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 
 const router = Router();
 
@@ -93,6 +95,8 @@ const STORES: StoreDef[] = [
       ? ctx.orgIds.has(row.scopeId)
       : row.scopeType === 'DOMAIN' ? ctx.domainIds.has(row.scopeId) : false,
     mode: 'replace' },
+  // Before mappings: a mapping's policyId FK references a governance policy.
+  { key: 'governancePolicies', makeRepo: () => getGovernancePoliciesRepository(governancePolicies), inScope: inByOrgId, mode: 'replace' },
   { key: 'mappings', makeRepo: () => getMappingsRepository(mappings), inScope: inByOrgId, mode: 'replace' },
   { key: 'flowRelationships', makeRepo: () => getFlowRelationshipsRepository(flowRelationships),
     inScope: (row, ctx) => ctx.nodeIds.has(row.fromNodeId) || ctx.nodeIds.has(row.toNodeId), mode: 'replace' },
