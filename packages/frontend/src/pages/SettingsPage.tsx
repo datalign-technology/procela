@@ -303,7 +303,7 @@ export default function SettingsPage() {
   const handleExportBackup = async () => {
     setExportLoading(true);
     try {
-      const data = await apiClient.get<any>('/backup/export');
+      const data = await apiClient.get<any>(activeOrgId ? `/backup/export?orgId=${encodeURIComponent(activeOrgId)}` : '/backup/export');
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -945,7 +945,7 @@ export default function SettingsPage() {
         <div style={{ marginBottom: '1.5rem' }}>
           <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Export Backup</h3>
           <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
-            Download a complete backup of all Procela data as a JSON file.
+            Download a backup of <strong>{activeOrgName || 'this tenant'}</strong> and everything beneath it as a JSON file.
           </p>
           <button
             onClick={handleExportBackup}
@@ -1042,8 +1042,8 @@ export default function SettingsPage() {
 
       <ConfirmDialog
         open={importConfirmOpen}
-        title="Replace All Data?"
-        message="This will permanently replace ALL existing data with the contents of the backup file. This action cannot be undone. Are you sure you want to continue?"
+        title="Restore this backup?"
+        message="This restores the backup into its tenant: existing process, data, and governance records in that scope are replaced with the file's contents (organizations and people are updated, not removed). This cannot be undone. Continue?"
         confirmLabel="Yes, Import"
         onConfirm={handleImportConfirm}
         onCancel={() => setImportConfirmOpen(false)}
