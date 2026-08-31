@@ -14,6 +14,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
 import { useAiEnabled } from '../stores/aiConfigStore';
+import { useRegimeStore } from '../stores/regimeStore';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
 import LoadDemoDataPanel from '../components/LoadDemoDataPanel';
@@ -184,6 +185,36 @@ export default function SettingsPage() {
     } catch (e) {
       setBrandingMsg(e instanceof Error ? e.message : 'Save failed');
     } finally { setBrandingBusy(false); }
+  };
+
+  // ── Data classification regimes (per-tenant) ──
+  // Which regulatory / export-control regimes an org admin has turned on.
+  // Universal data-sensitivity tags (PII/PHI/…) are always available and not
+  // configurable here.
+  const [regimes, setRegimes] = useState<string[]>(['CUI', 'ITAR', 'EXPORT_CONTROLLED']);
+  const [regimesBusy, setRegimesBusy] = useState(false);
+  useEffect(() => {
+    if (!activeOrgId) return;
+    apiClient
+      .get<{ success: boolean; data: { activeSensitivityRegimes?: string[] } }>(`/organizations/${activeOrgId}`)
+      .then((res) => {
+        const r = res.data?.activeSensitivityRegimes;
+        setRegimes(Array.isArray(r) ? r : ['CUI', 'ITAR', 'EXPORT_CONTROLLED']);
+      })
+      .catch(() => { /* leave defaults */ });
+  }, [activeOrgId]);
+  const toggleRegime = async (key: string) => {
+    if (!activeOrgId || regimesBusy) return;
+    const prev = regimes;
+    const next = regimes.includes(key) ? regimes.filter((r) => r !== key) : [...regimes, key];
+    setRegimes(next);
+    setRegimesBusy(true);
+    try {
+      await apiClient.put(`/organizations/${activeOrgId}`, { activeSensitivityRegimes: next });
+      void useRegimeStore.getState().fetch(activeOrgId);
+    } catch {
+      setRegimes(prev);
+    } finally { setRegimesBusy(false); }
   };
 
   // Auth settings state
@@ -513,6 +544,40 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      </Card>
+
+      {/* Data classification regimes — an org admin chooses which regulatory /
+          export-control regimes are active for this tenant. The universal
+          data-sensitivity tags (PII/PHI/PCI/…) are always available and not
+          listed here. */}
+      <Card padding="1.5rem">
+        <h2 style={sectionTitleStyle}>Data classification regimes</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+          Choose which regulatory / export-control regimes apply to <strong>{activeOrgName || 'this tenant'}</strong>. Only active regimes can be applied to data assets and are suggested by the classifier. Universal data-sensitivity tags (PII, PHI, PCI, Financial, Credential, Confidential, Public) are always available.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+          {[
+            { key: 'CUI', label: 'CUI', desc: 'Controlled Unclassified Information — NARA CUI Registry / DFARS 252.204-7012.' },
+            { key: 'ITAR', label: 'ITAR', desc: 'Technical data on the US Munitions List, subject to ITAR export control.' },
+            { key: 'EXPORT_CONTROLLED', label: 'Export-Controlled', desc: 'Dual-use technical data subject to the EAR / Commerce Control List.' },
+          ].map((r) => {
+            const on = regimes.includes(r.key);
+            return (
+              <label key={r.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: regimesBusy ? 'wait' : 'pointer', background: on ? 'var(--color-primary-light)' : 'var(--color-bg)' }}>
+                <input type="checkbox" checked={on} disabled={regimesBusy} onChange={() => toggleRegime(r.key)} style={{ marginTop: 2 }} />
+                <span>
+                  <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{r.label}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 1 }}>{r.desc}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {regimes.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--color-warning)', marginTop: 10 }}>
+            No regulatory regimes are active — assets in this tenant can carry only the universal data-sensitivity tags.
+          </p>
+        )}
       </Card>
 
       <ConfirmDialog

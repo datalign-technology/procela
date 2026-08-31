@@ -30,7 +30,7 @@ interface DataDomain {
   ownerId: string | null; ownerName: string | null;
   stewardIds: string[]; stewards: { id: string; name: string }[];
   dataAssetIds: string[]; assets: { id: string; name: string }[];
-  status: string; scopeDefinition?: string; criticality?: string;
+  status: string; scopeDefinition?: string; criticality?: string; code?: string;
   // Sub-domain nesting + master/reference governance signals (backend-derived).
   parentDomainId?: string | null; parentDomainName?: string | null; subDomainCount?: number;
   containsMasterData?: boolean; containsReferenceData?: boolean; suggestedCriticality?: string;
@@ -43,8 +43,8 @@ const inputStyle: React.CSSProperties = { border: '1px solid var(--color-border)
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
 
-interface FormData { name: string; description: string; status: string; criticality: string; parentDomainId: string; }
-const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', criticality: '', parentDomainId: '' };
+interface FormData { name: string; description: string; status: string; criticality: string; parentDomainId: string; code: string; }
+const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', criticality: '', parentDomainId: '', code: '' };
 
 const SIMPLE_TRANSITIONS: Record<string, string[]> = { DRAFT: ['ACTIVE'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 const ADVANCED_TRANSITIONS: Record<string, string[]> = { DRAFT: ['PROPOSED'], PROPOSED: ['UNDER_REVIEW', 'DRAFT'], UNDER_REVIEW: ['APPROVED', 'DRAFT'], APPROVED: ['ACTIVE', 'DRAFT'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
@@ -236,7 +236,7 @@ export default function DataDomainsPage() {
     setForm(emptyForm); setEditingId(null); setCreateStewardshipTeam(true); setShowForm(true);
   };
   const openEdit = (domain: DataDomain) => {
-    setForm({ name: domain.name, description: domain.description, status: domain.status, criticality: domain.criticality || '', parentDomainId: domain.parentDomainId || '' });
+    setForm({ name: domain.name, description: domain.description, status: domain.status, criticality: domain.criticality || '', parentDomainId: domain.parentDomainId || '', code: domain.code || '' });
     setEditingId(domain.id); setShowForm(true);
   };
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
@@ -572,6 +572,9 @@ export default function DataDomainsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus aria-label="Name" style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Customer Data" /></div>
+            <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Code</label>
+              <input aria-label="Code" style={{ ...inputStyle, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder={form.parentDomainId ? 'e.g. MFG-02' : 'e.g. MFG'} />
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Structured governance code. Auto-suggested if left blank.</div></div>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
               {editingId ? (
                 <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
@@ -713,6 +716,9 @@ export default function DataDomainsPage() {
                     )}
                     {isSub && <span title="Sub-domain" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>}
                     <span style={statusDot(d.status)} title={d.status} />
+                    {d.code && (
+                      <span title={`Code: ${d.code}`} style={{ flexShrink: 0, fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 5px' }}>{d.code}</span>
+                    )}
                     <div
                       style={{
                         flex: 1, minWidth: 0,

@@ -164,6 +164,8 @@ interface Asset360Column {
   sourceColumn?: string;
   rulesCount: number;
   healthScore: number | null;
+  isPrimaryKey?: boolean;
+  references?: string;
 }
 interface Asset360Data {
   asset: DataAssetEntity;
@@ -248,6 +250,8 @@ interface DataAssetColumn {
   rulesWarning?: number;
   healthScore?: number | null;
   rules?: ColumnRule[];
+  isPrimaryKey?: boolean;
+  references?: string;
 }
 
 const ORIGIN_BADGE: Record<string, { label: string; bg: string; fg: string; title: string }> = {
@@ -770,6 +774,20 @@ export default function DataAssetsPage({
       }));
     } catch (err) {
       errorToast(err, 'Failed to update column type');
+    }
+  };
+
+  // Generic column field patch (primary-key flag, FK references). Optimistic
+  // local update + PUT.
+  const updateColumnField = async (assetId: string, colId: string, patch: Partial<DataAssetColumn>) => {
+    setColumnsMap((prev) => ({
+      ...prev,
+      [assetId]: (prev[assetId] || []).map((c) => c.id === colId ? { ...c, ...patch } : c),
+    }));
+    try {
+      await apiClient.put(`/data-assets/${assetId}/columns/${colId}`, patch);
+    } catch (err) {
+      errorToast(err, 'Failed to update column');
     }
   };
 
@@ -1312,11 +1330,23 @@ export default function DataAssetsPage({
                     onMouseLeave={(e) => { if (!isColExpanded) e.currentTarget.style.background = ''; }}
                   >
                     <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 12, flexShrink: 0 }}>
-                      {colRules.length > 0 ? (isColExpanded ? '▼' : '▶') : '•'}
+                      {isColExpanded ? '▼' : '▶'}
                     </span>
                     <span style={{ fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 13, minWidth: 120 }}>
                       {col.columnName}
                     </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); updateColumnField(asset.id, col.id, { isPrimaryKey: !col.isPrimaryKey }); }}
+                      title={col.isPrimaryKey ? 'Primary key — click to unset' : 'Mark as (part of) the primary key'}
+                      aria-label={col.isPrimaryKey ? `Unset primary key on ${col.columnName}` : `Mark ${col.columnName} as primary key`}
+                      style={{
+                        flexShrink: 0, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+                        padding: '1px 6px', borderRadius: 3,
+                        background: col.isPrimaryKey ? '#fef3c7' : 'transparent',
+                        color: col.isPrimaryKey ? '#92400e' : 'var(--color-text-muted)',
+                        border: `1px solid ${col.isPrimaryKey ? '#fcd34d' : 'var(--color-border)'}`,
+                      }}
+                    >PK</button>
                     <span style={{ minWidth: 90 }} onClick={(e) => e.stopPropagation()}>
                       <select
                         aria-label="Column data type"
@@ -1330,7 +1360,7 @@ export default function DataAssetsPage({
                       </select>
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {col.description || ''}
+                      {col.references ? <span title={`References ${col.references}`} style={{ color: 'var(--color-text-muted)' }}>→ {col.references}</span> : (col.description || '')}
                     </span>
                     {h != null && (
                       <span style={{ fontSize: 11, fontWeight: 600, color: hc, minWidth: 40, textAlign: 'right' }}>{h}%</span>
@@ -1342,6 +1372,22 @@ export default function DataAssetsPage({
                       <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => requestDeleteColumn(asset.id, col)} />
                     </div>
                   </div>
+                  {/* Key relationship (FK) editor — always available when the
+                      column is expanded. */}
+                  {isColExpanded && (
+                    <div style={{ paddingLeft: 46, paddingRight: 12, paddingBottom: 8, paddingTop: 4 }} onClick={(e) => e.stopPropagation()}>
+                      <label style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', display: 'block', marginBottom: 3 }}>
+                        Key relationship (foreign key)
+                      </label>
+                      <input
+                        aria-label={`Foreign-key reference for ${col.columnName}`}
+                        defaultValue={col.references || ''}
+                        placeholder="e.g. Customer Master.customer_id — the entity/column this points to"
+                        onBlur={(e) => { const v = e.target.value.trim(); if (v !== (col.references || '')) updateColumnField(asset.id, col.id, { references: v }); }}
+                        style={{ width: '100%', maxWidth: 460, fontSize: 12, padding: '5px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}
+                      />
+                    </div>
+                  )}
                   {/* Expanded rules under this column */}
                   {isColExpanded && colRules.length > 0 && (
                     <div style={{ paddingLeft: 46, paddingBottom: 8 }}>
@@ -2314,7 +2360,11 @@ export default function DataAssetsPage({
                               : h >= 50 ? 'var(--color-warning)' : 'var(--color-error)';
                             return (
                               <tr key={col.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                                <td style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)' }}>{col.columnName}</td>
+                                <td style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)' }}>
+                                  {col.columnName}
+                                  {col.isPrimaryKey && <span title="Primary key" style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 3, padding: '0 4px' }}>PK</span>}
+                                  {col.references && <span title={`References ${col.references}`} style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-text-muted)' }}>→ {col.references}</span>}
+                                </td>
                                 <td style={{ padding: '5px 8px', color: 'var(--color-text-secondary)' }}>{col.dataType || '—'}</td>
                                 <td style={{ padding: '5px 8px', color: col.rulesCount === 0 ? 'var(--color-warning)' : 'var(--color-text-secondary)' }}>
                                   {col.rulesCount === 0 ? 'No rules' : `${col.rulesCount} rule${col.rulesCount === 1 ? '' : 's'}`}
