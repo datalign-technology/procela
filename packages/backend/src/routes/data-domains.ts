@@ -181,6 +181,61 @@ router.post('/generate', requireAiEnabled, async (req: Request, res: Response) =
   }
 });
 
+/**
+ * POST /api/v1/data-domains/generate-subdomains
+ *
+ * Body: { industry, parentName, parentDescription? }
+ * Suggests sub-domains for one parent domain (Domain → Sub-Domain). Like
+ * /generate, returns suggestions without committing — the frontend previews
+ * them and the user picks which to keep, then creates them with the parent set.
+ */
+router.post('/generate-subdomains', requireAiEnabled, async (req: Request, res: Response) => {
+  const { industry, parentName, parentDescription } = req.body || {};
+  if (!industry || typeof industry !== 'string') {
+    res.status(400).json({ success: false, error: 'industry is required' });
+    return;
+  }
+  if (!parentName || typeof parentName !== 'string') {
+    res.status(400).json({ success: false, error: 'parentName is required' });
+    return;
+  }
+  try {
+    const suggestions = await aiService.generateSubDomains(
+      industry,
+      parentName,
+      typeof parentDescription === 'string' ? parentDescription : undefined,
+    );
+    // Tolerate both a top-level array and a { items: [...] } wrapper, exactly
+    // like /generate.
+    let subs: Array<unknown> = [];
+    if (Array.isArray(suggestions)) {
+      subs = suggestions;
+    } else if (suggestions && typeof suggestions === 'object') {
+      for (const v of Object.values(suggestions as Record<string, unknown>)) {
+        if (Array.isArray(v)) { subs = v; break; }
+      }
+    }
+    if (subs.length === 0) {
+      logger.warn({ industry, parentName, suggestions }, 'Sub-domain generation returned no array');
+      res.status(502).json({
+        success: false,
+        error: 'The AI response did not contain a list of sub-domains. Try again — Claude occasionally returns prose; a retry usually fixes it.',
+      });
+      return;
+    }
+    res.json({ success: true, data: subs });
+  } catch (err: any) {
+    const message = err?.message || 'AI generation failed';
+    const raw = err?.rawResponse as string | undefined;
+    logger.error({ err, industry, parentName, raw }, 'Sub-domain generation failed');
+    res.status(500).json({
+      success: false,
+      error: message,
+      ...(raw ? { rawSnippet: raw.slice(0, 300) } : {}),
+    });
+  }
+});
+
 router.delete('/all', async (_req: Request, res: Response) => {
   const all = await dataDomainsRepo.list();
   const count = all.length;

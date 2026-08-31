@@ -818,7 +818,12 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   const domCustomer = { id: demoId('domain-customer'), orgId: orgTidewater.id, name: 'Customer Data', description: 'Customer accounts, addresses, service history, billing.', ownerId: susan.id, stewardIds: [natalie.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   const domOps = { id: demoId('domain-ops'), orgId: orgTidewater.id, name: 'Operational Data', description: 'Grid, generation, metering — the real-time and near-real-time operational feeds.', ownerId: jennifer.id, stewardIds: [brandon.id, deborah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   const domRegulatory = { id: demoId('domain-regulatory'), orgId: orgTidewater.id, name: 'Regulatory Data', description: 'Compliance evidence, filings, rate case data, NERC CIP + EPA SDWA.', ownerId: lorraine.id, stewardIds: [phillip.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  await createAll(repos.dataDomains, [domCustomer, domOps, domRegulatory]);
+  // Two sub-domains under Operational Data — shows the Domain → Sub-Domain
+  // nesting out of the box. Parents are created first (FK order).
+  const domOpsGrid = { id: demoId('domain-ops-grid'), orgId: orgTidewater.id, name: 'Grid Telemetry', description: 'SCADA and sensor feeds from the distribution grid — the real-time operational signal.', ownerId: jennifer.id, stewardIds: [brandon.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domOps.id, createdAt: ts, updatedAt: ts };
+  const domOpsMetering = { id: demoId('domain-ops-metering'), orgId: orgTidewater.id, name: 'Metering & AMI', description: 'Advanced metering infrastructure reads and interval consumption data.', ownerId: jennifer.id, stewardIds: [deborah.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domOps.id, createdAt: ts, updatedAt: ts };
+  const domOpsGen = { id: demoId('domain-ops-generation'), orgId: orgTidewater.id, name: 'Generation', description: 'Plant-level generation output and availability data.', ownerId: jennifer.id, stewardIds: [deborah.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domOps.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domCustomer, domOps, domRegulatory, domOpsGrid, domOpsMetering, domOpsGen]);
 
   // ── Data Assets (with domain inheritance where the pattern applies) ──
   const assetOutageLogs = { id: demoId('asset-outage-logs'), orgId: orgElectric.id, name: 'Outage Logs', description: 'Per-event SCADA records of distribution outages.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 62, createdAt: ts, updatedAt: ts };
@@ -1293,7 +1298,7 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     people: 24,
     systems: 8,
     agents: 5,
-    dataDomains: 3,
+    dataDomains: 6,
     dataAssets: 9,
     processNodes: 15,
     mappings: 7,
@@ -1382,7 +1387,12 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
   const domDesign = { id: demoId('domain-design'), orgId: orgMeridian.id, name: 'Design & Engineering Data', description: '3D product models, drawings, engineering BOMs, change orders.', ownerId: elena.id, stewardIds: [dmitri.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   const domProduction = { id: demoId('domain-production'), orgId: orgMeridian.id, name: 'Production Data', description: 'Work orders, material receipts, weld telemetry — the shop-floor operational feeds.', ownerId: grant.id, stewardIds: [noor.id, aaliyah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   const domQuality = { id: demoId('domain-quality'), orgId: orgMeridian.id, name: 'Quality & Compliance Data', description: 'Inspection records, nonconformance reports, certification evidence (ABS / Naval / OSHA).', ownerId: gabriela.id, stewardIds: [warrick.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  await createAll(repos.dataDomains, [domDesign, domProduction, domQuality]);
+  // Sub-domains under Production Data — mirrors the canonical shipbuilder model
+  // (Manufacturing → Welding / Fabrication / Assembly). Parent created first.
+  const domProdWelding = { id: demoId('domain-prod-welding'), orgId: orgMeridian.id, name: 'Welding', description: 'Weld records, procedure specs (WPS), and weld sensor telemetry from the shop floor.', ownerId: grant.id, stewardIds: [noor.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domProduction.id, createdAt: ts, updatedAt: ts };
+  const domProdFab = { id: demoId('domain-prod-fab'), orgId: orgMeridian.id, name: 'Fabrication', description: 'Cut lists, plate and structural fabrication records, and material receipts.', ownerId: grant.id, stewardIds: [aaliyah.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domProduction.id, createdAt: ts, updatedAt: ts };
+  const domProdAssembly = { id: demoId('domain-prod-assembly'), orgId: orgMeridian.id, name: 'Assembly & Outfitting', description: 'Module assembly, outfitting work packages, and unit erection sequencing.', ownerId: grant.id, stewardIds: [noor.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domProduction.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domDesign, domProduction, domQuality, domProdWelding, domProdFab, domProdAssembly]);
 
   // ── Data Assets (9) ──
   const assetProductModel = { id: demoId('asset-product-model'), orgId: orgMeridian.id, name: '3D Product Model', description: 'The master 3D CAD product model and released drawings.', systemId: sysPLM.id, owner: '', ownerPersonId: dmitri.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 90, createdAt: ts, updatedAt: ts };
@@ -1672,7 +1682,7 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
     people: 24,
     systems: 8,
     agents: 5,
-    dataDomains: 3,
+    dataDomains: 6,
     dataAssets: 9,
     processNodes: 15,
     mappings: 7,
