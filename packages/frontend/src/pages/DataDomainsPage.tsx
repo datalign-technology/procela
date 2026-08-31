@@ -92,7 +92,7 @@ export default function DataDomainsPage() {
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [deleteImpact, setDeleteImpact] = useState<{ assets: number; stewards: number } | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<{ assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } | null>(null);
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -550,9 +550,22 @@ export default function DataDomainsPage() {
       )}
 
       <ConfirmDialog open={confirmDelete !== null} title="Delete Data Domain?"
-        message={deleteImpact && (deleteImpact.assets > 0 || deleteImpact.stewards > 0)
-          ? `This domain has ${deleteImpact.assets} asset${deleteImpact.assets !== 1 ? 's' : ''} and ${deleteImpact.stewards} steward${deleteImpact.stewards !== 1 ? 's' : ''}. This cannot be undone.`
-          : 'This will permanently delete this data domain.'}
+        message={(() => {
+          const parts: string[] = [];
+          if (deleteImpact && (deleteImpact.assets > 0 || deleteImpact.stewards > 0)) {
+            parts.push(`This domain has ${deleteImpact.assets} asset${deleteImpact.assets !== 1 ? 's' : ''} and ${deleteImpact.stewards} steward${deleteImpact.stewards !== 1 ? 's' : ''}. This cannot be undone.`);
+          } else {
+            parts.push('This will permanently delete this data domain.');
+          }
+          if (deleteImpact?.subDomains) {
+            const names = deleteImpact.subDomainNames || [];
+            const shown = names.slice(0, 3).join(', ');
+            const more = names.length > 3 ? ` +${names.length - 3} more` : '';
+            const list = shown ? ` (${shown}${more})` : '';
+            parts.push(`It has ${deleteImpact.subDomains} sub-domain${deleteImpact.subDomains !== 1 ? 's' : ''}${list}. ${deleteImpact.subDomains !== 1 ? 'They' : 'It'} won't be deleted — ${deleteImpact.subDomains !== 1 ? 'they' : 'it'}'ll move to the top level.`);
+          }
+          return parts.join(' ');
+        })()}
         confirmLabel="Delete"
         onConfirm={async () => { const id = confirmDelete; setConfirmDelete(null); setDeleteImpact(null); if (id) await handleDelete(id); }}
         onCancel={() => { setConfirmDelete(null); setDeleteImpact(null); }}
@@ -816,7 +829,7 @@ export default function DataDomainsPage() {
                     {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(selectedDomain)} />}
                     {canWrite && (
                       <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
-                        try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number } }>(`/data-domains/${selectedDomain.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
+                        try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${selectedDomain.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
                         setConfirmDelete(selectedDomain.id);
                       }} />
                     )}

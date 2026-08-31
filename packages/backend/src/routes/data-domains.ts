@@ -484,11 +484,19 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
   const domain = await dataDomainsRepo.get(String(req.params.id));
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
 
+  // Sub-domains are re-homed to top-level on delete (not deleted). Surface the
+  // names so the confirm dialog can warn the user before they lose the nesting.
+  const subDomainNames = (await dataDomainsRepo.list())
+    .filter((d) => d.parentDomainId === domain.id)
+    .map((d) => d.name);
+
   res.json({
     success: true,
     data: {
       assets: domain.dataAssetIds.length,
       stewards: domain.stewardIds.length,
+      subDomains: subDomainNames.length,
+      subDomainNames,
     },
   });
 });
