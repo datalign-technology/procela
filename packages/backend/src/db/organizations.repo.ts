@@ -63,6 +63,7 @@ type PrismaOrgRow = {
   brandGlyph: string | null;
   ssoButtonLabel: string | null;
   brandPrimaryColor: string | null;
+  activeSensitivityRegimes?: string[] | null;
   syncConnectionId?: string | null;
   syncStatus?: string | null;
   createdAt: Date;
@@ -87,6 +88,7 @@ function fromPrisma(r: PrismaOrgRow): StoredOrg {
     ...(r.brandGlyph ? { brandGlyph: r.brandGlyph } : {}),
     ...(r.ssoButtonLabel ? { ssoButtonLabel: r.ssoButtonLabel } : {}),
     ...(r.brandPrimaryColor ? { brandPrimaryColor: r.brandPrimaryColor } : {}),
+    ...(r.activeSensitivityRegimes ? { activeSensitivityRegimes: r.activeSensitivityRegimes } : {}),
     syncConnectionId: r.syncConnectionId ?? null,
     syncStatus: r.syncStatus ?? null,
     createdAt: r.createdAt.toISOString(),
@@ -123,6 +125,7 @@ function toPrismaData(row: StoredOrg): Record<string, unknown> {
     brandGlyph: row.brandGlyph ?? null,
     ssoButtonLabel: row.ssoButtonLabel ?? null,
     brandPrimaryColor: row.brandPrimaryColor ?? null,
+    ...(row.activeSensitivityRegimes !== undefined ? { activeSensitivityRegimes: row.activeSensitivityRegimes ?? [] } : {}),
     // Data-sync tracking — presence-guarded so a partial update that doesn't
     // mention them preserves the stored value (only the sync engine sets them).
     ...(row.syncConnectionId !== undefined ? { syncConnectionId: row.syncConnectionId } : {}),

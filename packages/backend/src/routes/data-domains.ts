@@ -21,6 +21,10 @@ export interface StoredDataDomain {
   ownerId: string | null;       // personId of the Data Owner
   stewardIds: string[];          // personIds of Data Stewards
   dataAssetIds: string[];
+  // Human-readable governance code (e.g. "MFG" for a domain, "MFG-02" for a
+  // sub-domain) — the structured id enterprises use to reference a domain in
+  // policies and reports. Auto-suggested on create; user-editable.
+  code?: string;
   // Optional parent domain — turns a flat catalog into Domain → Sub-Domain.
   // A domain with a parentDomainId IS a sub-domain; nesting is one level
   // deep only (a parent must itself be top-level), so the tree never exceeds
@@ -124,6 +128,42 @@ function enrichDomain(
     parentDomainName: parent?.name || null,
     subDomainCount,
   };
+}
+
+// Derive a short alphabetic code from a top-level domain name — initials when
+// there are ≥2 significant words (dropping "data"/filler), else the first three
+// letters. Deduped against existing codes with a numeric suffix.
+function suggestTopCode(name: string, existing: Set<string>): string {
+  const words = name.replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean)
+    .filter((w) => !['data', 'and', 'of', 'the'].includes(w.toLowerCase()));
+  let base = 'DOM';
+  if (words.length >= 2) base = words.map((w) => w[0]).join('').slice(0, 4).toUpperCase();
+  else if (words.length === 1) base = words[0].slice(0, 3).toUpperCase();
+  let code = base;
+  let i = 1;
+  while (existing.has(code)) { code = `${base}${i++}`; }
+  return code;
+}
+
+// Suggest a structured code: top-level → an abbreviation (MFG); sub-domain →
+// parentCode + a two-digit sequence among its siblings (MFG-02).
+function suggestDomainCode(name: string, parent: StoredDataDomain | null, allDomains: StoredDataDomain[]): string {
+  const existing = new Set(allDomains.map((d) => (d.code || '').toUpperCase()).filter(Boolean));
+  if (!parent) return suggestTopCode(name, existing);
+  const base = (parent.code || suggestTopCode(parent.name, existing)).toUpperCase();
+  const prefix = `${base}-`;
+  let n = 0;
+  for (const s of allDomains.filter((d) => d.parentDomainId === parent.id)) {
+    const c = (s.code || '').toUpperCase();
+    if (c.startsWith(prefix)) {
+      const seq = parseInt(c.slice(prefix.length), 10);
+      if (Number.isFinite(seq)) n = Math.max(n, seq);
+    }
+  }
+  let seq = n + 1;
+  let code = `${prefix}${String(seq).padStart(2, '0')}`;
+  while (existing.has(code)) { seq++; code = `${prefix}${String(seq).padStart(2, '0')}`; }
+  return code;
 }
 
 const router = Router();
@@ -348,6 +388,12 @@ router.post('/', async (req: Request, res: Response) => {
 
   const parentResult = resolveParentDomainId(req.body?.parentDomainId, orgId, null, allDomains);
   if (parentResult.error) { res.status(400).json({ success: false, error: parentResult.error }); return; }
+  const resolvedParentId = parentResult.skip ? null : (parentResult.value ?? null);
+  const parentForCode = resolvedParentId ? allDomains.find((d) => d.id === resolvedParentId) || null : null;
+  const orgDomains = allDomains.filter((d) => d.orgId === orgId);
+  const code = (typeof req.body?.code === 'string' && req.body.code.trim())
+    ? req.body.code.trim()
+    : suggestDomainCode(name, parentForCode, orgDomains);
 
   const now = new Date().toISOString();
   const domain: StoredDataDomain = {
@@ -359,7 +405,8 @@ router.post('/', async (req: Request, res: Response) => {
     ownerId: null,
     stewardIds: [],
     dataAssetIds: [],
-    parentDomainId: parentResult.skip ? null : (parentResult.value ?? null),
+    code,
+    parentDomainId: resolvedParentId,
     criticality: VALID_CRITICALITY.includes(req.body?.criticality) ? req.body.criticality : undefined,
     status: status && VALID_STATUSES.includes(status) ? status : 'DRAFT',
     createdAt: now,
@@ -398,6 +445,9 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (dataAssetIds !== undefined && Array.isArray(dataAssetIds)) domain.dataAssetIds = dataAssetIds;
   if (req.body?.criticality !== undefined) {
     domain.criticality = VALID_CRITICALITY.includes(req.body.criticality) ? req.body.criticality : undefined;
+  }
+  if (req.body?.code !== undefined) {
+    domain.code = typeof req.body.code === 'string' && req.body.code.trim() ? req.body.code.trim() : undefined;
   }
   // Parent domain (sub-domain nesting). Validated against the full list.
   const allDomainsForParent = await dataDomainsRepo.list();

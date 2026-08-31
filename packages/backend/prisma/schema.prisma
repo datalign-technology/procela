@@ -90,23 +90,27 @@ enum NotificationType {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Organization {
-  id                String     @id @default(uuid()) @db.Uuid
-  parentId          String?    @db.Uuid
-  name              String
-  type              OrgType    @default(COMPANY)
-  industry          String?
-  description       String?    @db.Text
-  headCount         Int        @default(0)
-  statusMode        StatusMode @default(SIMPLE)
+  id                       String     @id @default(uuid()) @db.Uuid
+  parentId                 String?    @db.Uuid
+  name                     String
+  type                     OrgType    @default(COMPANY)
+  industry                 String?
+  description              String?    @db.Text
+  headCount                Int        @default(0)
+  statusMode               StatusMode @default(SIMPLE)
   // Branding fields kept flat rather than under a `branding Json?`
   // blob so tenantSlug can be uniquely indexed for tenant lookup.
-  tenantSlug        String?    @unique
-  brandDisplayName  String?
-  brandGlyph        String?
-  ssoButtonLabel    String?
-  brandPrimaryColor String?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  tenantSlug               String?    @unique
+  brandDisplayName         String?
+  brandGlyph               String?
+  ssoButtonLabel           String?
+  brandPrimaryColor        String?
+  // Active regulatory / export-control classification regimes for this tenant
+  // (subset of CUI / ITAR / EXPORT_CONTROLLED). Defaults to all three active
+  // (back-compat with the built-in set); an explicit empty [] means none.
+  activeSensitivityRegimes String[]   @default(["CUI", "ITAR", "EXPORT_CONTROLLED"])
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
 
   parent   Organization?  @relation("OrgHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children Organization[] @relation("OrgHierarchy")
@@ -418,6 +422,9 @@ model DataDomain {
   name            String
   description     String?          @db.Text
   ownerId         String?          @db.Uuid
+  // Human-readable governance code (e.g. "MFG" / "MFG-02"). Auto-suggested on
+  // create, user-editable.
+  code            String?
   // Optional parent domain — turns a flat catalog into Domain → Sub-Domain.
   // Nesting is one level deep (enforced in the route layer). onDelete:
   // SetNull re-homes children to top-level if the parent is removed.
@@ -1278,6 +1285,10 @@ model DataAssetColumn {
   sourceConnectionId String?  @db.Uuid
   sourceAsset        String?
   sourceColumn       String?
+  // Part of the asset's primary key (identity) + an optional foreign-key
+  // reference to another entity's key (e.g. "Customer Master.customer_id").
+  isPrimaryKey       Boolean  @default(false)
+  keyReferences      String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

@@ -53,6 +53,8 @@ type PrismaDataAssetColumnRow = {
   sourceConnectionId: string | null;
   sourceAsset: string | null;
   sourceColumn: string | null;
+  isPrimaryKey?: boolean | null;
+  keyReferences?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -75,6 +77,8 @@ function fromPrisma(r: PrismaDataAssetColumnRow): StoredDataAssetColumn {
     ...(r.sourceConnectionId ? { sourceConnectionId: r.sourceConnectionId } : {}),
     ...(r.sourceAsset ? { sourceAsset: r.sourceAsset } : {}),
     ...(r.sourceColumn ? { sourceColumn: r.sourceColumn } : {}),
+    ...(r.isPrimaryKey ? { isPrimaryKey: true } : {}),
+    ...(r.keyReferences ? { references: r.keyReferences } : {}),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -90,6 +94,8 @@ function toPrismaData(row: Partial<StoredDataAssetColumn>): Record<string, unkno
   if (row.sourceConnectionId !== undefined) d.sourceConnectionId = row.sourceConnectionId || null;
   if (row.sourceAsset !== undefined) d.sourceAsset = row.sourceAsset || null;
   if (row.sourceColumn !== undefined) d.sourceColumn = row.sourceColumn || null;
+  if (row.isPrimaryKey !== undefined) d.isPrimaryKey = !!row.isPrimaryKey;
+  if (row.references !== undefined) d.keyReferences = row.references || null;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;
 }

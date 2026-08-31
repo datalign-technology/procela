@@ -167,4 +167,41 @@ describe('sub-domains, master-data signal, SOR gap', () => {
     assert.strictEqual(stillThere, undefined, 'gap should clear once a SOR is declared');
     void b;
   });
+
+  it('auto-suggests a structured code for domains and sub-domains', async () => {
+    const parent = await request(port, 'POST', '/data-domains', { name: PREFIX + 'Codes Parent', orgId });
+    assert.strictEqual(parent.status, 201);
+    assert.ok(parent.body.data.code, 'top-level domain gets an auto code');
+    const parentCode = parent.body.data.code;
+
+    const child = await request(port, 'POST', '/data-domains', { name: PREFIX + 'Codes Child One', orgId, parentDomainId: parent.body.data.id });
+    assert.strictEqual(child.body.data.code, `${parentCode}-01`);
+
+    const child2 = await request(port, 'POST', '/data-domains', { name: PREFIX + 'Codes Child Two', orgId, parentDomainId: parent.body.data.id });
+    assert.strictEqual(child2.body.data.code, `${parentCode}-02`);
+
+    // An explicit code is honored over the suggestion.
+    const explicit = await request(port, 'POST', '/data-domains', { name: PREFIX + 'Custom Code', orgId, code: 'ZZZ' });
+    assert.strictEqual(explicit.body.data.code, 'ZZZ');
+  });
+
+  it('persists column primary-key + references', async () => {
+    const asset = await request(port, 'POST', '/data-assets', { name: PREFIX + 'Weld Record' });
+    const assetId = asset.body.data.id;
+    const col = await request(port, 'POST', `/data-assets/${assetId}/columns`, { columnName: 'weld_id', isPrimaryKey: true, references: 'Hull.hull_number' });
+    assert.strictEqual(col.status, 201);
+    assert.strictEqual(col.body.data.isPrimaryKey, true);
+    assert.strictEqual(col.body.data.references, 'Hull.hull_number');
+
+    const cols = await request(port, 'GET', `/data-assets/${assetId}/columns`);
+    const got = (cols.body.data || []).find((c: any) => c.columnName === 'weld_id');
+    assert.strictEqual(got.isPrimaryKey, true);
+    assert.strictEqual(got.references, 'Hull.hull_number');
+
+    // Unset the PK flag via PUT.
+    await request(port, 'PUT', `/data-assets/${assetId}/columns/${col.body.data.id}`, { isPrimaryKey: false });
+    const cols2 = await request(port, 'GET', `/data-assets/${assetId}/columns`);
+    const got2 = (cols2.body.data || []).find((c: any) => c.columnName === 'weld_id');
+    assert.ok(!got2.isPrimaryKey);
+  });
 });

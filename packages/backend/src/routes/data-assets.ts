@@ -3,7 +3,8 @@ import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { hasDatabase } from '../db/prisma';
-import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
+import { filterByOrgScope, isOwnershipLevel, getCachedOrgList } from '../lib/org-scope';
+import { REGULATORY_SENSITIVITY_TAGS } from '../services/ai.service';
 import { auditService } from '../services/audit.service';
 import { aiService, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
 import logger from '../lib/logger';
@@ -287,11 +288,15 @@ const createColumnBodySchema = z.object({
   sourceConnectionId: z.string().optional(),
   sourceAsset: z.string().optional(),
   sourceColumn: z.string().optional(),
+  isPrimaryKey: z.boolean().optional(),
+  references: z.string().optional(),
 });
 const updateColumnBodySchema = z.object({
   columnName: z.string().optional(),
   dataType: z.string().optional(),
   description: z.string().optional(),
+  isPrimaryKey: z.boolean().optional(),
+  references: z.string().optional(),
 });
 const putSensitivityBodySchema = z.object({
   tags: z.array(z.string()),
@@ -487,6 +492,14 @@ export interface StoredDataAssetColumn {
   sourceConnectionId?: string;
   sourceAsset?: string;
   sourceColumn?: string;
+  /** True when this column is (part of) the asset's primary key — the field(s)
+   *  that uniquely identify a row. Primary keys are what duplicate detection
+   *  and cross-asset joins key on. */
+  isPrimaryKey?: boolean;
+  /** Free-text foreign-key / relationship reference to another entity's key,
+   *  e.g. "Customer Master.customer_id". Captures the "Key Relationships" a
+   *  canonical model records; feeds lineage between assets. */
+  references?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -1275,7 +1288,7 @@ router.post('/:id/columns', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { columnName, dataType, description, sourceConnectionId, sourceAsset, sourceColumn } = parsed.data;
+  const { columnName, dataType, description, sourceConnectionId, sourceAsset, sourceColumn, isPrimaryKey, references } = parsed.data;
   const now = new Date().toISOString();
   const col: StoredDataAssetColumn = {
     id: uuid(), dataAssetId: asset.id, columnName,
@@ -1283,6 +1296,8 @@ router.post('/:id/columns', async (req: Request, res: Response) => {
     sourceConnectionId: sourceConnectionId || undefined,
     sourceAsset: sourceAsset || undefined,
     sourceColumn: sourceColumn || columnName,
+    ...(isPrimaryKey ? { isPrimaryKey: true } : {}),
+    ...(references ? { references } : {}),
     createdAt: now, updatedAt: now,
   };
   await dataAssetColumnsRepo.create(col);
@@ -1299,11 +1314,13 @@ router.put('/:id/columns/:colId', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  const { columnName, dataType, description } = parsed.data;
+  const { columnName, dataType, description, isPrimaryKey, references } = parsed.data;
   const patch: Partial<StoredDataAssetColumn> = { updatedAt: new Date().toISOString() };
   if (columnName !== undefined) patch.columnName = columnName;
   if (dataType !== undefined) patch.dataType = normalizeDataType(dataType);
   if (description !== undefined) patch.description = description;
+  if (isPrimaryKey !== undefined) patch.isPrimaryKey = isPrimaryKey;
+  if (references !== undefined) patch.references = references || undefined;
   const updated = await dataAssetColumnsRepo.update(col.id, patch);
   res.json({ success: true, data: updated });
 });
@@ -1685,6 +1702,32 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
   });
 });
 
+// Which regulatory regimes are active for an org — walk up to the first
+// ancestor that has an explicit config; unset (JSON never-configured) = all
+// active (back-compat). Universal data-sensitivity tags are never gated.
+function activeRegimesForOrg(orgId: string | undefined): Set<string> {
+  const all = new Set<string>(REGULATORY_SENSITIVITY_TAGS as readonly string[]);
+  if (!orgId) return all;
+  const orgs = getCachedOrgList();
+  let cur = orgs.find((o) => o.id === orgId);
+  const seen = new Set<string>();
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    const regimes = (cur as { activeSensitivityRegimes?: string[] }).activeSensitivityRegimes;
+    if (Array.isArray(regimes)) return new Set(regimes);
+    cur = cur.parentId ? orgs.find((o) => o.id === cur!.parentId) : undefined;
+  }
+  return all;
+}
+
+// Drop regulatory tags that aren't active for the org; keep every universal
+// data-sensitivity tag untouched.
+function filterTagsByRegime<T extends string>(tags: readonly T[], orgId: string | undefined): T[] {
+  const regSet = new Set<string>(REGULATORY_SENSITIVITY_TAGS as readonly string[]);
+  const active = activeRegimesForOrg(orgId);
+  return tags.filter((t) => !regSet.has(t) || active.has(t));
+}
+
 /** POST /api/v1/data-assets/:id/suggest-sensitivity */
 router.post('/:id/suggest-sensitivity', requireAiEnabled, async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
@@ -1704,7 +1747,13 @@ router.post('/:id/suggest-sensitivity', requireAiEnabled, async (req: Request, r
       systemType: system?.systemType,
       columns: cols,
     });
-    res.json({ success: true, data: suggestions });
+    // Drop any regulatory regime the tenant has turned off, so the classifier
+    // never suggests a tag the org can't apply.
+    const activeTags = new Set<string>(filterTagsByRegime(SENSITIVITY_TAGS, asset.orgId));
+    const filtered = Array.isArray(suggestions)
+      ? (suggestions as Array<{ tag?: string }>).filter((s) => typeof s?.tag === 'string' && activeTags.has(s.tag))
+      : suggestions;
+    res.json({ success: true, data: filtered });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'AI classification failed.';
     logger.error({ err, assetId: asset.id }, 'Sensitivity classification failed');
@@ -1723,10 +1772,16 @@ router.put('/:id/sensitivity', async (req: Request, res: Response) => {
   }
   const { tags } = parsed.data;
   const validSet = new Set<string>(SENSITIVITY_TAGS);
+  const regSet = new Set<string>(REGULATORY_SENSITIVITY_TAGS as readonly string[]);
+  const activeRegimes = activeRegimesForOrg(asset.orgId);
   const clean: SensitivityTag[] = [];
   for (const t of tags) {
     if (typeof t !== 'string' || !validSet.has(t)) {
       res.status(400).json({ success: false, error: `Unknown sensitivity tag: ${String(t)}. Valid: ${SENSITIVITY_TAGS.join(', ')}` });
+      return;
+    }
+    if (regSet.has(t) && !activeRegimes.has(t)) {
+      res.status(400).json({ success: false, error: `Classification regime "${t}" is not active for this tenant. An org admin can enable it in Settings.` });
       return;
     }
     if (!clean.includes(t as SensitivityTag)) clean.push(t as SensitivityTag);

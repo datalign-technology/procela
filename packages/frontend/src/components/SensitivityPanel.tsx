@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
 import { successToast, errorToast } from '../lib/errorToast';
 import SectionLabel from './SectionLabel';
 import { useAiEnabled } from '../stores/aiConfigStore';
+import { useRegimeStore, useActiveRegimes } from '../stores/regimeStore';
+import { useOrgContext } from '../stores/orgContext';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SensitivityPanel — the Suggest & Review flow for AI-generated data
@@ -80,6 +82,11 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const aiEnabled = useAiEnabled();
+  const activeOrgId = useOrgContext((s) => s.activeOrgId);
+  const activeRegimes = useActiveRegimes();
+  // Resolve which regulatory regimes this tenant has turned on, so the manual
+  // picker only offers CUI/ITAR/export where the org admin enabled them.
+  useEffect(() => { void useRegimeStore.getState().fetch(activeOrgId); }, [activeOrgId]);
 
   // Classification can be set two ways: the AI classifier (Suggest → Accept)
   // and a manual picker. The manual picker matters most for regulatory tags
@@ -151,7 +158,8 @@ export default function SensitivityPanel({ assetId, initialTags, disabled, onCom
   // optgroups (data-sensitivity vs regulatory / export-control).
   const committedSet = new Set(committed);
   const dataSensitivityChoices = (['PII','PHI','PCI','FINANCIAL','CREDENTIAL','CONFIDENTIAL','PUBLIC'] as SensitivityTag[]).filter((t) => !committedSet.has(t));
-  const regulatoryChoices = REGULATORY_TAGS.filter((t) => !committedSet.has(t));
+  // Only offer regulatory regimes the tenant has active.
+  const regulatoryChoices = REGULATORY_TAGS.filter((t) => !committedSet.has(t) && activeRegimes.includes(t));
 
   return (
     <div style={{

@@ -51,6 +51,13 @@ export interface StoredOrg {
   /** Hex color (with leading #) used for the SSO button + accent.
    *  Falls back to Procela primary when unset. */
   brandPrimaryColor?: string;
+  /** Which regulatory / export-control classification regimes are active for
+   *  this tenant (subset of CUI / ITAR / EXPORT_CONTROLLED). Only meaningful
+   *  on company-level orgs; gates the regulatory sensitivity tags in the
+   *  classifier and UI. Undefined = all regimes active (back-compat with the
+   *  built-in set). Universal data-sensitivity tags (PII/PHI/…) are never
+   *  gated by this. */
+  activeSensitivityRegimes?: string[];
   // Data-sync tracking — set by the sync engine when this row was created or
   // updated from a SyncConnection source. Soft reference; absent when unsynced.
   syncConnectionId?: string | null;
@@ -420,6 +427,20 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       org.brandPrimaryColor = brandPrimaryColor;
     } else {
       res.status(400).json({ success: false, error: 'brandPrimaryColor must be a #RRGGBB hex string.' });
+      return;
+    }
+  }
+  // Active regulatory / export-control regimes for this tenant. Accepts an
+  // array; invalid entries are dropped. Empty array = no regimes active.
+  if (req.body?.activeSensitivityRegimes !== undefined) {
+    const VALID_REGIMES = ['CUI', 'ITAR', 'EXPORT_CONTROLLED'];
+    const raw = req.body.activeSensitivityRegimes;
+    if (raw === null) {
+      org.activeSensitivityRegimes = undefined;
+    } else if (Array.isArray(raw)) {
+      org.activeSensitivityRegimes = [...new Set(raw.filter((r) => VALID_REGIMES.includes(r)))];
+    } else {
+      res.status(400).json({ success: false, error: 'activeSensitivityRegimes must be an array of regime codes.' });
       return;
     }
   }
