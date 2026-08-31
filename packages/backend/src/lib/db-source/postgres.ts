@@ -22,7 +22,7 @@ export async function fetchPostgresRows(req: DbSourceRequest, sql: string): Prom
   });
   await client.connect();
   try {
-    const res = await client.query(sql);
+    const res = await client.query(sql, req.params ?? []);
     return res.rows.map((r) => normalizeRow(r as Record<string, unknown>));
   } finally {
     await client.end();

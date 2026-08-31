@@ -31,6 +31,12 @@ export interface DbSourceRequest {
   /** Row cap for a table-scan (ignored for a raw `query`, which owns its
    *  own limiting). */
   limit?: number;
+  /** Positional bind values for a parameterized `query`. Rule *values*
+   *  (allowed set, range bounds) are always bound, never interpolated, so a
+   *  rule definition can't inject SQL. The `query` must use the engine's
+   *  placeholder style ($1 / ? / @p0 / :1); buildDqAggregateSql emits the
+   *  right one per engine. */
+  params?: unknown[];
 }
 
 /** A source row, stringified — matches the shape the CSV/JSON path already

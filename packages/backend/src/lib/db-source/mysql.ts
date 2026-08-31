@@ -20,7 +20,7 @@ export async function fetchMysqlRows(req: DbSourceRequest, sql: string): Promise
     dateStrings: true,
   });
   try {
-    const [rows] = await conn.query(sql);
+    const [rows] = await conn.query(sql, req.params ?? []);
     if (!Array.isArray(rows)) return [];
     return (rows as Record<string, unknown>[]).map(normalizeRow);
   } finally {

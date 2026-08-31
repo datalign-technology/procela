@@ -13,6 +13,7 @@ import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
 import { dataAssets, dataAssetBindings, dataAssetColumns, StoredDataAsset, StoredDataAssetBinding } from './data-assets';
 import { connections, ConnectionProfile } from './connections';
 import { syncDataQualityIssueForRule } from './governance-issues';
+import { measureRuleOverDb } from '../services/dq-db';
 import {
   evaluateRule,
   rollupAssetHealth,
@@ -594,15 +595,41 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
   }
   if (!sourceColumn) sourceColumn = rule.columnName || binding?.sourceColumn || asset.sourceColumn;
 
-  const result = evaluateRule(rule.ruleType!, rule.parameters || {}, {
-    connectionType: conn?.connectionType,
-    storageType: conn?.config?.storageType,
-    localFilePath: conn?.config?.localFilePath,
-    sourceColumn,
-    originalFileName: conn?.config?.originalFileName,
-    assetId: asset.id,
-    ruleId: rule.id,
-  });
+  // Real measurement over a direct-connect database: turn the rule into one
+  // aggregate query and run it through the live driver layer (measured result
+  // → feeds real asset health). Only the pushdown-safe rule types on a
+  // configured supported engine qualify; a live-execution failure falls back
+  // to the file / simulated path rather than corrupting health with a zero.
+  let result: RuleRunResult | null = null;
+  if (conn?.connectionType === 'DATABASE') {
+    try {
+      const cfg = conn.config as Record<string, unknown>;
+      result = await measureRuleOverDb(rule.ruleType!, rule.parameters || {}, {
+        dbType: cfg?.dbType as string | undefined,
+        host: cfg?.host as string | undefined,
+        port: cfg?.port != null ? Number(cfg.port) : undefined,
+        database: cfg?.database as string | undefined,
+        schema: cfg?.schema as string | undefined,
+        username: conn.credentials?.username,
+        password: conn.credentials?.password,
+        table: binding?.sourceAsset || asset.name,
+        column: sourceColumn,
+      });
+    } catch (err) {
+      logger.warn({ err, ruleId: rule.id }, 'Live DQ measurement failed; falling back to simulated');
+    }
+  }
+  if (!result) {
+    result = evaluateRule(rule.ruleType!, rule.parameters || {}, {
+      connectionType: conn?.connectionType,
+      storageType: conn?.config?.storageType,
+      localFilePath: conn?.config?.localFilePath,
+      sourceColumn,
+      originalFileName: conn?.config?.originalFileName,
+      assetId: asset.id,
+      ruleId: rule.id,
+    });
+  }
 
   const outcome = await applyRuleResult(rule, result);
   logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows, assetHealthScore: outcome.assetHealth, assetHealthEstimated: outcome.assetHealthEstimated }, 'DQ rule run');

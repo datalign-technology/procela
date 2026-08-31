@@ -22,7 +22,7 @@ export async function fetchOracleRows(req: DbSourceRequest, sql: string): Promis
     connectString,
   });
   try {
-    const res = await conn.execute(sql, [], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    const res = await conn.execute(sql, (req.params ?? []) as oracledb.BindParameters, { outFormat: oracledb.OUT_FORMAT_OBJECT });
     return ((res.rows ?? []) as Record<string, unknown>[]).map(normalizeRow);
   } finally {
     await conn.close();
