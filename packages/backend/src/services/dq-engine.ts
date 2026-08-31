@@ -4,14 +4,18 @@
  * Evaluates a typed DQ rule against the values of a single column. Works in
  * two modes:
  *
- *  - Real: when the rule's Data Asset was imported from a FILE_STORAGE/LOCAL
- *    connection with a concrete `sourceColumn`, the engine reads the uploaded
- *    file and runs the rule against the actual values.
+ *  - Real (file): when the rule's Data Asset was imported from a
+ *    FILE_STORAGE/LOCAL connection with a concrete `sourceColumn`, the engine
+ *    reads the uploaded file and runs the rule against the actual values.
  *
- *  - Simulated: for every other connection type (DATABASE / DATA_WAREHOUSE /
- *    API / cloud FILE_STORAGE / SPREADSHEET) we don't have a driver, so the
- *    engine returns a clearly-labelled simulated result that is deterministic
- *    per (asset, rule) so repeated runs don't thrash.
+ *  - Simulated: when no driver can measure the rule — an unconfigured source,
+ *    or a rule type (REGEX_MATCH / CUSTOM) that doesn't push down — the engine
+ *    returns a clearly-labelled simulated result, deterministic per (asset,
+ *    rule) so repeated runs don't thrash.
+ *
+ * A configured direct-connect DATABASE is measured for real by the pushdown
+ * path in services/dq-db.ts (and the on-prem connector), not here — this
+ * module stays driver-free so it unit-tests without a live database.
  */
 
 import { readColumnValues } from '../lib/local-file-connector';

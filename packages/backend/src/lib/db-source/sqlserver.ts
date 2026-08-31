@@ -29,7 +29,9 @@ export async function fetchSqlServerRows(req: DbSourceRequest, query: string): P
   });
   await pool.connect();
   try {
-    const res = await pool.request().query(query);
+    const request = pool.request();
+    (req.params ?? []).forEach((v, i) => request.input(`p${i}`, v));
+    const res = await request.query(query);
     return (res.recordset ?? []).map((r) => normalizeRow(r as Record<string, unknown>));
   } finally {
     await pool.close();
