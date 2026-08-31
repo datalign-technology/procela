@@ -137,6 +137,19 @@ describe('sub-domains, master-data signal, SOR gap', () => {
     assert.strictEqual(childAfter.body.data.parentDomainId, null);
   });
 
+  it('reports sub-domains in the delete-impact preview', async () => {
+    const parent = await request(port, 'POST', '/data-domains', { name: PREFIX + 'ImpactParent', orgId });
+    const parentId = parent.body.data.id;
+    await request(port, 'POST', '/data-domains', { name: PREFIX + 'ImpactChildA', orgId, parentDomainId: parentId });
+    await request(port, 'POST', '/data-domains', { name: PREFIX + 'ImpactChildB', orgId, parentDomainId: parentId });
+
+    const impact = await request(port, 'GET', `/data-domains/${parentId}/impact`);
+    assert.strictEqual(impact.status, 200);
+    assert.strictEqual(impact.body.data.subDomains, 2);
+    assert.ok(impact.body.data.subDomainNames.includes(PREFIX + 'ImpactChildA'));
+    assert.ok(impact.body.data.subDomainNames.includes(PREFIX + 'ImpactChildB'));
+  });
+
   it('flags a domain holding master data as suggested Tier-1', async () => {
     const dom = await request(port, 'POST', '/data-domains', { name: PREFIX + 'MasterDom', orgId });
     const domId = dom.body.data.id;
