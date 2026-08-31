@@ -1,9 +1,11 @@
+import fs from 'fs';
 import { Router, Response } from 'express';
 import { wipeAllStores } from '../lib/persistence';
 import logger from '../lib/logger';
 import { authenticateToken, authorize, AuthenticatedRequest } from '../middleware/auth';
 import { auditService, auditLogs } from '../services/audit.service';
 import { getVisibleOrgScope } from '../lib/org-scope';
+import { restoreAttachmentFile } from './attachments';
 import type { Repository } from '../db/repository';
 
 // Import all in-memory stores + their repository factories. The factory wraps
@@ -160,14 +162,34 @@ router.get('/export', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'), 
   const exportData: Record<string, any[]> = {};
   for (const s of STORES) exportData[s.key] = rowsByKey[s.key].filter((r) => s.inScope(r, ctx));
 
+  // Full-fidelity: bundle the bytes of every in-scope uploaded FILE attachment
+  // (base64-embedded) so a cross-host restore rebuilds the files, not just the
+  // rows that reference them. URL attachments carry no bytes. Rows whose file
+  // is missing on disk are skipped (the row still restores; only its content
+  // is gone). Per-file size is already capped at upload; total is logged.
+  const files: Array<{ attachmentId: string; fileName: string; mimeType: string; size: number; base64: string }> = [];
+  let fileBytes = 0;
+  for (const a of exportData.attachments || []) {
+    if (a?.type !== 'FILE' || !a.filePath) continue;
+    try {
+      if (!fs.existsSync(a.filePath)) continue;
+      const buf = fs.readFileSync(a.filePath);
+      files.push({ attachmentId: a.id, fileName: a.fileName || 'file', mimeType: a.mimeType || 'application/octet-stream', size: buf.length, base64: buf.toString('base64') });
+      fileBytes += buf.length;
+    } catch (err) {
+      logger.warn({ attachmentId: a.id, err }, 'Backup export: attachment file unreadable, skipping bytes');
+    }
+  }
+
   const payload = {
     exportedAt: new Date().toISOString(),
-    version: '2.0',
+    version: '2.1',
     scope: { orgId: scopeOrgId, orgIds: [...orgIds] },
     data: exportData,
+    files,
   };
 
-  logger.info({ scopeOrgId, counts: Object.fromEntries(Object.entries(exportData).map(([k, v]) => [k, v.length])) }, 'Exported backup');
+  logger.info({ scopeOrgId, fileCount: files.length, fileBytes, counts: Object.fromEntries(Object.entries(exportData).map(([k, v]) => [k, v.length])) }, 'Exported backup');
   res.json(payload);
 });
 
@@ -247,8 +269,32 @@ router.post('/import', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
     imported[s.key] = count;
   }
 
-  logger.info({ scope: [...orgIds], imported, deleted }, 'Imported backup');
-  res.json({ success: true, imported, deleted, scope: { orgIds: [...orgIds] } });
+  // Full-fidelity: restore bundled attachment bytes to disk and point each
+  // imported attachment row at its new host path (the exported absolute path
+  // belonged to the source host). Type/name/id are re-sanitized on write, so a
+  // hostile backup can't drop a file outside the attachments dir or an
+  // executable. Only attachments that were actually imported are touched.
+  let filesRestored = 0;
+  if (Array.isArray(body.files) && body.files.length) {
+    const attachRepo = getAttachmentsRepository(attachments);
+    for (const f of body.files) {
+      if (!f?.attachmentId || typeof f.base64 !== 'string') continue;
+      const existing = await attachRepo.get(String(f.attachmentId));
+      if (!existing) continue; // its row wasn't in scope / didn't import
+      try {
+        const buf = Buffer.from(f.base64, 'base64');
+        const absPath = restoreAttachmentFile(String(f.attachmentId), String(f.fileName || 'file'), buf);
+        if (!absPath) { logger.warn({ attachmentId: f.attachmentId }, 'Backup import: attachment file rejected'); continue; }
+        await attachRepo.update(existing.id, { filePath: absPath, fileSize: buf.length, ...(f.mimeType ? { mimeType: String(f.mimeType) } : {}) });
+        filesRestored++;
+      } catch (err) {
+        logger.warn({ attachmentId: f.attachmentId, err }, 'Backup import: attachment restore failed');
+      }
+    }
+  }
+
+  logger.info({ scope: [...orgIds], imported, deleted, filesRestored }, 'Imported backup');
+  res.json({ success: true, imported, deleted, filesRestored, scope: { orgIds: [...orgIds] } });
 });
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';

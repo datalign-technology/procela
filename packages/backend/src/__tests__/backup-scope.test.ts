@@ -7,6 +7,9 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import http from 'http';
 import express from 'express';
 import jwt from 'jsonwebtoken';
@@ -57,9 +60,13 @@ describe('per-tenant backup export/import', () => {
   let server: http.Server;
   let port: number;
 
+  const attFile = path.join(os.tmpdir(), P + 'attachment.txt');
+  const ATT_CONTENT = 'hello full-fidelity attachment';
+
   const clearFixtures = () => {
     sweep(organizations, byPrefixId); sweep(dataDomains, byPrefixId); sweep(dataAssets, byPrefixId);
     sweep(people, byPrefixId); sweep(governancePolicies, byPrefixId); sweep(attachments, byPrefixId);
+    try { fs.rmSync(attFile, { force: true }); } catch { /* ignore */ }
   };
 
   const seed = () => {
@@ -86,9 +93,11 @@ describe('per-tenant backup export/import', () => {
       { id: P + 'gpA', orgId: A, code: 'POL-A', name: 'Policy A', description: '', content: '', status: 'ACTIVE' } as any,
       { id: P + 'gpB', orgId: B, code: 'POL-B', name: 'Policy B', description: '', content: '', status: 'ACTIVE' } as any,
     );
+    fs.writeFileSync(attFile, ATT_CONTENT);
     attachments.push(
       { id: P + 'atA', orgId: A, entityType: 'ProcessNode', entityId: 'n', type: 'URL', name: 'Link A', description: '', url: 'https://x/a', uploadedBy: null } as any,
       { id: P + 'atB', orgId: B, entityType: 'ProcessNode', entityId: 'n', type: 'URL', name: 'Link B', description: '', url: 'https://x/b', uploadedBy: null } as any,
+      { id: P + 'atFile', orgId: A, entityType: 'ProcessNode', entityId: 'n', type: 'FILE', name: 'Doc', description: '', fileName: 'doc.txt', filePath: attFile, fileSize: ATT_CONTENT.length, mimeType: 'text/plain', uploadedBy: null } as any,
     );
   };
 
@@ -125,7 +134,7 @@ describe('per-tenant backup export/import', () => {
     assert.deepStrictEqual(d.dataAssets.map((x: any) => x.id), [P + 'aA']);
     assert.deepStrictEqual(d.people.map((x: any) => x.id), [P + 'pA']);
     assert.deepStrictEqual(d.governancePolicies.map((x: any) => x.id), [P + 'gpA']);
-    assert.deepStrictEqual(d.attachments.map((x: any) => x.id), [P + 'atA']);
+    assert.deepStrictEqual(d.attachments.map((x: any) => x.id).sort(), [P + 'atA', P + 'atFile'].sort());
     // Tenant B leaks nowhere.
     assert.ok(!JSON.stringify(d).includes(P + 'dB'));
     assert.ok(!JSON.stringify(d).includes(P + 'aB'));
@@ -156,5 +165,26 @@ describe('per-tenant backup export/import', () => {
     const res = await request(port, 'POST', '/backup/import', token('ORG_ADMIN', B), exported);
     assert.strictEqual(res.status, 403);
     assert.match(res.body.error, /Not authorized/i);
+  });
+
+  it('bundles uploaded file bytes and restores them on a cross-host import', async () => {
+    const exported = (await request(port, 'GET', `/backup/export?orgId=${A}`, token('SUPER_ADMIN', A))).body;
+    const bundled = (exported.files || []).find((f: any) => f.attachmentId === P + 'atFile');
+    assert.ok(bundled, 'the FILE attachment bytes should be bundled');
+    assert.strictEqual(Buffer.from(bundled.base64, 'base64').toString('utf8'), ATT_CONTENT);
+    // URL attachments carry no bytes.
+    assert.ok(!(exported.files || []).some((f: any) => f.attachmentId === P + 'atA'));
+
+    // Simulate a cross-host restore: the source file no longer exists here.
+    fs.rmSync(attFile, { force: true });
+    const imp = await request(port, 'POST', '/backup/import', token('SUPER_ADMIN', A), exported);
+    assert.strictEqual(imp.status, 200);
+    assert.ok(imp.body.filesRestored >= 1, 'at least one file restored');
+
+    // The row now points at a rebuilt file on this host with the original bytes.
+    const row = attachments.find((a) => a.id === P + 'atFile');
+    assert.ok(row && row.filePath && fs.existsSync(row.filePath), 'attachment file restored to disk');
+    assert.strictEqual(fs.readFileSync(row.filePath, 'utf8'), ATT_CONTENT);
+    try { fs.rmSync(row.filePath, { force: true }); } catch { /* cleanup */ }
   });
 });
