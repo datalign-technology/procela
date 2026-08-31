@@ -1,10 +1,15 @@
-import { Router, Request, Response } from 'express';
-import { saveStore, wipeAllStores } from '../lib/persistence';
+import { Router, Response } from 'express';
+import { wipeAllStores } from '../lib/persistence';
 import logger from '../lib/logger';
 import { authenticateToken, authorize, AuthenticatedRequest } from '../middleware/auth';
 import { auditService, auditLogs } from '../services/audit.service';
+import { getVisibleOrgScope } from '../lib/org-scope';
+import type { Repository } from '../db/repository';
 
-// Import all in-memory stores
+// Import all in-memory stores + their repository factories. The factory wraps
+// the same array the route exports, so it reads/writes Postgres in DB mode and
+// the array in JSON mode — the export/import below go through the repository,
+// never the (stale in Postgres) array directly.
 import { processNodes, flowRelationships, processVersions } from './process-catalog';
 import { systems } from './systems';
 import { dataAssets } from './data-assets';
@@ -17,70 +22,221 @@ import { dataDomains } from './data-domains';
 import { tags } from './tags';
 import { comments } from './comments';
 
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
+import { getProcessVersionsRepository } from '../db/process-versions.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getOrganizationsRepository } from '../db/organizations.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getTagsRepository } from '../db/tags.repo';
+import { getCommentsRepository } from '../db/comments.repo';
+
 const router = Router();
 
-// All store definitions: key = JSON field name, value = array reference + persistence name
-const STORES: Record<string, { data: any[]; persistName: string }> = {
-  organizations:      { data: organizations,      persistName: 'organizations' },
-  people:             { data: people,              persistName: 'people' },
-  processNodes:       { data: processNodes,        persistName: 'processNodes' },
-  flowRelationships:  { data: flowRelationships,   persistName: 'flowRelationships' },
-  processVersions:    { data: processVersions,     persistName: 'processVersions' },
-  systems:            { data: systems,              persistName: 'systems' },
-  dataAssets:         { data: dataAssets,           persistName: 'dataAssets' },
-  mappings:           { data: mappings,             persistName: 'mappings' },
-  governanceGroups:   { data: governanceGroups,     persistName: 'governanceGroups' },
-  damaRoles:          { data: damaRoles,            persistName: 'damaRoles' },
-  dataDomains:        { data: dataDomains,          persistName: 'dataDomains' },
-  tags:               { data: tags,                 persistName: 'tags' },
-  comments:           { data: comments,             persistName: 'comments' },
-};
+// ──────────────────────────────────────────────────────────────────────────
+// Per-tenant, repository-backed backup.
+//
+// A backup is scoped to one org subtree (the caller's tenant): the scope org
+// plus every descendant org. Every store is read through its repository so the
+// export reflects Postgres in DB mode, not the retired in-memory array. Each
+// store declares how it maps to an org so the same predicate scopes both the
+// export (filter what to write) and the import wipe (filter what to replace).
+//
+// Two stores are structural / shared identities and are UPSERTED rather than
+// wiped, so a restore never severs cross-scope relationships:
+//   - organizations: the containers themselves (a delete would cascade).
+//   - people: can belong to several orgs at once (orgIds[]); deleting one to
+//     replace it would drop its memberships in orgs outside this backup.
+// Every other store is REPLACED: existing in-scope rows are deleted, then the
+// backup's rows are created.
+//
+// The registry is ordered parents-before-children so create() satisfies FK
+// constraints in Postgres; the wipe walks it in reverse.
+// ──────────────────────────────────────────────────────────────────────────
 
-/** GET /api/v1/backup/export — Export all data as a single JSON file */
-router.get('/export', (_req: Request, res: Response) => {
-  const exportData: Record<string, any[]> = {};
-  for (const [key, store] of Object.entries(STORES)) {
-    exportData[key] = [...store.data];
+interface ScopeCtx {
+  orgIds: Set<string>;   // scope org subtree
+  nodeIds: Set<string>;  // process nodes in scope (for flows / versions)
+  domainIds: Set<string>; // data domains in scope (for DOMAIN-scoped dama roles)
+}
+
+interface StoreDef {
+  key: string;
+  makeRepo: () => Repository<any>;
+  inScope: (row: any, ctx: ScopeCtx) => boolean;
+  // 'replace' = delete in-scope rows then load; 'upsert' = never delete, upsert by id.
+  mode: 'replace' | 'upsert';
+  // Optional create ordering within the store (e.g. comment parents first).
+  sortForCreate?: (a: any, b: any) => number;
+}
+
+const inByOrgId = (row: any, ctx: ScopeCtx) => !!row.orgId && ctx.orgIds.has(row.orgId);
+
+// Registry in create order (parents first). The wipe reverses it.
+const STORES: StoreDef[] = [
+  { key: 'organizations', makeRepo: () => getOrganizationsRepository(organizations),
+    inScope: (row, ctx) => ctx.orgIds.has(row.id), mode: 'upsert' },
+  { key: 'people', makeRepo: () => getPeopleRepository(people),
+    inScope: (row, ctx) => Array.isArray(row.orgIds) && row.orgIds.some((id: string) => ctx.orgIds.has(id)), mode: 'upsert' },
+  { key: 'systems', makeRepo: () => getSystemsRepository(systems), inScope: inByOrgId, mode: 'replace' },
+  { key: 'dataDomains', makeRepo: () => getDataDomainsRepository(dataDomains), inScope: inByOrgId, mode: 'replace' },
+  { key: 'processNodes', makeRepo: () => getProcessNodesRepository(processNodes), inScope: inByOrgId, mode: 'replace' },
+  { key: 'dataAssets', makeRepo: () => getDataAssetsRepository(dataAssets), inScope: inByOrgId, mode: 'replace' },
+  { key: 'governanceGroups', makeRepo: () => getGovernanceGroupsRepository(governanceGroups), inScope: inByOrgId, mode: 'replace' },
+  { key: 'damaRoles', makeRepo: () => getDamaRolesRepository(damaRoles),
+    inScope: (row, ctx) => row.scopeType === 'ORG'
+      ? ctx.orgIds.has(row.scopeId)
+      : row.scopeType === 'DOMAIN' ? ctx.domainIds.has(row.scopeId) : false,
+    mode: 'replace' },
+  { key: 'mappings', makeRepo: () => getMappingsRepository(mappings), inScope: inByOrgId, mode: 'replace' },
+  { key: 'flowRelationships', makeRepo: () => getFlowRelationshipsRepository(flowRelationships),
+    inScope: (row, ctx) => ctx.nodeIds.has(row.fromNodeId) || ctx.nodeIds.has(row.toNodeId), mode: 'replace' },
+  { key: 'processVersions', makeRepo: () => getProcessVersionsRepository(processVersions),
+    inScope: (row, ctx) => ctx.nodeIds.has(row.nodeId), mode: 'replace' },
+  { key: 'tags', makeRepo: () => getTagsRepository(tags), inScope: inByOrgId, mode: 'replace' },
+  { key: 'comments', makeRepo: () => getCommentsRepository(comments), inScope: inByOrgId, mode: 'replace',
+    // Parents before replies so a reply's parentId FK resolves on create.
+    sortForCreate: (a, b) => (a.parentId ? 1 : 0) - (b.parentId ? 1 : 0) },
+];
+
+/** Resolve the scope org subtree: the scope org plus every descendant org. */
+async function resolveScopeOrgIds(scopeOrgId: string): Promise<Set<string>> {
+  const orgs = await getOrganizationsRepository(organizations).list();
+  const ids = new Set<string>([scopeOrgId]);
+  const queue = [scopeOrgId];
+  while (queue.length) {
+    const id = queue.shift()!;
+    for (const o of orgs) {
+      if (o.parentId === id && !ids.has(o.id)) { ids.add(o.id); queue.push(o.id); }
+    }
   }
+  return ids;
+}
+
+/** Build the scope context (org ids + in-scope node/domain ids) from a set of rows. */
+function buildCtx(orgIds: Set<string>, nodes: any[], domains: any[]): ScopeCtx {
+  return {
+    orgIds,
+    nodeIds: new Set(nodes.filter((n) => orgIds.has(n.orgId)).map((n) => n.id)),
+    domainIds: new Set(domains.filter((d) => orgIds.has(d.orgId)).map((d) => d.id)),
+  };
+}
+
+/**
+ * GET /api/v1/backup/export?orgId=<scope>
+ *
+ * Export the caller's tenant (the scope org subtree) as a single JSON file.
+ * `orgId` defaults to the caller's own org and is validated against their
+ * accessible-org set by the auth middleware.
+ */
+router.get('/export', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
+  const scopeOrgId = (typeof req.query.orgId === 'string' && req.query.orgId) || req.user?.orgId;
+  if (!scopeOrgId) { res.status(400).json({ success: false, error: 'No org scope: pass ?orgId or authenticate with an org' }); return; }
+
+  const orgIds = await resolveScopeOrgIds(scopeOrgId);
+
+  // Read every store once through its repository.
+  const rowsByKey: Record<string, any[]> = {};
+  for (const s of STORES) rowsByKey[s.key] = await s.makeRepo().list();
+  const ctx = buildCtx(orgIds, rowsByKey.processNodes, rowsByKey.dataDomains);
+
+  const exportData: Record<string, any[]> = {};
+  for (const s of STORES) exportData[s.key] = rowsByKey[s.key].filter((r) => s.inScope(r, ctx));
 
   const payload = {
     exportedAt: new Date().toISOString(),
-    version: '1.0',
+    version: '2.0',
+    scope: { orgId: scopeOrgId, orgIds: [...orgIds] },
     data: exportData,
   };
 
-  logger.info({ counts: Object.fromEntries(Object.entries(exportData).map(([k, v]) => [k, v.length])) }, 'Exported backup');
+  logger.info({ scopeOrgId, counts: Object.fromEntries(Object.entries(exportData).map(([k, v]) => [k, v.length])) }, 'Exported backup');
   res.json(payload);
 });
 
-/** POST /api/v1/backup/import — Import data from a backup JSON file (replaces all data) */
-router.post('/import', (req: Request, res: Response) => {
+/**
+ * POST /api/v1/backup/import
+ *
+ * Restore a backup into its scope. Replace-mode stores have their in-scope rows
+ * deleted and re-created from the file; organizations and people are upserted.
+ * The scope comes from the file (v2 records it; v1 is derived from the data),
+ * and a non-super-admin may only import into orgs they can access.
+ */
+router.post('/import', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
   const body = req.body;
-
   if (!body || !body.data || typeof body.data !== 'object') {
     res.status(400).json({ success: false, error: 'Invalid backup format: missing "data" field' });
     return;
   }
+  const data: Record<string, any[]> = body.data;
 
-  const imported: Record<string, number> = {};
+  // Resolve the import scope. Prefer the recorded scope; otherwise derive it
+  // from the org ids present in the file (their own ids + every referenced orgId).
+  let orgIds: Set<string>;
+  if (body.scope && Array.isArray(body.scope.orgIds) && body.scope.orgIds.length) {
+    orgIds = new Set(body.scope.orgIds.map(String));
+  } else {
+    orgIds = new Set<string>();
+    for (const o of data.organizations || []) if (o?.id) orgIds.add(String(o.id));
+    for (const key of Object.keys(data)) for (const r of data[key] || []) if (r?.orgId) orgIds.add(String(r.orgId));
+  }
+  if (orgIds.size === 0) { res.status(400).json({ success: false, error: 'Backup has no resolvable org scope' }); return; }
 
-  for (const [key, store] of Object.entries(STORES)) {
-    const incoming = body.data[key];
-    if (Array.isArray(incoming)) {
-      // Clear existing data
-      store.data.splice(0, store.data.length);
-      // Push all imported items
-      store.data.push(...incoming);
-      // Persist to disk
-      saveStore(store.persistName, store.data);
-      imported[key] = incoming.length;
-    } else {
-      imported[key] = 0;
-    }
+  // Authorization: a non-super-admin can only import into orgs within their
+  // visible scope. Super admins may restore any tenant.
+  if (req.user?.role !== 'SUPER_ADMIN') {
+    const visible = getVisibleOrgScope(req.user?.orgId) || new Set<string>();
+    const outside = [...orgIds].filter((id) => !visible.has(id));
+    if (outside.length) { res.status(403).json({ success: false, error: `Not authorized to import into org(s): ${outside.join(', ')}` }); return; }
   }
 
-  logger.info({ imported }, 'Imported backup');
-  res.json({ success: true, imported });
+  // Context for the wipe is computed from EXISTING data (what's in scope now),
+  // so replace-mode deletes exactly the rows the backup will re-create.
+  const existingNodes = await getProcessNodesRepository(processNodes).list();
+  const existingDomains = await getDataDomainsRepository(dataDomains).list();
+  const ctx = buildCtx(orgIds, existingNodes, existingDomains);
+
+  const imported: Record<string, number> = {};
+  const deleted: Record<string, number> = {};
+
+  // Wipe replace-mode stores first, children before parents (reverse order).
+  for (const s of [...STORES].reverse()) {
+    if (s.mode !== 'replace') continue;
+    const repo = s.makeRepo();
+    let removed = 0;
+    for (const row of await repo.list()) {
+      if (s.inScope(row, ctx)) { if (await repo.delete(row.id)) removed++; }
+    }
+    deleted[s.key] = removed;
+  }
+
+  // Load in create order (parents first) so FKs resolve.
+  for (const s of STORES) {
+    const incoming = Array.isArray(data[s.key]) ? [...data[s.key]] : [];
+    if (s.sortForCreate) incoming.sort(s.sortForCreate);
+    const repo = s.makeRepo();
+    let count = 0;
+    for (const row of incoming) {
+      if (!row?.id) continue;
+      try {
+        const existing = await repo.get(row.id);
+        if (existing) await repo.update(row.id, row);
+        else await repo.create(row);
+        count++;
+      } catch (err) {
+        logger.warn({ store: s.key, id: row.id, err }, 'Backup import: row skipped');
+      }
+    }
+    imported[s.key] = count;
+  }
+
+  logger.info({ scope: [...orgIds], imported, deleted }, 'Imported backup');
+  res.json({ success: true, imported, deleted, scope: { orgIds: [...orgIds] } });
 });
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
