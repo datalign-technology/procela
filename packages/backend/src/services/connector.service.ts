@@ -1,29 +1,37 @@
 /**
- * Mock Connector Service
+ * Connector Service
  *
- * Simulates connecting to external data sources and discovering assets for
- * most connection types. The LOCAL file-storage subtype is the exception —
- * for uploaded files we actually read the bytes from disk and surface real
- * row/column counts to the user.
+ * Connects to external data sources and discovers assets. Two paths are real:
+ *   - LOCAL file uploads read the bytes from disk (real row/column counts).
+ *   - Direct-connect DATABASE connections whose engine the drivers support
+ *     (PostgreSQL / MySQL / SQL Server / Oracle) run real catalog SQL through
+ *     the shared db-source driver layer (see lib/db-source/introspect.ts).
  *
- * In production the cloud/database/warehouse branches would use real drivers
- * (pg, mysql2, @azure/storage-blob, etc.).
+ * The remaining branches (cloud file storage, API, data warehouse, spreadsheet,
+ * and databases without a configured driver/credentials) still return clearly-
+ * labelled sample assets; the UI surfaces `simulated: true` so they aren't
+ * mistaken for a live scan. Those would use type-specific drivers
+ * (@azure/storage-blob, snowflake-sdk, …) or route through the on-prem agent.
  */
 
 import fs from 'fs';
 import net from 'net';
 import { analyzeLocalFile } from '../lib/local-file-connector';
+import { SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
+import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
+import { discoverDbSchema } from '../lib/db-source/introspect';
+import logger from '../lib/logger';
 
 export interface ConnectorResult {
   success: boolean;
   message: string;
   latencyMs: number;
   /** True when the assets are illustrative sample data rather than a real
-   *  discovery. Direct-connect discovery for DATABASE / API / WAREHOUSE /
-   *  SPREADSHEET types is simulated in this build (live discovery runs
-   *  through the on-prem connector agent + dbt); LOCAL file uploads are
-   *  real. The UI surfaces this so simulated results aren't mistaken for
-   *  live ones. */
+   *  discovery. A configured direct-connect DATABASE (supported engine +
+   *  host + credentials) and LOCAL file uploads are REAL; API / WAREHOUSE /
+   *  SPREADSHEET / cloud file storage, and databases without a driver or
+   *  credentials, are still simulated. The UI surfaces this so simulated
+   *  results aren't mistaken for live ones. */
   simulated?: boolean;
   details?: {
     version?: string;
@@ -278,11 +286,53 @@ export async function testConnection(profile: ConnectionProfileLike): Promise<Co
   }
 }
 
+/** Map a connection profile to the driver request, when it's a database whose
+ *  engine the direct-connect drivers support and it carries the host +
+ *  username a real scan needs. Returns null when real discovery can't run
+ *  (unsupported engine, or an unconfigured/demo connection) — the caller then
+ *  falls back to the clearly-labelled sample assets. */
+function toDbSourceRequest(profile: ConnectionProfileLike): DbSourceRequest | null {
+  if (profile.connectionType !== 'DATABASE') return null;
+  const dbType = String(profile.config.dbType || '').toUpperCase() as DbSourceType;
+  if (!SUPPORTED_DB_SOURCE_TYPES.includes(dbType)) return null;
+  const { host, port, database, schema } = profile.config;
+  const username = profile.credentials?.username;
+  if (!host || !database || !username) return null;
+  return { dbType, host, port, database, schema, username, password: profile.credentials?.password };
+}
+
 export async function discoverAssets(profile: ConnectionProfileLike): Promise<ConnectorResult> {
   // Real discovery for LOCAL file uploads: surface the file as a single
   // asset with its parsed columns attached.
   if (profile.connectionType === 'FILE_STORAGE' && profile.config.storageType === 'LOCAL') {
     return discoverLocalFile(profile);
+  }
+
+  // Real discovery for a configured direct-connect database: run engine-
+  // specific catalog SQL through the live driver layer. A failure (bad host,
+  // auth, permissions) surfaces the real error rather than falling back to
+  // samples, so an operator isn't misled into thinking a broken connection
+  // discovered data.
+  const dbReq = toDbSourceRequest(profile);
+  if (dbReq) {
+    const start = Date.now();
+    try {
+      const assets = await discoverDbSchema(dbReq);
+      return {
+        success: true,
+        message: `Discovered ${assets.length} asset${assets.length === 1 ? '' : 's'} from ${dbReq.database}`,
+        latencyMs: Date.now() - start,
+        simulated: false,
+        details: { tableCount: assets.length, assets },
+      };
+    } catch (err) {
+      logger.warn({ err, dbType: dbReq.dbType, host: dbReq.host }, 'Live asset discovery failed');
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Live asset discovery failed',
+        latencyMs: Date.now() - start,
+      };
+    }
   }
 
   // Simulate discovery with delay
