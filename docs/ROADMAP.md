@@ -27,30 +27,33 @@ rollback in [`DR_RUNBOOK.md`](./DR_RUNBOOK.md).
 
 ## Track A — Phase 3: close the discovery loop
 
-*The product frontier. The connector agent is built, shipped, and
-CI-tested against five engines (Postgres · SQL Server · MySQL · Oracle ·
-dbt manifest) with column-level discovery — but the loop from a real scan
-back into business-layer governance is not closed.*
-**Size: large. Biggest net-new build and the core differentiator.**
+*The product frontier. The Discover loop is now **closed for direct-connect
+databases**: a configured connection (Postgres · SQL Server · MySQL · Oracle)
+runs real catalog discovery, measures data quality live, and reconciles the
+results into the governed catalog. The on-prem connector agent covers
+firewalled sources with the same five-engine + dbt coverage. The one
+remaining item is proving it end to end against a real customer database.*
+**Size: large. The core differentiator — now built.**
 
 - **A1 — Real-customer connector pilot.** Run the shipped agent against a
   live customer database (GO_LIVE_CHECKLIST **#25**'s sole remaining
   item). Everything upstream is done and green in CI; this is the first
   real-world scan and the thing that proves the whole Phase-3 thesis.
-- **A2 — Discovered-asset → business-definition reconciliation.** The
-  "guide technical users to map business definitions to real data" half of
-  Phase 3. Discovery upserts Bronze `DataAsset`s (audit-only) today, but
-  there is no flow to reconcile a scanned table/column against an existing
-  business-defined asset — accept, merge, or promote. This is the bridge
-  between the technical layer and the business layer that Procela's whole
-  premise rests on.
-- **A3 — Source-fed health scores.** _Partially delivered._ The on-prem
-  connector now feeds **measured** `health_score` from real DQ results for
-  the five pushdown-safe rule types (null-rate via NOT_NULL, uniqueness,
-  set/range/length checks), and freshness/row-count already drive the
-  connector's discovered-asset health. Remaining: schema-drift and
-  row-count-delta signals, and closing the direct-Connection DQ-simulation
-  gap so a cloud-reachable database measures too.
+- **A2 — Discovered-asset → business-definition reconciliation.**
+  _Shipped._ A suggest-and-confirm reconciliation flow matches each
+  discovered table to an existing business-defined asset (by name
+  similarity) or creates a new Bronze `DataAsset`, materializing its
+  columns so DQ rules can attach — the bridge between the technical and
+  business layers that Procela's premise rests on. Connection-rooted from
+  the Connections **Discover** view.
+- **A3 — Source-fed health scores.** _Delivered._ Both the on-prem
+  connector **and** a direct-connect database now feed **measured**
+  `health_score` from real DQ results for the five pushdown-safe rule types
+  (null-rate via NOT_NULL, uniqueness, set/range/length checks); the
+  direct-Connection DQ-simulation gap is closed, so a cloud-reachable
+  database measures too. Freshness/row-count already drive the connector's
+  discovered-asset health. Remaining: schema-drift and row-count-delta
+  signals.
 
 ## Track B — production-scale hardening
 
@@ -114,7 +117,7 @@ architectural unknowns.*
 
 | Track | Theme | Size | Gated on |
 |---|---|---|---|
-| **A** | Phase 3 discovery loop | Large | A real customer DB to pilot against |
+| **A** | Phase 3 discovery loop — built; only the real-customer pilot (A1) remains | Large | A real customer DB to pilot against |
 | **B** | Production-scale hardening | Medium | A running deploy (task #3) |
 | **C** | Commercial SaaS readiness | Large / Med / Small | Go-to-market = self-serve SaaS |
 | **D** | Depth on existing features | Small–Med | Nothing; incremental anytime |

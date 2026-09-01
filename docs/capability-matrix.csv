@@ -28,7 +28,7 @@ Connections,Connection profiles,Built,"DATABASE/FILE_STORAGE/API/DATA_WAREHOUSE/
 Connections,Many-to-many connection ↔ system,Built,ConnectionSystemLink join table,P1,Yes,Partial,Yes,Yes,—
 Connections,Real database connectors,Built,"On-prem edge agent ships Postgres/MySQL/SQL Server/Oracle adapters (pair -> discover -> sync)",P0,200+ native,200+ native,200+ native,Many,Expand adapter coverage (Snowflake/BigQuery/warehouses)
 Connections,Connection testing,Built,Tests reachability; live test for staged file before save,P1,Yes,Yes,Yes,Yes,—
-Connections,Connection discovery (browse contents),Built,"On-prem connector discovers tables + columns (metadata only, audit-only)",P0,Yes,Yes,Yes,Yes,Expand adapter coverage
+Connections,Connection discovery (browse contents),Built,"Direct-connect Connections and the on-prem connector both discover real tables + columns; discovered assets reconcile into the catalog (suggest-and-confirm match, or create Bronze)",P0,Yes,Yes,Yes,Yes,Expand adapter coverage
 Lineage,Manual lineage links,Built,System-to-system + asset-level Data Lineage page,P1,Yes,Yes,Yes,Yes,—
 Lineage,Auto-extracted lineage (SQL/dbt),Partial,"dbt manifest ingestion (disk import + dbt Cloud API fetch) builds asset-level lineage edges from depends_on and derives DQ rules from dbt tests; SQL/query-log parsing not yet built",P0,Yes,Best-in-class,Best-in-class (dbt),Yes,Build SQL/query-log parser for non-dbt warehouses
 Lineage,Column-level lineage,Not Started,Schema supports it; no extraction,P1,Yes,Yes,Yes,Yes,Build extraction
