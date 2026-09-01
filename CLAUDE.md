@@ -43,6 +43,8 @@ Procela AI suggests what data and systems typically support each step based on t
 Once business intent is defined, Procela uses that context to help find, validate, and connect to actual data assets — either by integrating with source systems or by guiding technical users to map business definitions to real data. This is where the business-layer definition meets the technical-layer reality.
 
 > Phase 3 integration capabilities should be architected for from the start but are not required for the initial prototype.
+>
+> **Status (shipped):** the Discover loop is now built for direct-connect databases — real catalog discovery (Postgres/MySQL/SQL Server/Oracle), measured data quality run live over the connection, and a suggest-and-confirm flow that reconciles discovered assets into the governed catalog. The on-prem edge connector covers firewalled sources. The remaining Phase-3 item is an operational pilot against a real customer database (see `docs/ROADMAP.md` Track A).
 
 ---
 

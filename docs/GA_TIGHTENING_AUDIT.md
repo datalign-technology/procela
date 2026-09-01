@@ -222,10 +222,19 @@ onboarding, and hiding them would remove the only way to exercise the flow
 before the real drivers land.
 
 - **Direct-connect discovery** — `ConnectorResult` carries a structured
-  `simulated` flag (`true` for the DATABASE/API/WAREHOUSE/SPREADSHEET mock,
-  `false` for real LOCAL file parsing). The Connections page Discover modal
-  renders a warning banner when `simulated` is true, so sample metadata is
-  never mistaken for a live read.
+  `simulated` flag (`true` for the API/WAREHOUSE/SPREADSHEET mock, `false`
+  for real LOCAL file parsing). The Connections page Discover modal renders
+  a warning banner when `simulated` is true, so sample metadata is never
+  mistaken for a live read.
+  - **Update — now real for databases (Phase 3 shipped).** A configured
+    direct-connect **DATABASE** (Postgres/MySQL/SQL Server/Oracle) now runs
+    real catalog discovery (`lib/db-source/introspect.ts`, `simulated:false`),
+    measures data quality live over the connection for the five pushdown-safe
+    rule types (`lib/db-source/dq-sql.ts` + `services/dq-db.ts`), and offers a
+    suggest-and-confirm **reconciliation** flow that folds discovered assets
+    into the governed catalog. Only API/WAREHOUSE/SPREADSHEET types and the
+    REGEX_MATCH/CUSTOM rule types remain simulated-and-labelled. See
+    `docs/ROADMAP.md` Track A.
 - **`SyncConnection` DATABASE source** — _(interim; superseded — see the
   §F live-driver outcome below.)_ Was relabelled "Database Table (simulated)"
   while drivers were unwired; the source now connects for real (Postgres /
@@ -342,6 +351,10 @@ Server, and Oracle.
   distinct env vars** but `.env.example` documents **49** (~11
   undiscoverable without grepping source). Only 6 are `PROD-REQUIRED`
   (good — deploy stays simple). Close the doc gap.
+  - **Done.** Every `process.env.*` the backend reads is now documented in
+    `.env.example`, kept honest by a test guard
+    (`__tests__/env-documented.test.ts`) that fails CI on any undocumented
+    read — so the gap can't silently re-grow.
 
 ---
 
