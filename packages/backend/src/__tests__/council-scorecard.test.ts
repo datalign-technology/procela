@@ -85,7 +85,7 @@ describe('Council Scorecard', () => {
     for (const store of [organizations, dataDomains, dataAssets, governanceExceptions, councilScorecards, people, damaRoles]) {
       for (let i = store.length - 1; i >= 0; i--) {
         const row = store[i];
-        if ((row.id && String(row.id).startsWith(P)) || row.orgId === parent || row.orgId === divA || row.orgId === divB) store.splice(i, 1);
+        if ((row.id && String(row.id).startsWith(P)) || row.orgId === parent || row.orgId === divA || row.orgId === divB || row.orgId === divC) store.splice(i, 1);
       }
     }
     await new Promise<void>((r) => server.close(() => r()));
@@ -134,5 +134,35 @@ describe('Council Scorecard', () => {
     const list = await req(port, 'GET', `/council-scorecard?orgId=${parent}`, undefined, cdo);
     assert.strictEqual(list.body.data.length, 1);
     assert.strictEqual(list.body.data[0].createdBy, P + 'cdo');
+  });
+
+  it('replaces a same-period snapshot in place with replaceId, else stacks a new one', async () => {
+    // Save against the empty divC so counts are isolated from the other
+    // suites' saves (tests share the in-memory store and may interleave).
+    const admin = { id: 'u', role: 'ORG_ADMIN', email: 'a@x.com' };
+    const count = async () => (await req(port, 'GET', `/council-scorecard?orgId=${divC}`, undefined, admin)).body.data.length;
+
+    // First save — a brand-new version.
+    const first = await req(port, 'POST', '/council-scorecard', { orgId: divC, narrative: { whatMoved: 'v1' } }, admin);
+    assert.strictEqual(first.status, 201);
+    const idA = first.body.data.id;
+    assert.strictEqual(await count(), 1);
+
+    // Replace it — same id kept, list count unchanged, content refreshed.
+    const replaced = await req(port, 'POST', '/council-scorecard', { orgId: divC, replaceId: idA, narrative: { whatMoved: 'v2' } }, admin);
+    assert.strictEqual(replaced.status, 200);
+    assert.strictEqual(replaced.body.data.id, idA);
+    assert.strictEqual(replaced.body.data.narrative.whatMoved, 'v2');
+    assert.strictEqual(await count(), 1);
+
+    // Save again without replaceId — a new, additional version.
+    const second = await req(port, 'POST', '/council-scorecard', { orgId: divC, narrative: { whatMoved: 'v3' } }, admin);
+    assert.strictEqual(second.status, 201);
+    assert.notStrictEqual(second.body.data.id, idA);
+    assert.strictEqual(await count(), 2);
+
+    // Replacing a version that belongs to another org is rejected.
+    const badReplace = await req(port, 'POST', '/council-scorecard', { orgId: parent, replaceId: idA }, admin);
+    assert.strictEqual(badReplace.status, 404);
   });
 });

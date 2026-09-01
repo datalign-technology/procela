@@ -266,15 +266,35 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json({ success: true, data: v });
 });
 
-/** POST / — save a version (derived + overrides + narrative). Editors only. */
+/** POST / — save a version (derived + overrides + narrative). Editors only.
+ *  With `replaceId`, overwrite that existing version in place (keeping its id,
+ *  createdAt and createdBy, refreshing the derived baseline + timestamp) so a
+ *  same-period re-save can replace rather than stack another snapshot. */
 router.post('/', requireScorecardEditor, async (req: Request, res: Response) => {
-  const { orgId, period, derived, overrides, narrative, status } = req.body || {};
+  const { orgId, period, derived, overrides, narrative, status, replaceId } = req.body || {};
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   // Recompute derived server-side so a saved version's machine baseline is
   // authoritative; the client only supplies overrides + narrative edits.
   const freshDerived: DerivedScorecard = derived && derived.divisions ? derived : await deriveScorecard(orgId);
   const now = new Date().toISOString();
   const userId = (req as Request & { user?: { id?: string } }).user?.id || undefined;
+
+  if (replaceId) {
+    const existing = await repo.get(String(replaceId));
+    if (!existing || existing.orgId !== orgId) { res.status(404).json({ success: false, error: 'Scorecard version to replace not found' }); return; }
+    const before = { period: existing.period, derived: existing.derived, overrides: existing.overrides, narrative: existing.narrative, status: existing.status };
+    existing.period = period || freshDerived.period;
+    existing.status = status === 'DRAFT' ? 'DRAFT' : 'PUBLISHED';
+    existing.derived = freshDerived;
+    existing.overrides = overrides && typeof overrides === 'object' ? overrides : {};
+    existing.narrative = narrative && typeof narrative === 'object' ? narrative : {};
+    existing.updatedAt = now;
+    await repo.update(existing.id, existing);
+    auditService.log(orgId, userId || null, 'CouncilScorecard', existing.id, 'REPLACE', before, { period: existing.period, status: existing.status });
+    res.json({ success: true, data: existing });
+    return;
+  }
+
   const entity: StoredCouncilScorecard = {
     id: uuid(),
     orgId,
