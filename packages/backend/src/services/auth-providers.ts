@@ -175,18 +175,15 @@ export async function hashPassword(plain: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// OIDC Auth Provider (placeholder)
+// OIDC Auth Provider
 // ---------------------------------------------------------------------------
-// Stores configuration (issuer, clientId, clientSecret) but returns
-// "OIDC not configured" until a real OIDC library is integrated.
-//
-// Integration points for a real OIDC implementation:
-//   1. getLoginUrl()   — build the authorization URL using the issuer's
-//                         .well-known/openid-configuration discovery endpoint.
-//   2. handleCallback() — exchange the authorization code for tokens,
-//                          validate the id_token, and extract user claims.
-//   3. validateCredentials() — not typically used for OIDC (the flow goes
-//                               through getLoginUrl → handleCallback instead).
+// A working OIDC / OAuth2 provider. Fetches and caches the issuer's
+// .well-known/openid-configuration discovery document (refreshed on a TTL so
+// an IdP key rotation propagates without a restart), builds the authorization
+// URL in getLoginUrl(), and in handleCallback() exchanges the code for tokens,
+// validates the id_token against the issuer's JWKS, and maps its claims
+// (email, name, groups/roles) onto a Procela user. validateCredentials() is
+// unused for OIDC — the flow goes through getLoginUrl → handleCallback.
 // ---------------------------------------------------------------------------
 
 export interface OidcConfig {

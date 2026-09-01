@@ -11,21 +11,10 @@ import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
 import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
-
-// ── Defensive imports for governance modules that may not exist yet ──────
-// These stores are created by separate agents; use `require` inside a
-// try/catch so this route can load even when only a subset of the
-// governance modules have been built.
-
-let governanceTasks: any[] = [];
-let governanceIssues: any[] = [];
-let governancePolicies: any[] = [];
-let governanceControls: any[] = [];
-
-try { governanceTasks = require('./governance-tasks').governanceTasks; } catch { /* module not yet created */ }
-try { governanceIssues = require('./governance-issues').governanceIssues; } catch { /* module not yet created */ }
-try { governancePolicies = require('./governance-policies').governancePolicies; } catch { /* module not yet created */ }
-try { governanceControls = require('./governance-controls').governanceControls; } catch { /* module not yet created */ }
+import { governanceTasks } from './governance-tasks';
+import { governanceIssues } from './governance-issues';
+import { governancePolicies } from './governance-policies';
+import { governanceControls } from './governance-controls';
 
 // Repositories — read Postgres when DATABASE_URL is set, else the JSON arrays
 // above. This aggregator is read-only; each request loads a fresh snapshot.
