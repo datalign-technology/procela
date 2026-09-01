@@ -45,7 +45,7 @@ export interface DerivedScorecard {
   orgId: string;
   orgName: string;
   period: string;                 // YYYY-MM
-  targets: { coverage: number; classification: number };
+  targets: { coverage: number; classification: number; openIssues: number; exceptions: number; openIssuesDays: number };
   divisions: DivisionRow[];
   enterprise: DivisionRow;
   narrative: { whatMoved: string; forCouncil: string; whatMovedAuto: boolean; forCouncilAuto: boolean };
@@ -75,7 +75,10 @@ const issuesRepo = getGovernanceIssuesRepository(governanceIssues);
 const exceptionsRepo = getGovernanceExceptionsRepository(governanceExceptions);
 
 const TERMINAL_ISSUE_STATUSES = new Set(['RESOLVED', 'CLOSED', 'WONT_FIX']);
-const TARGETS = { coverage: 80, classification: 70 };
+// All four measure thresholds live here, in one place, and ship to the client
+// in the derived payload so the UI's target labels can't drift from the logic.
+// `openIssuesDays` is the age (in days) past which an open issue counts.
+const TARGETS = { coverage: 80, classification: 70, openIssues: 0, exceptions: 0, openIssuesDays: 30 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ── Org tree helpers ──
@@ -120,7 +123,7 @@ function computeMeasures(scope: Set<string>, s: Sources): Omit<DivisionRow, 'org
   const openIssues = s.issues.filter((i) =>
     scope.has(i.orgId) &&
     !TERMINAL_ISSUE_STATUSES.has(i.status) &&
-    !!i.createdAt && (s.now - Date.parse(i.createdAt)) > 30 * DAY_MS,
+    !!i.createdAt && (s.now - Date.parse(i.createdAt)) > TARGETS.openIssuesDays * DAY_MS,
   ).length;
   const exceptions = s.exceptions.filter((e) => scope.has(e.orgId) && isPastExpiry(e, s.now)).length;
   return {
@@ -150,8 +153,8 @@ function deriveStatus(m: Omit<DivisionRow, 'orgId' | 'name' | 'status'>): string
   const good = [
     m.coverage == null || m.coverage >= TARGETS.coverage,
     m.classification == null || m.classification >= TARGETS.classification,
-    m.openIssues === 0,
-    m.exceptions === 0,
+    m.openIssues <= TARGETS.openIssues,
+    m.exceptions <= TARGETS.exceptions,
   ].filter(Boolean).length;
   return good >= 4 ? 'On track' : good >= 2 ? 'Behind' : 'At risk';
 }
