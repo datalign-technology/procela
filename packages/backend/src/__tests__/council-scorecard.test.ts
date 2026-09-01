@@ -41,7 +41,7 @@ function req(port: number, method: string, path: string, body?: unknown, user?: 
 
 describe('Council Scorecard', () => {
   let server: http.Server; let port: number;
-  const parent = P + 'ent', divA = P + 'divA', divB = P + 'divB';
+  const parent = P + 'ent', divA = P + 'divA', divB = P + 'divB', divC = P + 'divC';
   const now = new Date().toISOString();
   const old = new Date(Date.now() - 45 * 24 * 3600 * 1000).toISOString();
 
@@ -59,6 +59,8 @@ describe('Council Scorecard', () => {
       { id: parent, parentId: null, name: 'Enterprise', type: 'company', industry: '', description: '', headCount: 0 },
       { id: divA, parentId: parent, name: 'Division A', type: 'division', industry: '', description: '', headCount: 0 },
       { id: divB, parentId: parent, name: 'Division B', type: 'division', industry: '', description: '', headCount: 0 },
+      // Division C: empty — no domains, assets, issues, or exceptions.
+      { id: divC, parentId: parent, name: 'Division C', type: 'division', industry: '', description: '', headCount: 0 },
     );
     // Division A: 2 tier-1 domains, both owned → coverage 100. 1 asset classified of 2 → 50%.
     dataDomains.push(
@@ -104,6 +106,16 @@ describe('Council Scorecard', () => {
     assert.strictEqual(d.enterprise.exceptions, 1);
     assert.strictEqual(d.canEdit, true);           // ORG_ADMIN can edit
     assert.ok(d.narrative.whatMoved && d.narrative.forCouncil);
+  });
+
+  it('reports a neutral "No data" status for an empty division', async () => {
+    const res = await req(port, 'GET', `/council-scorecard/derive?orgId=${parent}`, undefined, { id: 'u', role: 'ORG_ADMIN', email: 'a@x.com' });
+    const c = res.body.data.divisions.find((r: any) => r.orgId === divC);
+    assert.strictEqual(c.coverage, null);        // no tier-1 domains
+    assert.strictEqual(c.classification, null);  // no assets
+    assert.strictEqual(c.openIssues, 0);
+    assert.strictEqual(c.exceptions, 0);
+    assert.strictEqual(c.status, 'No data');     // neutral, not "Behind"
   });
 
   it('lets a CDO edit but blocks a plain viewer', async () => {

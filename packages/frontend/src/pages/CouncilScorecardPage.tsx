@@ -79,6 +79,7 @@ function statusPill(status: string) {
     'on track':  { bg: 'var(--color-success)', color: '#fff' },
     'behind':    { bg: 'var(--color-warning)', color: '#fff' },
     'at risk':   { bg: 'var(--color-error)',   color: '#fff' },
+    'no data':   { bg: 'var(--color-text-muted)', color: '#fff' },
   };
   const c = map[s] || { bg: 'var(--color-border)', color: 'var(--color-text)' };
   return (
@@ -292,7 +293,7 @@ export default function CouncilScorecardPage() {
                     <td style={tdR}>
                       {editing && canEdit ? (
                         <select value={resolvedStatus(row)} onChange={(e) => setOverride(row.orgId, 'status', e.target.value)} style={{ border: `1px solid ${isOverridden(row.orgId, 'status') ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 4, padding: '3px 6px', fontSize: 12, background: 'var(--color-surface)', color: 'var(--color-text)' }}>
-                          {['On track', 'Behind', 'At risk'].map((s) => <option key={s} value={s}>{s}</option>)}
+                          {['On track', 'Behind', 'At risk', 'No data'].map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       ) : statusPill(resolvedStatus(row))}
                     </td>
