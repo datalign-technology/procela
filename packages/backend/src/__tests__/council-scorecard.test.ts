@@ -41,7 +41,7 @@ function req(port: number, method: string, path: string, body?: unknown, user?: 
 
 describe('Council Scorecard', () => {
   let server: http.Server; let port: number;
-  const parent = P + 'ent', divA = P + 'divA', divB = P + 'divB';
+  const parent = P + 'ent', divA = P + 'divA', divB = P + 'divB', divC = P + 'divC';
   const now = new Date().toISOString();
   const old = new Date(Date.now() - 45 * 24 * 3600 * 1000).toISOString();
 
@@ -59,6 +59,8 @@ describe('Council Scorecard', () => {
       { id: parent, parentId: null, name: 'Enterprise', type: 'company', industry: '', description: '', headCount: 0 },
       { id: divA, parentId: parent, name: 'Division A', type: 'division', industry: '', description: '', headCount: 0 },
       { id: divB, parentId: parent, name: 'Division B', type: 'division', industry: '', description: '', headCount: 0 },
+      // Division C: empty — no domains, assets, issues, or exceptions.
+      { id: divC, parentId: parent, name: 'Division C', type: 'division', industry: '', description: '', headCount: 0 },
     );
     // Division A: 2 tier-1 domains, both owned → coverage 100. 1 asset classified of 2 → 50%.
     dataDomains.push(
@@ -83,7 +85,7 @@ describe('Council Scorecard', () => {
     for (const store of [organizations, dataDomains, dataAssets, governanceExceptions, councilScorecards, people, damaRoles]) {
       for (let i = store.length - 1; i >= 0; i--) {
         const row = store[i];
-        if ((row.id && String(row.id).startsWith(P)) || row.orgId === parent || row.orgId === divA || row.orgId === divB) store.splice(i, 1);
+        if ((row.id && String(row.id).startsWith(P)) || row.orgId === parent || row.orgId === divA || row.orgId === divB || row.orgId === divC) store.splice(i, 1);
       }
     }
     await new Promise<void>((r) => server.close(() => r()));
@@ -106,6 +108,16 @@ describe('Council Scorecard', () => {
     assert.ok(d.narrative.whatMoved && d.narrative.forCouncil);
   });
 
+  it('reports a neutral "No data" status for an empty division', async () => {
+    const res = await req(port, 'GET', `/council-scorecard/derive?orgId=${parent}`, undefined, { id: 'u', role: 'ORG_ADMIN', email: 'a@x.com' });
+    const c = res.body.data.divisions.find((r: any) => r.orgId === divC);
+    assert.strictEqual(c.coverage, null);        // no tier-1 domains
+    assert.strictEqual(c.classification, null);  // no assets
+    assert.strictEqual(c.openIssues, 0);
+    assert.strictEqual(c.exceptions, 0);
+    assert.strictEqual(c.status, 'No data');     // neutral, not "Behind"
+  });
+
   it('lets a CDO edit but blocks a plain viewer', async () => {
     const cdo = { id: P + 'cdo', role: 'VIEWER', email: 'dana.cdo@example.com' };
     const viewer = { id: 'v', role: 'VIEWER', email: 'nobody@example.com' };
@@ -122,5 +134,35 @@ describe('Council Scorecard', () => {
     const list = await req(port, 'GET', `/council-scorecard?orgId=${parent}`, undefined, cdo);
     assert.strictEqual(list.body.data.length, 1);
     assert.strictEqual(list.body.data[0].createdBy, P + 'cdo');
+  });
+
+  it('replaces a same-period snapshot in place with replaceId, else stacks a new one', async () => {
+    // Save against the empty divC so counts are isolated from the other
+    // suites' saves (tests share the in-memory store and may interleave).
+    const admin = { id: 'u', role: 'ORG_ADMIN', email: 'a@x.com' };
+    const count = async () => (await req(port, 'GET', `/council-scorecard?orgId=${divC}`, undefined, admin)).body.data.length;
+
+    // First save — a brand-new version.
+    const first = await req(port, 'POST', '/council-scorecard', { orgId: divC, narrative: { whatMoved: 'v1' } }, admin);
+    assert.strictEqual(first.status, 201);
+    const idA = first.body.data.id;
+    assert.strictEqual(await count(), 1);
+
+    // Replace it — same id kept, list count unchanged, content refreshed.
+    const replaced = await req(port, 'POST', '/council-scorecard', { orgId: divC, replaceId: idA, narrative: { whatMoved: 'v2' } }, admin);
+    assert.strictEqual(replaced.status, 200);
+    assert.strictEqual(replaced.body.data.id, idA);
+    assert.strictEqual(replaced.body.data.narrative.whatMoved, 'v2');
+    assert.strictEqual(await count(), 1);
+
+    // Save again without replaceId — a new, additional version.
+    const second = await req(port, 'POST', '/council-scorecard', { orgId: divC, narrative: { whatMoved: 'v3' } }, admin);
+    assert.strictEqual(second.status, 201);
+    assert.notStrictEqual(second.body.data.id, idA);
+    assert.strictEqual(await count(), 2);
+
+    // Replacing a version that belongs to another org is rejected.
+    const badReplace = await req(port, 'POST', '/council-scorecard', { orgId: parent, replaceId: idA }, admin);
+    assert.strictEqual(badReplace.status, 404);
   });
 });

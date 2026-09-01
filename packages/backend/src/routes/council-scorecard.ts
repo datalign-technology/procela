@@ -38,7 +38,7 @@ export interface DivisionRow {
   classification: number | null;  // % of assets with a sensitivity classification
   openIssues: number;             // non-terminal governance issues open > 30 days
   exceptions: number;             // exceptions past expiry and still active
-  status: string;                 // derived: On track | Behind | At risk
+  status: string;                 // derived: On track | Behind | At risk | No data
 }
 
 export interface DerivedScorecard {
@@ -136,6 +136,17 @@ function computeMeasures(scope: Set<string>, s: Sources): Omit<DivisionRow, 'org
 
 /** Derived status from the four measures vs. targets. Overridable by editors. */
 function deriveStatus(m: Omit<DivisionRow, 'orgId' | 'name' | 'status'>): string {
+  // Nothing to assess yet — no governed domains, no tier-1 coverage
+  // denominator, nothing classified, and no open issues or exceptions.
+  // A brand-new / empty division has no governance health to report, so
+  // return a neutral status rather than shaming it as "Behind".
+  const noData =
+    m.domainsGoverned === 0 &&
+    m.coverage == null &&
+    (m.classification == null || m.classification === 0) &&
+    m.openIssues === 0 &&
+    m.exceptions === 0;
+  if (noData) return 'No data';
   const good = [
     m.coverage == null || m.coverage >= TARGETS.coverage,
     m.classification == null || m.classification >= TARGETS.classification,
@@ -255,15 +266,35 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json({ success: true, data: v });
 });
 
-/** POST / — save a version (derived + overrides + narrative). Editors only. */
+/** POST / — save a version (derived + overrides + narrative). Editors only.
+ *  With `replaceId`, overwrite that existing version in place (keeping its id,
+ *  createdAt and createdBy, refreshing the derived baseline + timestamp) so a
+ *  same-period re-save can replace rather than stack another snapshot. */
 router.post('/', requireScorecardEditor, async (req: Request, res: Response) => {
-  const { orgId, period, derived, overrides, narrative, status } = req.body || {};
+  const { orgId, period, derived, overrides, narrative, status, replaceId } = req.body || {};
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   // Recompute derived server-side so a saved version's machine baseline is
   // authoritative; the client only supplies overrides + narrative edits.
   const freshDerived: DerivedScorecard = derived && derived.divisions ? derived : await deriveScorecard(orgId);
   const now = new Date().toISOString();
   const userId = (req as Request & { user?: { id?: string } }).user?.id || undefined;
+
+  if (replaceId) {
+    const existing = await repo.get(String(replaceId));
+    if (!existing || existing.orgId !== orgId) { res.status(404).json({ success: false, error: 'Scorecard version to replace not found' }); return; }
+    const before = { period: existing.period, derived: existing.derived, overrides: existing.overrides, narrative: existing.narrative, status: existing.status };
+    existing.period = period || freshDerived.period;
+    existing.status = status === 'DRAFT' ? 'DRAFT' : 'PUBLISHED';
+    existing.derived = freshDerived;
+    existing.overrides = overrides && typeof overrides === 'object' ? overrides : {};
+    existing.narrative = narrative && typeof narrative === 'object' ? narrative : {};
+    existing.updatedAt = now;
+    await repo.update(existing.id, existing);
+    auditService.log(orgId, userId || null, 'CouncilScorecard', existing.id, 'REPLACE', before, { period: existing.period, status: existing.status });
+    res.json({ success: true, data: existing });
+    return;
+  }
+
   const entity: StoredCouncilScorecard = {
     id: uuid(),
     orgId,

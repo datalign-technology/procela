@@ -439,9 +439,9 @@ export default function SettingsPage() {
       <Card padding="1.5rem">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h2 style={sectionTitleStyle}>Branding</h2>
+            <h2 style={sectionTitleStyle}>Brand &amp; appearance</h2>
             <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-              Company name, logo, and color palette.
+              Company name, logo, and color palette used across the app.
             </p>
           </div>
           <button
@@ -547,40 +547,6 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* Data classification regimes — an org admin chooses which regulatory /
-          export-control regimes are active for this tenant. The universal
-          data-sensitivity tags (PII/PHI/PCI/…) are always available and not
-          listed here. */}
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Data classification regimes</h2>
-        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-          Choose which regulatory / export-control regimes apply to <strong>{activeOrgName || 'this tenant'}</strong>. Only active regimes can be applied to data assets and are suggested by the classifier. Universal data-sensitivity tags (PII, PHI, PCI, Financial, Credential, Confidential, Public) are always available.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
-          {[
-            { key: 'CUI', label: 'CUI', desc: 'Controlled Unclassified Information — NARA CUI Registry / DFARS 252.204-7012.' },
-            { key: 'ITAR', label: 'ITAR', desc: 'Technical data on the US Munitions List, subject to ITAR export control.' },
-            { key: 'EXPORT_CONTROLLED', label: 'Export-Controlled', desc: 'Dual-use technical data subject to the EAR / Commerce Control List.' },
-          ].map((r) => {
-            const on = regimes.includes(r.key);
-            return (
-              <label key={r.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: regimesBusy ? 'wait' : 'pointer', background: on ? 'var(--color-primary-light)' : 'var(--color-bg)' }}>
-                <input type="checkbox" checked={on} disabled={regimesBusy} onChange={() => toggleRegime(r.key)} style={{ marginTop: 2 }} />
-                <span>
-                  <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{r.label}</span>
-                  <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 1 }}>{r.desc}</span>
-                </span>
-              </label>
-            );
-          })}
-        </div>
-        {regimes.length === 0 && (
-          <p style={{ fontSize: 12, color: 'var(--color-warning)', marginTop: 10 }}>
-            No regulatory regimes are active — assets in this tenant can carry only the universal data-sensitivity tags.
-          </p>
-        )}
-      </Card>
-
       <ConfirmDialog
         open={!!confirmLifecycle}
         title={confirmLifecycle ? `Switch to ${confirmLifecycle.charAt(0).toUpperCase() + confirmLifecycle.slice(1)} lifecycle?` : ''}
@@ -607,7 +573,7 @@ export default function SettingsPage() {
           the sign-in card. Kept text-only in v1 (emoji glyph +
           display name + button label + primary hex). */}
       <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Sign-in branding</h2>
+        <h2 style={sectionTitleStyle}>Sign-in page appearance</h2>
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
           Customises the sign-in card for users landing at your tenant URL — <code>/login?tenant=&lt;slug&gt;</code> or your subdomain — so the login page reads as <strong>{branding.brandDisplayName || activeOrgName || 'your company'}</strong> rather than generic Procela. Fields below stay optional; empty ones fall back to platform defaults.
         </p>
@@ -937,6 +903,41 @@ export default function SettingsPage() {
 
       {/* ══ Data ══ */}
       <div style={{ display: settingsTab === 'data' ? 'block' : 'none' }}>
+
+      {/* Data classification regimes — an org admin chooses which regulatory /
+          export-control regimes are active for this tenant. The universal
+          data-sensitivity tags (PII/PHI/PCI/…) are always available and not
+          listed here. Sits at the top of the Data tab — data-governance policy
+          ahead of the operational backup / demo / reset actions below. */}
+      <Card padding="1.5rem" marginBottom="1.5rem">
+        <h2 style={sectionTitleStyle}>Data classification regimes</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+          Choose which regulatory / export-control regimes apply to <strong>{activeOrgName || 'this tenant'}</strong>. Only active regimes can be applied to data assets and are suggested by the classifier. Universal data-sensitivity tags (PII, PHI, PCI, Financial, Credential, Confidential, Public) are always available.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+          {[
+            { key: 'CUI', label: 'CUI', desc: 'Controlled Unclassified Information — NARA CUI Registry / DFARS 252.204-7012.' },
+            { key: 'ITAR', label: 'ITAR', desc: 'Technical data on the US Munitions List, subject to ITAR export control.' },
+            { key: 'EXPORT_CONTROLLED', label: 'Export-Controlled', desc: 'Dual-use technical data subject to the EAR / Commerce Control List.' },
+          ].map((r) => {
+            const on = regimes.includes(r.key);
+            return (
+              <label key={r.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: regimesBusy ? 'wait' : 'pointer', background: on ? 'var(--color-primary-light)' : 'var(--color-bg)' }}>
+                <input type="checkbox" checked={on} disabled={regimesBusy} onChange={() => toggleRegime(r.key)} style={{ marginTop: 2 }} />
+                <span>
+                  <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{r.label}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 1 }}>{r.desc}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {regimes.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--color-warning)', marginTop: 10 }}>
+            No regulatory regimes are active — assets in this tenant can carry only the universal data-sensitivity tags.
+          </p>
+        )}
+      </Card>
 
       {/* Backup & Restore */}
       <Card padding="1.5rem">

@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import ConfirmDialog from '../components/ConfirmDialog';
 import Spinner from '../components/Spinner';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -79,6 +80,7 @@ function statusPill(status: string) {
     'on track':  { bg: 'var(--color-success)', color: '#fff' },
     'behind':    { bg: 'var(--color-warning)', color: '#fff' },
     'at risk':   { bg: 'var(--color-error)',   color: '#fff' },
+    'no data':   { bg: 'var(--color-text-muted)', color: '#fff' },
   };
   const c = map[s] || { bg: 'var(--color-border)', color: 'var(--color-text)' };
   return (
@@ -106,6 +108,9 @@ export default function CouncilScorecardPage() {
   const [narrative, setNarrative] = useState<Narrative>({});
   const [versions, setVersions] = useState<VersionMeta[]>([]);
   const [viewingVersionId, setViewingVersionId] = useState<string | null>(null);
+  // Set when a save collides with an existing snapshot for the same period —
+  // holds the replace target so the prompt can offer Replace vs. Save-as-new.
+  const [pendingSave, setPendingSave] = useState<{ replaceId: string; period: string; savedAt: string } | null>(null);
 
   const canEdit = !!derived?.canEdit && !viewingVersionId;
 
@@ -152,16 +157,38 @@ export default function CouncilScorecardPage() {
     } catch { addToast('error', 'Failed to open that version.'); }
   };
 
-  const publish = async () => {
+  // Save the current view as a snapshot. `replaceId` overwrites an existing
+  // same-period version in place; otherwise a fresh version (new id +
+  // timestamp) is created.
+  const doPublish = async (replaceId?: string) => {
     if (!activeOrgId || !derived) return;
     setSaving(true);
     try {
-      await apiClient.post('/council-scorecard', { orgId: activeOrgId, period: derived.period, overrides, narrative });
-      addToast('success', `Published the ${derived.period} scorecard.`);
+      await apiClient.post('/council-scorecard', {
+        orgId: activeOrgId,
+        period: derived.period,
+        overrides,
+        narrative,
+        ...(replaceId ? { replaceId } : {}),
+      });
+      addToast('success', replaceId
+        ? `Replaced the ${derived.period} scorecard snapshot.`
+        : `Saved the ${derived.period} scorecard snapshot.`);
+      setPendingSave(null);
       setEditing(false);
       loadVersions();
-    } catch { addToast('error', 'Failed to publish. You may not have permission.'); }
+    } catch { addToast('error', 'Failed to save. You may not have permission.'); }
     finally { setSaving(false); }
+  };
+
+  // Entry point for both the one-click "Save snapshot" and the edit-mode
+  // "Publish snapshot". If a snapshot for this period already exists, prompt to
+  // replace it or keep both; otherwise save straight away.
+  const attemptSave = () => {
+    if (!derived) return;
+    const existing = versions.find((v) => v.period === derived.period);
+    if (existing) setPendingSave({ replaceId: existing.id, period: derived.period, savedAt: existing.createdAt });
+    else doPublish();
   };
 
   const oKey = (orgId: string, key: string) => `${orgId}.${key}`;
@@ -229,8 +256,9 @@ export default function CouncilScorecardPage() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {viewingVersionId && <Button variant="secondary" onClick={loadDerived}>Back to live</Button>}
             {canEdit && !editing && <Button variant="secondary" onClick={() => setEditing(true)}>Edit &amp; override</Button>}
+            {canEdit && !editing && <Button variant="primary" onClick={attemptSave} loading={saving}>Save snapshot</Button>}
             {canEdit && editing && <Button variant="secondary" onClick={cancelEdit} disabled={saving}>Cancel</Button>}
-            {canEdit && editing && <Button variant="primary" onClick={publish} loading={saving}>Publish snapshot</Button>}
+            {canEdit && editing && <Button variant="primary" onClick={attemptSave} loading={saving}>Publish snapshot</Button>}
           </div>
         )}
       />
@@ -292,7 +320,7 @@ export default function CouncilScorecardPage() {
                     <td style={tdR}>
                       {editing && canEdit ? (
                         <select value={resolvedStatus(row)} onChange={(e) => setOverride(row.orgId, 'status', e.target.value)} style={{ border: `1px solid ${isOverridden(row.orgId, 'status') ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 4, padding: '3px 6px', fontSize: 12, background: 'var(--color-surface)', color: 'var(--color-text)' }}>
-                          {['On track', 'Behind', 'At risk'].map((s) => <option key={s} value={s}>{s}</option>)}
+                          {['On track', 'Behind', 'At risk', 'No data'].map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       ) : statusPill(resolvedStatus(row))}
                     </td>
@@ -335,7 +363,7 @@ export default function CouncilScorecardPage() {
       <Card padding={18}>
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: 12 }}>Saved versions</div>
         {versions.length === 0 ? (
-          <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No versions saved yet. {canEdit ? 'Edit and publish a snapshot to keep a monthly record.' : ''}</div>
+          <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No versions saved yet. {canEdit ? 'Click Save snapshot to keep a monthly record.' : ''}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {versions.map((v) => (
@@ -348,6 +376,29 @@ export default function CouncilScorecardPage() {
           </div>
         )}
       </Card>
+
+      {/* Same-period save collision — let the editor replace the existing
+          snapshot or keep it and save an additional one (new id + timestamp). */}
+      <ConfirmDialog
+        open={!!pendingSave}
+        title="A snapshot for this period already exists"
+        message={pendingSave
+          ? `A ${pendingSave.period} snapshot was already saved on ${new Date(pendingSave.savedAt).toLocaleDateString()}. Replace it with the current view, or keep it and save this as a new snapshot?`
+          : ''}
+        confirmLabel="Replace existing"
+        variant="primary"
+        onConfirm={() => { if (pendingSave) doPublish(pendingSave.replaceId); }}
+        onCancel={() => setPendingSave(null)}
+      >
+        <button
+          type="button"
+          onClick={() => doPublish()}
+          disabled={saving}
+          style={{ width: '100%', marginBottom: 16, padding: '8px 16px', fontSize: '0.875rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', color: 'var(--color-text)', cursor: saving ? 'wait' : 'pointer', fontWeight: 500 }}
+        >
+          Save as a new snapshot
+        </button>
+      </ConfirmDialog>
     </div>
   );
 }
