@@ -486,7 +486,6 @@ export default function ProcessCatalogPage() {
   const [bulkStatusValue, setBulkStatusValue] = useState('');
   const [bulkOwnerOpen, setBulkOwnerOpen] = useState(false);
   const [bulkOwnerValue, setBulkOwnerValue] = useState('');
-  const [confirmGovTemplate, setConfirmGovTemplate] = useState(false);
   const [allTags, setAllTags] = useState<TagEntry[]>([]);
   const [peopleList, setPeopleList] = useState<PersonRef[]>([]);
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
@@ -1208,7 +1207,7 @@ export default function ProcessCatalogPage() {
                       : 'Generate governance processes'
                   }
                   disabled={tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))}
-                  onClick={() => setConfirmGovTemplate(true)}
+                  onClick={() => navigate('/processes/wizard?mode=governance')}
                 />
               )}
               {totalNodes > 0 && (
@@ -1238,23 +1237,6 @@ export default function ProcessCatalogPage() {
           least one Process and one Activity exist underneath.
         </HelpPopover>
       </PageHeader>
-
-      <ConfirmDialog
-        open={confirmGovTemplate}
-        title="Generate Governance Processes?"
-        message="This will create a 'Data Governance Management' value stream with 6 processes and 31 activities, each with DAMA-aligned roles, inputs, and outputs. You can customize everything after creation."
-        confirmLabel="Generate"
-        variant="primary"
-        onConfirm={async () => {
-          setConfirmGovTemplate(false);
-          try {
-            const res = await apiClient.post<{ success: boolean; message?: string }>('/process-catalog/apply-governance-template', { orgId: activeOrgId || undefined });
-            addToast('success', res.message || 'Governance processes created');
-            fetchData();
-          } catch { addToast('error', 'Failed to generate governance processes'); }
-        }}
-        onCancel={() => setConfirmGovTemplate(false)}
-      />
 
       {/* Org restriction notice */}
       {!activeOrgId && (

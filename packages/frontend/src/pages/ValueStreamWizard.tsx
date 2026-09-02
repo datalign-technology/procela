@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import { INDUSTRIES } from '../types';
 import { apiClient } from '../api/client';
@@ -53,6 +53,15 @@ interface GeneratedTemplate { valueStreams: TemplateValueStream[]; }
 
 export default function ValueStreamWizard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Governance mode: the "Generate governance processes" wand on the
+  // Process Catalog routes here with ?mode=governance. Instead of the
+  // AI Industry → Generate steps, it loads the standard (static) DAMA
+  // governance hierarchy from the backend and drops the user straight
+  // onto the same Review & Apply screen the operational wizard uses —
+  // so the two flows look and feel identical. Governance is static, so
+  // this path never touches the AI endpoints and isn't gated on AI.
+  const isGovernance = searchParams.get('mode') === 'governance';
   const aiEnabled = useAiEnabled();
   const { activeOrgId, activeOrgName, activeOrgType, setActiveOrg } = useOrgContext();
   // parentName / divisions / blocked all come from the shared scope
@@ -78,6 +87,12 @@ export default function ValueStreamWizard() {
   // during Generate — divided by ESTIMATED_TEMPLATE_CHARS and
   // clamped to 0..0.95 until the `done` event arrives.
   const [progressChars, setProgressChars] = useState(0);
+  // Governance mode state: whether a governance program already exists
+  // at the company (apply would be a no-op then), the company name it
+  // lands under, and a small loading flag while the preview is fetched.
+  const [govExists, setGovExists] = useState(false);
+  const [govCompanyName, setGovCompanyName] = useState('');
+  const [govLoading, setGovLoading] = useState(false);
 
   // Check existing value stream count to warn about duplicates
   useEffect(() => {
@@ -243,6 +258,29 @@ export default function ValueStreamWizard() {
 
   // No auto-generate — user must explicitly click Generate
 
+  // Governance mode: fetch the standard governance hierarchy preview and
+  // drop it straight into the Review screen. No AI, no Industry/Generate
+  // steps — the operational wizard's Review & Apply UI is reused verbatim.
+  useEffect(() => {
+    if (!isGovernance) return;
+    let cancelled = false;
+    setGovLoading(true);
+    setError('');
+    const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
+    apiClient
+      .get<{ success: boolean; data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] }; companyName?: string; exists?: boolean }>(`/process-catalog/governance-template${qp}`)
+      .then((res) => {
+        if (cancelled) return;
+        setGovExists(!!res.exists);
+        setGovCompanyName(res.companyName || '');
+        setTemplate({ valueStreams: res.data.valueStreams.map((vs) => ({ ...vs, selected: true })) });
+        setExpandedStreams(new Set([0]));
+      })
+      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load the governance template.'); })
+      .finally(() => { if (!cancelled) setGovLoading(false); });
+    return () => { cancelled = true; };
+  }, [isGovernance, activeOrgId]);
+
   const toggleStream = (idx: number) => {
     setExpandedStreams((prev) => { const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next; });
   };
@@ -264,6 +302,16 @@ export default function ValueStreamWizard() {
     setApplying(true);
     setError('');
     try {
+      if (isGovernance) {
+        // The backend owns the governance hierarchy (static template),
+        // so we don't post the reviewed nodes back — we just trigger the
+        // apply for this company. It creates the value stream, processes,
+        // AND activities in one shot and is idempotent.
+        const res = await apiClient.post<{ success: boolean; message?: string }>('/process-catalog/apply-governance-template', { orgId: activeOrgId || undefined });
+        addToast('success', res.message || 'Governance processes created');
+        navigate('/processes');
+        return;
+      }
       const selectedStreams = template.valueStreams.filter((vs) => vs.selected).map(({ selected: _, ...rest }) => rest);
       await apiClient.post('/process-catalog/apply-template', { industry, valueStreams: selectedStreams, orgId: activeOrgId || undefined });
       addToast('success', `Applied ${selectedStreams.length} value stream${selectedStreams.length === 1 ? '' : 's'}`);
@@ -283,7 +331,7 @@ export default function ValueStreamWizard() {
   // The Process Wizard is an AI-only flow (it generates the hierarchy with
   // Claude). When AI integration features are turned off, there's nothing to
   // run here — point the user at the manual path instead of a dead form.
-  if (!aiEnabled) {
+  if (!aiEnabled && !isGovernance) {
     return (
       <Page>
         <PageHeader title="Process Wizard" subtitle="Generate a process hierarchy" />
@@ -305,22 +353,43 @@ export default function ValueStreamWizard() {
     <Page>
       {/* Header */}
       <PageHeader
-        title={activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}
-        subtitle="AI generates a complete process hierarchy (Value Streams → Processes → Activities) based on your industry."
+        title={
+          isGovernance
+            ? (activeOrgName ? `Governance Process Wizard — ${activeOrgName}` : 'Governance Process Wizard')
+            : (activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard')
+        }
+        subtitle={
+          isGovernance
+            ? 'Review the standard data-governance program (Value Stream → Processes → Activities), then apply it to your catalog.'
+            : 'AI generates a complete process hierarchy (Value Streams → Processes → Activities) based on your industry.'
+        }
         actions={<Button variant="secondary" onClick={() => navigate('/processes')}>Back to Processes</Button>}
       />
 
       {/* Step bar. The Generate step's active fill is driven by the
           same char count that feeds the big progress bar below when
-          loading — that way the two indicators can't disagree. */}
+          loading — that way the two indicators can't disagree.
+          Governance skips Industry/Generate (it's a static template),
+          so it runs a two-step Review → Apply bar. */}
       <WizardProgress
-        steps={['Industry', 'Generate', 'Review', 'Apply']}
-        current={applying ? 3 : template ? 2 : loading ? 1 : 0}
-        activeFill={loading ? Math.min(0.95, progressChars / ESTIMATED_TEMPLATE_CHARS) : undefined}
+        steps={isGovernance ? ['Review', 'Apply'] : ['Industry', 'Generate', 'Review', 'Apply']}
+        current={isGovernance ? (applying ? 1 : 0) : (applying ? 3 : template ? 2 : loading ? 1 : 0)}
+        activeFill={!isGovernance && loading ? Math.min(0.95, progressChars / ESTIMATED_TEMPLATE_CHARS) : undefined}
       />
 
+      {/* Governance context banner — replaces the industry/scope chrome.
+          Governance always lands at the company level, so it works even
+          when this org is a division or a below-value-stream tier. */}
+      {isGovernance && (
+        <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', marginBottom: 16, fontSize: 13, lineHeight: 1.55 }}>
+          <span style={{ color: 'var(--color-text-secondary)' }}>Governance processes are created once at the company level</span>
+          {govCompanyName && <> — under <strong>{govCompanyName}</strong></>}
+          <span style={{ color: 'var(--color-text-secondary)' }}>. This is the enterprise-wide program, shared across every division.</span>
+        </div>
+      )}
+
       {/* Warning banner when existing value streams exist */}
-      {existingCount > 0 && (
+      {!isGovernance && existingCount > 0 && (
         <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 'var(--radius-md)', padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>
           <strong style={{ color: '#92400e' }}>Heads up:</strong>{' '}
           <span style={{ color: '#92400e' }}>
@@ -332,7 +401,7 @@ export default function ValueStreamWizard() {
       {/* Active-org context banner. Always visible on the wizard so
           "which org am I about to plant a catalog under" is never
           guessed from the header chrome. */}
-      {activeOrgName && (
+      {!isGovernance && activeOrgName && (
         <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', marginBottom: blocked ? 12 : 16, fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <span style={{ color: 'var(--color-text-secondary)' }}>Generating processes for </span>
@@ -361,7 +430,7 @@ export default function ValueStreamWizard() {
           Division names render as one-click chips that switch the
           active org without forcing the user back to the header
           dropdown. */}
-      {isCompanyWithDivisions && (
+      {!isGovernance && isCompanyWithDivisions && (
         <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, lineHeight: 1.55 }}>
           <div style={{ color: '#991b1b', fontWeight: 600, marginBottom: 4 }}>Pick a division first.</div>
           <div style={{ color: '#7f1d1d' }}>
@@ -391,7 +460,7 @@ export default function ValueStreamWizard() {
           tier (department, team, …). VALUE_STREAM_LEVELS is the
           single source of truth for which org types can host
           streams. */}
-      {wrongLevel && (
+      {!isGovernance && wrongLevel && (
         <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, lineHeight: 1.55 }}>
           <div style={{ color: '#991b1b', fontWeight: 600, marginBottom: 4 }}>This level can't host value streams.</div>
           <div style={{ color: '#7f1d1d' }}>
@@ -400,8 +469,28 @@ export default function ValueStreamWizard() {
         </div>
       )}
 
+      {/* Governance: loading the standard hierarchy preview */}
+      {isGovernance && govLoading && !template && (
+        <Card radius="lg" padding={24} style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 14 }}>
+          Loading the standard governance program…
+        </Card>
+      )}
+
+      {/* Governance: a program already exists at this company — apply
+          would be a no-op, so point the user at the catalog instead. */}
+      {isGovernance && govExists && !govLoading && (
+        <Card radius="lg" padding={24}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Governance program already exists</h2>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
+            A governance process hierarchy is already planted{govCompanyName ? <> at <strong>{govCompanyName}</strong></> : ''}. To
+            regenerate it, delete the existing <em>Data Governance Management</em> value stream on the Process Catalog first.
+          </p>
+          <Button variant="primary" onClick={() => navigate('/processes')}>Go to Process Catalog</Button>
+        </Card>
+      )}
+
       {/* Step 1: Industry + Generate */}
-      {!template && !loading && (
+      {!isGovernance && !template && !loading && (
         <Card radius="lg" padding={24}>
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
             {orgIndustry ? 'Generate Process Hierarchy' : 'Select Industry'}
@@ -463,7 +552,7 @@ export default function ValueStreamWizard() {
           event lands so an overshoot doesn't stall at 100%. Cache
           hits skip this state entirely (they land straight in the
           review screen). */}
-      {loading && (() => {
+      {!isGovernance && loading && (() => {
         const rawFill = progressChars / ESTIMATED_TEMPLATE_CHARS;
         const displayFill = Math.min(0.95, rawFill);
         const pct = Math.round(displayFill * 100);
@@ -498,7 +587,7 @@ export default function ValueStreamWizard() {
       })()}
 
       {/* Step 2: Review & Apply (combined preview + confirm) */}
-      {template && !loading && (
+      {template && !loading && !(isGovernance && govExists) && (
         <Card radius="lg" padding={24}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
@@ -530,6 +619,20 @@ export default function ValueStreamWizard() {
                     Specialised: {templateSource.specializedFor}
                   </StatusBadge>
                 )}
+                {isGovernance && (
+                  <span
+                    title="The standard DAMA-aligned data-governance program. It's the same for every organization, so it's a fixed template rather than an AI generation."
+                    style={{
+                      padding: '1px 8px', borderRadius: 999,
+                      fontSize: 10, fontWeight: 600,
+                      background: 'var(--color-primary-light)', color: 'var(--color-primary)',
+                      border: '1px solid var(--color-primary)',
+                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}
+                  >
+                    Standard framework
+                  </span>
+                )}
               </h2>
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                 {selectedCount} value streams, {totalProcesses} processes, {totalActivities} activities selected
@@ -544,18 +647,23 @@ export default function ValueStreamWizard() {
                   again (same input, same output). "Regenerate from
                   AI" forces a fresh Claude call and replaces the
                   cached entry server-side. Two buttons because the
-                  cost / latency difference matters. */}
-              <Button variant="secondary" size="sm" onClick={() => { setTemplate(null); setTemplateSource(null); }}>
-                Regenerate
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handleGenerate(orgIndustry || industry, true)}
-                title="Bypass the cache and ask Claude for a fresh template. Replaces the stored version for this industry."
-              >
-                Regenerate from AI
-              </Button>
+                  cost / latency difference matters. Governance is a
+                  fixed template, so neither applies there. */}
+              {!isGovernance && (
+                <>
+                  <Button variant="secondary" size="sm" onClick={() => { setTemplate(null); setTemplateSource(null); }}>
+                    Regenerate
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleGenerate(orgIndustry || industry, true)}
+                    title="Bypass the cache and ask Claude for a fresh template. Replaces the stored version for this industry."
+                  >
+                    Regenerate from AI
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 

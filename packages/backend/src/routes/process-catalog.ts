@@ -1678,38 +1678,14 @@ router.post('/apply-template', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /apply-governance-template — create a standard data governance
- * process hierarchy. Unlike business processes (which are industry-specific
- * and AI-generated), governance processes are universal and use a static
- * template. Idempotent — skips if governance value streams already exist.
- */
-router.post('/apply-governance-template', async (req: Request, res: Response) => {
-  const { orgId: requestOrgId } = req.body;
-
-  // Always create governance processes at the company level — governance
-  // is an enterprise function, not per-division. Walk up from the
-  // requested org to find the root company.
-  let companyOrgId = requestOrgId || DEV_ORG_ID;
-  const knownOrgs = getCachedOrgList();
-  let current = knownOrgs.find((o) => o.id === companyOrgId);
-  while (current?.parentId) {
-    current = knownOrgs.find((o) => o.id === current!.parentId);
-    if (current) companyOrgId = current.id;
-  }
-  const templateOrgId = companyOrgId;
-
-  // Check if governance processes already exist anywhere in the company
-  const existing = nodeSource().filter((n) =>
-    n.level === 'VALUE_STREAM' && n.orgId === templateOrgId && isGovernanceNode(n),
-  );
-  if (existing.length > 0) {
-    const companyName = knownOrgs.find((o) => o.id === templateOrgId)?.name || templateOrgId;
-    res.json({ success: true, data: [], message: `Governance processes already exist at ${companyName}. Delete them to regenerate.` });
-    return;
-  }
-
-  const template = [
+// The standard, DAMA-aligned data-governance process hierarchy. Unlike
+// operational value streams (which are industry-specific and AI-generated),
+// the governance program is universal, so it's a static template rather
+// than a Claude call. Kept at module scope as the SINGLE source of truth
+// for both the preview (GET /governance-template, which feeds the wizard's
+// Review screen) and the apply (POST /apply-governance-template) — so the
+// hierarchy a user reviews is exactly the hierarchy that gets created.
+const GOVERNANCE_TEMPLATE = [
     {
       name: 'Data Governance Management',
       description: 'Enterprise-wide data governance strategy, policies, standards, and oversight',
@@ -1791,6 +1767,84 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
       ],
     },
   ];
+
+/**
+ * Build the wizard-facing preview of the governance hierarchy. Returns the
+ * same `{ valueStreams: [...] }` shape the operational (AI) template endpoint
+ * produces, so the Process Wizard's Review screen renders governance
+ * identically — value stream → processes → activities.
+ */
+function buildGovernancePreview() {
+  return {
+    valueStreams: GOVERNANCE_TEMPLATE.map((vs) => ({
+      name: vs.name,
+      description: vs.description,
+      purpose: vs.purpose,
+      businessOutcome: vs.businessOutcome,
+      processes: vs.processes.map((p) => ({
+        name: p.name,
+        description: p.description,
+        purpose: p.purpose,
+        activities: p.activities.map((a) => ({
+          name: a.name,
+          description: a.description,
+          responsibleRole: (a as { responsibleRole?: string }).responsibleRole,
+          inputsOutputs: (a as { inputsOutputs?: string }).inputsOutputs,
+        })),
+      })),
+    })),
+  };
+}
+
+// Resolve the enterprise (company-root) org for governance by walking up
+// from the requested org. Governance is an enterprise function, so it
+// always lands at the company level, never per-division. Also reports
+// whether a governance program is already planted there.
+function resolveGovernanceCompanyOrg(requestOrgId?: string): { templateOrgId: string; companyName: string; exists: boolean } {
+  let companyOrgId = requestOrgId || DEV_ORG_ID;
+  const knownOrgs = getCachedOrgList();
+  let current = knownOrgs.find((o) => o.id === companyOrgId);
+  while (current?.parentId) {
+    current = knownOrgs.find((o) => o.id === current!.parentId);
+    if (current) companyOrgId = current.id;
+  }
+  const exists = nodeSource().some((n) =>
+    n.level === 'VALUE_STREAM' && n.orgId === companyOrgId && isGovernanceNode(n),
+  );
+  const companyName = knownOrgs.find((o) => o.id === companyOrgId)?.name || companyOrgId;
+  return { templateOrgId: companyOrgId, companyName, exists };
+}
+
+/**
+ * GET /governance-template — preview the standard governance hierarchy
+ * without creating anything. Feeds the Process Wizard's Review screen so the
+ * governance flow looks and behaves like the operational one: review the
+ * value stream → processes → activities, then Apply. `exists` tells the
+ * wizard whether a governance program is already planted at the company.
+ */
+router.get('/governance-template', (req: Request, res: Response) => {
+  const requestOrgId = typeof req.query.orgId === 'string' ? req.query.orgId : undefined;
+  const { templateOrgId, companyName, exists } = resolveGovernanceCompanyOrg(requestOrgId);
+  res.json({ success: true, data: buildGovernancePreview(), templateOrgId, companyName, exists });
+});
+
+/**
+ * POST /apply-governance-template — create a standard data governance
+ * process hierarchy. Unlike business processes (which are industry-specific
+ * and AI-generated), governance processes are universal and use a static
+ * template. Idempotent — skips if governance value streams already exist.
+ */
+router.post('/apply-governance-template', async (req: Request, res: Response) => {
+  const { orgId: requestOrgId } = req.body;
+
+  // Always create governance processes at the company level.
+  const { templateOrgId, companyName, exists } = resolveGovernanceCompanyOrg(requestOrgId);
+  if (exists) {
+    res.json({ success: true, data: [], message: `Governance processes already exist at ${companyName}. Delete them to regenerate.` });
+    return;
+  }
+
+  const template = GOVERNANCE_TEMPLATE;
 
   const created: ProcessNode[] = [];
   const now = new Date().toISOString();
@@ -1922,7 +1976,6 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
     logger.error({ err }, 'Failed to seed governance documents (non-fatal)');
   }
   logger.info({ created: created.length, orgId: templateOrgId }, 'Applied governance process template');
-  const companyName = getCachedOrgList().find((o) => o.id === templateOrgId)?.name || '';
   res.status(201).json({ success: true, data: created, message: `Created ${created.length} governance process nodes at ${companyName} (company level)` });
 });
 
