@@ -1,5 +1,5 @@
 // SearchInput — the shared free-text filter box used across the Data Assets
-// hub tabs (Registry / Quality / Rules) so they look and behave identically.
+// hub tabs (Registry / Rules / Quality) so they look and behave identically.
 // A plain controlled text input styled from tokens, with a clear (×) button
 // that appears once there's a value. Filtering stays the caller's job — this
 // only owns the input affordance.

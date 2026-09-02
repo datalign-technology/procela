@@ -618,7 +618,7 @@ today but coupled to the palette going forward.
 ### `<SearchInput>`
 
 The free-text list-filter box shared across the Data Assets hub tabs
-(Registry / Quality / Rules) so they look and behave identically. A
+(Registry / Rules / Quality) so they look and behave identically. A
 token-styled controlled text input with a clear (`×`) button that
 appears once there's a value. Filtering stays the caller's job — this
 only owns the input affordance. Do NOT hand-roll a bare
