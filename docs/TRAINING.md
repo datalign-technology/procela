@@ -1027,6 +1027,13 @@ classified assets, and no open issues or exceptions — shows a neutral
 **No data** status rather than being flagged **Behind**, so an
 un-started division doesn't read as a failing one.
 
+The four thresholds the scorecard grades against (coverage %,
+classification %, max aged open issues, max past-expiry exceptions, and
+the open-issue age in days) ship with defaults of 80 / 70 / 0 / 0 / 30.
+An org admin can tune them under **Settings → Data → Council Scorecard
+targets**; the change re-derives the live scorecard on its next load,
+while already-saved snapshots keep the targets they were frozen with.
+
 To feed the *Exceptions past expiry* measure, visit **Governance →
 Operate → Exceptions** and grant a waiver with an expiry date in the
 past — it flags red on that page and increments the exceptions column

@@ -110,6 +110,26 @@ describe('Council Scorecard', () => {
     assert.deepStrictEqual(d.targets, { coverage: 80, classification: 70, openIssues: 0, exceptions: 0, openIssuesDays: 30 });
   });
 
+  it('honours per-tenant scorecard targets when set on the scoped org', async () => {
+    const admin = { id: 'u', role: 'ORG_ADMIN', email: 'a@x.com' };
+    // Division A on its own: coverage 100, classification 50, 0 issues/exceptions.
+    // Under the default classification target (70) that's "Behind"; lower the
+    // bar to 40 on divA and it should read "On track".
+    const before = (await req(port, 'GET', `/council-scorecard/derive?orgId=${divA}`, undefined, admin)).body.data;
+    assert.strictEqual(before.targets.classification, 70);
+    assert.strictEqual(before.enterprise.status, 'Behind');
+
+    const orgA = organizations.find((o: { id: string }) => o.id === divA)!;
+    (orgA as { scorecardTargets?: unknown }).scorecardTargets = { coverage: 80, classification: 40, openIssues: 0, exceptions: 0, openIssuesDays: 30 };
+    try {
+      const after = (await req(port, 'GET', `/council-scorecard/derive?orgId=${divA}`, undefined, admin)).body.data;
+      assert.strictEqual(after.targets.classification, 40);   // custom target shipped in payload
+      assert.strictEqual(after.enterprise.status, 'On track'); // 50 >= 40 now clears the bar
+    } finally {
+      delete (orgA as { scorecardTargets?: unknown }).scorecardTargets;
+    }
+  });
+
   it('reports a neutral "No data" status for an empty division', async () => {
     const res = await req(port, 'GET', `/council-scorecard/derive?orgId=${parent}`, undefined, { id: 'u', role: 'ORG_ADMIN', email: 'a@x.com' });
     const c = res.body.data.divisions.find((r: any) => r.orgId === divC);

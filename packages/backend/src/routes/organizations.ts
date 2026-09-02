@@ -58,6 +58,11 @@ export interface StoredOrg {
    *  built-in set). Universal data-sensitivity tags (PII/PHI/…) are never
    *  gated by this. */
   activeSensitivityRegimes?: string[];
+  /** Per-tenant Council Scorecard thresholds. Undefined = use the shipped
+   *  defaults (coverage 80 / classification 70 / open issues 0 / exceptions 0
+   *  / open-issue age 30 days). Resolved by walking up to the first ancestor
+   *  that sets it, so a company can set the bar for its divisions. */
+  scorecardTargets?: { coverage: number; classification: number; openIssues: number; exceptions: number; openIssuesDays: number } | null;
   // Data-sync tracking — set by the sync engine when this row was created or
   // updated from a SyncConnection source. Soft reference; absent when unsynced.
   syncConnectionId?: string | null;
@@ -441,6 +446,28 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       org.activeSensitivityRegimes = [...new Set(raw.filter((r) => VALID_REGIMES.includes(r)))];
     } else {
       res.status(400).json({ success: false, error: 'activeSensitivityRegimes must be an array of regime codes.' });
+      return;
+    }
+  }
+  // Per-tenant Council Scorecard thresholds. Accepts the five-number object;
+  // null clears back to the shipped defaults. Percentages clamp to 0–100,
+  // counts to >= 0, and the open-issue age to >= 1 day.
+  if (req.body?.scorecardTargets !== undefined) {
+    const raw = req.body.scorecardTargets;
+    if (raw === null) {
+      org.scorecardTargets = null;
+    } else if (raw && typeof raw === 'object') {
+      const clampPct = (v: unknown, d: number) => Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Math.round(Number(v)))) : d;
+      const clampCount = (v: unknown, d: number) => Number.isFinite(Number(v)) ? Math.max(0, Math.round(Number(v))) : d;
+      org.scorecardTargets = {
+        coverage: clampPct(raw.coverage, 80),
+        classification: clampPct(raw.classification, 70),
+        openIssues: clampCount(raw.openIssues, 0),
+        exceptions: clampCount(raw.exceptions, 0),
+        openIssuesDays: Math.max(1, clampCount(raw.openIssuesDays, 30)),
+      };
+    } else {
+      res.status(400).json({ success: false, error: 'scorecardTargets must be an object of threshold numbers, or null.' });
       return;
     }
   }
