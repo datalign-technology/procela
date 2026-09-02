@@ -18,10 +18,13 @@ import DataQualityPage from './DataQualityPage';
 
 type HubTab = 'registry' | 'quality' | 'rules';
 
+// Order follows the setup flow and the data dependency: define assets on
+// Registry, author the checks on Rules, then read the resulting Quality —
+// Rules populate Quality, so the producer sits before the product.
 const TABS: { key: HubTab; label: string }[] = [
   { key: 'registry', label: 'Registry' },
-  { key: 'quality', label: 'Quality' },
   { key: 'rules', label: 'Rules' },
+  { key: 'quality', label: 'Quality' },
 ];
 
 function isHubTab(v: string | null): v is HubTab {
@@ -69,7 +72,7 @@ export default function DataAssetsHubPage() {
         <HelpPopover id="data-assets-hub-overview" title="Data assets">
           Define your data in business terms first ("Customer accounts",
           "Billing records") and bind each to where it lives on the
-          Registry tab. Quality and Rules track each asset's health via
+          Registry tab. Rules and Quality track each asset's health via
           quality rules that run on demand or on a schedule.
         </HelpPopover>
       </PageHeader>
