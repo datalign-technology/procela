@@ -940,11 +940,17 @@ The same data, different views — that's the Procela model.
 ### 10.1 Generate governance processes
 
 1. *Working in…* → **Tidewater Utilities** (parent company).
-2. **Processes** → **Generate governance processes** (separate wand
-   from the operational one).
-3. This creates a *governance* value stream alongside the operational
-   ones — Phase 1 Foundation, Phase 2 Design, Phase 3 People &
-   Process, Phase 4 Operationalisation.
+2. **Processes** → **Generate governance processes** (a separate wand
+   from the operational one). It opens the **Process Wizard** in
+   governance mode — the same Review & Apply screen the operational
+   wizard uses, but pre-loaded with the standard framework instead of
+   an AI generation.
+3. Review the hierarchy, then click **Apply … to Catalog**. It creates
+   a *governance* value stream alongside the operational ones —
+   **Data Governance Management**, with six processes (Data Strategy &
+   Policy, Data Quality Management, Data Domain Management, Metadata &
+   Catalog Management, Data Access & Security, Issue & Change
+   Management) and their 30 DAMA-aligned activities.
 
 Now switch **Working in…** back to **Tidewater Electric**. Notice
 two things: the governance value stream you just created
