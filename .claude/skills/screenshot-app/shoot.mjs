@@ -28,7 +28,12 @@ const page = await (await browser.newContext({ viewport: { width: 1360, height: 
 
 // Dev quick-login as the seeded Super Admin, and skip the onboarding wizard.
 await page.goto(FE + '/login', { waitUntil: 'networkidle' });
-await page.evaluate(() => localStorage.setItem('procela:onboarding-complete', 'true'));
+await page.evaluate(() => {
+  localStorage.setItem('procela:onboarding-complete', 'true');
+  // Suppress the first-run keyboard-shortcuts hint toast so it doesn't
+  // overlap page content in captures.
+  localStorage.setItem('procela:shortcuts-hint-dismissed', '1');
+});
 await page.getByRole('button', { name: /Eleanor Briggs/i }).click();
 await page.waitForFunction(() => !!localStorage.getItem('auth-storage'), null, { timeout: 15000 });
 const token = await page.evaluate(() => JSON.parse(localStorage.getItem('auth-storage')).state.accessToken);
