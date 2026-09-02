@@ -25,7 +25,7 @@ interface Row {
 interface Narrative { whatMoved?: string; forCouncil?: string; whatMovedAuto?: boolean; forCouncilAuto?: boolean }
 interface Derived {
   orgId: string; orgName: string; period: string;
-  targets: { coverage: number; classification: number };
+  targets: { coverage: number; classification: number; openIssues: number; exceptions: number; openIssuesDays: number };
   divisions: Row[]; enterprise: Row; narrative: Narrative; canEdit?: boolean;
 }
 interface VersionMeta { id: string; period: string; status: string; createdBy?: string; createdAt: string }
@@ -35,12 +35,25 @@ type Overrides = Record<string, number | string>;
 
 // Each measure links to the page where you act on it — like the dashboard
 // tiles and Gap Detection rows, the number is a hyperlink to its source.
-const MEASURES: Array<{ key: 'coverage' | 'classification' | 'openIssues' | 'exceptions'; label: string; sub: string; kind: 'pct' | 'count'; href: string; }> = [
-  { key: 'coverage',       label: 'Tier-1 coverage', sub: 'target 80%',            kind: 'pct',   href: '/data-domains' },
-  { key: 'classification', label: 'Classification',  sub: 'target 70%',            kind: 'pct',   href: '/data-assets' },
-  { key: 'openIssues',     label: 'Open issues',     sub: '>30d · target 0',       kind: 'count', href: '/governance-work?tab=issues' },
-  { key: 'exceptions',     label: 'Exceptions',      sub: 'past expiry · target 0', kind: 'count', href: '/governance-exceptions' },
+const MEASURES: Array<{ key: 'coverage' | 'classification' | 'openIssues' | 'exceptions'; label: string; kind: 'pct' | 'count'; href: string; }> = [
+  { key: 'coverage',       label: 'Tier-1 coverage', kind: 'pct',   href: '/data-domains' },
+  { key: 'classification', label: 'Classification',  kind: 'pct',   href: '/data-assets' },
+  { key: 'openIssues',     label: 'Open issues',     kind: 'count', href: '/governance-work?tab=issues' },
+  { key: 'exceptions',     label: 'Exceptions',      kind: 'count', href: '/governance-exceptions' },
 ];
+
+// The column-header subtitle for each measure, derived from the server's
+// targets so the printed thresholds always match the logic that colours the
+// bars and derives the status (no hardcoded "target 80%" to drift).
+type Targets = Derived['targets'];
+function measureSub(key: typeof MEASURES[number]['key'], t: Targets): string {
+  switch (key) {
+    case 'coverage':       return `target ${t.coverage}%`;
+    case 'classification': return `target ${t.classification}%`;
+    case 'openIssues':     return `>${t.openIssuesDays}d · target ${t.openIssues}`;
+    case 'exceptions':     return `past expiry · target ${t.exceptions}`;
+  }
+}
 
 // Friendly destination names for link tooltips.
 const MEASURE_DEST: Record<'coverage' | 'classification' | 'openIssues' | 'exceptions', string> = {
@@ -267,7 +280,7 @@ export default function CouncilScorecardPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
         {MEASURES.map((m) => {
           const val = resolved(ent, m.key);
-          const tgt = m.key === 'coverage' ? derived.targets.coverage : m.key === 'classification' ? derived.targets.classification : 0;
+          const tgt = derived.targets[m.key];
           return (
             <Link
               key={m.key}
@@ -286,7 +299,7 @@ export default function CouncilScorecardPage() {
                   {val == null ? '—' : `${val}${m.kind === 'pct' ? '%' : ''}`}
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                  {m.kind === 'pct' ? `Target ${tgt}%` : 'Target 0'}
+                  {m.kind === 'pct' ? `Target ${tgt}%` : `Target ${tgt}`}
                 </div>
               </Card>
             </Link>
@@ -302,7 +315,7 @@ export default function CouncilScorecardPage() {
               <tr>
                 <th style={thL}>Division</th>
                 <th style={thR}>Domains<div style={thSub}>governed · context</div></th>
-                {MEASURES.map((m) => <th key={m.key} style={thR}>{m.label}<div style={thSub}>{m.sub}</div></th>)}
+                {MEASURES.map((m) => <th key={m.key} style={thR}>{m.label}<div style={thSub}>{measureSub(m.key, derived.targets)}</div></th>)}
                 <th style={thR}>Status<div style={thSub}>derived</div></th>
               </tr>
             </thead>

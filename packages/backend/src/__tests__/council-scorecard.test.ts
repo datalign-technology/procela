@@ -106,6 +106,8 @@ describe('Council Scorecard', () => {
     assert.strictEqual(d.enterprise.exceptions, 1);
     assert.strictEqual(d.canEdit, true);           // ORG_ADMIN can edit
     assert.ok(d.narrative.whatMoved && d.narrative.forCouncil);
+    // All four thresholds ship in one payload so the UI labels can't drift.
+    assert.deepStrictEqual(d.targets, { coverage: 80, classification: 70, openIssues: 0, exceptions: 0, openIssuesDays: 30 });
   });
 
   it('reports a neutral "No data" status for an empty division', async () => {

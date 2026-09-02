@@ -1013,10 +1013,19 @@ council").
    any measure or rewrite a narrative. An overridden cell keeps the
    machine value underneath and is marked, so the council can see what
    was adjusted; **Reset** puts it back to derived.
-2. Click **Publish snapshot** to freeze this month as an immutable
-   version. The version-history panel reopens any past month read-only —
-   that's your historical reference for how governance moved
+2. Click **Save snapshot** to freeze this month as an immutable
+   version — one click from the read-only view, or **Publish snapshot**
+   from inside Edit. If a snapshot for this period already exists,
+   Procela asks whether to **Replace existing** (overwrite that version
+   in place) or **Save as a new snapshot** (keep both as separate dated
+   versions). The version-history panel reopens any past month
+   read-only — that's your historical reference for how governance moved
    quarter over quarter.
+
+A division with nothing to assess yet — no governed domains, no
+classified assets, and no open issues or exceptions — shows a neutral
+**No data** status rather than being flagged **Behind**, so an
+un-started division doesn't read as a failing one.
 
 To feed the *Exceptions past expiry* measure, visit **Governance →
 Operate → Exceptions** and grant a waiver with an expiry date in the

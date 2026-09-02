@@ -16,6 +16,8 @@ If a file referenced by the markdown is missing, the guide renders a striped pla
 | `connectors-panel.png` | 6. Systems → On-prem connectors | Settings → On-prem connectors panel with at least one paired connector row. Status chip green (Online), systems column populated, "Add connector" button visible in the header. Empty-state also OK — it just tells a different story. |
 | `connector-pairing.png` | 6. Systems → On-prem connectors | The pairing-code modal after clicking "Add connector" and hitting Generate. The eight-digit code should dominate visually; the `docker run` hint underneath should be readable. |
 | `chat-panel.png` | 10. Cross-cutting → Ask AI assistant | AI assistant chat panel opened on the right. A grounded question ("Where are our data gaps?" is a good one) and an answer that includes at least one clickable entity citation and a green pill-shaped **Open** navigation chip at the end. |
+| `council-scorecard.png` | Governance → Council Scorecard | Council Scorecard division table. Show the neutral **No data** status on divisions with nothing to assess yet and the **Save snapshot** button top-right. Tidewater Utilities fixture. |
+| `settings-data-tab.png` | Settings → Data tab | Settings on the **Data** tab. Lead with the **Data classification regimes** card (CUI / ITAR / Export-Controlled) at the top, then Backup & Restore, then Load demo data / Reset everything. Show the four-tab bar so the Data tab reads as selected. |
 
 ## Recommended shape
 
