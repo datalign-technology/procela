@@ -109,6 +109,11 @@ model Organization {
   // (subset of CUI / ITAR / EXPORT_CONTROLLED). Defaults to all three active
   // (back-compat with the built-in set); an explicit empty [] means none.
   activeSensitivityRegimes String[]   @default(["CUI", "ITAR", "EXPORT_CONTROLLED"])
+  // Per-tenant Council Scorecard thresholds: { coverage, classification,
+  // openIssues, exceptions, openIssuesDays }. Null = use the shipped defaults
+  // (80 / 70 / 0 / 0 / 30). Kept as a small JSON blob rather than five columns
+  // since it's read/written as one policy object and never queried by field.
+  scorecardTargets         Json?
   createdAt                DateTime   @default(now())
   updatedAt                DateTime   @updatedAt
 

@@ -21,6 +21,8 @@ import LoadDemoDataPanel from '../components/LoadDemoDataPanel';
 import { useAuthStore } from '@/stores/authStore';
 import { Link } from 'react-router-dom';
 import { useOrgContext } from '../stores/orgContext';
+import { useToastStore } from '../stores/toastStore';
+import SecondaryButton from '../components/SecondaryButton';
 import { useSetupStore, type GetStartedVisibility } from '@/stores/setupStore';
 
 interface AuthConfigData {
@@ -63,6 +65,18 @@ function backendToDisplayProvider(backendProvider: string, issuerUrl: string): D
 // Per-user concerns (display preferences, sign out) live in the
 // top-right user menu instead.
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ORG_ADMIN']);
+
+// Shipped Council Scorecard thresholds — the fallback when a tenant hasn't set
+// its own bar. Mirrors DEFAULT_TARGETS on the backend.
+type ScorecardTargets = { coverage: number; classification: number; openIssues: number; exceptions: number; openIssuesDays: number };
+const SCORECARD_TARGET_DEFAULTS: ScorecardTargets = { coverage: 80, classification: 70, openIssues: 0, exceptions: 0, openIssuesDays: 30 };
+const SCORECARD_TARGET_FIELDS: Array<{ key: keyof ScorecardTargets; label: string; unit: '%' | 'count' | 'days'; hint: string }> = [
+  { key: 'coverage',       label: 'Tier-1 coverage', unit: '%',     hint: 'Min share of Tier-1 domains with a named owner.' },
+  { key: 'classification', label: 'Classification',  unit: '%',     hint: 'Min share of data assets carrying a sensitivity classification.' },
+  { key: 'openIssues',     label: 'Open issues',     unit: 'count', hint: 'Max aged open issues before the division falls short.' },
+  { key: 'exceptions',     label: 'Exceptions',      unit: 'count', hint: 'Max past-expiry exceptions allowed.' },
+  { key: 'openIssuesDays', label: 'Open-issue age',  unit: 'days',  hint: 'How old (in days) an open issue must be to count.' },
+];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -118,6 +132,7 @@ export default function SettingsPage() {
   // move through their statuses — wrong page for the audience.
   // It's a one-time configuration so Settings is the right home.
   const { activeOrgId, activeOrgName } = useOrgContext();
+  const { addToast } = useToastStore();
   const [lifecycleMode, setLifecycleMode] = useState<'simple' | 'review' | 'advanced'>('simple');
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [confirmLifecycle, setConfirmLifecycle] = useState<'simple' | 'review' | 'advanced' | null>(null);
@@ -215,6 +230,58 @@ export default function SettingsPage() {
     } catch {
       setRegimes(prev);
     } finally { setRegimesBusy(false); }
+  };
+
+  // ── Council Scorecard targets (per-tenant) ──
+  // The thresholds the scorecard grades each division against. Unset on the
+  // org = shipped defaults. `saved` tracks what's persisted so we can show a
+  // dirty state and a reset-to-defaults affordance.
+  const [scorecardTargets, setScorecardTargets] = useState<ScorecardTargets>(SCORECARD_TARGET_DEFAULTS);
+  const [scorecardTargetsSaved, setScorecardTargetsSaved] = useState<ScorecardTargets>(SCORECARD_TARGET_DEFAULTS);
+  const [scorecardTargetsBusy, setScorecardTargetsBusy] = useState(false);
+  const [scorecardTargetsCustom, setScorecardTargetsCustom] = useState(false);
+  useEffect(() => {
+    if (!activeOrgId) return;
+    apiClient
+      .get<{ success: boolean; data: { scorecardTargets?: Partial<ScorecardTargets> | null } }>(`/organizations/${activeOrgId}`)
+      .then((res) => {
+        const t = res.data?.scorecardTargets;
+        const merged = t && typeof t === 'object' ? { ...SCORECARD_TARGET_DEFAULTS, ...t } : SCORECARD_TARGET_DEFAULTS;
+        setScorecardTargets(merged);
+        setScorecardTargetsSaved(merged);
+        setScorecardTargetsCustom(!!t && typeof t === 'object');
+      })
+      .catch(() => { /* leave defaults */ });
+  }, [activeOrgId]);
+  const scorecardTargetsDirty = SCORECARD_TARGET_FIELDS.some((f) => scorecardTargets[f.key] !== scorecardTargetsSaved[f.key]);
+  const setScorecardTarget = (key: keyof ScorecardTargets, value: number) =>
+    setScorecardTargets((p) => ({ ...p, [key]: value }));
+  const saveScorecardTargets = async () => {
+    if (!activeOrgId || scorecardTargetsBusy) return;
+    setScorecardTargetsBusy(true);
+    try {
+      const res = await apiClient.put<{ success: boolean; data: { scorecardTargets?: ScorecardTargets } }>(`/organizations/${activeOrgId}`, { scorecardTargets });
+      const saved = res.data?.scorecardTargets ?? scorecardTargets;
+      setScorecardTargets(saved);
+      setScorecardTargetsSaved(saved);
+      setScorecardTargetsCustom(true);
+      addToast('success', 'Scorecard targets saved.');
+    } catch {
+      addToast('error', 'Failed to save scorecard targets.');
+    } finally { setScorecardTargetsBusy(false); }
+  };
+  const resetScorecardTargets = async () => {
+    if (!activeOrgId || scorecardTargetsBusy) return;
+    setScorecardTargetsBusy(true);
+    try {
+      await apiClient.put(`/organizations/${activeOrgId}`, { scorecardTargets: null });
+      setScorecardTargets(SCORECARD_TARGET_DEFAULTS);
+      setScorecardTargetsSaved(SCORECARD_TARGET_DEFAULTS);
+      setScorecardTargetsCustom(false);
+      addToast('success', 'Scorecard targets reset to the shipped defaults.');
+    } catch {
+      addToast('error', 'Failed to reset scorecard targets.');
+    } finally { setScorecardTargetsBusy(false); }
   };
 
   // Auth settings state
@@ -937,6 +1004,48 @@ export default function SettingsPage() {
             No regulatory regimes are active — assets in this tenant can carry only the universal data-sensitivity tags.
           </p>
         )}
+      </Card>
+
+      {/* Council Scorecard targets — an org admin sets the thresholds the
+          scorecard grades divisions against. Unset on the org = the shipped
+          defaults; changes take effect on the next scorecard load (saved
+          snapshots keep the targets they were frozen with). */}
+      <Card padding="1.5rem" marginBottom="1.5rem">
+        <h2 style={sectionTitleStyle}>Council Scorecard targets</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+          The thresholds the <strong>{activeOrgName || 'this tenant'}</strong> Council Scorecard grades each division against. Keep the shipped defaults or set your council's own bar — the live scorecard re-derives against these on its next load. {scorecardTargetsCustom ? 'Custom targets are in effect.' : 'Using the shipped defaults.'}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+          {SCORECARD_TARGET_FIELDS.map((f) => (
+            <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{f.label}</span>
+                <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 1 }}>{f.hint}</span>
+              </span>
+              <input
+                type="number"
+                aria-label={f.label}
+                min={f.unit === 'days' ? 1 : 0}
+                max={f.unit === '%' ? 100 : undefined}
+                value={scorecardTargets[f.key]}
+                disabled={scorecardTargetsBusy}
+                onChange={(e) => setScorecardTarget(f.key, e.target.value === '' ? 0 : Number(e.target.value))}
+                style={{ width: 72, textAlign: 'right', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}
+              />
+              <span style={{ width: 34, fontSize: 12, color: 'var(--color-text-muted)' }}>{f.unit === '%' ? '%' : f.unit === 'days' ? 'days' : ''}</span>
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' }}>
+          <button
+            onClick={saveScorecardTargets}
+            disabled={!activeOrgId || scorecardTargetsBusy || !scorecardTargetsDirty}
+            style={{ padding: '0.5rem 1.25rem', background: (!scorecardTargetsDirty || scorecardTargetsBusy) ? 'var(--color-border)' : 'var(--color-primary)', color: (!scorecardTargetsDirty || scorecardTargetsBusy) ? 'var(--color-text-muted)' : '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: (!activeOrgId || scorecardTargetsBusy || !scorecardTargetsDirty) ? 'not-allowed' : 'pointer' }}
+          >
+            {scorecardTargetsBusy ? 'Saving…' : 'Save targets'}
+          </button>
+          <SecondaryButton onClick={resetScorecardTargets} disabled={!activeOrgId || scorecardTargetsBusy || !scorecardTargetsCustom}>Reset to defaults</SecondaryButton>
+        </div>
       </Card>
 
       {/* Backup & Restore */}

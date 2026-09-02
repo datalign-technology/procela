@@ -75,10 +75,38 @@ const issuesRepo = getGovernanceIssuesRepository(governanceIssues);
 const exceptionsRepo = getGovernanceExceptionsRepository(governanceExceptions);
 
 const TERMINAL_ISSUE_STATUSES = new Set(['RESOLVED', 'CLOSED', 'WONT_FIX']);
-// All four measure thresholds live here, in one place, and ship to the client
-// in the derived payload so the UI's target labels can't drift from the logic.
-// `openIssuesDays` is the age (in days) past which an open issue counts.
-const TARGETS = { coverage: 80, classification: 70, openIssues: 0, exceptions: 0, openIssuesDays: 30 };
+// All four measure thresholds in one shape. `openIssuesDays` is the age (in
+// days) past which an open issue counts. Resolved per-tenant (see
+// targetsForOrg) and shipped whole in the derived payload so the UI's target
+// labels can't drift from the logic.
+export interface ScorecardTargets {
+  coverage: number;
+  classification: number;
+  openIssues: number;
+  exceptions: number;
+  openIssuesDays: number;
+}
+
+// The shipped defaults, used when a tenant hasn't set its own bar.
+const DEFAULT_TARGETS: ScorecardTargets = { coverage: 80, classification: 70, openIssues: 0, exceptions: 0, openIssuesDays: 30 };
+
+// Resolve the thresholds for a scorecard scoped to `orgId`: walk up to the
+// first ancestor that has set `scorecardTargets` (so a company can set the bar
+// for its divisions), merging over the defaults so a partial stored object
+// still yields a complete set; fall back to the defaults when none is set.
+function targetsForOrg(orgId: string | undefined): ScorecardTargets {
+  if (!orgId) return { ...DEFAULT_TARGETS };
+  const orgs = getCachedOrgList();
+  let cur = orgs.find((o) => o.id === orgId);
+  const seen = new Set<string>();
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    const t = (cur as { scorecardTargets?: Partial<ScorecardTargets> | null }).scorecardTargets;
+    if (t && typeof t === 'object') return { ...DEFAULT_TARGETS, ...t };
+    cur = cur.parentId ? orgs.find((o) => o.id === cur!.parentId) : undefined;
+  }
+  return { ...DEFAULT_TARGETS };
+}
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ── Org tree helpers ──
@@ -114,7 +142,7 @@ interface Sources {
   now: number;
 }
 
-function computeMeasures(scope: Set<string>, s: Sources): Omit<DivisionRow, 'orgId' | 'name' | 'status'> {
+function computeMeasures(scope: Set<string>, s: Sources, targets: ScorecardTargets): Omit<DivisionRow, 'orgId' | 'name' | 'status'> {
   const domains = s.domains.filter((d) => scope.has(d.orgId));
   const tier1 = domains.filter((d) => d.criticality === 'TIER_1');
   const tier1Governed = tier1.filter((d) => !!d.ownerId).length;
@@ -123,7 +151,7 @@ function computeMeasures(scope: Set<string>, s: Sources): Omit<DivisionRow, 'org
   const openIssues = s.issues.filter((i) =>
     scope.has(i.orgId) &&
     !TERMINAL_ISSUE_STATUSES.has(i.status) &&
-    !!i.createdAt && (s.now - Date.parse(i.createdAt)) > TARGETS.openIssuesDays * DAY_MS,
+    !!i.createdAt && (s.now - Date.parse(i.createdAt)) > targets.openIssuesDays * DAY_MS,
   ).length;
   const exceptions = s.exceptions.filter((e) => scope.has(e.orgId) && isPastExpiry(e, s.now)).length;
   return {
@@ -138,7 +166,7 @@ function computeMeasures(scope: Set<string>, s: Sources): Omit<DivisionRow, 'org
 }
 
 /** Derived status from the four measures vs. targets. Overridable by editors. */
-function deriveStatus(m: Omit<DivisionRow, 'orgId' | 'name' | 'status'>): string {
+function deriveStatus(m: Omit<DivisionRow, 'orgId' | 'name' | 'status'>, targets: ScorecardTargets): string {
   // Nothing to assess yet — no governed domains, no tier-1 coverage
   // denominator, nothing classified, and no open issues or exceptions.
   // A brand-new / empty division has no governance health to report, so
@@ -151,17 +179,17 @@ function deriveStatus(m: Omit<DivisionRow, 'orgId' | 'name' | 'status'>): string
     m.exceptions === 0;
   if (noData) return 'No data';
   const good = [
-    m.coverage == null || m.coverage >= TARGETS.coverage,
-    m.classification == null || m.classification >= TARGETS.classification,
-    m.openIssues <= TARGETS.openIssues,
-    m.exceptions <= TARGETS.exceptions,
+    m.coverage == null || m.coverage >= targets.coverage,
+    m.classification == null || m.classification >= targets.classification,
+    m.openIssues <= targets.openIssues,
+    m.exceptions <= targets.exceptions,
   ].filter(Boolean).length;
   return good >= 4 ? 'On track' : good >= 2 ? 'Behind' : 'At risk';
 }
 
-function rowFor(orgId: string, name: string, scope: Set<string>, s: Sources): DivisionRow {
-  const m = computeMeasures(scope, s);
-  return { orgId, name, ...m, status: deriveStatus(m) };
+function rowFor(orgId: string, name: string, scope: Set<string>, s: Sources, targets: ScorecardTargets): DivisionRow {
+  const m = computeMeasures(scope, s, targets);
+  return { orgId, name, ...m, status: deriveStatus(m, targets) };
 }
 
 // ── Narrative auto-derivation (data trends / activity) ──
@@ -220,9 +248,12 @@ async function deriveScorecard(parentOrgId: string): Promise<DerivedScorecard> {
   const parent = orgs.find((o) => o.id === parentOrgId);
   const orgName = parent?.name || 'Enterprise';
 
-  const divisions = childDivisions(parentOrgId).map((c) => rowFor(c.id, c.name, subtreeOrgIds(c.id), s));
+  // One threshold set for the whole scorecard — a per-tenant policy resolved
+  // from the parent org (walking up to the first ancestor that sets it).
+  const targets = targetsForOrg(parentOrgId);
+  const divisions = childDivisions(parentOrgId).map((c) => rowFor(c.id, c.name, subtreeOrgIds(c.id), s, targets));
   const parentScope = subtreeOrgIds(parentOrgId);
-  const enterprise = rowFor(parentOrgId, orgName, parentScope, s);
+  const enterprise = rowFor(parentOrgId, orgName, parentScope, s, targets);
   const narr = autoNarrative(parentScope, s, enterprise);
 
   const d = new Date(now);
@@ -232,7 +263,7 @@ async function deriveScorecard(parentOrgId: string): Promise<DerivedScorecard> {
     orgId: parentOrgId,
     orgName,
     period,
-    targets: TARGETS,
+    targets,
     divisions,
     enterprise,
     narrative: { whatMoved: narr.whatMoved, forCouncil: narr.forCouncil, whatMovedAuto: true, forCouncilAuto: true },
