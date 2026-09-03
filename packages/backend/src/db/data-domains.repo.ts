@@ -42,6 +42,7 @@ type PrismaDomainRow = {
   ownerId: string | null;
   code?: string | null;
   parentDomainId?: string | null;
+  businessCapabilityId?: string | null;
   scopeDefinition: string | null;
   criticality?: string | null;
   status: string;
@@ -76,6 +77,7 @@ function fromPrisma(r: PrismaDomainRow): StoredDataDomain {
     dataAssetIds: (r.dataAssets ?? []).map((a) => a.id),
     ...(r.code ? { code: r.code } : {}),
     ...(r.parentDomainId !== undefined ? { parentDomainId: r.parentDomainId } : {}),
+    ...(r.businessCapabilityId !== undefined ? { businessCapabilityId: r.businessCapabilityId } : {}),
     ...(r.scopeDefinition ? { scopeDefinition: r.scopeDefinition } : {}),
     ...(r.criticality ? { criticality: r.criticality } : {}),
     status: r.status,
@@ -97,6 +99,7 @@ function toPrismaData(row: Partial<StoredDataDomain>): Record<string, unknown> {
   if (row.ownerId !== undefined) data.ownerId = row.ownerId;
   if (row.code !== undefined) data.code = row.code || null;
   if (row.parentDomainId !== undefined) data.parentDomainId = row.parentDomainId || null;
+  if (row.businessCapabilityId !== undefined) data.businessCapabilityId = row.businessCapabilityId || null;
   if (row.scopeDefinition !== undefined) data.scopeDefinition = row.scopeDefinition || null;
   if (row.criticality !== undefined) data.criticality = row.criticality || null;
   if (row.status !== undefined) data.status = row.status;

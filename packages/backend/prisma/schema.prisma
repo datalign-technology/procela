@@ -124,6 +124,7 @@ model Organization {
   processNodes         ProcessNode[]         @relation("ProcessNodeCanonicalOrg")
   processNodeOrgs      ProcessNodeOrg[]
   systems              System[]
+  businessCapabilities BusinessCapability[]
   dataDomains          DataDomain[]
   dataAssets           DataAsset[]
   dataAssetBindings    DataAssetBinding[]
@@ -200,17 +201,18 @@ model Person {
   orgLinks            PersonOrg[]
   personSkills        PersonSkill[]
   damaRoles           DamaRole[]
-  ownedNodes          ProcessNode[]       @relation("ProcessNodeOwner")
-  responsibleForNodes ProcessNode[]       @relation("ProcessNodeResponsible")
-  ownedSystems        System[]            @relation("SystemOwner")
-  deputySystems       System[]            @relation("SystemDeputyOwner")
-  custodianSystems    SystemCustodian[]   @relation("SystemCustodianM2M")
-  ownedDomains        DataDomain[]        @relation("DataDomainOwner")
+  ownedNodes          ProcessNode[]        @relation("ProcessNodeOwner")
+  responsibleForNodes ProcessNode[]        @relation("ProcessNodeResponsible")
+  ownedSystems        System[]             @relation("SystemOwner")
+  deputySystems       System[]             @relation("SystemDeputyOwner")
+  custodianSystems    SystemCustodian[]    @relation("SystemCustodianM2M")
+  ownedCapabilities   BusinessCapability[] @relation("BusinessCapabilityOwner")
+  ownedDomains        DataDomain[]         @relation("DataDomainOwner")
   domainStewards      DataDomainSteward[]
-  ownedAssets         DataAsset[]         @relation("DataAssetOwner")
-  dataAssetStewards   DataAssetSteward[]  @relation("DataAssetStewardM2M")
-  assignedTasks       GovernanceTask[]    @relation("GovernanceTaskAssignee")
-  assignedIssues      GovernanceIssue[]   @relation("GovernanceIssueAssignee")
+  ownedAssets         DataAsset[]          @relation("DataAssetOwner")
+  dataAssetStewards   DataAssetSteward[]   @relation("DataAssetStewardM2M")
+  assignedTasks       GovernanceTask[]     @relation("GovernanceTaskAssignee")
+  assignedIssues      GovernanceIssue[]    @relation("GovernanceIssueAssignee")
 
   // Data-sync tracking (soft reference to SyncConnection; see Organization).
   syncConnectionId String?
@@ -422,37 +424,70 @@ model SystemCustodian {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model DataDomain {
-  id              String           @id @default(uuid()) @db.Uuid
-  orgId           String           @db.Uuid
-  name            String
-  description     String?          @db.Text
-  ownerId         String?          @db.Uuid
+  id                   String           @id @default(uuid()) @db.Uuid
+  orgId                String           @db.Uuid
+  name                 String
+  description          String?          @db.Text
+  ownerId              String?          @db.Uuid
   // Human-readable governance code (e.g. "MFG" / "MFG-02"). Auto-suggested on
   // create, user-editable.
-  code            String?
+  code                 String?
   // Optional parent domain — turns a flat catalog into Domain → Sub-Domain.
   // Nesting is one level deep (enforced in the route layer). onDelete:
   // SetNull re-homes children to top-level if the parent is removed.
-  parentDomainId  String?          @db.Uuid
-  scopeDefinition String?          @db.Text
+  parentDomainId       String?          @db.Uuid
+  // Optional parent Business Capability — the grouping level ABOVE Data Domain
+  // (Business Capability → Data Domain → Sub-Domain). Only meaningful on
+  // top-level domains; a sub-domain inherits its capability from its parent.
+  // onDelete: SetNull re-homes domains to no-capability if the capability is
+  // removed.
+  businessCapabilityId String?          @db.Uuid
+  scopeDefinition      String?          @db.Text
   // Business-criticality tier (TIER_1 = council-critical). Drives the Council
   // Scorecard's tier-1 coverage measure; null = unclassified.
-  criticality     CriticalityTier?
-  status          String           @default("DRAFT")
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  criticality          CriticalityTier?
+  status               String           @default("DRAFT")
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  owner        Person?      @relation("DataDomainOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  parent       DataDomain?  @relation("DataDomainParent", fields: [parentDomainId], references: [id], onDelete: SetNull)
-  subDomains   DataDomain[] @relation("DataDomainParent")
+  organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner              Person?             @relation("DataDomainOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  parent             DataDomain?         @relation("DataDomainParent", fields: [parentDomainId], references: [id], onDelete: SetNull)
+  subDomains         DataDomain[]        @relation("DataDomainParent")
+  businessCapability BusinessCapability? @relation(fields: [businessCapabilityId], references: [id], onDelete: SetNull)
 
   stewards   DataDomainSteward[]
   dataAssets DataAsset[]
 
   @@index([orgId])
   @@index([parentDomainId])
+  @@index([businessCapabilityId])
   @@map("data_domains")
+}
+
+// Business Capability — the grouping level ABOVE Data Domain, completing the
+// canonical taxonomy Business Capability → Data Domain → Sub-Domain → Entity.
+// A capability is a data-side grouping (e.g. "Customer Management",
+// "Grid Operations") that gathers related data domains under one accountable
+// owner; it is distinct from the CAPABILITY level in the process tree.
+model BusinessCapability {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  name        String
+  description String?  @db.Text
+  ownerId     String?  @db.Uuid
+  // Human-readable code (e.g. "CUST"). Auto-suggested on create, editable.
+  code        String?
+  status      String   @default("DRAFT")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner        Person?      @relation("BusinessCapabilityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  dataDomains  DataDomain[]
+
+  @@index([orgId])
+  @@map("business_capabilities")
 }
 
 model DataDomainSteward {
