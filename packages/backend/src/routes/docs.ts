@@ -595,6 +595,53 @@ const openApiSpec = {
       },
     },
 
+    // ── Business Capabilities (the grouping level above Data Domain) ──
+    '/business-capabilities': {
+      get: {
+        summary: 'List all business capabilities (Capability → Domain → Sub-domain)',
+        tags: ['Business Capabilities'],
+        security: [{ bearerAuth: [] }],
+        responses: { '200': { description: 'Array of business capabilities' } },
+      },
+      post: {
+        summary: 'Create a new business capability',
+        tags: ['Business Capabilities'],
+        security: [{ bearerAuth: [] }],
+        responses: { '201': { description: 'Business capability created' } },
+      },
+    },
+    '/business-capabilities/{id}': {
+      get: {
+        summary: 'Get business capability by ID',
+        tags: ['Business Capabilities'],
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Business capability details' } },
+      },
+      put: {
+        summary: 'Update a business capability',
+        tags: ['Business Capabilities'],
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Business capability updated' } },
+      },
+      delete: {
+        summary: 'Delete a business capability (its domains become ungrouped)',
+        tags: ['Business Capabilities'],
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '204': { description: 'Business capability deleted' } },
+      },
+    },
+    '/business-capabilities/generate': {
+      post: {
+        summary: 'AI-suggest business capabilities for an industry (preview only)',
+        tags: ['Business Capabilities'],
+        security: [{ bearerAuth: [] }],
+        responses: { '200': { description: 'Array of suggested capabilities' } },
+      },
+    },
+
     // ── Dashboard ──
     '/dashboard/stats': {
       get: {
