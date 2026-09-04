@@ -548,6 +548,15 @@ Procela knows which system carries the canonical copy.
    domain — Reset to domain owner"* — a one-click undo if you
    change your mind.
 
+**Navigating the domain tree.** The left index nests each parent
+domain with its sub-domains indented beneath it. Once you've added
+sub-domains (or generated them with *Suggest sub-domains*), each
+parent with children shows a **▾/▸ caret** — click it to fold that
+branch, or use **Collapse all / Expand all** at the top of the index
+to tame a long catalog. The fold state is remembered per
+organization. Long domain and sub-domain names clip to one line and
+reveal the full label on hover, so the rows stay a uniform height.
+
 The domain assignments feed the Governance Groups page in Module 8.
 
 ### 4.4 The Data Asset 360 view — Sensitivity + Impact
