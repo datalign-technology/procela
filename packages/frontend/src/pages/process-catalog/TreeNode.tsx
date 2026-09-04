@@ -9,7 +9,7 @@ import FieldStack from '../../components/FieldStack';
 import SectionLabel from '../../components/SectionLabel';
 import Modal from '../../components/Modal';
 import {
-  InlineEdit, DocField, DocDropdown, TierField, RtoField,
+  InlineEdit, DocField, DocDropdown, TierField, RtoField, RpoField,
   ControlsPicker, DocPersonField, DocRoleField, DocMultiSelect,
   DocSystemsField,
 } from './DocFields';
@@ -20,7 +20,7 @@ import {
   LEVEL_CONFIG, statusColors,
   SIMPLE_TRANSITIONS, REVIEW_TRANSITIONS, ADVANCED_TRANSITIONS,
   SIMPLE_LOCKED, REVIEW_LOCKED, ADVANCED_LOCKED,
-  COMPLIANCE_OPTIONS, FREQUENCY_OPTIONS, RISK_OPTIONS,
+  COMPLIANCE_OPTIONS, FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS,
   countByLevel, hasRequiredPath, getRequiredNextLevel,
   type ProcessNode, type NodeLevel,
   type FlowRelationship, type TagEntry,
@@ -502,6 +502,19 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         onSave={(v) => onUpdate(node.id, { rtoHours: v })}
                         disabled={isLocked}
                       />
+                      {/* RPO — the BCM pair to RTO: how much data loss (in
+                          time) is tolerable if this activity fails. */}
+                      <RpoField
+                        value={node.rpoHours}
+                        onSave={(v) => onUpdate(node.id, { rpoHours: v })}
+                        disabled={isLocked}
+                      />
+                      {/* Trigger — what initiates the activity (complements the
+                          flow edges, which only give ordering). */}
+                      <DocDropdown label="Trigger" value={node.trigger || ''} options={TRIGGER_OPTIONS} onSave={(v) => onUpdate(node.id, { trigger: v })} disabled={isLocked} placeholder="What starts this?" />
+                      {/* Volume — processing scale/throughput; Frequency is
+                          cadence, this is how much. */}
+                      <DocField label="Volume" value={node.volume || ''} onSave={(v) => onUpdate(node.id, { volume: v })} disabled={isLocked} placeholder="Throughput, e.g. ~10k invoices/day" />
                       {/* Target / SLA — the former "Success Measure" and
                           "SLA Target" fields, merged: both expressed the same
                           "what does good look like" target. Stored in

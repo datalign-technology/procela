@@ -145,6 +145,11 @@ export interface ProcessNode {
    *  criticalityTier for BCM reports. Zero means "must never fail";
    *  undefined means "not set". */
   rtoHours?: number;
+  /** Recovery Point Objective in hours — how much data loss (measured
+   *  in time) is tolerable if this activity fails? The BCM pair to
+   *  `rtoHours`: RTO is "how fast to recover", RPO is "how much can we
+   *  lose". Zero means "no data loss tolerable"; undefined = not set. */
+  rpoHours?: number;
   /** Measurable success criterion — free-text, e.g. "Field crew on
    *  site within 30 minutes for Tier 1 outages". Complements the
    *  narrative `businessOutcome` with a target you can build a
@@ -154,6 +159,16 @@ export interface ProcessNode {
    *  "99.9% monthly" or "Same business day" without a schema war.
    *  Rendered next to `successMeasure` on the activity detail. */
   slaTarget?: string;
+  /** What initiates this activity — SCHEDULED / EVENT / UPSTREAM /
+   *  MANUAL / EXTERNAL_REQUEST. Complements the flow edges (which give
+   *  ordering) with the *kind* of trigger. Stored as a plain string
+   *  (like frequency/riskLevel) so the option set can grow without a
+   *  DB enum migration. */
+  trigger?: string;
+  /** Processing volume / throughput — free-text, e.g. "~10k invoices/
+   *  day". `frequency` captures cadence; this captures scale, which is
+   *  what actually drives criticality and sizing. */
+  volume?: string;
   /** Governance controls this activity implements or is subject to.
    *  IDs point at StoredGovernanceControl rows. Cascade: when a
    *  control is deleted, its id is swept from every activity's
@@ -727,7 +742,7 @@ router.post('/nodes', async (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
-    criticalityTier, rtoHours, successMeasure, slaTarget, controlIds } = req.body;
+    criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, controlIds } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -839,8 +854,11 @@ router.post('/nodes', async (req: Request, res: Response) => {
     // don't grow "" placeholders and pickers stay clean.
     ...(criticalityTier && CRITICALITY_TIERS.includes(criticalityTier) ? { criticalityTier } : {}),
     ...(typeof rtoHours === 'number' && rtoHours >= 0 ? { rtoHours } : {}),
+    ...(typeof rpoHours === 'number' && rpoHours >= 0 ? { rpoHours } : {}),
     // Success Measure + former SLA Target are merged into one field.
     ...(combineTargetSla(successMeasure, slaTarget) ? { successMeasure: combineTargetSla(successMeasure, slaTarget) } : {}),
+    ...(typeof trigger === 'string' && trigger.trim() ? { trigger: trigger.trim() } : {}),
+    ...(typeof volume === 'string' && volume.trim() ? { volume: volume.trim() } : {}),
     ...(cleanedControlIds.length ? { controlIds: cleanedControlIds } : {}),
     domain: nodeDomain,
     createdAt: now,
@@ -871,7 +889,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
-    criticalityTier, rtoHours, successMeasure, slaTarget, controlIds,
+    criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, controlIds,
     reviewComment } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
@@ -921,8 +939,9 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     || frequency !== undefined || riskLevel !== undefined || automationLevel !== undefined || estimatedDuration !== undefined
     || requiredSkillIds !== undefined || systemIds !== undefined
     || responsiblePersonId !== undefined
-    || criticalityTier !== undefined || rtoHours !== undefined
+    || criticalityTier !== undefined || rtoHours !== undefined || rpoHours !== undefined
     || successMeasure !== undefined || slaTarget !== undefined
+    || trigger !== undefined || volume !== undefined
     || controlIds !== undefined;
   // Resolve org's status mode to determine which transitions/locks apply
   const nodeOrg = getCachedOrgList().find((o) => o.id === node.orgId) as any;
@@ -993,6 +1012,16 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
       return;
     }
   }
+  if (rpoHours !== undefined) {
+    if (rpoHours === null || rpoHours === '') {
+      node.rpoHours = undefined;
+    } else if (typeof rpoHours === 'number' && rpoHours >= 0) {
+      node.rpoHours = rpoHours;
+    } else {
+      res.status(400).json({ success: false, error: 'rpoHours must be a non-negative number.' });
+      return;
+    }
+  }
   if (successMeasure !== undefined) node.successMeasure = successMeasure || undefined;
   // SLA Target merged into Success Measure (the "Target / SLA" field): fold
   // any incoming slaTarget into successMeasure. The deprecated field is never
@@ -1000,6 +1029,8 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (slaTarget !== undefined) {
     node.successMeasure = combineTargetSla(node.successMeasure, slaTarget);
   }
+  if (trigger !== undefined) node.trigger = (typeof trigger === 'string' && trigger.trim()) ? trigger.trim() : undefined;
+  if (volume !== undefined) node.volume = (typeof volume === 'string' && volume.trim()) ? volume.trim() : undefined;
   if (controlIds !== undefined) {
     node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
       ? await cleanControlIds(controlIds)

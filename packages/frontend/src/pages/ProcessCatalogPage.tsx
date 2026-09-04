@@ -66,13 +66,18 @@ export interface ProcessNode {
    *  surfaced. */
   systemIds?: string[];
   domain?: 'GOVERNANCE' | 'OPERATIONAL';
-  // BCM: business-continuity tier + RTO in hours
+  // BCM: business-continuity tier + RTO/RPO in hours
   criticalityTier?: 'TIER_1' | 'TIER_2' | 'TIER_3' | 'TIER_4';
   rtoHours?: number;
+  rpoHours?: number;
   // Measurable success signals — free-text so operators can express
   // "P95 4h" or "99.9% monthly" without a schema war
   successMeasure?: string;
   slaTarget?: string;
+  // What initiates the activity (SCHEDULED / EVENT / UPSTREAM / MANUAL /
+  // EXTERNAL_REQUEST) and its processing volume / throughput (free-text).
+  trigger?: string;
+  volume?: string;
   // Governance controls this activity implements or is subject to
   controlIds?: string[];
   // Change-management review workflow (only meaningful when the
@@ -164,6 +169,10 @@ export const FREQUENCY_OPTIONS = [
 ];
 
 export const RISK_OPTIONS = ['High', 'Medium', 'Low'];
+
+// What initiates an activity. Free-text under the hood (like Frequency /
+// Risk) with a suggested set so common triggers stay consistent.
+export const TRIGGER_OPTIONS = ['Scheduled', 'Event-driven', 'Upstream completion', 'Manual', 'External request'];
 
 export const AUTOMATION_OPTIONS = ['Manual', 'Semi-automated', 'Fully automated'];
 

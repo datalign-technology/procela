@@ -58,8 +58,11 @@ type PrismaProcessNodeRow = {
   estimatedDuration: string | null;
   criticalityTier: string | null;
   rtoHours: number | null;
+  rpoHours: number | null;
   successMeasure: string | null;
   slaTarget: string | null;
+  trigger: string | null;
+  volume: string | null;
   domain: string;
   version: number;
   submittedBy: string | null;
@@ -133,8 +136,11 @@ function fromPrisma(r: PrismaProcessNodeRow): StoredProcessNode {
       ? { criticalityTier: r.criticalityTier as StoredProcessNode['criticalityTier'] }
       : {}),
     ...(r.rtoHours != null ? { rtoHours: r.rtoHours } : {}),
+    ...(r.rpoHours != null ? { rpoHours: r.rpoHours } : {}),
     ...(r.successMeasure ? { successMeasure: r.successMeasure } : {}),
     ...(r.slaTarget ? { slaTarget: r.slaTarget } : {}),
+    ...(r.trigger ? { trigger: r.trigger } : {}),
+    ...(r.volume ? { volume: r.volume } : {}),
     ...(r.controls && r.controls.length > 0
       ? { controlIds: r.controls.map((c) => c.controlId) }
       : {}),
@@ -179,8 +185,11 @@ function toPrismaData(row: Partial<StoredProcessNode>): Record<string, unknown> 
   if (row.estimatedDuration !== undefined) data.estimatedDuration = row.estimatedDuration ?? null;
   if (row.criticalityTier !== undefined) data.criticalityTier = row.criticalityTier ?? null;
   if (row.rtoHours !== undefined) data.rtoHours = row.rtoHours ?? null;
+  if (row.rpoHours !== undefined) data.rpoHours = row.rpoHours ?? null;
   if (row.successMeasure !== undefined) data.successMeasure = row.successMeasure ?? null;
   if (row.slaTarget !== undefined) data.slaTarget = row.slaTarget ?? null;
+  if (row.trigger !== undefined) data.trigger = row.trigger ?? null;
+  if (row.volume !== undefined) data.volume = row.volume ?? null;
   if (row.domain !== undefined) data.domain = row.domain;
   if (row.submittedBy !== undefined) data.submittedBy = row.submittedBy ?? null;
   if (row.submittedAt !== undefined) {
