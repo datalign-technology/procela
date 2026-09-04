@@ -288,6 +288,8 @@ export default function HelpPage() {
           <li>Option to auto-create a Data Stewardship Team when creating a domain.</li>
           <li>AI-generated domain suggestions based on your industry.</li>
           <li><strong>Criticality</strong> &mdash; mark a domain's business-criticality tier (Tier-1 = council-critical &hellip; Tier-4). Tier-1 domains are what the <strong>Council Scorecard</strong> measures for coverage &mdash; the share of your most critical domains that have a named owner.</li>
+          <li><strong>Sub-domains.</strong> Nest a domain one level deep under a parent (set <em>Parent domain</em> on the form, or use <em>Suggest sub-domains</em> to have AI propose them). A sub-domain with no owner of its own can <em>inherit the parent's owner</em> in one click.</li>
+          <li><strong>Navigating the left tree.</strong> The domain index shows each parent with its sub-domains indented beneath it. A parent that has sub-domains carries a <strong>&#9662;/&#9656; caret</strong> &mdash; click it to fold or unfold that parent, or use <strong>Collapse&nbsp;all / Expand&nbsp;all</strong> at the top of the index; your choice is remembered per organization. Names that are too long to fit clip with an ellipsis and show the full label on hover.</li>
         </ul>
         <h3 style={h3Style}>Data Quality</h3>
         <ul style={listStyle}>
