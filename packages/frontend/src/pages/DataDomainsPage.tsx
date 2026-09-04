@@ -34,25 +34,17 @@ interface DataDomain {
   // Sub-domain nesting + master/reference governance signals (backend-derived).
   parentDomainId?: string | null; parentDomainName?: string | null; subDomainCount?: number;
   containsMasterData?: boolean; containsReferenceData?: boolean; suggestedCriticality?: string;
-  // Business Capability — the grouping level ABOVE Domain (backend-derived).
-  businessCapabilityId?: string | null; businessCapabilityName?: string | null;
   createdAt: string; updatedAt: string;
 }
 interface Person { id: string; name: string; }
 interface DataAssetOption { id: string; name: string; }
-// Business Capability — the grouping level above Data Domain.
-interface BusinessCapability {
-  id: string; orgId: string; name: string; description: string;
-  ownerId: string | null; ownerName: string | null; code?: string;
-  status: string; domainCount?: number; domains?: { id: string; name: string }[];
-}
 
 const inputStyle: React.CSSProperties = { border: '1px solid var(--color-border)', borderRadius: 4, padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)' };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
 
-interface FormData { name: string; description: string; status: string; criticality: string; parentDomainId: string; code: string; businessCapabilityId: string; }
-const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', criticality: '', parentDomainId: '', code: '', businessCapabilityId: '' };
+interface FormData { name: string; description: string; status: string; criticality: string; parentDomainId: string; code: string; }
+const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', criticality: '', parentDomainId: '', code: '' };
 
 const SIMPLE_TRANSITIONS: Record<string, string[]> = { DRAFT: ['ACTIVE'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 const ADVANCED_TRANSITIONS: Record<string, string[]> = { DRAFT: ['PROPOSED'], PROPOSED: ['UNDER_REVIEW', 'DRAFT'], UNDER_REVIEW: ['APPROVED', 'DRAFT'], APPROVED: ['ACTIVE', 'DRAFT'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
@@ -91,7 +83,6 @@ export default function DataDomainsPage() {
   const aiEnabled = useAiEnabled();
   const { addToast } = useToastStore();
   const [domains, setDomains] = useState<DataDomain[]>([]);
-  const [capabilities, setCapabilities] = useState<BusinessCapability[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [allAssets, setAllAssets] = useState<DataAssetOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,15 +95,6 @@ export default function DataDomainsPage() {
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } | null>(null);
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-
-  // ── Business Capability management (the grouping level above Domain) ──
-  const [showCapForm, setShowCapForm] = useState(false);
-  const [editingCapId, setEditingCapId] = useState<string | null>(null);
-  const [capForm, setCapForm] = useState<{ name: string; description: string; code: string; ownerId: string }>({ name: '', description: '', code: '', ownerId: '' });
-  const [confirmCapDelete, setConfirmCapDelete] = useState<string | null>(null);
-  const [capGenerating, setCapGenerating] = useState(false);
-  const [generatedCaps, setGeneratedCaps] = useState<Array<{ name: string; description: string; selected: boolean }>>([]);
-  const [showCapPreview, setShowCapPreview] = useState(false);
 
   // Bulk selection
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
@@ -147,7 +129,7 @@ export default function DataDomainsPage() {
   // its parentDomainId. `pendingGen` remembers what to generate when the
   // industry picker has to open first.
   const [previewIsSub, setPreviewIsSub] = useState(false);
-  const [pendingGen, setPendingGen] = useState<{ type: 'domains' } | { type: 'subs'; domain: DataDomain } | { type: 'subs-all' } | { type: 'caps' } | null>(null);
+  const [pendingGen, setPendingGen] = useState<{ type: 'domains' } | { type: 'subs'; domain: DataDomain } | { type: 'subs-all' } | null>(null);
   // Industry picker — opens when the active org (and its visible
   // ancestors) carries no `industry`, or when the user explicitly
   // wants to override the auto-detected value.
@@ -177,16 +159,14 @@ export default function DataDomainsPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [domainsRes, peopleRes, assetsRes, capsRes] = await Promise.all([
+      const [domainsRes, peopleRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
         apiClient.get<{ success: boolean; data: DataAssetOption[] }>(`/data-assets${query}`),
-        apiClient.get<{ success: boolean; data: BusinessCapability[] }>(`/business-capabilities${query}`),
       ]);
       setDomains(domainsRes.data || []);
       setPeople(peopleRes.data || []);
       setAllAssets(assetsRes.data || []);
-      setCapabilities(capsRes.data || []);
       if (activeOrgId) {
         try {
           const orgRes = await apiClient.get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`);
@@ -220,38 +200,6 @@ export default function DataDomainsPage() {
     }
     return out;
   }, [filteredDomains]);
-
-  // Group the ordered list under Business Capability headers — the level ABOVE
-  // Domain (Capability → Domain → Sub-domain). Top-level domains are bucketed by
-  // their capability (name-ordered), with an "Ungrouped" bucket last; each
-  // domain is still followed by its own sub-domains. When the org defines no
-  // capabilities the list stays flat (no headers). Empty capabilities live in
-  // the "Manage capabilities" dialog, not the list.
-  type GroupRow = { kind: 'header'; cap: BusinessCapability | null; count: number } | { kind: 'row'; domain: DataDomain };
-  const groupedRows = useMemo<GroupRow[]>(() => {
-    if (capabilities.length === 0) return orderedDomains.map((d) => ({ kind: 'row', domain: d }));
-    const capById = new Map(capabilities.map((c) => [c.id, c]));
-    const present = new Set(filteredDomains.map((d) => d.id));
-    const byName = (a: DataDomain, b: DataDomain) => a.name.localeCompare(b.name);
-    const tops = filteredDomains.filter((d) => !d.parentDomainId || !present.has(d.parentDomainId)).sort(byName);
-    const keyFor = (t: DataDomain) => (t.businessCapabilityId && capById.has(t.businessCapabilityId)) ? t.businessCapabilityId! : '__ungrouped__';
-    const groups = new Map<string, DataDomain[]>();
-    for (const t of tops) { const k = keyFor(t); if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(t); }
-    const orderedKeys = [
-      ...[...capabilities].sort((a, b) => a.name.localeCompare(b.name)).map((c) => c.id).filter((id) => groups.has(id)),
-      ...(groups.has('__ungrouped__') ? ['__ungrouped__'] : []),
-    ];
-    const rows: GroupRow[] = [];
-    for (const k of orderedKeys) {
-      const groupTops = groups.get(k)!;
-      rows.push({ kind: 'header', cap: k === '__ungrouped__' ? null : capById.get(k)!, count: groupTops.length });
-      for (const t of groupTops) {
-        rows.push({ kind: 'row', domain: t });
-        for (const c of filteredDomains.filter((d) => d.parentDomainId === t.id).sort(byName)) rows.push({ kind: 'row', domain: c });
-      }
-    }
-    return rows;
-  }, [orderedDomains, filteredDomains, capabilities]);
 
   const selectedDomain = selectedDomainId ? domains.find((d) => d.id === selectedDomainId) || null : null;
   // Parent of the selected sub-domain (if any) — used to offer an explicit
@@ -288,7 +236,7 @@ export default function DataDomainsPage() {
     setForm(emptyForm); setEditingId(null); setCreateStewardshipTeam(true); setShowForm(true);
   };
   const openEdit = (domain: DataDomain) => {
-    setForm({ name: domain.name, description: domain.description, status: domain.status, criticality: domain.criticality || '', parentDomainId: domain.parentDomainId || '', code: domain.code || '', businessCapabilityId: domain.businessCapabilityId || '' });
+    setForm({ name: domain.name, description: domain.description, status: domain.status, criticality: domain.criticality || '', parentDomainId: domain.parentDomainId || '', code: domain.code || '' });
     setEditingId(domain.id); setShowForm(true);
   };
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
@@ -449,68 +397,6 @@ export default function DataDomainsPage() {
     await generateForIndustry(detected);
   };
 
-  // ── Business Capability handlers ──
-  const openCapAdd = () => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    setCapForm({ name: '', description: '', code: '', ownerId: '' }); setEditingCapId(null); setShowCapForm(true);
-  };
-  const openCapEdit = (cap: BusinessCapability) => {
-    setCapForm({ name: cap.name, description: cap.description || '', code: cap.code || '', ownerId: cap.ownerId || '' });
-    setEditingCapId(cap.id); setShowCapForm(true);
-  };
-  const closeCapForm = () => { setShowCapForm(false); setEditingCapId(null); };
-  const handleCapSave = async () => {
-    if (!capForm.name.trim()) return;
-    try {
-      if (editingCapId) {
-        await apiClient.put(`/business-capabilities/${editingCapId}`, { name: capForm.name, description: capForm.description, code: capForm.code, ownerId: capForm.ownerId || null });
-        addToast('success', 'Capability updated');
-      } else {
-        await apiClient.post('/business-capabilities', { name: capForm.name, description: capForm.description, code: capForm.code, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
-        addToast('success', 'Capability created');
-      }
-      closeCapForm(); fetchData();
-    } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to save capability'));
-    }
-  };
-  const handleCapDelete = async (id: string) => {
-    try {
-      await apiClient.delete(`/business-capabilities/${id}`);
-      addToast('success', 'Capability deleted — its domains are now ungrouped'); fetchData();
-    } catch (err) { errorToast(err, 'Failed to delete capability'); }
-  };
-  const generateCapabilities = async () => {
-    if (!activeOrgId) { errorToast(null, 'Select an organization first.'); return; }
-    const industry = await detectIndustry();
-    if (!industry) { setPickedIndustry(INDUSTRIES[0]); setPendingGen({ type: 'caps' }); setIndustryPickerOpen(true); return; }
-    await runCapGeneration(industry);
-  };
-  const runCapGeneration = async (industry: string) => {
-    setCapGenerating(true);
-    try {
-      const res = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>('/business-capabilities/generate', { industry });
-      const suggestions = (res.data || []).map((c) => ({ ...c, selected: true }));
-      if (suggestions.length === 0) { errorToast(null, 'No capabilities returned. Retry — a retry usually fixes it.'); return; }
-      setGeneratedCaps(suggestions); setShowCapPreview(true);
-    } catch (err: any) {
-      const snippet = err?.body?.rawSnippet ? `\n\n— AI returned: ${err.body.rawSnippet}` : '';
-      errorToast(err, `Capability generation failed.${snippet}`);
-    } finally { setCapGenerating(false); }
-  };
-  const applyGeneratedCaps = async () => {
-    const toCreate = generatedCaps.filter((c) => c.selected);
-    if (toCreate.length === 0) { setShowCapPreview(false); return; }
-    try {
-      const results = await Promise.allSettled(toCreate.map((c) => apiClient.post('/business-capabilities', { name: c.name, description: c.description, ...(activeOrgId ? { orgId: activeOrgId } : {}) })));
-      const created = results.filter((r) => r.status === 'fulfilled').length;
-      const failed = results.length - created;
-      addToast(failed > 0 ? 'info' : 'success', `Created ${created} capabilit${created === 1 ? 'y' : 'ies'}${failed > 0 ? ` · ${failed} failed` : ''}`);
-      setShowCapPreview(false); setGeneratedCaps([]); fetchData();
-    } catch (err) { errorToast(err, 'Failed to create capabilities'); }
-  };
-
   // Actually fire the /generate call once we know which industry to
   // ask Claude about. Surface the raw model response when extraction
   // failed so the operator can see what came back.
@@ -631,10 +517,6 @@ export default function DataDomainsPage() {
             {canWrite && aiEnabled && domains.some((d) => !d.parentDomainId) && (
               <IconButton icon="wand" label={generating ? 'Generating…' : 'Suggest sub-domains (all)'} disabled={generating} onClick={generateSubsForAll} />
             )}
-            {canWrite && aiEnabled && (
-              <IconButton icon="wand" label={capGenerating ? 'Generating…' : 'Generate business capabilities'} disabled={capGenerating} onClick={generateCapabilities} />
-            )}
-            {canWrite && <IconButton icon="plus" label="Add business capability" onClick={openCapAdd} />}
             {domains.length > 0 && (
               <ExportMenu build={() => ({
                 filenameBase: 'data-domains',
@@ -740,22 +622,6 @@ export default function DataDomainsPage() {
               </select>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Nest this under a parent to make it a sub-domain. One level deep.</div>
             </div>
-            {/* Business Capability — the grouping level ABOVE Domain. Only
-                top-level domains carry one; a sub-domain inherits its parent's. */}
-            {!form.parentDomainId && (
-              <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Business capability</label>
-                <select
-                  aria-label="Business capability"
-                  style={selectStyle}
-                  value={form.businessCapabilityId}
-                  onChange={(e) => setForm({ ...form, businessCapabilityId: e.target.value })}
-                >
-                  <option value="">— None (ungrouped)</option>
-                  {capabilities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>The capability this domain rolls up to (Capability → Domain → Sub-domain).</div>
-              </div>
-            )}
             {/* Description absorbed the former "Scope Definition" field. */}
             <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" /></div>
@@ -772,61 +638,6 @@ export default function DataDomainsPage() {
             <Button variant="primary" disabled={!form.name.trim()} onClick={handleSave}>{editingId ? 'Save Changes' : 'Add Domain'}</Button>
           </div>
         </Card>
-      )}
-
-      {/* Business Capability add/edit form */}
-      {showCapForm && (
-        <Card padding={20} marginBottom={16}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{editingCapId ? 'Edit Business Capability' : 'Add Business Capability'}</h3>
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 16 }}>The grouping level above Data Domain — Capability → Domain → Sub-domain.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus aria-label="Capability name" style={inputStyle} value={capForm.name} onChange={(e) => setCapForm({ ...capForm, name: e.target.value })} placeholder="e.g. Customer Management" /></div>
-            <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Code</label>
-              <input aria-label="Capability code" style={{ ...inputStyle, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }} value={capForm.code} onChange={(e) => setCapForm({ ...capForm, code: e.target.value })} placeholder="e.g. CUST" />
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Auto-suggested if left blank.</div></div>
-            {editingCapId && (
-              <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
-                <PersonPicker mode="single" valueMode="id" value={capForm.ownerId || null} onChange={(pid) => setCapForm({ ...capForm, ownerId: pid || '' })} placeholder="-- Unassigned --" /></div>
-            )}
-            <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input aria-label="Capability description" style={inputStyle} value={capForm.description} onChange={(e) => setCapForm({ ...capForm, description: e.target.value })} placeholder="What this capability covers and the domains it groups" /></div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={closeCapForm}>Cancel</Button>
-            <Button variant="primary" disabled={!capForm.name.trim()} onClick={handleCapSave}>{editingCapId ? 'Save Changes' : 'Add Capability'}</Button>
-          </div>
-        </Card>
-      )}
-
-      <ConfirmDialog open={confirmCapDelete !== null} title="Delete Business Capability?"
-        message="This removes the capability. Its data domains are kept — they'll simply become ungrouped. This cannot be undone."
-        confirmLabel="Delete"
-        onConfirm={async () => { const id = confirmCapDelete; setConfirmCapDelete(null); if (id) await handleCapDelete(id); }}
-        onCancel={() => setConfirmCapDelete(null)} />
-
-      {/* Business Capability generate preview */}
-      {showCapPreview && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
-          onClick={() => setShowCapPreview(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', padding: 24, maxWidth: 620, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 0, marginBottom: 4 }}>Suggested Business Capabilities</h3>
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 0 }}>Pick the capabilities to create. You can group domains under them afterwards.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '12px 0' }}>
-              {generatedCaps.map((c, i) => (
-                <label key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: c.selected ? 'var(--color-primary-light)' : 'var(--color-bg)' }}>
-                  <input type="checkbox" checked={c.selected} onChange={() => setGeneratedCaps((prev) => prev.map((x, xi) => xi === i ? { ...x, selected: !x.selected } : x))} style={{ marginTop: 2 }} />
-                  <div><div style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{c.description}</div></div>
-                </label>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <Button variant="secondary" onClick={() => setShowCapPreview(false)}>Cancel</Button>
-              <Button variant="primary" onClick={applyGeneratedCaps}>Create {generatedCaps.filter((c) => c.selected).length} capabilit{generatedCaps.filter((c) => c.selected).length === 1 ? 'y' : 'ies'}</Button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Main content: dictionary layout */}
@@ -891,31 +702,7 @@ export default function DataDomainsPage() {
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {filteredDomains.length === 0 ? (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No domains match.</div>
-              ) : groupedRows.map((item, gi) => {
-                if (item.kind === 'header') {
-                  const cap = item.cap;
-                  return (
-                    <div key={`cap-hdr-${cap?.id ?? 'ungrouped'}-${gi}`} style={{
-                      padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 8,
-                      background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)',
-                      borderTop: gi === 0 ? 'none' : '1px solid var(--color-border)',
-                      position: 'sticky', top: 0, zIndex: 1,
-                    }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: cap ? 'var(--color-primary)' : 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {cap ? cap.name : 'Ungrouped'}
-                      </span>
-                      {cap?.code && <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 9, fontWeight: 600, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 4px' }}>{cap.code}</span>}
-                      <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{item.count}</span>
-                      {cap && canWrite && (
-                        <span style={{ marginLeft: 'auto', display: 'flex', gap: 2, flexShrink: 0 }}>
-                          <button aria-label={`Edit capability ${cap.name}`} title="Edit capability" onClick={(e) => { e.stopPropagation(); openCapEdit(cap); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12, padding: '0 2px' }}>✎</button>
-                          <button aria-label={`Delete capability ${cap.name}`} title="Delete capability" onClick={(e) => { e.stopPropagation(); setConfirmCapDelete(cap.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 14, padding: '0 2px' }}>×</button>
-                        </span>
-                      )}
-                    </div>
-                  );
-                }
-                const d = item.domain;
+              ) : orderedDomains.map((d) => {
                 const isActive = selectedDomainId === d.id;
                 const isChecked = bulkSelectedIds.has(d.id);
                 const isSub = !!d.parentDomainId;
@@ -1205,9 +992,7 @@ export default function DataDomainsPage() {
                   setIndustryPickerOpen(false);
                   setPendingGen(null);
                   if (!chosen) return;
-                  if (pending?.type === 'caps') {
-                    await runCapGeneration(chosen);
-                  } else if (pending?.type === 'subs') {
+                  if (pending?.type === 'subs') {
                     await runSubGeneration(chosen, [pending.domain]);
                   } else if (pending?.type === 'subs-all') {
                     const parents = domains.filter((d) => !d.parentDomainId);
