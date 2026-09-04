@@ -464,22 +464,22 @@ export default function DataDomainsPage() {
     try {
       if (editingCapId) {
         await apiClient.put(`/business-capabilities/${editingCapId}`, { name: capForm.name, description: capForm.description, code: capForm.code, ownerId: capForm.ownerId || null });
-        addToast('success', 'Capability updated');
+        addToast('success', 'Capability area updated');
       } else {
         await apiClient.post('/business-capabilities', { name: capForm.name, description: capForm.description, code: capForm.code, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
-        addToast('success', 'Capability created');
+        addToast('success', 'Capability area created');
       }
       closeCapForm(); fetchData();
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } } };
-      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to save capability'));
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to save capability area'));
     }
   };
   const handleCapDelete = async (id: string) => {
     try {
       await apiClient.delete(`/business-capabilities/${id}`);
-      addToast('success', 'Capability deleted — its domains are now ungrouped'); fetchData();
-    } catch (err) { errorToast(err, 'Failed to delete capability'); }
+      addToast('success', 'Capability area deleted — its domains are now ungrouped'); fetchData();
+    } catch (err) { errorToast(err, 'Failed to delete capability area'); }
   };
   const generateCapabilities = async () => {
     if (!activeOrgId) { errorToast(null, 'Select an organization first.'); return; }
@@ -492,11 +492,11 @@ export default function DataDomainsPage() {
     try {
       const res = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>('/business-capabilities/generate', { industry });
       const suggestions = (res.data || []).map((c) => ({ ...c, selected: true }));
-      if (suggestions.length === 0) { errorToast(null, 'No capabilities returned. Retry — a retry usually fixes it.'); return; }
+      if (suggestions.length === 0) { errorToast(null, 'No capability areas returned. Retry — a retry usually fixes it.'); return; }
       setGeneratedCaps(suggestions); setShowCapPreview(true);
     } catch (err: any) {
       const snippet = err?.body?.rawSnippet ? `\n\n— AI returned: ${err.body.rawSnippet}` : '';
-      errorToast(err, `Capability generation failed.${snippet}`);
+      errorToast(err, `Capability-area generation failed.${snippet}`);
     } finally { setCapGenerating(false); }
   };
   const applyGeneratedCaps = async () => {
@@ -506,9 +506,9 @@ export default function DataDomainsPage() {
       const results = await Promise.allSettled(toCreate.map((c) => apiClient.post('/business-capabilities', { name: c.name, description: c.description, ...(activeOrgId ? { orgId: activeOrgId } : {}) })));
       const created = results.filter((r) => r.status === 'fulfilled').length;
       const failed = results.length - created;
-      addToast(failed > 0 ? 'info' : 'success', `Created ${created} capabilit${created === 1 ? 'y' : 'ies'}${failed > 0 ? ` · ${failed} failed` : ''}`);
+      addToast(failed > 0 ? 'info' : 'success', `Created ${created} capability area${created === 1 ? '' : 's'}${failed > 0 ? ` · ${failed} failed` : ''}`);
       setShowCapPreview(false); setGeneratedCaps([]); fetchData();
-    } catch (err) { errorToast(err, 'Failed to create capabilities'); }
+    } catch (err) { errorToast(err, 'Failed to create capability areas'); }
   };
 
   // Actually fire the /generate call once we know which industry to
@@ -632,9 +632,9 @@ export default function DataDomainsPage() {
               <IconButton icon="wand" label={generating ? 'Generating…' : 'Suggest sub-domains (all)'} disabled={generating} onClick={generateSubsForAll} />
             )}
             {canWrite && aiEnabled && (
-              <IconButton icon="wand" label={capGenerating ? 'Generating…' : 'Generate business capabilities'} disabled={capGenerating} onClick={generateCapabilities} />
+              <IconButton icon="wand" label={capGenerating ? 'Generating…' : 'Generate capability areas'} disabled={capGenerating} onClick={generateCapabilities} />
             )}
-            {canWrite && <IconButton icon="plus" label="Add business capability" onClick={openCapAdd} />}
+            {canWrite && <IconButton icon="plus" label="Add capability area" onClick={openCapAdd} />}
             {domains.length > 0 && (
               <ExportMenu build={() => ({
                 filenameBase: 'data-domains',
@@ -743,9 +743,9 @@ export default function DataDomainsPage() {
             {/* Business Capability — the grouping level ABOVE Domain. Only
                 top-level domains carry one; a sub-domain inherits its parent's. */}
             {!form.parentDomainId && (
-              <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Business capability</label>
+              <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Capability area</label>
                 <select
-                  aria-label="Business capability"
+                  aria-label="Capability area"
                   style={selectStyle}
                   value={form.businessCapabilityId}
                   onChange={(e) => setForm({ ...form, businessCapabilityId: e.target.value })}
@@ -753,7 +753,7 @@ export default function DataDomainsPage() {
                   <option value="">— None (ungrouped)</option>
                   {capabilities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>The capability this domain rolls up to (Capability → Domain → Sub-domain).</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>The capability area this domain rolls up to (Capability Area → Domain → Sub-domain).</div>
               </div>
             )}
             {/* Description absorbed the former "Scope Definition" field. */}
@@ -777,30 +777,30 @@ export default function DataDomainsPage() {
       {/* Business Capability add/edit form */}
       {showCapForm && (
         <Card padding={20} marginBottom={16}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{editingCapId ? 'Edit Business Capability' : 'Add Business Capability'}</h3>
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 16 }}>The grouping level above Data Domain — Capability → Domain → Sub-domain.</p>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{editingCapId ? 'Edit Capability Area' : 'Add Capability Area'}</h3>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 16 }}>The grouping level above Data Domain — Capability Area → Domain → Sub-domain.</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus aria-label="Capability name" style={inputStyle} value={capForm.name} onChange={(e) => setCapForm({ ...capForm, name: e.target.value })} placeholder="e.g. Customer Management" /></div>
+              <input autoFocus aria-label="Capability area name" style={inputStyle} value={capForm.name} onChange={(e) => setCapForm({ ...capForm, name: e.target.value })} placeholder="e.g. Customer Management" /></div>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Code</label>
-              <input aria-label="Capability code" style={{ ...inputStyle, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }} value={capForm.code} onChange={(e) => setCapForm({ ...capForm, code: e.target.value })} placeholder="e.g. CUST" />
+              <input aria-label="Capability area code" style={{ ...inputStyle, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }} value={capForm.code} onChange={(e) => setCapForm({ ...capForm, code: e.target.value })} placeholder="e.g. CUST" />
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Auto-suggested if left blank.</div></div>
             {editingCapId && (
               <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
                 <PersonPicker mode="single" valueMode="id" value={capForm.ownerId || null} onChange={(pid) => setCapForm({ ...capForm, ownerId: pid || '' })} placeholder="-- Unassigned --" /></div>
             )}
             <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input aria-label="Capability description" style={inputStyle} value={capForm.description} onChange={(e) => setCapForm({ ...capForm, description: e.target.value })} placeholder="What this capability covers and the domains it groups" /></div>
+              <input aria-label="Capability area description" style={inputStyle} value={capForm.description} onChange={(e) => setCapForm({ ...capForm, description: e.target.value })} placeholder="What this capability area covers and the domains it groups" /></div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={closeCapForm}>Cancel</Button>
-            <Button variant="primary" disabled={!capForm.name.trim()} onClick={handleCapSave}>{editingCapId ? 'Save Changes' : 'Add Capability'}</Button>
+            <Button variant="primary" disabled={!capForm.name.trim()} onClick={handleCapSave}>{editingCapId ? 'Save Changes' : 'Add Capability Area'}</Button>
           </div>
         </Card>
       )}
 
-      <ConfirmDialog open={confirmCapDelete !== null} title="Delete Business Capability?"
-        message="This removes the capability. Its data domains are kept — they'll simply become ungrouped. This cannot be undone."
+      <ConfirmDialog open={confirmCapDelete !== null} title="Delete Capability Area?"
+        message="This removes the capability area. Its data domains are kept — they'll simply become ungrouped. This cannot be undone."
         confirmLabel="Delete"
         onConfirm={async () => { const id = confirmCapDelete; setConfirmCapDelete(null); if (id) await handleCapDelete(id); }}
         onCancel={() => setConfirmCapDelete(null)} />
@@ -810,8 +810,8 @@ export default function DataDomainsPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
           onClick={() => setShowCapPreview(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', padding: 24, maxWidth: 620, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 0, marginBottom: 4 }}>Suggested Business Capabilities</h3>
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 0 }}>Pick the capabilities to create. You can group domains under them afterwards.</p>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 0, marginBottom: 4 }}>Suggested Capability Areas</h3>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 0 }}>Pick the capability areas to create. You can group domains under them afterwards.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '12px 0' }}>
               {generatedCaps.map((c, i) => (
                 <label key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: c.selected ? 'var(--color-primary-light)' : 'var(--color-bg)' }}>
@@ -823,7 +823,7 @@ export default function DataDomainsPage() {
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <Button variant="secondary" onClick={() => setShowCapPreview(false)}>Cancel</Button>
-              <Button variant="primary" onClick={applyGeneratedCaps}>Create {generatedCaps.filter((c) => c.selected).length} capabilit{generatedCaps.filter((c) => c.selected).length === 1 ? 'y' : 'ies'}</Button>
+              <Button variant="primary" onClick={applyGeneratedCaps}>Create {generatedCaps.filter((c) => c.selected).length} capability area{generatedCaps.filter((c) => c.selected).length === 1 ? '' : 's'}</Button>
             </div>
           </div>
         </div>
@@ -908,8 +908,8 @@ export default function DataDomainsPage() {
                       <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{item.count}</span>
                       {cap && canWrite && (
                         <span style={{ marginLeft: 'auto', display: 'flex', gap: 2, flexShrink: 0 }}>
-                          <button aria-label={`Edit capability ${cap.name}`} title="Edit capability" onClick={(e) => { e.stopPropagation(); openCapEdit(cap); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12, padding: '0 2px' }}>✎</button>
-                          <button aria-label={`Delete capability ${cap.name}`} title="Delete capability" onClick={(e) => { e.stopPropagation(); setConfirmCapDelete(cap.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 14, padding: '0 2px' }}>×</button>
+                          <button aria-label={`Edit capability area ${cap.name}`} title="Edit capability area" onClick={(e) => { e.stopPropagation(); openCapEdit(cap); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12, padding: '0 2px' }}>✎</button>
+                          <button aria-label={`Delete capability area ${cap.name}`} title="Delete capability area" onClick={(e) => { e.stopPropagation(); setConfirmCapDelete(cap.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 14, padding: '0 2px' }}>×</button>
                         </span>
                       )}
                     </div>

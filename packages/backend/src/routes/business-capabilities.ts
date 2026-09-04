@@ -116,7 +116,7 @@ router.post('/generate', requireAiEnabled, async (req: Request, res: Response) =
       logger.warn({ industry, suggestions }, 'Business-capability generation returned no array');
       res.status(502).json({
         success: false,
-        error: 'The AI response did not contain a list of capabilities. Try again — Claude occasionally returns prose; a retry usually fixes it.',
+        error: 'The AI response did not contain a list of capability areas. Try again — Claude occasionally returns prose; a retry usually fixes it.',
       });
       return;
     }
@@ -155,7 +155,7 @@ router.get('/', async (req: Request, res: Response) => {
 /** GET /api/v1/business-capabilities/:id */
 router.get('/:id', async (req: Request, res: Response) => {
   const cap = await capabilitiesRepo.get(String(req.params.id));
-  if (!cap) { res.status(404).json({ success: false, error: 'Business capability not found' }); return; }
+  if (!cap) { res.status(404).json({ success: false, error: 'Capability area not found' }); return; }
   const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), domainsRepo().list()]);
   res.json({ success: true, data: enrichCapability(cap, allPeople, allDomains as never) });
 });
@@ -171,7 +171,7 @@ router.post('/', async (req: Request, res: Response) => {
     (c) => c.orgId === orgId && c.name.trim().toLowerCase() === name.trim().toLowerCase(),
   );
   if (duplicate) {
-    res.status(409).json({ success: false, error: `A business capability named "${name}" already exists in this organization` });
+    res.status(409).json({ success: false, error: `A capability area named "${name}" already exists in this organization` });
     return;
   }
 
@@ -202,7 +202,7 @@ router.post('/', async (req: Request, res: Response) => {
 /** PUT /api/v1/business-capabilities/:id — update */
 router.put('/:id', async (req: Request, res: Response) => {
   const cap = await capabilitiesRepo.get(String(req.params.id));
-  if (!cap) { res.status(404).json({ success: false, error: 'Business capability not found' }); return; }
+  if (!cap) { res.status(404).json({ success: false, error: 'Capability area not found' }); return; }
 
   const { name, description, ownerId, status } = req.body || {};
   if (name !== undefined) cap.name = name;
@@ -233,7 +233,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 /** GET /api/v1/business-capabilities/:id/impact — preview a delete */
 router.get('/:id/impact', async (req: Request, res: Response) => {
   const cap = await capabilitiesRepo.get(String(req.params.id));
-  if (!cap) { res.status(404).json({ success: false, error: 'Business capability not found' }); return; }
+  if (!cap) { res.status(404).json({ success: false, error: 'Capability area not found' }); return; }
   const domainNames = ((await domainsRepo().list()) as Array<{ businessCapabilityId?: string | null; name: string }>)
     .filter((d) => d.businessCapabilityId === cap.id)
     .map((d) => d.name);
@@ -243,7 +243,7 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
 /** DELETE /api/v1/business-capabilities/:id — un-groups its domains, then deletes */
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await capabilitiesRepo.get(String(req.params.id));
-  if (!removed) { res.status(404).json({ success: false, error: 'Business capability not found' }); return; }
+  if (!removed) { res.status(404).json({ success: false, error: 'Capability area not found' }); return; }
   // Re-home grouped domains to ungrouped before deleting. In Postgres the FK's
   // onDelete:SetNull handles this; the JSON store has no cascade, so do it
   // explicitly so both backends behave the same.
