@@ -40,6 +40,14 @@ interface DataDomain {
 interface Person { id: string; name: string; }
 interface DataAssetOption { id: string; name: string; }
 
+// Nodes of the unified generate-and-review tree. Every row is an editable
+// name + description, so accepting an AI suggestion, editing it, and
+// hand-adding your own are the same gesture. A GenDomain with `existingId`
+// is a real catalog domain shown as locked context (branch mode); without
+// it, it's a new top-level domain to be created.
+interface GenSub { name: string; description: string; selected: boolean; }
+interface GenDomain { name: string; description: string; selected: boolean; existingId?: string; subDomains: GenSub[]; }
+
 const inputStyle: React.CSSProperties = { border: '1px solid var(--color-border)', borderRadius: 4, padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)' };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
@@ -132,17 +140,17 @@ export default function DataDomainsPage() {
   const [detailAssetIds, setDetailAssetIds] = useState<string[]>([]);
   const [assetSearch, setAssetSearch] = useState('');
 
-  // AI generate
+  // AI generate — one nested-tree review. "Generate domains" builds top-level
+  // domains each with suggested sub-domains; the per-domain wand seeds the same
+  // tree with a single existing (locked) parent. `genBranchMode` distinguishes
+  // the two; `pendingGen` remembers the intent when the industry picker has to
+  // open first.
   const [generating, setGenerating] = useState(false);
-  const [generatedDomains, setGeneratedDomains] = useState<Array<{ name: string; description: string; selected: boolean; parentId?: string; parentName?: string }>>([]);
+  const [genTree, setGenTree] = useState<GenDomain[]>([]);
   const [showGeneratePreview, setShowGeneratePreview] = useState(false);
   const [generateStewardshipTeams, setGenerateStewardshipTeams] = useState(true);
-  // Sub-domain generation: when the preview holds sub-domains it renders a
-  // different title, hides the stewardship-team option, and applies each with
-  // its parentDomainId. `pendingGen` remembers what to generate when the
-  // industry picker has to open first.
-  const [previewIsSub, setPreviewIsSub] = useState(false);
-  const [pendingGen, setPendingGen] = useState<{ type: 'domains' } | { type: 'subs'; domain: DataDomain } | { type: 'subs-all' } | null>(null);
+  const [genBranchMode, setGenBranchMode] = useState(false);
+  const [pendingGen, setPendingGen] = useState<{ type: 'tree' } | { type: 'branch'; domain: DataDomain } | null>(null);
   // Industry picker — opens when the active org (and its visible
   // ancestors) carries no `industry`, or when the user explicitly
   // wants to override the auto-detected value.
@@ -427,33 +435,37 @@ export default function DataDomainsPage() {
     }
   };
 
+  // "Generate domains" — the full-tree build. Detect industry (or ask), then
+  // build the nested tree.
   const handleGenerate = async () => {
     if (!activeOrgId) { errorToast(null, 'Select an organization first.'); return; }
-    const detected = await detectIndustry();
-    if (!detected) {
-      // Nothing on the org or any visible ancestor — let the user pick
-      // one inline so they're not stuck. They can also use this to
-      // override the auto-detected industry (see the IconButton menu).
-      setPickedIndustry(INDUSTRIES[0]);
-      setIndustryPickerOpen(true);
-      return;
-    }
-    await generateForIndustry(detected);
+    const industry = await detectIndustry();
+    if (!industry) { setPendingGen({ type: 'tree' }); setPickedIndustry(INDUSTRIES[0]); setIndustryPickerOpen(true); return; }
+    await buildTree(industry);
   };
 
-  // Actually fire the /generate call once we know which industry to
-  // ask Claude about. Surface the raw model response when extraction
-  // failed so the operator can see what came back.
-  const generateForIndustry = async (industry: string) => {
+  // Suggest top-level domains, then fan out sub-domains for each (one AI call
+  // per domain, in parallel) into a single nested review tree.
+  const buildTree = async (industry: string) => {
     setGenerating(true);
     try {
       const res = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>('/data-domains/generate', { industry });
-      const suggestions = (res.data || []).map((d) => ({ ...d, selected: true }));
-      if (suggestions.length === 0) {
+      const tops = res.data || [];
+      if (tops.length === 0) {
         errorToast(null, 'No suggestions returned. Retry — Claude occasionally returns prose; a retry usually fixes it.');
         return;
       }
-      setGeneratedDomains(suggestions);
+      const withSubs = await Promise.all(tops.map(async (t): Promise<GenDomain> => {
+        let subDomains: GenSub[] = [];
+        try {
+          const sr = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>(
+            '/data-domains/generate-subdomains', { industry, parentName: t.name, parentDescription: t.description });
+          subDomains = (sr.data || []).map((s) => ({ name: s.name, description: s.description, selected: true }));
+        } catch { subDomains = []; }
+        return { name: t.name, description: t.description, selected: true, subDomains };
+      }));
+      setGenTree(withSubs);
+      setGenBranchMode(false);
       setShowGeneratePreview(true);
     } catch (err: any) {
       const snippet = err?.body?.rawSnippet ? `\n\n— AI returned: ${err.body.rawSnippet}` : '';
@@ -463,43 +475,26 @@ export default function DataDomainsPage() {
     }
   };
 
-  // Generate sub-domains for a single parent domain. Only top-level domains can
-  // hold sub-domains (nesting is one level deep).
+  // Per-domain "Suggest sub-domains" — the branch build. Opens the same tree
+  // seeded with one existing domain as a locked parent.
   const generateSubsForDomain = async (domain: DataDomain) => {
     const industry = await detectIndustry();
-    if (!industry) { setPendingGen({ type: 'subs', domain }); setPickedIndustry(INDUSTRIES[0]); setIndustryPickerOpen(true); return; }
-    await runSubGeneration(industry, [domain]);
+    if (!industry) { setPendingGen({ type: 'branch', domain }); setPickedIndustry(INDUSTRIES[0]); setIndustryPickerOpen(true); return; }
+    await buildBranch(industry, domain);
   };
 
-  // Generate sub-domains for every top-level domain at once. One AI call per
-  // parent; the results land in a single grouped preview.
-  const generateSubsForAll = async () => {
-    const industry = await detectIndustry();
-    if (!industry) { setPendingGen({ type: 'subs-all' }); setPickedIndustry(INDUSTRIES[0]); setIndustryPickerOpen(true); return; }
-    const parents = domains.filter((d) => !d.parentDomainId);
-    if (parents.length === 0) { errorToast(null, 'No top-level domains to expand yet — generate or add domains first.'); return; }
-    await runSubGeneration(industry, parents);
-  };
-
-  const runSubGeneration = async (industry: string, parents: DataDomain[]) => {
+  const buildBranch = async (industry: string, domain: DataDomain) => {
     setGenerating(true);
     try {
-      const batches = await Promise.all(parents.map(async (p) => {
-        try {
-          const res = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>(
-            '/data-domains/generate-subdomains',
-            { industry, parentName: p.name, parentDescription: p.description },
-          );
-          return (res.data || []).map((d) => ({ ...d, selected: true, parentId: p.id, parentName: p.name }));
-        } catch { return []; }
-      }));
-      const suggestions = batches.flat();
-      if (suggestions.length === 0) {
+      const sr = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>(
+        '/data-domains/generate-subdomains', { industry, parentName: domain.name, parentDescription: domain.description });
+      const subDomains: GenSub[] = (sr.data || []).map((s) => ({ name: s.name, description: s.description, selected: true }));
+      if (subDomains.length === 0) {
         errorToast(null, 'No sub-domains returned. Retry — Claude occasionally returns prose; a retry usually fixes it.');
         return;
       }
-      setGeneratedDomains(suggestions);
-      setPreviewIsSub(true);
+      setGenTree([{ name: domain.name, description: domain.description, selected: true, existingId: domain.id, subDomains }]);
+      setGenBranchMode(true);
       setShowGeneratePreview(true);
     } catch (err: any) {
       const snippet = err?.body?.rawSnippet ? `\n\n— AI returned: ${err.body.rawSnippet}` : '';
@@ -509,39 +504,83 @@ export default function DataDomainsPage() {
     }
   };
 
+  // ── Tree editing ───────────────────────────────────────────────────────
+  const closeGenerate = () => { setShowGeneratePreview(false); setGenTree([]); setGenBranchMode(false); };
+  const updateDomain = (di: number, patch: Partial<GenDomain>) => setGenTree((t) => t.map((d, i) => (i === di ? { ...d, ...patch } : d)));
+  const updateSub = (di: number, si: number, patch: Partial<GenSub>) => setGenTree((t) => t.map((d, i) => (i === di ? { ...d, subDomains: d.subDomains.map((s, j) => (j === si ? { ...s, ...patch } : s)) } : d)));
+  const addSub = (di: number) => setGenTree((t) => t.map((d, i) => (i === di ? { ...d, subDomains: [...d.subDomains, { name: '', description: '', selected: true }] } : d)));
+  const removeSub = (di: number, si: number) => setGenTree((t) => t.map((d, i) => (i === di ? { ...d, subDomains: d.subDomains.filter((_, j) => j !== si) } : d)));
+  const addTopDomain = () => setGenTree((t) => [...t, { name: '', description: '', selected: true, subDomains: [] }]);
+  const removeTopDomain = (di: number) => setGenTree((t) => t.filter((_, i) => i !== di));
+
+  // Conflict detection mirrors the backend rule: names are unique among
+  // siblings (same parent), not globally. Empty selected names also block.
+  const norm = (s: string) => s.trim().toLowerCase();
+  const topDomainConflict = (di: number): boolean => {
+    const dom = genTree[di];
+    if (!dom.selected || dom.existingId) return false;
+    const nm = norm(dom.name);
+    if (!nm) return false;
+    if (genTree.some((o, oi) => oi !== di && o.selected && !o.existingId && norm(o.name) === nm)) return true;
+    return domains.some((d) => !d.parentDomainId && norm(d.name) === nm);
+  };
+  const subConflict = (di: number, si: number): boolean => {
+    const dom = genTree[di];
+    const sub = dom.subDomains[si];
+    if (!sub.selected) return false;
+    const nm = norm(sub.name);
+    if (!nm) return false;
+    if (dom.subDomains.some((o, oj) => oj !== si && o.selected && norm(o.name) === nm)) return true;
+    return dom.existingId ? domains.some((d) => d.parentDomainId === dom.existingId && norm(d.name) === nm) : false;
+  };
+  // Apply is blocked while any selected node is empty-named or conflicts, and
+  // when nothing creatable is selected.
+  const genHasCreatable = genTree.some((d) => (d.selected && !d.existingId) || d.subDomains.some((s) => s.selected));
+  const genHasError = genTree.some((d, di) => {
+    if (d.selected && !d.existingId && !d.name.trim()) return true;
+    if (topDomainConflict(di)) return true;
+    return d.subDomains.some((s, si) => (s.selected && !s.name.trim()) || subConflict(di, si));
+  });
+
   const handleApplyGenerated = async () => {
-    const toCreate = generatedDomains.filter((d) => d.selected);
-    if (toCreate.length === 0) { setShowGeneratePreview(false); setPreviewIsSub(false); return; }
-    // Sub-domain apply: create each child with its parentDomainId. No
-    // stewardship-team side-effect (that's a top-level-domain convenience).
-    if (previewIsSub) {
-      try {
-        const results = await Promise.allSettled(toCreate.map((d) => apiClient.post('/data-domains', {
-          name: d.name, description: d.description, status: 'DRAFT',
-          ...(d.parentId ? { parentDomainId: d.parentId } : {}),
-          ...(activeOrgId ? { orgId: activeOrgId } : {}),
-        })));
-        const created = results.filter((r) => r.status === 'fulfilled').length;
-        const failed = results.length - created;
-        addToast(failed > 0 ? 'info' : 'success', `Created ${created} sub-domain${created === 1 ? '' : 's'}${failed > 0 ? ` · ${failed} failed` : ''}`);
-      } catch (err) {
-        errorToast(err, 'Failed to create sub-domains');
-      }
-      setShowGeneratePreview(false); setPreviewIsSub(false); setGeneratedDomains([]); fetchData();
-      return;
-    }
+    const chosen = genTree.filter((d) => d.selected);
+    let createdParents = 0; let createdSubs = 0; let failed = 0;
+    const newTopNames: string[] = [];
     try {
-      const results = await Promise.allSettled(toCreate.map((d) => apiClient.post('/data-domains', { name: d.name, description: d.description, status: 'DRAFT', ...(activeOrgId ? { orgId: activeOrgId } : {}) })));
-      const created = results.filter((r) => r.status === 'fulfilled').length;
-      if (generateStewardshipTeams && created > 0) {
-        const parentId = await ensureGovernanceHierarchy();
-        await Promise.all(toCreate.filter((_, i) => results[i].status === 'fulfilled').map((d) =>
-          apiClient.post('/governance-groups', { name: `${d.name} Stewardship Team`, type: 'STEWARDSHIP_TEAM', status: 'ACTIVE', orgId: activeOrgId, parentId }).catch(() => {})
-        ));
+      for (const dom of chosen) {
+        // Create (or reuse) the parent first so children can reference its id.
+        let parentId = dom.existingId;
+        if (!parentId) {
+          const nm = dom.name.trim();
+          if (!nm) { failed++; continue; }
+          try {
+            const r = await apiClient.post<{ success: boolean; data: { id: string } }>('/data-domains', { name: nm, description: dom.description, status: 'DRAFT', ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+            parentId = r.data.id; createdParents++; newTopNames.push(nm);
+          } catch { failed++; continue; }
+        }
+        for (const sub of dom.subDomains.filter((s) => s.selected)) {
+          const nm = sub.name.trim();
+          if (!nm) { failed++; continue; }
+          try {
+            await apiClient.post('/data-domains', { name: nm, description: sub.description, status: 'DRAFT', parentDomainId: parentId, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+            createdSubs++;
+          } catch { failed++; }
+        }
       }
-      addToast('success', `Created ${created} domain${created !== 1 ? 's' : ''}${generateStewardshipTeams ? ' with stewardship teams' : ''}`);
-      setShowGeneratePreview(false); setPreviewIsSub(false); setGeneratedDomains([]); fetchData();
-    } catch (err) { errorToast(err, 'Failed to create domains'); }
+      if (generateStewardshipTeams && newTopNames.length > 0) {
+        const teamParent = await ensureGovernanceHierarchy();
+        await Promise.all(newTopNames.map((n) =>
+          apiClient.post('/governance-groups', { name: `${n} Stewardship Team`, type: 'STEWARDSHIP_TEAM', status: 'ACTIVE', orgId: activeOrgId, parentId: teamParent }).catch(() => {})));
+      }
+      const parts: string[] = [];
+      if (createdParents) parts.push(`${createdParents} domain${createdParents === 1 ? '' : 's'}`);
+      if (createdSubs) parts.push(`${createdSubs} sub-domain${createdSubs === 1 ? '' : 's'}`);
+      addToast(failed > 0 ? 'info' : 'success', `Created ${parts.join(' + ') || 'nothing'}${failed > 0 ? ` · ${failed} failed` : ''}`);
+    } catch (err) {
+      errorToast(err, 'Failed to create domains');
+    }
+    closeGenerate();
+    fetchData();
   };
 
   const transitions = statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
@@ -555,11 +594,8 @@ export default function DataDomainsPage() {
         subtitle="Organize data assets into governed domains with assigned owners and stewards."
         actions={
           <>
-            {canWrite && aiEnabled && domains.length === 0 && (
-              <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
-            )}
-            {canWrite && aiEnabled && domains.some((d) => !d.parentDomainId) && (
-              <IconButton icon="wand" label={generating ? 'Generating…' : 'Suggest sub-domains (all)'} disabled={generating} onClick={generateSubsForAll} />
+            {canWrite && aiEnabled && (
+              <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate domains'} disabled={generating} onClick={handleGenerate} />
             )}
             {domains.length > 0 && (
               <ExportMenu build={() => ({
@@ -1061,13 +1097,10 @@ export default function DataDomainsPage() {
                   setIndustryPickerOpen(false);
                   setPendingGen(null);
                   if (!chosen) return;
-                  if (pending?.type === 'subs') {
-                    await runSubGeneration(chosen, [pending.domain]);
-                  } else if (pending?.type === 'subs-all') {
-                    const parents = domains.filter((d) => !d.parentDomainId);
-                    if (parents.length > 0) await runSubGeneration(chosen, parents);
+                  if (pending?.type === 'branch') {
+                    await buildBranch(chosen, pending.domain);
                   } else {
-                    await generateForIndustry(chosen);
+                    await buildTree(chosen);
                   }
                 }}
                 disabled={!pickedIndustry || generating}
@@ -1079,7 +1112,7 @@ export default function DataDomainsPage() {
                   cursor: pickedIndustry ? 'pointer' : 'default',
                 }}
               >
-                {generating ? 'Generating…' : (pendingGen && pendingGen.type !== 'domains' ? 'Generate sub-domains' : 'Generate domains')}
+                {generating ? 'Generating…' : (pendingGen?.type === 'branch' ? 'Generate sub-domains' : 'Generate domains')}
               </button>
             </div>
           </div>
@@ -1087,35 +1120,78 @@ export default function DataDomainsPage() {
       )}
 
       {showGeneratePreview && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1050, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowGeneratePreview(false)}>
-          <div ref={generatePreviewRef} role="dialog" aria-modal="true" aria-label={previewIsSub ? 'Generated sub-domains preview' : 'Generated domains preview'} onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xl)', padding: 24, maxWidth: 600, width: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{previewIsSub ? 'Suggested Sub-Domains' : 'Suggested Data Domains'}</h3>
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16 }}>Uncheck any you don't need; the rest will be created as DRAFT {previewIsSub ? 'sub-domains under their parent' : 'domains'}.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {generatedDomains.map((d, i) => (
-                <label key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--color-border)', background: d.selected ? '#f0f9ff' : 'transparent', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={d.selected} onChange={() => setGeneratedDomains((p) => p.map((x, j) => j === i ? { ...x, selected: !x.selected } : x))} style={{ marginTop: 3 }} />
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                      {d.name}
-                      {previewIsSub && d.parentName && <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>under {d.parentName}</span>}
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1050, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeGenerate}>
+          <div ref={generatePreviewRef} role="dialog" aria-modal="true" aria-label={genBranchMode ? 'Suggest sub-domains' : 'Generate domains'} onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xl)', padding: 24, maxWidth: 640, width: '94vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{genBranchMode ? 'Suggest sub-domains' : 'Generate domains'}</h3>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>
+              Review the tree — edit any name, uncheck what you don't need, or add your own. Everything selected is created as DRAFT. Names must be unique within their parent.
+            </p>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
+              {genTree.map((dom, di) => {
+                const dupTop = topDomainConflict(di);
+                return (
+                  <div key={di} style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '10px 12px', background: dom.selected ? 'var(--color-bg)' : 'transparent' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {dom.existingId ? (
+                        <span title="Existing domain" style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>PARENT</span>
+                      ) : (
+                        <input type="checkbox" aria-label={`Include ${dom.name || 'new domain'}`} checked={dom.selected} onChange={() => updateDomain(di, { selected: !dom.selected })} style={{ flexShrink: 0 }} />
+                      )}
+                      <input
+                        aria-label="Domain name"
+                        value={dom.name}
+                        readOnly={!!dom.existingId}
+                        onChange={(e) => updateDomain(di, { name: e.target.value })}
+                        placeholder="Domain name"
+                        style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 8px', background: dom.existingId ? 'var(--color-bg)' : 'var(--color-surface)', color: 'var(--color-text)' }}
+                      />
+                      {!dom.existingId && (
+                        <button type="button" aria-label="Remove domain" onClick={() => removeTopDomain(di)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
+                      )}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>{d.description}</div>
+                    {!dom.existingId && (
+                      <input
+                        aria-label="Domain description"
+                        value={dom.description}
+                        onChange={(e) => updateDomain(di, { description: e.target.value })}
+                        placeholder="Description (optional)"
+                        style={{ width: '100%', marginTop: 6, fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', background: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}
+                      />
+                    )}
+                    {dupTop && <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 4 }}>A top-level domain with this name already exists.</div>}
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 22 }}>
+                      {dom.subDomains.map((sub, si) => {
+                        const dupSub = subConflict(di, si);
+                        return (
+                          <div key={si}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>
+                              <input type="checkbox" aria-label={`Include ${sub.name || 'new sub-domain'}`} checked={sub.selected} onChange={() => updateSub(di, si, { selected: !sub.selected })} style={{ flexShrink: 0 }} />
+                              <input aria-label="Sub-domain name" value={sub.name} onChange={(e) => updateSub(di, si, { name: e.target.value })} placeholder="Sub-domain name" style={{ flex: 1, minWidth: 0, fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', background: 'var(--color-surface)', color: 'var(--color-text)' }} />
+                              <button type="button" aria-label="Remove sub-domain" onClick={() => removeSub(di, si)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
+                            </div>
+                            {dupSub && <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 2, paddingLeft: 41 }}>Duplicate name under this parent.</div>}
+                          </div>
+                        );
+                      })}
+                      <button type="button" onClick={() => addSub(di)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 12, padding: '2px 0' }}>+ Add sub-domain</button>
+                    </div>
                   </div>
-                </label>
-              ))}
+                );
+              })}
+              {!genBranchMode && (
+                <button type="button" onClick={addTopDomain} style={{ alignSelf: 'flex-start', background: 'none', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13, padding: '6px 12px', borderRadius: 6 }}>+ Add domain</button>
+              )}
             </div>
-            {!previewIsSub && (
+            {!genBranchMode && (
               <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <input type="checkbox" checked={generateStewardshipTeams} onChange={(e) => setGenerateStewardshipTeams(e.target.checked)} />
-                <div><div style={{ fontSize: 12, fontWeight: 500 }}>Also create Stewardship Teams</div></div>
+                <div style={{ fontSize: 12, fontWeight: 500 }}>Also create Stewardship Teams for new top-level domains</div>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <Button variant="secondary" onClick={() => { setShowGeneratePreview(false); setPreviewIsSub(false); }}>Cancel</Button>
-              <Button variant="primary" disabled={!generatedDomains.some((d) => d.selected)} onClick={handleApplyGenerated}>
-                Create {generatedDomains.filter((d) => d.selected).length} {previewIsSub ? 'Sub-Domains' : 'Domains'}
-              </Button>
+              <Button variant="secondary" onClick={closeGenerate}>Cancel</Button>
+              <Button variant="primary" disabled={!genHasCreatable || genHasError} onClick={handleApplyGenerated}>Create selected</Button>
             </div>
           </div>
         </div>
