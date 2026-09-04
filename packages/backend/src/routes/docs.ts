@@ -595,51 +595,50 @@ const openApiSpec = {
       },
     },
 
-    // ── Capability Areas (the grouping level above Data Domain).
-    //    Internally the entity/route are named "business-capabilities". ──
+    // ── Business Capabilities (the grouping level above Data Domain) ──
     '/business-capabilities': {
       get: {
-        summary: 'List all capability areas (Capability Area → Domain → Sub-domain)',
-        tags: ['Capability Areas'],
+        summary: 'List all business capabilities (Capability → Domain → Sub-domain)',
+        tags: ['Business Capabilities'],
         security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'Array of capability areas' } },
+        responses: { '200': { description: 'Array of business capabilities' } },
       },
       post: {
-        summary: 'Create a new capability area',
-        tags: ['Capability Areas'],
+        summary: 'Create a new business capability',
+        tags: ['Business Capabilities'],
         security: [{ bearerAuth: [] }],
-        responses: { '201': { description: 'Capability area created' } },
+        responses: { '201': { description: 'Business capability created' } },
       },
     },
     '/business-capabilities/{id}': {
       get: {
-        summary: 'Get capability area by ID',
-        tags: ['Capability Areas'],
+        summary: 'Get business capability by ID',
+        tags: ['Business Capabilities'],
         security: [{ bearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'Capability area details' } },
+        responses: { '200': { description: 'Business capability details' } },
       },
       put: {
-        summary: 'Update a capability area',
-        tags: ['Capability Areas'],
+        summary: 'Update a business capability',
+        tags: ['Business Capabilities'],
         security: [{ bearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'Capability area updated' } },
+        responses: { '200': { description: 'Business capability updated' } },
       },
       delete: {
-        summary: 'Delete a capability area (its domains become ungrouped)',
-        tags: ['Capability Areas'],
+        summary: 'Delete a business capability (its domains become ungrouped)',
+        tags: ['Business Capabilities'],
         security: [{ bearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '204': { description: 'Capability area deleted' } },
+        responses: { '204': { description: 'Business capability deleted' } },
       },
     },
     '/business-capabilities/generate': {
       post: {
-        summary: 'AI-suggest capability areas for an industry (preview only)',
-        tags: ['Capability Areas'],
+        summary: 'AI-suggest business capabilities for an industry (preview only)',
+        tags: ['Business Capabilities'],
         security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'Array of suggested capability areas' } },
+        responses: { '200': { description: 'Array of suggested capabilities' } },
       },
     },
 

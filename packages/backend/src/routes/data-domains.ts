@@ -397,11 +397,11 @@ function resolveBusinessCapabilityId(
 ): { skip?: boolean; value?: string | null; error?: string } {
   if (raw === undefined) return { skip: true };
   if (raw === null || raw === '') return { value: null };
-  if (typeof raw !== 'string') return { error: 'businessCapabilityId must be a capability-area id or null' };
-  if (isSubDomain) return { error: 'A sub-domain inherits its capability area from its parent domain — set it on the parent instead' };
+  if (typeof raw !== 'string') return { error: 'businessCapabilityId must be a capability id or null' };
+  if (isSubDomain) return { error: 'A sub-domain inherits its capability from its parent domain — set it on the parent instead' };
   const cap = allCapabilities.find((c) => c.id === raw);
-  if (!cap) return { error: 'Capability area not found' };
-  if (cap.orgId !== orgId) return { error: 'Capability area belongs to a different organization' };
+  if (!cap) return { error: 'Business capability not found' };
+  if (cap.orgId !== orgId) return { error: 'Business capability belongs to a different organization' };
   return { value: raw };
 }
 

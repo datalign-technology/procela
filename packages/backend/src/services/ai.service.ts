@@ -366,38 +366,37 @@ Guidelines:
    * before committing.
    */
   /**
-   * Suggest capability areas for an industry — the grouping level ABOVE Data
-   * Domain (Capability Area → Data Domain → Sub-Domain). A capability area
+   * Suggest business capabilities for an industry — the grouping level ABOVE
+   * Data Domain (Business Capability → Data Domain → Sub-Domain). A capability
    * gathers related data domains (e.g. "Customer Management" groups Accounts,
-   * Billing, Service). Flat list, mirroring generateDataDomains. (The entity is
-   * named BusinessCapability internally; "Capability Area" is the UI label.)
+   * Billing, Service). Flat list, mirroring generateDataDomains.
    */
   async generateBusinessCapabilities(industry: string): Promise<object> {
     const response = await getClient().messages.create({
       model: getConfiguredModel(),
       max_tokens: 6144,
-      system: `You are a data governance expert for the Procela platform. Given an industry, suggest the capability areas that a company in that industry should define to organize their data domains.
+      system: `You are a data governance expert for the Procela platform. Given an industry, suggest the business capabilities that a company in that industry should define to organize their data domains.
 
-A capability area is the top grouping level of the data taxonomy — Capability Area → Data Domain → Sub-Domain. It names WHAT the business does at a high level (e.g. "Customer Management", "Grid Operations", "Financial Management", "Regulatory Compliance") and gathers several related data domains beneath it. It is coarser than a data domain: a single capability area like "Customer Management" would contain domains such as "Customer Accounts", "Billing", and "Service History".
+A business capability is the top grouping level of the data taxonomy — Business Capability → Data Domain → Sub-Domain. It names WHAT the business does at a high level (e.g. "Customer Management", "Grid Operations", "Financial Management", "Regulatory Compliance") and gathers several related data domains beneath it. It is coarser than a data domain: a single capability like "Customer Management" would contain domains such as "Customer Accounts", "Billing", and "Service History".
 
 Return ONLY a valid JSON array — no markdown, no code fences, no explanation:
 [
   {
-    "name": "Capability Area Name",
-    "description": "1-2 sentence description of what this capability area covers and the kinds of data domains it groups"
+    "name": "Capability Name",
+    "description": "1-2 sentence description of what this capability covers and the kinds of data domains it groups"
   }
 ]
 
 Guidelines:
-- Suggest 5-9 capability areas that are standard for the industry
+- Suggest 5-9 capabilities that are standard for the industry
 - Each must be a genuine grouping ABOVE the data-domain level — not a single domain restated
 - Use clear business language accessible to non-technical users
 - Order from most foundational to most specialized
-- Descriptions should explain the capability area's scope and the domains it would contain`,
+- Descriptions should explain the capability's scope and the domains it would contain`,
       messages: [
         {
           role: 'user',
-          content: `Generate standard capability areas for the "${industry}" industry.`,
+          content: `Generate standard business capabilities for the "${industry}" industry.`,
         },
       ],
     });
