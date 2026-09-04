@@ -21,8 +21,6 @@ import { mappings } from './mappings';
 import { governanceGroups } from './governance-groups';
 import { damaRoles } from './dama-roles';
 import { dataDomains } from './data-domains';
-import { businessCapabilities } from './business-capabilities';
-import { getBusinessCapabilitiesRepository } from '../db/business-capabilities.repo';
 import { tags } from './tags';
 import { comments } from './comments';
 import { governancePolicies } from './governance-policies';
@@ -92,9 +90,6 @@ const STORES: StoreDef[] = [
   { key: 'people', makeRepo: () => getPeopleRepository(people),
     inScope: (row, ctx) => Array.isArray(row.orgIds) && row.orgIds.some((id: string) => ctx.orgIds.has(id)), mode: 'upsert' },
   { key: 'systems', makeRepo: () => getSystemsRepository(systems), inScope: inByOrgId, mode: 'replace' },
-  // Business capabilities must precede dataDomains: a domain's
-  // businessCapabilityId FK requires the capability row to exist first.
-  { key: 'businessCapabilities', makeRepo: () => getBusinessCapabilitiesRepository(businessCapabilities), inScope: inByOrgId, mode: 'replace' },
   { key: 'dataDomains', makeRepo: () => getDataDomainsRepository(dataDomains), inScope: inByOrgId, mode: 'replace' },
   { key: 'processNodes', makeRepo: () => getProcessNodesRepository(processNodes), inScope: inByOrgId, mode: 'replace' },
   { key: 'dataAssets', makeRepo: () => getDataAssetsRepository(dataAssets), inScope: inByOrgId, mode: 'replace' },

@@ -63,7 +63,6 @@ import searchRouter from './routes/search';
 import governanceGroupsRouter from './routes/governance-groups';
 import damaRolesRouter from './routes/dama-roles';
 import dataDomainsRouter from './routes/data-domains';
-import businessCapabilitiesRouter from './routes/business-capabilities';
 import docsRouter from './routes/docs';
 import connectorsRouter from './routes/connectors';
 import connectorSyncRouter from './routes/connector-sync';
@@ -278,7 +277,6 @@ app.use('/api/v1/data-assets', authenticateToken, requireResource('data-asset'),
 app.use('/api/v1/systems', authenticateToken, requireResource('system'), systemsRouter);
 app.use('/api/v1/mappings', authenticateToken, requireResource('mapping'), mappingsRouter);
 app.use('/api/v1/data-domains', authenticateToken, requireResource('data-asset'), dataDomainsRouter);
-app.use('/api/v1/business-capabilities', authenticateToken, requireResource('data-asset'), businessCapabilitiesRouter);
 app.use('/api/v1/data-lineage', authenticateToken, requireResource('data-asset'), dataLineageRouter);
 app.use('/api/v1/data-quality', authenticateToken, requireResource('data-asset'), dataQualityRouter);
 app.use('/api/v1/business-glossary', authenticateToken, requireResource('data-asset'), businessGlossaryRouter);
@@ -378,7 +376,6 @@ import { mappings } from './routes/mappings';
 import { governanceGroups } from './routes/governance-groups';
 import { damaRoles } from './routes/dama-roles';
 import { dataDomains } from './routes/data-domains';
-import { businessCapabilities } from './routes/business-capabilities';
 import { auditLogs, initAuditChain, flushAuditQueue, auditService } from './services/audit.service';
 import { tags } from './routes/tags';
 import { comments } from './routes/comments';
@@ -420,7 +417,6 @@ const stores = {
   mappings: () => mappings,
   governanceGroups: () => governanceGroups,
   damaRoles: () => damaRoles,
-  businessCapabilities: () => businessCapabilities,
   dataDomains: () => dataDomains,
   auditLogs: () => auditLogs,
   tags: () => tags,

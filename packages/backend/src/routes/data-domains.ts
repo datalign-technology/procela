@@ -30,11 +30,6 @@ export interface StoredDataDomain {
   // deep only (a parent must itself be top-level), so the tree never exceeds
   // Domain → Sub-Domain → Asset. null / undefined = top-level domain.
   parentDomainId?: string | null;
-  // Optional parent Business Capability — the grouping level ABOVE Data Domain
-  // (Business Capability → Data Domain → Sub-Domain). Set only on top-level
-  // domains; a sub-domain inherits its capability from its parent. null /
-  // undefined = ungrouped.
-  businessCapabilityId?: string | null;
   scopeDefinition?: string;
   // Business-criticality tier. TIER_1 = the domains the council watches most
   // closely; drives the Council Scorecard's tier-1 coverage measure. null =
@@ -61,17 +56,6 @@ let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
 const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
 let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
 const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
-// Business Capability (the grouping level above Domain). Lazy to dodge the
-// value-import cycle (business-capabilities value-imports this module).
-let _capabilitiesRepo: ReturnType<typeof import('../db/business-capabilities.repo').getBusinessCapabilitiesRepository> | null = null;
-const capabilitiesRepo = () => {
-  if (_capabilitiesRepo) return _capabilitiesRepo;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getBusinessCapabilitiesRepository } = require('../db/business-capabilities.repo');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { businessCapabilities } = require('./business-capabilities');
-  return (_capabilitiesRepo = getBusinessCapabilitiesRepository(businessCapabilities));
-};
 
 // Migrate legacy statuses to DRAFT. JSON mode only — in Postgres mode the
 // persisted rows already carry the canonical status shape.
@@ -107,7 +91,6 @@ function enrichDomain(
   allPeople: typeof people,
   allAssets: typeof dataAssets,
   allDomains: StoredDataDomain[] = [],
-  allCapabilities: Array<{ id: string; name: string }> = [],
 ) {
   const owner = domain.ownerId ? allPeople.find((p) => p.id === domain.ownerId) : null;
   const stewards = domain.stewardIds
@@ -134,12 +117,6 @@ function enrichDomain(
   const parent = domain.parentDomainId ? allDomains.find((d) => d.id === domain.parentDomainId) : null;
   const subDomainCount = allDomains.filter((d) => d.parentDomainId === domain.id).length;
 
-  // Business Capability (the grouping level above Domain). A sub-domain has no
-  // capability of its own — it inherits its parent's — so resolve the effective
-  // capability from the parent when this is a sub-domain.
-  const capSourceId = domain.parentDomainId ? (parent?.businessCapabilityId ?? null) : (domain.businessCapabilityId ?? null);
-  const capability = capSourceId ? allCapabilities.find((c) => c.id === capSourceId) : null;
-
   return {
     ...domain,
     ownerName: owner?.name || null,
@@ -150,7 +127,6 @@ function enrichDomain(
     suggestedCriticality,
     parentDomainName: parent?.name || null,
     subDomainCount,
-    businessCapabilityName: capability?.name || null,
   };
 }
 
@@ -314,14 +290,13 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/data-domains — list all (support ?orgId= filter) */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const [allDomains, allPeople, allAssets, allCaps] = await Promise.all([
+  const [allDomains, allPeople, allAssets] = await Promise.all([
     dataDomainsRepo.list(),
     peopleRepo().list(),
     dataAssetsRepo().list(),
-    capabilitiesRepo().list(),
   ]);
   const filtered = filterByOrgScope(allDomains, orgId as string | undefined);
-  const enriched = filtered.map((d) => enrichDomain(d, allPeople, allAssets, allDomains, allCaps));
+  const enriched = filtered.map((d) => enrichDomain(d, allPeople, allAssets, allDomains));
   res.json({ success: true, data: enriched });
 });
 
@@ -343,15 +318,14 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 /** GET /api/v1/data-domains/:id — single domain with enriched data */
 router.get('/:id', async (req: Request, res: Response) => {
-  const [domain, allPeople, allAssets, allDomains, allCaps] = await Promise.all([
+  const [domain, allPeople, allAssets, allDomains] = await Promise.all([
     dataDomainsRepo.get(String(req.params.id)),
     peopleRepo().list(),
     dataAssetsRepo().list(),
     dataDomainsRepo.list(),
-    capabilitiesRepo().list(),
   ]);
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
-  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets, allDomains, allCaps) });
+  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets, allDomains) });
 });
 
 /**
@@ -380,28 +354,6 @@ function resolveParentDomainId(
   if (selfId && allDomains.some((d) => d.parentDomainId === selfId)) {
     return { error: 'This domain has its own sub-domains, so it cannot become a sub-domain itself' };
   }
-  return { value: raw };
-}
-
-/**
- * Validate an incoming businessCapabilityId. A capability is the grouping level
- * ABOVE Domain and is set only on top-level domains (a sub-domain inherits its
- * parent's). Returns { skip } when the field wasn't provided, { value } on
- * success (null = ungroup), or { error }.
- */
-function resolveBusinessCapabilityId(
-  raw: unknown,
-  orgId: string,
-  isSubDomain: boolean,
-  allCapabilities: Array<{ id: string; orgId: string; name: string }>,
-): { skip?: boolean; value?: string | null; error?: string } {
-  if (raw === undefined) return { skip: true };
-  if (raw === null || raw === '') return { value: null };
-  if (typeof raw !== 'string') return { error: 'businessCapabilityId must be a capability-area id or null' };
-  if (isSubDomain) return { error: 'A sub-domain inherits its capability area from its parent domain — set it on the parent instead' };
-  const cap = allCapabilities.find((c) => c.id === raw);
-  if (!cap) return { error: 'Capability area not found' };
-  if (cap.orgId !== orgId) return { error: 'Capability area belongs to a different organization' };
   return { value: raw };
 }
 
@@ -438,11 +390,6 @@ router.post('/', async (req: Request, res: Response) => {
   if (parentResult.error) { res.status(400).json({ success: false, error: parentResult.error }); return; }
   const resolvedParentId = parentResult.skip ? null : (parentResult.value ?? null);
   const parentForCode = resolvedParentId ? allDomains.find((d) => d.id === resolvedParentId) || null : null;
-
-  const allCaps = await capabilitiesRepo().list();
-  const capResult = resolveBusinessCapabilityId(req.body?.businessCapabilityId, orgId, !!resolvedParentId, allCaps);
-  if (capResult.error) { res.status(400).json({ success: false, error: capResult.error }); return; }
-  const resolvedCapabilityId = capResult.skip ? null : (capResult.value ?? null);
   const orgDomains = allDomains.filter((d) => d.orgId === orgId);
   const code = (typeof req.body?.code === 'string' && req.body.code.trim())
     ? req.body.code.trim()
@@ -460,7 +407,6 @@ router.post('/', async (req: Request, res: Response) => {
     dataAssetIds: [],
     code,
     parentDomainId: resolvedParentId,
-    businessCapabilityId: resolvedCapabilityId,
     criticality: VALID_CRITICALITY.includes(req.body?.criticality) ? req.body.criticality : undefined,
     status: status && VALID_STATUSES.includes(status) ? status : 'DRAFT',
     createdAt: now,
@@ -468,7 +414,7 @@ router.post('/', async (req: Request, res: Response) => {
   };
   await dataDomainsRepo.create(domain);
   const [allPeople, allAssets] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list()]);
-  res.status(201).json({ success: true, data: enrichDomain(domain, allPeople, allAssets, [...allDomains, domain], allCaps) });
+  res.status(201).json({ success: true, data: enrichDomain(domain, allPeople, allAssets, [...allDomains, domain]) });
 });
 
 /** PUT /api/v1/data-domains/:id — update fields */
@@ -508,15 +454,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   const parentResult = resolveParentDomainId(req.body?.parentDomainId, domain.orgId, domain.id, allDomainsForParent);
   if (parentResult.error) { res.status(400).json({ success: false, error: parentResult.error }); return; }
   if (!parentResult.skip) domain.parentDomainId = parentResult.value ?? null;
-  // Business Capability (grouping level above Domain). Set only on top-level
-  // domains — validated against the (possibly just-updated) parent state.
-  const allCapsForPut = await capabilitiesRepo().list();
-  const capResult = resolveBusinessCapabilityId(req.body?.businessCapabilityId, domain.orgId, !!domain.parentDomainId, allCapsForPut);
-  if (capResult.error) { res.status(400).json({ success: false, error: capResult.error }); return; }
-  if (!capResult.skip) domain.businessCapabilityId = capResult.value ?? null;
-  // A domain demoted to a sub-domain drops its own capability (it now inherits
-  // the parent's), so a stale grouping can't linger.
-  if (domain.parentDomainId) domain.businessCapabilityId = null;
   // Scope Definition merged into Description: fold any incoming value in.
   if (scopeDefinition !== undefined) {
     domain.description = combineDescription(domain.description, scopeDefinition) || '';
@@ -539,7 +476,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   await dataDomainsRepo.update(domain.id, domain);
 
   const [allPeople, allAssets, allDomains] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list(), dataDomainsRepo.list()]);
-  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets, allDomains, allCapsForPut) });
+  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets, allDomains) });
 });
 
 /** GET /api/v1/data-domains/:id/impact — preview what would be affected by deleting this domain */

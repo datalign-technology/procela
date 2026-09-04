@@ -18,7 +18,6 @@ import { people } from '../routes/people';
 import { systems } from '../routes/systems';
 import { agents } from '../routes/agents';
 import { dataDomains } from '../routes/data-domains';
-import { businessCapabilities } from '../routes/business-capabilities';
 import { dataAssets } from '../routes/data-assets';
 import { processNodes, flowRelationships } from '../routes/process-catalog';
 import { mappings } from '../routes/mappings';
@@ -63,7 +62,6 @@ import { getPeopleRepository } from '../db/people.repo';
 import { getSystemsRepository } from '../db/systems.repo';
 import { getAgentsRepository } from '../db/agents.repo';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
-import { getBusinessCapabilitiesRepository } from '../db/business-capabilities.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
@@ -184,7 +182,6 @@ interface DemoRepos {
   people: Repository<any>;
   systems: Repository<any>;
   agents: Repository<any>;
-  businessCapabilities: Repository<any>;
   dataDomains: Repository<any>;
   dataAssets: Repository<any>;
   processNodes: Repository<any>;
@@ -230,7 +227,6 @@ function buildRepos(): DemoRepos {
     people: getPeopleRepository(people as any),
     systems: getSystemsRepository(systems as any),
     agents: getAgentsRepository(agents as any),
-    businessCapabilities: getBusinessCapabilitiesRepository(businessCapabilities as any),
     dataDomains: getDataDomainsRepository(dataDomains as any),
     dataAssets: getDataAssetsRepository(dataAssets as any),
     processNodes: getProcessNodesRepository(processNodes as any),
@@ -374,7 +370,6 @@ async function sweep(repos: DemoRepos): Promise<void> {
   await sweepHierarchy(repos.processNodes);
   await sweepRepo(repos.dataAssets);
   await sweepRepo(repos.dataDomains);
-  await sweepRepo(repos.businessCapabilities);
   await sweepRepo(repos.agents);
   await sweepRepo(repos.systems);
   await sweepRepo(repos.people);
@@ -701,7 +696,6 @@ export interface DemoSeedReport {
   people: number;
   systems: number;
   agents: number;
-  businessCapabilities: number;
   dataDomains: number;
   dataAssets: number;
   processNodes: number;
@@ -820,18 +814,10 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     { id: demoId('agent-compliance'), orgIds: [orgTidewater.id], name: 'Compliance Report Generator', agentType: 'OTHER', description: 'Scheduled generator producing NPDES DMR and DWR monthly submissions.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: isabella.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
   ]);
 
-  // ── Business Capabilities (the grouping level above Data Domain) ──
-  // Capability → Data Domain → Sub-Domain. Created before the domains so the
-  // businessCapabilityId FK resolves on import.
-  const capCustomer = { id: demoId('capability-customer'), code: 'CUST', orgId: orgTidewater.id, name: 'Customer Management', description: 'Serving customers end to end — accounts, billing, and service. Groups the customer-facing data domains.', ownerId: susan.id, dataDomainIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const capGridOps = { id: demoId('capability-grid-ops'), code: 'GRDOPS', orgId: orgTidewater.id, name: 'Grid & Generation Operations', description: 'Running the physical network — grid telemetry, generation, and metering. Groups the operational data domains.', ownerId: jennifer.id, dataDomainIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const capCompliance = { id: demoId('capability-compliance'), code: 'RCOMP', orgId: orgTidewater.id, name: 'Regulatory Compliance', description: 'Meeting NERC CIP, EPA SDWA, and rate-case obligations. Groups the regulatory data domains.', ownerId: lorraine.id, dataDomainIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  await createAll(repos.businessCapabilities, [capCustomer, capGridOps, capCompliance]);
-
   // ── Data Domains ──
-  const domCustomer = { id: demoId('domain-customer'), code: 'CUST', orgId: orgTidewater.id, name: 'Customer Data', description: 'Customer accounts, addresses, service history, billing.', ownerId: susan.id, stewardIds: [natalie.id], dataAssetIds: [] as string[], businessCapabilityId: capCustomer.id, status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domOps = { id: demoId('domain-ops'), code: 'OPS', orgId: orgTidewater.id, name: 'Operational Data', description: 'Grid, generation, metering — the real-time and near-real-time operational feeds.', ownerId: jennifer.id, stewardIds: [brandon.id, deborah.id], dataAssetIds: [] as string[], businessCapabilityId: capGridOps.id, status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domRegulatory = { id: demoId('domain-regulatory'), code: 'REG', orgId: orgTidewater.id, name: 'Regulatory Data', description: 'Compliance evidence, filings, rate case data, NERC CIP + EPA SDWA.', ownerId: lorraine.id, stewardIds: [phillip.id], dataAssetIds: [] as string[], businessCapabilityId: capCompliance.id, status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domCustomer = { id: demoId('domain-customer'), code: 'CUST', orgId: orgTidewater.id, name: 'Customer Data', description: 'Customer accounts, addresses, service history, billing.', ownerId: susan.id, stewardIds: [natalie.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domOps = { id: demoId('domain-ops'), code: 'OPS', orgId: orgTidewater.id, name: 'Operational Data', description: 'Grid, generation, metering — the real-time and near-real-time operational feeds.', ownerId: jennifer.id, stewardIds: [brandon.id, deborah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domRegulatory = { id: demoId('domain-regulatory'), code: 'REG', orgId: orgTidewater.id, name: 'Regulatory Data', description: 'Compliance evidence, filings, rate case data, NERC CIP + EPA SDWA.', ownerId: lorraine.id, stewardIds: [phillip.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   // Two sub-domains under Operational Data — shows the Domain → Sub-Domain
   // nesting out of the box. Parents are created first (FK order).
   const domOpsGrid = { id: demoId('domain-ops-grid'), code: 'OPS-01', orgId: orgTidewater.id, name: 'Grid Telemetry', description: 'SCADA and sensor feeds from the distribution grid — the real-time operational signal.', ownerId: jennifer.id, stewardIds: [brandon.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domOps.id, createdAt: ts, updatedAt: ts };
@@ -1312,7 +1298,6 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     people: 24,
     systems: 8,
     agents: 5,
-    businessCapabilities: 3,
     dataDomains: 6,
     dataAssets: 9,
     processNodes: 15,
@@ -1398,16 +1383,10 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
     { id: demoId('agent-cert-gen'), orgIds: [orgMeridian.id], name: 'Naval Cert Package Generator', agentType: 'OTHER', description: 'Scheduled generator producing ABS + Naval certification evidence packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: isadora.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
   ]);
 
-  // ── Business Capabilities (3) — grouping level above Data Domain ──
-  const capEngineering = { id: demoId('capability-engineering'), code: 'ENGG', orgId: orgMeridian.id, name: 'Engineering & Design', description: 'Designing the vessel — models, drawings, and engineering BOMs. Groups the design/engineering data domains.', ownerId: elena.id, dataDomainIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const capProduction = { id: demoId('capability-production'), code: 'PRODN', orgId: orgMeridian.id, name: 'Production & Fabrication', description: 'Building the vessel — work orders, materials, and weld telemetry across the shop floor. Groups the production data domains.', ownerId: grant.id, dataDomainIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const capQuality = { id: demoId('capability-quality'), code: 'QCOMP', orgId: orgMeridian.id, name: 'Quality & Certification', description: 'Proving the vessel — inspection, nonconformance, and ABS/Naval/OSHA certification evidence. Groups the quality/compliance data domains.', ownerId: gabriela.id, dataDomainIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  await createAll(repos.businessCapabilities, [capEngineering, capProduction, capQuality]);
-
   // ── Data Domains (3) ──
-  const domDesign = { id: demoId('domain-design'), code: 'ENG', orgId: orgMeridian.id, name: 'Design & Engineering Data', description: '3D product models, drawings, engineering BOMs, change orders.', ownerId: elena.id, stewardIds: [dmitri.id], dataAssetIds: [] as string[], businessCapabilityId: capEngineering.id, status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domProduction = { id: demoId('domain-production'), code: 'PROD', orgId: orgMeridian.id, name: 'Production Data', description: 'Work orders, material receipts, weld telemetry — the shop-floor operational feeds.', ownerId: grant.id, stewardIds: [noor.id, aaliyah.id], dataAssetIds: [] as string[], businessCapabilityId: capProduction.id, status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domQuality = { id: demoId('domain-quality'), code: 'QLT', orgId: orgMeridian.id, name: 'Quality & Compliance Data', description: 'Inspection records, nonconformance reports, certification evidence (ABS / Naval / OSHA).', ownerId: gabriela.id, stewardIds: [warrick.id], dataAssetIds: [] as string[], businessCapabilityId: capQuality.id, status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domDesign = { id: demoId('domain-design'), code: 'ENG', orgId: orgMeridian.id, name: 'Design & Engineering Data', description: '3D product models, drawings, engineering BOMs, change orders.', ownerId: elena.id, stewardIds: [dmitri.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domProduction = { id: demoId('domain-production'), code: 'PROD', orgId: orgMeridian.id, name: 'Production Data', description: 'Work orders, material receipts, weld telemetry — the shop-floor operational feeds.', ownerId: grant.id, stewardIds: [noor.id, aaliyah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domQuality = { id: demoId('domain-quality'), code: 'QLT', orgId: orgMeridian.id, name: 'Quality & Compliance Data', description: 'Inspection records, nonconformance reports, certification evidence (ABS / Naval / OSHA).', ownerId: gabriela.id, stewardIds: [warrick.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   // Sub-domains under Production Data — mirrors the canonical shipbuilder model
   // (Manufacturing → Welding / Fabrication / Assembly). Parent created first.
   const domProdWelding = { id: demoId('domain-prod-welding'), code: 'PROD-01', orgId: orgMeridian.id, name: 'Welding', description: 'Weld records, procedure specs (WPS), and weld sensor telemetry from the shop floor.', ownerId: grant.id, stewardIds: [noor.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domProduction.id, createdAt: ts, updatedAt: ts };
@@ -1703,7 +1682,6 @@ async function seedShipbuilding(repos: DemoRepos, ts: string): Promise<DemoSeedR
     people: 24,
     systems: 8,
     agents: 5,
-    businessCapabilities: 3,
     dataDomains: 6,
     dataAssets: 9,
     processNodes: 15,

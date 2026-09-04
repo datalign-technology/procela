@@ -595,54 +595,6 @@ const openApiSpec = {
       },
     },
 
-    // ── Capability Areas (the grouping level above Data Domain).
-    //    Internally the entity/route are named "business-capabilities". ──
-    '/business-capabilities': {
-      get: {
-        summary: 'List all capability areas (Capability Area → Domain → Sub-domain)',
-        tags: ['Capability Areas'],
-        security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'Array of capability areas' } },
-      },
-      post: {
-        summary: 'Create a new capability area',
-        tags: ['Capability Areas'],
-        security: [{ bearerAuth: [] }],
-        responses: { '201': { description: 'Capability area created' } },
-      },
-    },
-    '/business-capabilities/{id}': {
-      get: {
-        summary: 'Get capability area by ID',
-        tags: ['Capability Areas'],
-        security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'Capability area details' } },
-      },
-      put: {
-        summary: 'Update a capability area',
-        tags: ['Capability Areas'],
-        security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'Capability area updated' } },
-      },
-      delete: {
-        summary: 'Delete a capability area (its domains become ungrouped)',
-        tags: ['Capability Areas'],
-        security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '204': { description: 'Capability area deleted' } },
-      },
-    },
-    '/business-capabilities/generate': {
-      post: {
-        summary: 'AI-suggest capability areas for an industry (preview only)',
-        tags: ['Capability Areas'],
-        security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'Array of suggested capability areas' } },
-      },
-    },
-
     // ── Dashboard ──
     '/dashboard/stats': {
       get: {

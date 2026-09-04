@@ -43,8 +43,6 @@ const { agents } = require('../routes/agents');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataDomains } = require('../routes/data-domains');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { businessCapabilities } = require('../routes/business-capabilities');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataAssets } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { processNodes } = require('../routes/process-catalog');
@@ -169,7 +167,6 @@ describe('demo-seed endpoint', () => {
       [people, 'people'],
       [systems, 'systems'],
       [agents, 'agents'],
-      [businessCapabilities, 'businessCapabilities'],
       [dataDomains, 'dataDomains'],
       [dataAssets, 'dataAssets'],
       [processNodes, 'processNodes'],
@@ -264,7 +261,6 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(people), 24, 'people');
     assert.strictEqual(demoCount(systems), 8, 'systems');
     assert.strictEqual(demoCount(agents), 5, 'agents');
-    assert.strictEqual(demoCount(businessCapabilities), 3, 'capabilities');
     assert.strictEqual(demoCount(dataDomains), 6, 'domains');
     assert.strictEqual(demoCount(dataAssets), 9, 'assets');
     assert.strictEqual(demoCount(processNodes), 15, 'process nodes');
@@ -395,7 +391,6 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(people), 24, 'people');
     assert.strictEqual(demoCount(systems), 8, 'systems');
     assert.strictEqual(demoCount(agents), 5, 'agents');
-    assert.strictEqual(demoCount(businessCapabilities), 3, 'capabilities');
     assert.strictEqual(demoCount(dataDomains), 6, 'domains');
     assert.strictEqual(demoCount(dataAssets), 9, 'assets');
     assert.strictEqual(demoCount(processNodes), 15, 'process nodes');

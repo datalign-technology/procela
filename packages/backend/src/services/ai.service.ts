@@ -218,7 +218,6 @@ export interface AiService {
    *  prompt and grounding as the non-streaming variant — only the
    *  delivery shape differs. */
   generateIndustryTemplateStream(industry: string, specialization?: IndustryTemplateSpecialization): AsyncIterable<TemplateStreamEvent>;
-  generateBusinessCapabilities(industry: string): Promise<object>;
   generateDataDomains(industry: string): Promise<object>;
   generateSubDomains(industry: string, parentName: string, parentDescription?: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
@@ -365,47 +364,6 @@ Guidelines:
    * array of { name, description } objects that the frontend previews
    * before committing.
    */
-  /**
-   * Suggest capability areas for an industry — the grouping level ABOVE Data
-   * Domain (Capability Area → Data Domain → Sub-Domain). A capability area
-   * gathers related data domains (e.g. "Customer Management" groups Accounts,
-   * Billing, Service). Flat list, mirroring generateDataDomains. (The entity is
-   * named BusinessCapability internally; "Capability Area" is the UI label.)
-   */
-  async generateBusinessCapabilities(industry: string): Promise<object> {
-    const response = await getClient().messages.create({
-      model: getConfiguredModel(),
-      max_tokens: 6144,
-      system: `You are a data governance expert for the Procela platform. Given an industry, suggest the capability areas that a company in that industry should define to organize their data domains.
-
-A capability area is the top grouping level of the data taxonomy — Capability Area → Data Domain → Sub-Domain. It names WHAT the business does at a high level (e.g. "Customer Management", "Grid Operations", "Financial Management", "Regulatory Compliance") and gathers several related data domains beneath it. It is coarser than a data domain: a single capability area like "Customer Management" would contain domains such as "Customer Accounts", "Billing", and "Service History".
-
-Return ONLY a valid JSON array — no markdown, no code fences, no explanation:
-[
-  {
-    "name": "Capability Area Name",
-    "description": "1-2 sentence description of what this capability area covers and the kinds of data domains it groups"
-  }
-]
-
-Guidelines:
-- Suggest 5-9 capability areas that are standard for the industry
-- Each must be a genuine grouping ABOVE the data-domain level — not a single domain restated
-- Use clear business language accessible to non-technical users
-- Order from most foundational to most specialized
-- Descriptions should explain the capability area's scope and the domains it would contain`,
-      messages: [
-        {
-          role: 'user',
-          content: `Generate standard capability areas for the "${industry}" industry.`,
-        },
-      ],
-    });
-
-    const text = textFromResponse(response);
-    return extractJson(text) as object;
-  }
-
   async generateDataDomains(industry: string): Promise<object> {
     const response = await getClient().messages.create({
       model: getConfiguredModel(),
