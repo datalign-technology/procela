@@ -378,22 +378,40 @@ router.post('/', async (req: Request, res: Response) => {
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 
   const allDomains = await dataDomainsRepo.list();
-  const duplicate = allDomains.find(
-    (d) => d.orgId === orgId && d.name.trim().toLowerCase() === name.trim().toLowerCase(),
-  );
-  if (duplicate) {
-    res.status(409).json({ success: false, error: `A data domain named "${name}" already exists in this organization` });
-    return;
-  }
 
+  // Resolve the parent first — name uniqueness is scoped to it (siblings), not
+  // the whole org: "Billing" may legitimately sit under both Customer and
+  // Finance. The structured `code` is the global handle instead.
   const parentResult = resolveParentDomainId(req.body?.parentDomainId, orgId, null, allDomains);
   if (parentResult.error) { res.status(400).json({ success: false, error: parentResult.error }); return; }
   const resolvedParentId = parentResult.skip ? null : (parentResult.value ?? null);
+
+  const nameClash = allDomains.find(
+    (d) => d.orgId === orgId
+      && (d.parentDomainId ?? null) === resolvedParentId
+      && d.name.trim().toLowerCase() === name.trim().toLowerCase(),
+  );
+  if (nameClash) {
+    res.status(409).json({ success: false, error: `A data domain named "${name}" already exists ${resolvedParentId ? 'under this parent domain' : 'at the top level'}.` });
+    return;
+  }
+
   const parentForCode = resolvedParentId ? allDomains.find((d) => d.id === resolvedParentId) || null : null;
   const orgDomains = allDomains.filter((d) => d.orgId === orgId);
-  const code = (typeof req.body?.code === 'string' && req.body.code.trim())
-    ? req.body.code.trim()
-    : suggestDomainCode(name, parentForCode, orgDomains);
+
+  // Code is the global handle within an org — a user-supplied one must be
+  // unique; an auto-suggested one already dedupes against existing codes.
+  let code: string;
+  if (typeof req.body?.code === 'string' && req.body.code.trim()) {
+    code = req.body.code.trim();
+    const codeClash = orgDomains.find((d) => (d.code || '').trim().toLowerCase() === code.toLowerCase());
+    if (codeClash) {
+      res.status(409).json({ success: false, error: `Code "${code}" is already used by "${codeClash.name}". Codes must be unique within the organization.` });
+      return;
+    }
+  } else {
+    code = suggestDomainCode(name, parentForCode, orgDomains);
+  }
 
   const now = new Date().toISOString();
   const domain: StoredDataDomain = {
@@ -438,6 +456,43 @@ router.put('/:id', async (req: Request, res: Response) => {
     return;
   }
 
+  // Resolve the (possibly new) parent first — sibling-uniqueness is scoped to
+  // it. Validate name + code conflicts before mutating anything, so a rejected
+  // update leaves the stored domain untouched.
+  const allDomainsForParent = await dataDomainsRepo.list();
+  const parentResult = resolveParentDomainId(req.body?.parentDomainId, domain.orgId, domain.id, allDomainsForParent);
+  if (parentResult.error) { res.status(400).json({ success: false, error: parentResult.error }); return; }
+  const effectiveParentId = parentResult.skip ? (domain.parentDomainId ?? null) : (parentResult.value ?? null);
+
+  // Name must be unique among siblings (same org + same parent), not globally.
+  const effectiveName = name !== undefined ? name : domain.name;
+  const nameClash = allDomainsForParent.find(
+    (d) => d.id !== domain.id
+      && d.orgId === domain.orgId
+      && (d.parentDomainId ?? null) === effectiveParentId
+      && d.name.trim().toLowerCase() === String(effectiveName).trim().toLowerCase(),
+  );
+  if (nameClash) {
+    res.status(409).json({ success: false, error: `A data domain named "${effectiveName}" already exists ${effectiveParentId ? 'under this parent domain' : 'at the top level'}.` });
+    return;
+  }
+
+  // Code (when being set) must be unique across the whole org — it's the handle.
+  if (req.body?.code !== undefined) {
+    const nextCode = typeof req.body.code === 'string' && req.body.code.trim() ? req.body.code.trim() : undefined;
+    if (nextCode) {
+      const codeClash = allDomainsForParent.find(
+        (d) => d.id !== domain.id && d.orgId === domain.orgId
+          && (d.code || '').trim().toLowerCase() === nextCode.toLowerCase(),
+      );
+      if (codeClash) {
+        res.status(409).json({ success: false, error: `Code "${nextCode}" is already used by "${codeClash.name}". Codes must be unique within the organization.` });
+        return;
+      }
+    }
+  }
+
+  // Validation passed — apply the field edits.
   if (name !== undefined) domain.name = name;
   if (description !== undefined) domain.description = description;
   if (ownerId !== undefined) domain.ownerId = ownerId || null;
@@ -449,10 +504,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (req.body?.code !== undefined) {
     domain.code = typeof req.body.code === 'string' && req.body.code.trim() ? req.body.code.trim() : undefined;
   }
-  // Parent domain (sub-domain nesting). Validated against the full list.
-  const allDomainsForParent = await dataDomainsRepo.list();
-  const parentResult = resolveParentDomainId(req.body?.parentDomainId, domain.orgId, domain.id, allDomainsForParent);
-  if (parentResult.error) { res.status(400).json({ success: false, error: parentResult.error }); return; }
   if (!parentResult.skip) domain.parentDomainId = parentResult.value ?? null;
   // Scope Definition merged into Description: fold any incoming value in.
   if (scopeDefinition !== undefined) {
