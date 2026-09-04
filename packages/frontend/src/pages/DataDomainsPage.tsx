@@ -18,6 +18,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
+import TruncatedText from '../components/TruncatedText';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
@@ -95,6 +96,18 @@ export default function DataDomainsPage() {
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } | null>(null);
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Left-tree expand/collapse: the set of parent-domain ids whose sub-domains
+  // are folded away. Persisted per org so navigation state survives reloads.
+  // Default is fully expanded (empty set) — matches the pre-collapse behaviour.
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const toggleCollapse = (id: string) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   // Bulk selection
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
@@ -200,6 +213,37 @@ export default function DataDomainsPage() {
     }
     return out;
   }, [filteredDomains]);
+
+  // Parents that actually have a sub-domain rendered in the current (filtered)
+  // list — the only rows that get a collapse caret.
+  const parentsWithChildren = useMemo(() => {
+    const s = new Set<string>();
+    for (const d of orderedDomains) if (d.parentDomainId) s.add(d.parentDomainId);
+    return s;
+  }, [orderedDomains]);
+  const allCollapsed = parentsWithChildren.size > 0 && Array.from(parentsWithChildren).every((id) => collapsedIds.has(id));
+  const toggleCollapseAll = () => setCollapsedIds(allCollapsed ? new Set() : new Set(parentsWithChildren));
+  // Rows that survive the fold: hide a sub-domain whose parent is collapsed.
+  const visibleDomains = useMemo(
+    () => orderedDomains.filter((d) => !(d.parentDomainId && collapsedIds.has(d.parentDomainId))),
+    [orderedDomains, collapsedIds],
+  );
+
+  // Persist the collapsed set per org. The prevKey guard skips the save on the
+  // render where the org (and thus the storage key) changed, so the freshly
+  // loaded set for the new org isn't clobbered by the previous org's state.
+  const collapseKey = activeOrgId ? `procela.dataDomains.collapsed.${activeOrgId}` : 'procela.dataDomains.collapsed';
+  const prevCollapseKeyRef = useRef(collapseKey);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(collapseKey);
+      setCollapsedIds(raw ? new Set<string>(JSON.parse(raw)) : new Set());
+    } catch { setCollapsedIds(new Set()); }
+  }, [collapseKey]);
+  useEffect(() => {
+    if (prevCollapseKeyRef.current !== collapseKey) { prevCollapseKeyRef.current = collapseKey; return; }
+    try { localStorage.setItem(collapseKey, JSON.stringify(Array.from(collapsedIds))); } catch { /* */ }
+  }, [collapsedIds, collapseKey]);
 
   const selectedDomain = selectedDomainId ? domains.find((d) => d.id === selectedDomainId) || null : null;
   // Parent of the selected sub-domain (if any) — used to offer an explicit
@@ -668,6 +712,18 @@ export default function DataDomainsPage() {
           <Card padding={0} shadow="none" style={{ overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
               <input aria-label="Search domains" style={{ ...inputStyle, fontSize: 12, padding: '6px 10px' }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              {parentsWithChildren.size > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={toggleCollapseAll}
+                    aria-expanded={!allCollapsed}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 11, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    {allCollapsed ? '▸ Expand all' : '▾ Collapse all'}
+                  </button>
+                </div>
+              )}
               {canWrite && filteredDomains.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
                   <input
@@ -702,10 +758,12 @@ export default function DataDomainsPage() {
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {filteredDomains.length === 0 ? (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No domains match.</div>
-              ) : orderedDomains.map((d) => {
+              ) : visibleDomains.map((d) => {
                 const isActive = selectedDomainId === d.id;
                 const isChecked = bulkSelectedIds.has(d.id);
                 const isSub = !!d.parentDomainId;
+                const isCollapsible = parentsWithChildren.has(d.id);
+                const isCollapsed = collapsedIds.has(d.id);
                 return (
                   <div key={d.id} {...clickable(() => openDetail(d), { label: `Open domain ${d.name}` })} style={{
                     padding: '10px 12px', paddingLeft: isSub ? 30 : 12, cursor: 'pointer',
@@ -727,20 +785,31 @@ export default function DataDomainsPage() {
                         style={{ cursor: 'pointer' }}
                       />
                     )}
+                    {/* Fold caret — only on parents that actually have a
+                        sub-domain in view. Every other row gets an equal-width
+                        spacer so names stay aligned regardless of caret. */}
+                    {isCollapsible ? (
+                      <button
+                        type="button"
+                        aria-label={isCollapsed ? `Expand ${d.name}` : `Collapse ${d.name}`}
+                        aria-expanded={!isCollapsed}
+                        onClick={(e) => { e.stopPropagation(); toggleCollapse(d.id); }}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: 14, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 10 }}
+                      >
+                        {isCollapsed ? '▸' : '▾'}
+                      </button>
+                    ) : (
+                      <span aria-hidden="true" style={{ width: 14, flexShrink: 0, display: 'inline-block' }} />
+                    )}
                     {isSub && <span title="Sub-domain" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>}
                     <span style={statusDot(d.status)} title={d.status} />
                     {d.code && (
                       <span title={`Code: ${d.code}`} style={{ flexShrink: 0, fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 5px' }}>{d.code}</span>
                     )}
-                    <div
-                      style={{
-                        flex: 1, minWidth: 0,
-                        fontSize: 13, fontWeight: isActive ? 600 : 400,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {d.name}
-                    </div>
+                    <TruncatedText
+                      text={d.name}
+                      style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: isActive ? 600 : 400 }}
+                    />
                     {/* Governance signal chips: sub-domain count on parents,
                         master/reference-data markers. Kept compact to preserve
                         the uniform row height. */}
