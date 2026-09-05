@@ -185,6 +185,45 @@ export function RtoField({ value, onSave, disabled }: {
   );
 }
 
+export function RpoField({ value, onSave, disabled }: {
+  value: number | undefined;
+  onSave: (v: number | null) => void;
+  disabled: boolean;
+}) {
+  const [draft, setDraft] = useState<string>(value !== undefined ? String(value) : '');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { setDraft(value !== undefined ? String(value) : ''); }, [value]);
+  const commit = () => {
+    if (draft.trim() === '') {
+      if (value !== undefined) { onSave(null); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+      return;
+    }
+    const n = Number(draft);
+    if (!Number.isFinite(n) || n < 0) { setDraft(value !== undefined ? String(value) : ''); return; }
+    if (n !== value) { onSave(n); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>RPO (hours):</span>
+      <input
+        type="number"
+        aria-label="RPO (hours)"
+        min={0}
+        step={0.5}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+        disabled={disabled}
+        placeholder="e.g. 1"
+        style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: 90 }}
+        title="Recovery Point Objective — how much data loss (in time) is tolerable"
+      />
+      {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+    </div>
+  );
+}
+
 // ── Controls Picker — multi-select for the governance controls this
 //    activity implements or is subject to. Options come from the
 //    governance-controls store; selection is stored as controlIds on

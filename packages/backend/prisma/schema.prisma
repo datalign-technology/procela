@@ -270,8 +270,11 @@ model ProcessNode {
   estimatedDuration   String?
   criticalityTier     CriticalityTier?
   rtoHours            Int?
+  rpoHours            Int?
   successMeasure      String?          @db.Text
   slaTarget           String?
+  trigger             String?
+  volume              String?
   domain              NodeDomain       @default(OPERATIONAL)
   version             Int              @default(1)
   submittedBy         String?          @db.Uuid
