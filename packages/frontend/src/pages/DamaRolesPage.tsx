@@ -252,7 +252,12 @@ export default function DamaRolesPage({
   });
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [filterRoleType, setFilterRoleType] = useState<string | null>(null);
+  // Filter chips narrow the role list by *category* (Executive /
+  // Business / Technical / Entity-attached) rather than by individual
+  // role — one compact chip row instead of a pill per role across four
+  // stacked rows. Clicking a table row still opens that specific role's
+  // preview (previewRoleType), independent of this filter.
+  const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   // Which role's detail pane is open on the right. Mirrors the People
   // page's preview-on-click pattern — click any row in the table to
@@ -388,7 +393,7 @@ export default function DamaRolesPage({
 
   // Apply role filter and free-text search against person name + org name.
   const filteredRoles = roles.filter((r) => {
-    if (filterRoleType && r.roleType !== filterRoleType) return false;
+    if (filterCategory && ROLE_CATEGORIES[r.roleType] !== filterCategory) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const hay = `${r.personName || ''} ${r.agentName || ''} ${scopeNameForFilter(r.scopeId)} ${ROLE_TYPE_LABELS[r.roleType] || r.roleType}`.toLowerCase();
@@ -418,6 +423,17 @@ export default function DamaRolesPage({
     }
     if (ids.size > 0) roleCounts[rt] = (roleCounts[rt] || 0) + ids.size;
   }
+
+  // Roll the per-role holder counts up to their category, for the
+  // category filter chips. Only categories with at least one holder
+  // render a chip (and the row hides entirely below two, since the
+  // filter couldn't split the list then).
+  const categoryCounts: Record<string, number> = {};
+  for (const [rt, cnt] of Object.entries(roleCounts)) {
+    const cat = ROLE_CATEGORIES[rt];
+    if (cat) categoryCounts[cat] = (categoryCounts[cat] || 0) + cnt;
+  }
+  const populatedCategories = CATEGORY_ORDER.filter((cat) => (categoryCounts[cat] || 0) > 0);
 
   // Resolve a role assignment's scopeId against every kind it might
   // point at (org / data domain / system / data asset) and return the
@@ -456,9 +472,9 @@ export default function DamaRolesPage({
         actions={<>
           <SavedViewsMenu
             pageKey="dama-roles"
-            currentFilters={{ filterRoleType, searchQuery }}
+            currentFilters={{ filterCategory, searchQuery }}
             onApply={(f) => {
-              setFilterRoleType((f.filterRoleType as string | null) ?? null);
+              setFilterCategory((f.filterCategory as string | null) ?? null);
               setSearchQuery((f.searchQuery as string) || '');
             }}
           />
@@ -496,8 +512,8 @@ export default function DamaRolesPage({
             }}
           />
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-            {filterRoleType
-              ? ROLE_TYPE_LABELS[filterRoleType]
+            {filterCategory
+              ? `${filterCategory} roles`
               : `${roles.length} assignment${roles.length === 1 ? '' : 's'} across ${Object.keys(ROLE_TYPE_LABELS).length} roles`}
           </div>
         </div>
@@ -718,56 +734,46 @@ export default function DamaRolesPage({
        *  staffing coverage is visible at a glance. */}
       <div style={{ display: 'grid', gridTemplateColumns: previewRoleType ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
         <div>
-          {/* Role chips grouped by category (was a left-rail tree; now top
-           *  facets). Shows the filled roles per category by default. Hidden
-           *  entirely when fewer than two role types are filled — the filter
-           *  can't split the list then, so it would only waste vertical space. */}
-          {Object.keys(ROLE_TYPE_LABELS).filter((rt) => (roleCounts[rt] || 0) > 0).length >= 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => setFilterRoleType(null)}
-                style={{
-                  padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                  border: `1px solid ${!filterRoleType ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                  background: !filterRoleType ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                  color: !filterRoleType ? 'var(--color-primary)' : 'var(--color-text)',
-                  cursor: 'pointer',
-                }}
-              >
-                All Roles <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({roles.length})</span>
-              </button>
-            </div>
-            {CATEGORY_ORDER.map((cat) => {
-              const inCat = Object.keys(ROLE_TYPE_LABELS).filter((rt) => ROLE_CATEGORIES[rt] === cat);
-              const visibleRoles = inCat.filter((rt) => (roleCounts[rt] || 0) > 0 || filterRoleType === rt);
-              if (visibleRoles.length === 0) return null;
+          {/* Category filter chips. Previously a pill per role stacked
+           *  across four category rows — collapsed to one row of category
+           *  chips (All + Executive / Business / Technical / Entity-attached)
+           *  to reclaim the vertical space above the list. Each chip narrows
+           *  the table to that category; the count is the category's total
+           *  holders. Hidden below two populated categories, since the filter
+           *  couldn't split the list then. */}
+          {populatedCategories.length >= 2 && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+            <button
+              onClick={() => setFilterCategory(null)}
+              style={{
+                padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                border: `1px solid ${!filterCategory ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                background: !filterCategory ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                color: !filterCategory ? 'var(--color-primary)' : 'var(--color-text)',
+                cursor: 'pointer',
+              }}
+            >
+              All Roles <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({roles.length})</span>
+            </button>
+            {populatedCategories.map((cat) => {
+              const isActive = filterCategory === cat;
               const c = CATEGORY_COLORS[cat] || NEUTRAL_PALETTE;
               return (
-                <div key={cat} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: c.color, marginRight: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color, display: 'inline-block' }} />
-                    {cat}
-                  </span>
-                  {visibleRoles.map((rt) => {
-                    const isActive = filterRoleType === rt;
-                    return (
-                      <button
-                        key={rt}
-                        onClick={() => setFilterRoleType(isActive ? null : rt)}
-                        style={{
-                          padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                          border: `1px solid ${isActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                          background: isActive ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                          color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {ROLE_TYPE_LABELS[rt]} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({roleCounts[rt] || 0})</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <button
+                  key={cat}
+                  onClick={() => setFilterCategory(isActive ? null : cat)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                    border: `1px solid ${isActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    background: isActive ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                    color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color, display: 'inline-block' }} />
+                  {cat} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({categoryCounts[cat] || 0})</span>
+                </button>
               );
             })}
           </div>
@@ -779,7 +785,7 @@ export default function DamaRolesPage({
               <RolesTable
                 catalog={(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS))}
                 damaRoles={filteredRoles}
-                filterRoleType={filterRoleType}
+                filterCategory={filterCategory}
                 domains={domains}
                 systems={systems}
                 dataAssets={dataAssets}
@@ -1089,10 +1095,10 @@ const tableTdStyle: React.CSSProperties = {
 // columns for Role, Holders, Status, Action. Clicking a row opens the
 // role's detail in the right preview pane (matrix / holders list /
 // purpose). Replaces the previous nested-cards layout.
-function RolesTable({ catalog, damaRoles, filterRoleType, domains, systems, dataAssets, personById, previewRoleType, onSelectRole, onAssign, programInUse }: {
+function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, dataAssets, personById, previewRoleType, onSelectRole, onAssign, programInUse }: {
   catalog: string[];
   damaRoles: DamaRoleAssignment[];
-  filterRoleType: string | null;
+  filterCategory: string | null;
   domains: DomainOption[];
   systems: SystemOption[];
   dataAssets: AssetOption[];
@@ -1107,7 +1113,7 @@ function RolesTable({ catalog, damaRoles, filterRoleType, domains, systems, data
   const catalogSet = new Set([...catalog, ...Object.keys(ENTITY_SCOPED_ROLE_INFO)]);
   const ordered = Object.keys(ROLE_TYPE_LABELS)
     .filter((rt) => catalogSet.has(rt))
-    .filter((rt) => !filterRoleType || rt === filterRoleType);
+    .filter((rt) => !filterCategory || ROLE_CATEGORIES[rt] === filterCategory);
 
   const byRole = new Map<string, DamaRoleAssignment[]>();
   for (const r of damaRoles) {
