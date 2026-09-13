@@ -120,9 +120,9 @@ export default function SettingsPage() {
   // form edit (sign-in branding, SSO config, MFA enrolment) survives a switch.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const settingsTab: 'general' | 'security' | 'integrations' | 'data' =
-    tabParam === 'security' || tabParam === 'integrations' || tabParam === 'data' ? tabParam : 'general';
-  const setSettingsTab = (t: 'general' | 'security' | 'integrations' | 'data') => {
+  const settingsTab: 'general' | 'security' | 'integrations' | 'data' | 'backup' =
+    tabParam === 'security' || tabParam === 'integrations' || tabParam === 'data' || tabParam === 'backup' ? tabParam : 'general';
+  const setSettingsTab = (t: 'general' | 'security' | 'integrations' | 'data' | 'backup') => {
     const p = new URLSearchParams(searchParams);
     if (t === 'general') p.delete('tab'); else p.set('tab', t);
     setSearchParams(p, { replace: true });
@@ -521,6 +521,7 @@ export default function SettingsPage() {
           { key: 'security', label: 'Sign-in & Security' },
           { key: 'integrations', label: 'Integrations' },
           { key: 'data', label: 'Data' },
+          { key: 'backup', label: 'Backup & Restore' },
         ] as const).map((t) => (
           <button
             key={t.key}
@@ -1170,6 +1171,30 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      {/* Load demo data and Reset — two data-lifecycle actions paired
+          side-by-side to shorten the Data tab. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+
+      {/* Load demo data — one-click seed of the Tidewater Utilities
+          fixture. Idempotent; a second call wipes the prior seed and
+          reseeds so the button always converges on a known state.
+          Positioned above Reset so the demo-mode workflow reads top-
+          to-bottom: seed → demo → reset. */}
+      <LoadDemoDataPanel />
+
+      {/* Reset everything — super-admin only "factory reset" that
+          wipes every store on disk + in memory. Its Export-first
+          affordance runs the same backup export as the Backup &
+          Restore tab, so the recommended Export-then-reset workflow
+          stays one click away here. */}
+      <ResetAllDataPanel onExportFirst={handleExportBackup} />
+
+      </div>{/* end demo + reset grid */}
+
+      </div>{/* ══ /Data ══ */}
+
+      {/* ══ Backup & Restore ══ */}
+      <div style={{ display: settingsTab === 'backup' ? 'block' : 'none' }}>
       {/* Backup & Restore */}
       <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>Backup & Restore</h2>
@@ -1281,31 +1306,7 @@ export default function SettingsPage() {
         onConfirm={handleImportConfirm}
         onCancel={() => setImportConfirmOpen(false)}
       />
-
-      {/* Spacer */}
-      <div style={{ height: '1.5rem' }} />
-
-      {/* Load demo data and Reset — two data-lifecycle actions paired
-          side-by-side to shorten the Data tab. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
-
-      {/* Load demo data — one-click seed of the Tidewater Utilities
-          fixture. Idempotent; a second call wipes the prior seed and
-          reseeds so the button always converges on a known state.
-          Positioned above Reset so the demo-mode workflow reads top-
-          to-bottom: seed → demo → reset. */}
-      <LoadDemoDataPanel />
-
-      {/* Reset everything — super-admin only "factory reset" that
-          wipes every store on disk + in memory. Lives next to Backup
-          & Restore so it's reachable from the same scroll position as
-          the Export button, and so the recommended Export-first
-          workflow is one click away. */}
-      <ResetAllDataPanel onExportFirst={handleExportBackup} />
-
-      </div>{/* end demo + reset grid */}
-
-      </div>{/* ══ /Data ══ */}
+      </div>{/* ══ /Backup & Restore ══ */}
 
     </div>
   );
