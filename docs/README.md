@@ -25,6 +25,16 @@ Standalone documents that don't belong in the app or the code.
 |---|---|
 | [`STATUS.md`](./STATUS.md) | **The single source of truth for status, roadmap and open work.** One consolidated doc: the snapshot, roadmap tracks A–E, open/partial items by priority, deferrals, recommendations, the full go-live checklist, the AWS production-hardening reference, the competitor coverage matrix, the discovery coverage survey, and the GA-audit outcome. The in-app **/roadmap** page renders it live. (Supersedes the former `ROADMAP.md`, `future-work.csv`, `capability-matrix`, `non-relational-discovery.md`, `GO_LIVE_CHECKLIST.md`, `AWS_PRODUCTION_GUIDE.md`, and GA-audit docs.) |
 
+> **Downstream mirror — refresh by hand when STATUS.md changes materially.** The
+> published **"Procela Application Roadmap"** Claude artifact
+> (`claude.ai/code/artifact/5b7e9492-182e-4b91-9c35-3d5acd55b524`) is a curated,
+> presentation-formatted mirror of this file's forward view (the five tracks, the
+> two P0 gates) plus an appended FedRAMP High gap analysis. It is **not**
+> auto-synced — it lives outside the repo, so a material change here (a track
+> opening/closing, a P0 moving, a shipped item) needs a manual artifact refresh
+> and a version bump. Last synced: **v1.1 · 2026-09-13**. The in-app `/roadmap`
+> page, by contrast, reads `STATUS.md` live and needs no refresh.
+
 ### Architecture & data model
 
 | File | Purpose |
