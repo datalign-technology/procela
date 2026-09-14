@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import config from '../config';
 import { ProcessContext, OrgContext, ChatMessage } from '../types';
+import { AnthropicProvider, ChatProvider } from './llm-provider';
 
 // Model resolution: admin override (set via Settings → AI, wins)
 // → ANTHROPIC_MODEL env → config default. Kept as a getter so
@@ -14,8 +14,6 @@ export function getConfiguredModel(): string {
 export function setModelOverride(model: string | null): void {
   _modelOverride = model && model.trim() ? model.trim() : null;
 }
-
-let _client: Anthropic | null = null;
 
 /**
  * Pull the first top-level JSON value (array or object) out of a free-
@@ -86,42 +84,6 @@ function aiParseError(message: string, raw: string): AiParseError {
   err.name = 'AiParseError';
   err.rawResponse = raw;
   return err;
-}
-
-/**
- * Concatenate every text block in a Claude response.
- *
- * Older Claude models put a single text block at content[0] — every
- * call site in this file used to just grab that. Claude 5-family
- * models with extended thinking return the content array as
- * `[{type: 'thinking', ...}, {type: 'text', text: ...}]`, so
- * content[0] is the thinking block and the text was silently missed —
- * downstream we saw "Empty response from AI" on every call.
- *
- * This walks the array, keeps every text block's `text` field, and
- * joins them. Non-text blocks (thinking, tool_use, etc.) are ignored.
- */
-function textFromResponse(response: { content?: unknown }): string {
-  const arr = Array.isArray(response.content) ? response.content : [];
-  const parts: string[] = [];
-  for (const block of arr) {
-    if (block && typeof block === 'object' && (block as { type?: string }).type === 'text') {
-      const t = (block as { text?: string }).text;
-      if (typeof t === 'string' && t) parts.push(t);
-    }
-  }
-  return parts.join('');
-}
-
-function getClient(): Anthropic {
-  if (!_client) {
-    const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
-    if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY is not set. Check your .env file.');
-    }
-    _client = new Anthropic({ apiKey });
-  }
-  return _client;
 }
 
 export interface IndustryTemplateSpecialization {
@@ -240,7 +202,17 @@ export interface AiService {
   performGovernanceActivity(run: GovernanceActivityRun): Promise<string>;
 }
 
-class AnthropicAiService implements AiService {
+export class AiServiceImpl implements AiService {
+  // Transport is delegated to a ChatProvider so no model-vendor SDK is
+  // referenced in this file — it owns only prompts and JSON extraction.
+  // Defaults to Anthropic today; Phase 3 will resolve the provider per
+  // org (bring-your-own-vendor) instead of hard-defaulting here.
+  private readonly provider: ChatProvider;
+
+  constructor(provider: ChatProvider = new AnthropicProvider()) {
+    this.provider = provider;
+  }
+
   /**
    * Generate a starter value-stream / process template for a given
    * industry. When `specialization` is supplied the template is
@@ -310,19 +282,18 @@ Guidelines:
 
   async generateIndustryTemplate(industry: string, specialization?: IndustryTemplateSpecialization): Promise<object> {
     const { system, user } = this.buildTemplatePrompt(industry, specialization);
-    const response = await getClient().messages.create({
+    const text = await this.provider.complete({
       model: getConfiguredModel(),
       // See generateIndustryTemplateStream for the streaming path
       // that lets us go higher. This non-streaming call is kept for
       // callers that don't need progress events (tests, admin
       // regeneration scripts) and stays below the streaming-required
       // threshold — Anthropic rejects non-streaming above ~16K.
-      max_tokens: 16000,
+      maxTokens: 16000,
       system,
       messages: [{ role: 'user', content: user }],
     });
 
-    const text = textFromResponse(response);
     return extractJson(text) as object;
   }
 
@@ -338,24 +309,21 @@ Guidelines:
    */
   async *generateIndustryTemplateStream(industry: string, specialization?: IndustryTemplateSpecialization): AsyncIterable<TemplateStreamEvent> {
     const { system, user } = this.buildTemplatePrompt(industry, specialization);
-    const stream = getClient().messages.stream({
-      model: getConfiguredModel(),
-      max_tokens: 32000,
-      system,
-      messages: [{ role: 'user', content: user }],
-    });
 
     let chars = 0;
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        chars += event.delta.text.length;
-        yield { type: 'progress', chars };
-      }
+    let full = '';
+    for await (const delta of this.provider.stream({
+      model: getConfiguredModel(),
+      maxTokens: 32000,
+      system,
+      messages: [{ role: 'user', content: user }],
+    })) {
+      chars += delta.length;
+      full += delta;
+      yield { type: 'progress', chars };
     }
 
-    const finalMessage = await stream.finalMessage();
-    const text = textFromResponse(finalMessage);
-    const data = extractJson(text) as object;
+    const data = extractJson(full) as object;
     yield { type: 'done', data };
   }
 
@@ -365,11 +333,11 @@ Guidelines:
    * before committing.
    */
   async generateDataDomains(industry: string): Promise<object> {
-    const response = await getClient().messages.create({
+    const text = await this.provider.complete({
       model: getConfiguredModel(),
       // See generateIndustryTemplate for the max_tokens rationale.
       // Smaller here since domain suggestions are a flatter list.
-      max_tokens: 8192,
+      maxTokens: 8192,
       system: `You are a data governance expert for the Procela platform. Given an industry, suggest the standard data domains that a company in that industry should define to organize their enterprise data assets.
 
 A data domain is a top-level grouping of related data assets under a single governance umbrella — for example "Customer Data", "Financial Data", "Product Data", "Operational Data".
@@ -397,7 +365,6 @@ Guidelines:
       ],
     });
 
-    const text = textFromResponse(response);
     return extractJson(text) as object;
   }
 
@@ -407,9 +374,9 @@ Guidelines:
    * so, e.g., a "Manufacturing" domain yields Welding / Fabrication / Assembly.
    */
   async generateSubDomains(industry: string, parentName: string, parentDescription?: string): Promise<object> {
-    const response = await getClient().messages.create({
+    const text = await this.provider.complete({
       model: getConfiguredModel(),
-      max_tokens: 4096,
+      maxTokens: 4096,
       system: `You are a data governance expert for the Procela platform. Given an industry and a top-level data domain, suggest the sub-domains that break that domain down into more granular, separately-stewarded subject areas.
 
 A sub-domain is the second level of the taxonomy — Data Domain → Sub-Domain. For example, a "Manufacturing" domain divides into sub-domains like "Welding", "Fabrication", "Assembly", "Outfitting"; a "Customer Data" domain divides into "Accounts", "Billing", "Service History".
@@ -436,7 +403,6 @@ Guidelines:
       ],
     });
 
-    const text = textFromResponse(response);
     return extractJson(text) as object;
   }
 
@@ -444,11 +410,11 @@ Guidelines:
    * Suggest data assets that are likely relevant for a given process context.
    */
   async suggestDataAssets(context: ProcessContext): Promise<object> {
-    const response = await getClient().messages.create({
+    const text = await this.provider.complete({
       model: getConfiguredModel(),
       // See generateIndustryTemplate — headroom for JSON list
       // output that new-gen models render more verbosely.
-      max_tokens: 8192,
+      maxTokens: 8192,
       system:
         'You are a data governance expert. Given a process context, suggest data assets (tables, datasets, reports) that are likely consumed or produced by the process step. Return a JSON array of suggestions.',
       messages: [
@@ -459,7 +425,6 @@ Guidelines:
       ],
     });
 
-    const text = textFromResponse(response);
     return extractJson(text) as object;
   }
 
@@ -484,9 +449,9 @@ Guidelines:
       type: c.dataType || 'unknown',
       ...(c.description ? { description: c.description } : {}),
     }));
-    const response = await getClient().messages.create({
+    const text = await this.provider.complete({
       model: getConfiguredModel(),
-      max_tokens: 4096,
+      maxTokens: 4096,
       system: `You are a data privacy and compliance classifier. Given a data asset's metadata, decide which sensitivity tags apply.
 
 Tags (only use these — exact spelling):
@@ -529,7 +494,6 @@ Return [] when no tag applies with any confidence.`,
       ],
     });
 
-    const text = textFromResponse(response);
     const raw = extractJson(text);
     if (!Array.isArray(raw)) return [];
     // Validate: keep only well-shaped entries with a known tag.
@@ -610,17 +574,15 @@ Return [] when no tag applies with any confidence.`,
    * actual Procela data when a catalog summary is supplied.
    */
   async chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string> {
-    const response = await getClient().messages.create({
+    return this.provider.complete({
       model: getConfiguredModel(),
-      max_tokens: 2048,
+      maxTokens: 2048,
       system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,
       })),
     });
-
-    return textFromResponse(response);
   }
 
   /** Streaming variant of chat(). Yields each text delta from the
@@ -630,18 +592,12 @@ Return [] when no tag applies with any confidence.`,
    *  caller is responsible for translating chunks to whatever wire
    *  format the client expects (SSE, WebSocket, plain HTTP chunked). */
   async *chatStream(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): AsyncIterable<string> {
-    const stream = getClient().messages.stream({
+    yield* this.provider.stream({
       model: getConfiguredModel(),
-      max_tokens: 2048,
+      maxTokens: 2048,
       system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     });
-
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        yield event.delta.text;
-      }
-    }
   }
 
   async performGovernanceActivity(run: GovernanceActivityRun): Promise<string> {
@@ -679,18 +635,16 @@ Return [] when no tag applies with any confidence.`,
     lines.push(systems.length ? `Systems involved: ${systems.join(', ')}` : 'Systems involved: none recorded.');
     lines.push('\nPerform this activity now and produce your draft deliverable.');
 
-    const response = await getClient().messages.create({
+    return this.provider.complete({
       model: getConfiguredModel(),
-      max_tokens: 3000,
+      maxTokens: 3000,
       system,
       messages: [{ role: 'user', content: lines.join('\n') }],
     });
-
-    return textFromResponse(response);
   }
 }
 
-export const aiService: AiService = new AnthropicAiService();
+export const aiService: AiService = new AiServiceImpl();
 
 // Internal helper exposed for unit tests. Not part of the public API.
 export const _extractJsonForTests = extractJson;
