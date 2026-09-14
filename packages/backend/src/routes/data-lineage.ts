@@ -7,6 +7,7 @@ import { systems } from './systems';
 import { dataAssets } from './data-assets';
 import { getDataLineageLinksRepository } from '../db/data-lineage-links.repo';
 import { getAssetLineageEdgesRepository } from '../db/asset-lineage-edges.repo';
+import { getColumnLineageEdgesRepository } from '../db/column-lineage-edges.repo';
 import { getSystemsRepository } from '../db/systems.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
@@ -76,6 +77,31 @@ export const assetLineageEdges: AssetLineageEdge[] =
 registerStore('assetLineageEdges', assetLineageEdges);
 
 const assetLineageEdgesRepo = getAssetLineageEdgesRepository(assetLineageEdges);
+
+// ── Column-level lineage edges ────────────────────────────────────────────
+// The finer grain beneath AssetLineageEdge: one upstream column feeding one
+// downstream column. Populated by the SQL column-lineage reconciler (and, in
+// future, dbt column metadata); scoped by `source` the same way so producers
+// don't clobber each other.
+
+export interface ColumnLineageEdge {
+  id: string;
+  orgId: string;
+  sourceColumnId: string;
+  targetColumnId: string;
+  /** 'dbt' | 'sql' | 'manual' — see AssetLineageEdge.source. */
+  source: 'dbt' | 'sql' | 'manual';
+  /** Stable provenance key, e.g. `sqlcol:<sourceColumnId>-><targetColumnId>`. */
+  sourceRef?: string;
+  lastSeenAt: string;
+  createdAt: string;
+}
+
+export const columnLineageEdges: ColumnLineageEdge[] =
+  loadStore<ColumnLineageEdge>('columnLineageEdges');
+registerStore('columnLineageEdges', columnLineageEdges);
+
+const columnLineageEdgesRepo = getColumnLineageEdgesRepository(columnLineageEdges);
 
 // ── dbt asset mapping ────────────────────────────────────────────────────
 // Maps a dbt unique_id (the manifest key) to the Procela DataAsset id it
@@ -260,6 +286,49 @@ router.get('/asset-edges', async (req: Request, res: Response) => {
       ...e,
       sourceAssetName: src?.name || null,
       targetAssetName: tgt?.name || null,
+      isStale,
+      staleAfterDays: STALE_AFTER_MS / (24 * 60 * 60 * 1000),
+    };
+  });
+  res.json({ success: true, data: enriched });
+});
+
+/** GET /api/v1/data-lineage/column-edges?orgId= — column-grain lineage
+ *  enriched with column + asset names on both ends and an isStale flag.
+ *  Mirrors /asset-edges. Declared before '/:id' for the same reason. */
+router.get('/column-edges', async (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { dataAssetColumns } = require('./data-assets');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getDataAssetColumnsRepository } = require('../db/data-asset-columns.repo');
+  const [allEdges, allColumns, allAssets] = await Promise.all([
+    columnLineageEdgesRepo.list(),
+    getDataAssetColumnsRepository(dataAssetColumns).list(),
+    dataAssetsRepo().list(),
+  ]);
+  const filtered = orgId ? allEdges.filter((e) => e.orgId === orgId) : allEdges;
+  const colById = new Map<string, { dataAssetId: string; columnName: string }>(
+    (allColumns as Array<{ id: string; dataAssetId: string; columnName: string }>).map((c) => [c.id, c]),
+  );
+  const assetName = (colId: string): { asset: string | null; column: string | null } => {
+    const col = colById.get(colId);
+    if (!col) return { asset: null, column: null };
+    const asset = allAssets.find((a) => a.id === col.dataAssetId);
+    return { asset: asset?.name || null, column: col.columnName };
+  };
+  const now = Date.now();
+  const enriched = filtered.map((e) => {
+    const src = assetName(e.sourceColumnId);
+    const tgt = assetName(e.targetColumnId);
+    const ageMs = now - new Date(e.lastSeenAt).getTime();
+    const isStale = (e.source === 'dbt' || e.source === 'sql') && ageMs > STALE_AFTER_MS;
+    return {
+      ...e,
+      sourceAssetName: src.asset,
+      sourceColumnName: src.column,
+      targetAssetName: tgt.asset,
+      targetColumnName: tgt.column,
       isStale,
       staleAfterDays: STALE_AFTER_MS / (24 * 60 * 60 * 1000),
     };
@@ -520,19 +589,47 @@ router.post('/extract-sql', async (req: AuthenticatedRequest, res: Response) => 
       days: typeof days === 'number' ? days : undefined,
       limit: typeof limit === 'number' ? limit : undefined,
     });
+    const statements = rows.map((r) => ({
+      sql: r.queryText,
+      defaultCatalog: r.database,
+      defaultSchema: r.schema,
+    }));
     const assets = (await dataAssetsRepo().list())
       .filter((a) => a.orgId === conn.orgId)
       .map((a) => ({ id: a.id, name: a.name }));
     const summary = await reconcileSqlLineage({
       orgId: conn.orgId,
-      statements: rows.map((r) => ({
-        sql: r.queryText,
-        defaultCatalog: r.database,
-        defaultSchema: r.schema,
-      })),
+      statements,
       assets,
       edges: assetLineageEdgesRepo,
     });
+
+    // Column-grain lineage over the same statements. Reuses the table
+    // resolver; resolves projection columns to governed DataAssetColumns and
+    // reconciles source:'sql' ColumnLineageEdge rows. Lazy require keeps the
+    // data-assets column store out of this module's init path.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { dataAssetColumns } = require('./data-assets');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getDataAssetColumnsRepository } = require('../db/data-asset-columns.repo');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { reconcileSqlColumnLineage } = require('../lib/sql-lineage/reconcile-columns');
+    const assetIds = new Set(
+      (await dataAssetsRepo().list()).filter((a) => a.orgId === conn.orgId).map((a) => a.id),
+    );
+    const columns = (await getDataAssetColumnsRepository(dataAssetColumns).list())
+      .filter((c: { dataAssetId: string }) => assetIds.has(c.dataAssetId))
+      .map((c: { id: string; dataAssetId: string; columnName: string }) => ({
+        id: c.id, dataAssetId: c.dataAssetId, columnName: c.columnName,
+      }));
+    const columnSummary = await reconcileSqlColumnLineage({
+      orgId: conn.orgId,
+      statements,
+      assets,
+      columns,
+      edges: columnLineageEdgesRepo,
+    });
+
     auditService.log(
       conn.orgId,
       req.user?.sub || null,
@@ -540,9 +637,9 @@ router.post('/extract-sql', async (req: AuthenticatedRequest, res: Response) => 
       conn.id,
       'EXTRACT_SQL_LINEAGE',
       null,
-      { ...summary, statements: rows.length },
+      { ...summary, columns: columnSummary, statements: rows.length },
     );
-    res.json({ success: true, summary });
+    res.json({ success: true, summary, columnSummary });
   } catch (err) {
     logger.error({ err, connectionId }, 'SQL lineage extraction failed');
     res.status(500).json({
