@@ -97,7 +97,7 @@ live-account validation of the cloud/SDK adapters against real endpoints.
 |---|---|---|---|
 | Multi-tenant SaaS hosting | Designed | C | Stand up a production environment (#20/#26). Architecture done; nothing deployed. |
 | Real-customer connector pilot (A1) | Pending | A | Run the shipped edge agent against a live customer DB (#25). |
-| Auto-extracted lineage — SQL/query-log half | Partial | Lineage | dbt path ships. SQL→edges parser ships (node-sql-parser, AST + MERGE heuristic); Snowflake `ACCOUNT_USAGE.QUERY_HISTORY` fetch → parse → reconcile into `source:'sql'` edges ships (`POST /data-lineage/extract-sql`). Remaining: surface auto-edges in the lineage/impact UI, then column-level. = **#1**. |
+| Auto-extracted lineage — SQL/query-log half | Partial | Lineage | dbt path ships. SQL→edges parser ships (node-sql-parser, AST + MERGE heuristic); Snowflake `ACCOUNT_USAGE.QUERY_HISTORY` fetch → parse → reconcile into `source:'sql'` edges ships (`POST /data-lineage/extract-sql`). UI surfacing ships: the Lineage page renders `sql` edges (colour/legend/marker) and an "Extract from query history" action, and the asset Impact panel now walks the AssetLineageEdge graph to show downstream (derived) assets. Remaining: column-level lineage. = **#1**. |
 
 ### P1 — important, not blocking
 | Item | State | Track | Next step / gap |

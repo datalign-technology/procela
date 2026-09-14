@@ -36,25 +36,41 @@ interface PersonNotify {
   roles: string[];
 }
 
+interface DownstreamAsset {
+  id: string;
+  name: string;
+  governanceTier: string | null;
+  /** Hops from this asset along the lineage graph (1 = direct). */
+  depth: number;
+  /** Which derivation(s) produced the edge: 'dbt' | 'sql' | 'manual'. */
+  via: string[];
+}
+
 interface ImpactData {
   summary: {
     activityCount: number;
     processCount: number;
     valueStreamCount: number;
     peopleCount: number;
+    downstreamAssetCount: number;
   };
   activities: Activity[];
+  downstreamAssets: DownstreamAsset[];
   people: PersonNotify[];
   domain: { id: string; name: string; owner: { id: string; name: string } | null } | null;
 }
+
+// How a lineage source reads in the UI.
+const VIA_LABEL: Record<string, string> = { dbt: 'dbt', sql: 'query history', manual: 'manual' };
 
 interface Props {
   assetId: string;
   onNavigateToActivity?: (nodeId: string) => void;
   onNavigateToPerson?: (personId: string) => void;
+  onNavigateToAsset?: (assetId: string) => void;
 }
 
-export default function ImpactAnalysisPanel({ assetId, onNavigateToActivity, onNavigateToPerson }: Props) {
+export default function ImpactAnalysisPanel({ assetId, onNavigateToActivity, onNavigateToPerson, onNavigateToAsset }: Props) {
   const [data, setData] = useState<ImpactData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedDetails, setExpandedDetails] = useState(true);
@@ -85,7 +101,7 @@ export default function ImpactAnalysisPanel({ assetId, onNavigateToActivity, onN
 
   if (!data) return null;
 
-  const { summary, activities, people } = data;
+  const { summary, activities, people, downstreamAssets = [] } = data;
 
   const tile = (label: string, value: number, color: string) => (
     <div style={{
@@ -145,12 +161,61 @@ export default function ImpactAnalysisPanel({ assetId, onNavigateToActivity, onN
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: expandedDetails ? 14 : 0 }}>
         {tile('Activities', summary.activityCount, '#0f4f46')}
         {tile('Processes', summary.processCount, '#92400e')}
+        {tile('Downstream data', summary.downstreamAssetCount ?? 0, '#0369a1')}
         {tile('Value streams', summary.valueStreamCount, '#5b21b6')}
         {tile('Notify', summary.peopleCount, '#dc2626')}
       </div>
 
       {expandedDetails && (
         <>
+          {/* Downstream data assets — the lineage blast radius: assets
+              derived from this one via dbt / query-history / manual edges. */}
+          {downstreamAssets.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <SectionLabel marginBottom={6}>
+                Downstream data assets ({downstreamAssets.length})
+              </SectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {downstreamAssets.map((a) => (
+                  <div key={a.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '6px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    background: 'var(--color-bg)',
+                  }}>
+                    <button
+                      onClick={() => onNavigateToAsset?.(a.id)}
+                      disabled={!onNavigateToAsset}
+                      style={{
+                        background: 'transparent', border: 'none',
+                        color: onNavigateToAsset ? 'var(--color-primary)' : 'var(--color-text)',
+                        cursor: onNavigateToAsset ? 'pointer' : 'default',
+                        padding: 0, fontSize: 13, fontWeight: 500,
+                        textAlign: 'left', minWidth: 0, flexShrink: 1,
+                      }}
+                    >{a.name}</button>
+                    {a.governanceTier && (
+                      <span style={{
+                        fontSize: 10, color: 'var(--color-text-muted)',
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                        padding: '1px 6px', background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)', borderRadius: 3,
+                      }}>{a.governanceTier}</span>
+                    )}
+                    <span style={{ flex: 1 }} />
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                      {a.via.map((v) => VIA_LABEL[v] || v).join(', ')}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                      {a.depth === 1 ? 'direct' : `${a.depth} hops`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Affected activities */}
           {activities.length > 0 && (
             <div style={{ marginBottom: 14 }}>
@@ -241,9 +306,9 @@ export default function ImpactAnalysisPanel({ assetId, onNavigateToActivity, onN
             </div>
           )}
 
-          {activities.length === 0 && people.length === 0 && (
+          {activities.length === 0 && people.length === 0 && downstreamAssets.length === 0 && (
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', textAlign: 'center', padding: 8 }}>
-              Nothing consumes or produces this asset. Change is safe — nobody to notify.
+              Nothing consumes, produces, or derives from this asset. Change is safe — nobody to notify.
             </div>
           )}
         </>

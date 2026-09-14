@@ -88,7 +88,7 @@ interface AssetLineageEdgeRow {
   orgId: string;
   sourceAssetId: string;
   targetAssetId: string;
-  source: 'dbt' | 'manual';
+  source: 'dbt' | 'sql' | 'manual';
   sourceRef?: string;
   sourceAssetName: string | null;
   targetAssetName: string | null;
@@ -97,6 +97,24 @@ interface AssetLineageEdgeRow {
   /** Server-derived: true when lastSeenAt is older than staleAfterDays. */
   isStale?: boolean;
   staleAfterDays?: number;
+}
+
+/** A connection profile, trimmed to what the query-history extractor needs.
+ *  Only Snowflake data-warehouse profiles are eligible today. */
+interface ConnectionRow {
+  id: string;
+  name: string;
+  connectionType: string;
+  config?: { warehouseType?: string; account?: string; database?: string };
+}
+
+/** Result of POST /data-lineage/extract-sql. */
+interface SqlLineageSummary {
+  statementsParsed: number;
+  edgesCreated: number;
+  edgesTouched: number;
+  edgesRemoved: number;
+  unresolvedRefs: number;
 }
 
 type DbtPollFrequency = 'NEVER' | 'HOURLY' | 'DAILY' | 'WEEKLY';
@@ -253,6 +271,17 @@ export default function DataLineagePage() {
   // beneath the existing system-lineage table.
   const [assetEdges, setAssetEdges] = useState<AssetLineageEdgeRow[]>([]);
 
+  // Query-history lineage extraction (Snowflake). Reads recent warehouse
+  // statements and derives asset-to-asset edges from what actually ran.
+  const [showSqlExtract, setShowSqlExtract] = useState(false);
+  const [snowflakeConns, setSnowflakeConns] = useState<ConnectionRow[]>([]);
+  const [sqlExtractConnId, setSqlExtractConnId] = useState('');
+  const [sqlExtracting, setSqlExtracting] = useState(false);
+  const [sqlExtractSummary, setSqlExtractSummary] = useState<SqlLineageSummary | null>(null);
+  const [sqlExtractError, setSqlExtractError] = useState<string | null>(null);
+  const sqlModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(sqlModalRef, showSqlExtract);
+
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
@@ -309,6 +338,43 @@ export default function DataLineagePage() {
   }, [activeOrgId]);
 
   useEffect(() => { void fetchDbtConnections(); }, [fetchDbtConnections]);
+
+  // Load the org's Snowflake data-warehouse connections — the only sources
+  // the query-history extractor can read today.
+  const fetchSnowflakeConns = useCallback(async () => {
+    const q = activeOrgId ? `?orgId=${activeOrgId}` : '';
+    try {
+      const res = await apiClient.get<{ success: boolean; data: ConnectionRow[] }>(`/connections${q}`);
+      const sf = (res.data || []).filter(
+        (c) => c.connectionType === 'DATA_WAREHOUSE'
+          && String(c.config?.warehouseType || '').toUpperCase() === 'SNOWFLAKE',
+      );
+      setSnowflakeConns(sf);
+      setSqlExtractConnId((prev) => prev || (sf[0]?.id ?? ''));
+    } catch { /* connections endpoint is best-effort here */ }
+  }, [activeOrgId]);
+
+  useEffect(() => { void fetchSnowflakeConns(); }, [fetchSnowflakeConns]);
+
+  const handleSqlExtract = async () => {
+    if (!sqlExtractConnId) return;
+    setSqlExtracting(true);
+    setSqlExtractError(null);
+    setSqlExtractSummary(null);
+    try {
+      const res = await apiClient.post<{ success: boolean; summary: SqlLineageSummary; error?: string }>(
+        '/data-lineage/extract-sql',
+        { connectionId: sqlExtractConnId },
+      );
+      if (!res.success) throw new Error(res.error || 'Extraction failed');
+      setSqlExtractSummary(res.summary);
+      await fetchData(); // surface the new sql edges
+    } catch (e) {
+      setSqlExtractError(errorMessage(e, 'Extraction failed'));
+    } finally {
+      setSqlExtracting(false);
+    }
+  };
 
   const refreshDbtConnection = async (id: string) => {
     setRefreshingConnId(id);
@@ -542,6 +608,10 @@ export default function DataLineagePage() {
             <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
               onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
             <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />
+            {snowflakeConns.length > 0 && (
+              <IconButton icon="download" label="Extract lineage from query history"
+                onClick={() => { setSqlExtractSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
+            )}
             {links.length > 0 && (
               <ExportMenu build={() => ({
                 filenameBase: 'data-lineage',
@@ -742,7 +812,7 @@ export default function DataLineagePage() {
                   )}
                 </h2>
                 <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 12 }}>
-                  Auto-derived from imported source manifests (dbt). Re-importing the same manifest updates these in place. Edges not re-seen in {staleAfterDays} days are flagged stale.
+                  Auto-derived from imported dbt manifests and from warehouse query history (Snowflake). Re-running the same source updates these in place. Edges not re-seen in {staleAfterDays} days are flagged stale.
                 </p>
                 <Card padding={0} shadow="none">
                   <div style={{ overflowX: 'auto' }}>
@@ -760,7 +830,7 @@ export default function DataLineagePage() {
                         <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)', opacity: e.isStale ? 0.7 : 1 }}>
                           <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.sourceAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
                           <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.targetAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
-                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{e.source}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{e.source === 'sql' ? 'query history' : e.source}</td>
                           <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>
                             {new Date(e.lastSeenAt).toLocaleString()}
                             {e.isStale && (
@@ -913,6 +983,97 @@ export default function DataLineagePage() {
               >
                 {dbtImportSummary ? 'Done' : 'Cancel'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Extract-from-query-history modal (Snowflake). Reads recent write
+        *  statements from ACCOUNT_USAGE.QUERY_HISTORY and derives asset
+        *  edges from what actually ran. */}
+      {showSqlExtract && (
+        <div
+          onClick={() => { if (!sqlExtracting) setShowSqlExtract(false); }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)',
+            zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            ref={sqlModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sql-extract-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(560px, 90vw)',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-md)',
+              padding: 20,
+            }}
+          >
+            <h3 id="sql-extract-title" style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Extract lineage from query history</h3>
+            <p style={{ marginTop: 6, marginBottom: 14, fontSize: 12, color: 'var(--color-text-muted)' }}>
+              Reads recent write statements from the warehouse's <code>QUERY_HISTORY</code>, parses each to
+              table-to-table lineage, and matches the tables to existing data assets. New edges are labelled
+              <span style={{ color: '#b45309', fontWeight: 600 }}> query history</span> and refreshed in place on each run.
+            </p>
+            <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Snowflake connection</label>
+            <select
+              aria-label="Snowflake connection"
+              style={selectStyle}
+              value={sqlExtractConnId}
+              disabled={sqlExtracting}
+              onChange={(e) => setSqlExtractConnId(e.target.value)}
+            >
+              {snowflakeConns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.config?.account ? ` (${c.config.account})` : ''}
+                </option>
+              ))}
+            </select>
+            {sqlExtracting && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>Reading query history…</div>
+            )}
+            {sqlExtractError && (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#b91c1c', fontSize: 12 }}>
+                {sqlExtractError}
+              </div>
+            )}
+            {sqlExtractSummary && (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 4, color: '#065f46', fontSize: 12 }}>
+                <div>
+                  Parsed {sqlExtractSummary.statementsParsed} statements.
+                  {' '}{sqlExtractSummary.edgesCreated} new edges, {sqlExtractSummary.edgesTouched} refreshed,
+                  {' '}{sqlExtractSummary.edgesRemoved} stale edges removed.
+                </div>
+                {sqlExtractSummary.unresolvedRefs > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    {sqlExtractSummary.unresolvedRefs} referenced tables matched no governed asset and were skipped.
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => setShowSqlExtract(false)}
+                disabled={sqlExtracting}
+                style={{
+                  padding: '6px 14px', fontSize: 13,
+                  background: 'var(--color-bg)', color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                  cursor: sqlExtracting ? 'default' : 'pointer',
+                }}
+              >
+                {sqlExtractSummary ? 'Done' : 'Cancel'}
+              </button>
+              {!sqlExtractSummary && (
+                <Button onClick={handleSqlExtract} disabled={sqlExtracting || !sqlExtractConnId}>
+                  {sqlExtracting ? 'Extracting…' : 'Extract'}
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1472,7 +1633,7 @@ function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) 
     return (
       <Card padding={40} shadow="none" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: 'var(--color-text-muted)' }}><ArrowLeftRight size={32} strokeWidth={1.8} /></div>
-        <div>No asset-level lineage yet. Import a dbt manifest to populate this view.</div>
+        <div>No asset-level lineage yet. Import a dbt manifest or extract from warehouse query history to populate this view.</div>
       </Card>
     );
   }
@@ -1515,21 +1676,25 @@ function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) 
     };
   });
 
-  // Colour by edge source. Asset edges almost always come from dbt for
-  // now; the conditional keeps the door open for snowflake / manual etc.
+  // Colour by edge source: dbt (imported manifests), sql (derived from
+  // warehouse query history), manual (hand-drawn). Unknown → grey.
   const colourFor = (source: string) =>
-    source === 'dbt' ? '#0ea5e9' : source === 'manual' ? '#22c55e' : '#94a3b8';
+    source === 'dbt' ? '#0ea5e9' : source === 'sql' ? '#f59e0b' : source === 'manual' ? '#22c55e' : '#94a3b8';
 
   return (
     <Card padding={0} style={{ overflow: 'auto' }}>
       <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-muted)', padding: '8px 12px', borderBottom: '1px solid var(--color-border)' }}>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#0ea5e9', borderRadius: 2, marginRight: 4 }} />dbt</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#f59e0b', borderRadius: 2, marginRight: 4 }} />query history</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#22c55e', borderRadius: 2, marginRight: 4 }} />manual</span>
       </div>
       <svg width={svgW} height={svgH} style={{ display: 'block' }}>
         <defs>
           <marker id="asset-arrow-dbt" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 3 L 0 6 z" fill="#0ea5e9" />
+          </marker>
+          <marker id="asset-arrow-sql" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 3 L 0 6 z" fill="#f59e0b" />
           </marker>
           <marker id="asset-arrow-manual" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 3 L 0 6 z" fill="#22c55e" />
@@ -1545,7 +1710,7 @@ function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) 
           const y1 = from.y + BOX_H / 2;
           const x2 = to.x + BOX_W / 2;
           const y2 = to.y + BOX_H / 2;
-          const marker = e.source === 'manual' ? 'asset-arrow-manual' : 'asset-arrow-dbt';
+          const marker = e.source === 'manual' ? 'asset-arrow-manual' : e.source === 'sql' ? 'asset-arrow-sql' : 'asset-arrow-dbt';
           // Stale edges render dashed and faded so they're visually
           // distinct without losing colour-coding by source.
           const isStale = !!e.isStale;
