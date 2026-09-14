@@ -2,7 +2,10 @@ import { Router, Request, Response } from 'express';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import { currentUsage } from '../middleware/ai-budget';
 import { isEnabled as aiUsageEnabled, getConfiguredLimits } from '../services/ai-usage';
-import { aiService, getConfiguredModel, setModelOverride, getActiveProvider } from '../services/ai.service';
+import { aiService, getConfiguredModel, setModelOverride, getActiveProvider, getAiServiceForOrg, probeAiForOrg } from '../services/ai.service';
+import { getOrgAiConfigView, setOrgAiConfig, OrgAiConfigError } from '../services/org-ai-config';
+import { requirePermission } from '../lib/permissions';
+import { isEncryptionConfigured } from '../services/crypto.service';
 // INDUSTRIES / Industry no longer imported — validation is
 // free-form; the enum lives only on the frontend combobox as
 // autocomplete hints.
@@ -146,7 +149,8 @@ router.post('/generate-template', async (req: Request, res: Response) => {
     // gracefully — the bar caps at ~95% until the `done` event
     // lands.
     let template: object | null = null;
-    for await (const evt of aiService.generateIndustryTemplateStream(industry, specialization)) {
+    const svc = await getAiServiceForOrg((req as AuthenticatedRequest).user?.orgId);
+    for await (const evt of svc.generateIndustryTemplateStream(industry, specialization)) {
       if (evt.type === 'progress') {
         emit({ type: 'progress', chars: evt.chars });
       } else if (evt.type === 'done') {
@@ -356,6 +360,80 @@ router.post('/test', async (_req: Request, res: Response) => {
     const msg = (err as { message?: string })?.message || 'unknown error';
     res.json({ success: true, data: { ok: false, provider, model, message: msg } });
   }
+});
+
+// ── Per-tenant AI provider config (multi-vendor, phase 3) ─────────────────
+//
+// These let each org bring its own vendor + model + key, overriding the
+// deployment default. The key is encrypted at rest and never returned — reads
+// expose only `apiKeyConfigured`. The deployment default is echoed so the UI
+// can show what an org falls back to when it has no config of its own.
+
+/** GET /api/v1/ai/org-config — the caller's org AI config + the deployment
+ *  default it falls back to. Readable by any authenticated user (no secrets). */
+router.get('/org-config', async (req: AuthenticatedRequest, res: Response) => {
+  const orgId = req.user?.orgId;
+  if (!orgId) {
+    res.status(400).json({ success: false, error: 'No organization in context.' });
+    return;
+  }
+  const orgConfig = await getOrgAiConfigView(orgId);
+  res.json({
+    success: true,
+    data: {
+      orgConfig,
+      // The deployment fallback — what this org uses when its own config is
+      // absent or disabled.
+      deploymentDefault: { provider: config.aiProvider, model: getConfiguredModel() },
+      // Whether at-rest encryption is active — the UI warns when a key would
+      // be stored in plaintext.
+      encryptionConfigured: isEncryptionConfigured(),
+    },
+  });
+});
+
+/** PUT /api/v1/ai/org-config — set the caller's org AI config. Admin-only
+ *  (org:write). Body: { provider?, model?, baseUrl?, region?, apiKey?, enabled? }.
+ *  `apiKey: ''`/null clears the stored key; a string is encrypted. The key is
+ *  never echoed back. */
+router.put('/org-config', requirePermission('org:write'), async (req: AuthenticatedRequest, res: Response) => {
+  const orgId = req.user?.orgId;
+  if (!orgId) {
+    res.status(400).json({ success: false, error: 'No organization in context.' });
+    return;
+  }
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string | null | undefined =>
+    v === undefined ? undefined : v === null ? null : typeof v === 'string' ? v : undefined;
+  try {
+    const view = await setOrgAiConfig(
+      orgId,
+      {
+        provider: str(b.provider),
+        model: str(b.model),
+        baseUrl: str(b.baseUrl),
+        region: str(b.region),
+        apiKey: str(b.apiKey),
+        enabled: typeof b.enabled === 'boolean' ? b.enabled : undefined,
+      },
+      req.user?.sub || null,
+    );
+    logger.info({ orgId, provider: view.provider, updatedBy: req.user?.sub }, 'Org AI config updated');
+    res.json({ success: true, data: view });
+  } catch (err) {
+    if (err instanceof OrgAiConfigError) {
+      res.status(400).json({ success: false, error: err.message });
+      return;
+    }
+    throw err;
+  }
+});
+
+/** POST /api/v1/ai/org-config/test — probe the vendor the caller's org will
+ *  actually use (its own config, or the deployment fallback). */
+router.post('/org-config/test', async (req: AuthenticatedRequest, res: Response) => {
+  const result = await probeAiForOrg(req.user?.orgId);
+  res.json({ success: true, data: result });
 });
 
 /** GET /api/v1/ai/usage — the caller's org's current per-hour and

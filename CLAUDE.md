@@ -193,8 +193,12 @@ Viewer            — read-only access to the full catalog
   is defined on a vendor-neutral `AiService` interface; the transport is a
   `ChatProvider` adapter (`services/llm-provider.ts`) — the only place a
   vendor SDK is referenced. Adding a vendor is one adapter, no business-logic
-  change. (Per-tenant provider selection is the next phase; today it's
-  deployment-level.)
+  change. Selection is **deployment-level** via `AI_PROVIDER`, or **per-tenant**:
+  an org can set its own provider/model/key (encrypted at rest) via
+  `/api/v1/ai/org-config` (admin-only), resolved per call through
+  `getAiServiceForOrg(orgId)` with the deployment default as fallback. The
+  Settings → AI provider picker (frontend) that drives per-tenant config is the
+  remaining piece.
 - **Model**: the active provider's `<PROVIDER>_MODEL` (default
   `claude-sonnet-5` on Anthropic), overridable in-app via Settings → AI.
 - **Uses**:

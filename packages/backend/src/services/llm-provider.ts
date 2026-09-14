@@ -54,6 +54,25 @@ export interface ChatProvider {
   stream(req: LlmRequest): AsyncIterable<string>;
 }
 
+/** Per-instance credentials for an adapter. When omitted, each adapter falls
+ *  back to the deployment-level env/config values (preserving the phase-2
+ *  behaviour). Supplying these is what lets one org run on its own key — the
+ *  per-tenant path builds an adapter bound to the org's decrypted key. */
+export interface ProviderCredentials {
+  apiKey?: string;
+  /** OpenAI-compatible endpoint base URL (Azure / self-hosted). */
+  baseUrl?: string;
+  /** AWS region for Bedrock. */
+  region?: string;
+}
+
+/** Adapter construction options: bound credentials for production, or a
+ *  pre-built SDK `client` for tests (no network, no real SDK). */
+export interface ProviderOptions {
+  creds?: ProviderCredentials;
+  client?: any;
+}
+
 /**
  * Concatenate every text block in an Anthropic response.
  *
@@ -89,9 +108,12 @@ function textFromAnthropicResponse(response: { content?: unknown }): string {
 export class AnthropicProvider implements ChatProvider {
   private client: Anthropic | null = null;
 
+  constructor(private opts: ProviderOptions = {}) {}
+
   private getClient(): Anthropic {
+    if (this.opts.client) return this.opts.client;
     if (!this.client) {
-      const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
+      const apiKey = this.opts.creds?.apiKey || config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
       if (!apiKey) {
         throw new Error('ANTHROPIC_API_KEY is not set. Check your .env file.');
       }
@@ -134,20 +156,22 @@ export class AnthropicProvider implements ChatProvider {
 export class OpenAiProvider implements ChatProvider {
   private clientPromise: Promise<any> | null = null;
 
-  // `injectedClient` lets a test drive the adapter with a fake `chat`
-  // surface — no SDK, no network. Production passes nothing.
-  constructor(private injectedClient?: any) {}
+  // `opts.client` lets a test drive the adapter with a fake `chat` surface
+  // (no SDK, no network); `opts.creds` binds a specific org's key/base-URL.
+  // Production with neither falls back to the deployment env/config.
+  constructor(private opts: ProviderOptions = {}) {}
 
   private async getClient(): Promise<any> {
-    if (this.injectedClient) return this.injectedClient;
+    if (this.opts.client) return this.opts.client;
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         const { default: OpenAI } = await import('openai');
-        const apiKey = config.openaiApiKey || process.env.OPENAI_API_KEY || '';
-        if (!apiKey && !config.openaiBaseUrl) {
+        const apiKey = this.opts.creds?.apiKey || config.openaiApiKey || process.env.OPENAI_API_KEY || '';
+        const baseURL = this.opts.creds?.baseUrl || config.openaiBaseUrl || '';
+        if (!apiKey && !baseURL) {
           throw new Error('OPENAI_API_KEY is not set (or set OPENAI_BASE_URL for a keyless self-hosted endpoint).');
         }
-        return new OpenAI({ apiKey: apiKey || 'not-required', baseURL: config.openaiBaseUrl || undefined });
+        return new OpenAI({ apiKey: apiKey || 'not-required', baseURL: baseURL || undefined });
       })();
     }
     return this.clientPromise;
@@ -190,14 +214,14 @@ export class OpenAiProvider implements ChatProvider {
 export class GeminiProvider implements ChatProvider {
   private clientPromise: Promise<any> | null = null;
 
-  constructor(private injectedClient?: any) {}
+  constructor(private opts: ProviderOptions = {}) {}
 
   private async getClient(): Promise<any> {
-    if (this.injectedClient) return this.injectedClient;
+    if (this.opts.client) return this.opts.client;
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
-        const apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+        const apiKey = this.opts.creds?.apiKey || config.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
         if (!apiKey) throw new Error('GEMINI_API_KEY (or GOOGLE_API_KEY) is not set.');
         return new GoogleGenerativeAI(apiKey);
       })();
@@ -250,14 +274,14 @@ export class GeminiProvider implements ChatProvider {
 export class BedrockProvider implements ChatProvider {
   private clientPromise: Promise<any> | null = null;
 
-  constructor(private injectedClient?: any) {}
+  constructor(private opts: ProviderOptions = {}) {}
 
   private async getClient(): Promise<any> {
-    if (this.injectedClient) return this.injectedClient;
+    if (this.opts.client) return this.opts.client;
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
-        return new BedrockRuntimeClient({ region: config.bedrockRegion });
+        return new BedrockRuntimeClient({ region: this.opts.creds?.region || config.bedrockRegion });
       })();
     }
     return this.clientPromise;
@@ -298,22 +322,50 @@ export class BedrockProvider implements ChatProvider {
  * call / boot probe), never at module load, so a bad value never crashes the
  * whole backend at boot.
  */
-export function createChatProvider(name?: string): ChatProvider {
+/** The canonical provider names the UI offers and the store persists. */
+export const KNOWN_PROVIDERS = ['anthropic', 'openai', 'gemini', 'bedrock'] as const;
+export type KnownProvider = (typeof KNOWN_PROVIDERS)[number];
+
+/** Fold a provider name (incl. aliases: claude / azure / google / aws) to its
+ *  canonical form, or null if unrecognised. Used to validate a per-tenant
+ *  provider choice with a clean 400 before it ever reaches createChatProvider. */
+export function normalizeProviderName(name?: string): KnownProvider | null {
+  switch ((name || '').trim().toLowerCase()) {
+    case 'anthropic':
+    case 'claude':
+      return 'anthropic';
+    case 'openai':
+    case 'azure':
+    case 'azure-openai':
+      return 'openai';
+    case 'gemini':
+    case 'google':
+      return 'gemini';
+    case 'bedrock':
+    case 'aws':
+      return 'bedrock';
+    default:
+      return null;
+  }
+}
+
+export function createChatProvider(name?: string, creds?: ProviderCredentials): ChatProvider {
+  const opts: ProviderOptions = creds ? { creds } : {};
   switch ((name || 'anthropic').trim().toLowerCase()) {
     case '':
     case 'anthropic':
     case 'claude':
-      return new AnthropicProvider();
+      return new AnthropicProvider(opts);
     case 'openai':
     case 'azure':
     case 'azure-openai':
-      return new OpenAiProvider();
+      return new OpenAiProvider(opts);
     case 'gemini':
     case 'google':
-      return new GeminiProvider();
+      return new GeminiProvider(opts);
     case 'bedrock':
     case 'aws':
-      return new BedrockProvider();
+      return new BedrockProvider(opts);
     default:
       throw new Error(`Unknown AI_PROVIDER "${name}". Use one of: anthropic, openai, gemini, bedrock.`);
   }
