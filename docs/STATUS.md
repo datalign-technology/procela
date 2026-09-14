@@ -4,7 +4,7 @@
 consolidates what used to live across separate files — the post-cutover roadmap,
 the itemized backlog, the competitor coverage matrix, the discovery survey, the
 go-live checklist, the AWS hardening guide, and the GA tightening audit. The
-in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-12.***
+in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-14.***
 
 > **How to read this.** Priorities: **P0** = required for a credible production
 > v1 · **P1** = important, not blocking · **P2** = differentiator/nice-to-have ·
@@ -27,14 +27,19 @@ in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-12.*
 
 ## Snapshot
 
-- **Functionally near-complete.** Of ~80 tracked capabilities, **64 are Built**;
-  16 are not (6 Partial · 2 Designed · 8 Not Started). Phases 1 (Define) and 2
+- **Functionally near-complete.** Of ~80 tracked capabilities, **67 are Built**;
+  13 are not (4 Partial · 2 Designed · 7 Not Started). Phases 1 (Define) and 2
   (Connect) ship in full; Phase 3 (Discover) is built for direct-connect and
   needs a real-customer pilot. The Postgres cutover and the GA tightening audit
   (§A–G) are complete; the AWS deploy path is wired and verified.
-- **Only two open items genuinely gate a production v1 (both P0):**
+- **One open item genuinely gates a production v1 (P0):**
   1. **Stand up production / multi-tenant SaaS hosting** (Designed).
-  2. **SQL / query-log lineage extraction** (Partial — the dbt half ships).
+- **Auto-extracted lineage now ships end-to-end** (three capabilities that were
+  P0/P1 open — SQL/query-log extraction, column-level lineage, and impact
+  analysis from the lineage graph): Snowflake query history → table-to-table
+  **and** column-to-column edges, reconciled into the governed catalog and
+  surfaced on the Lineage page (asset + column grains) and in the asset impact
+  blast radius. Only an operational pilot against a real warehouse remains.
 - Everything else is a deliberate P2/P3 defer, a go-to-market-gated bet, or
   polish-level backlog. Sequencing Tracks A / B / C is a go-to-market call, not a
   technical one, and is intentionally left open.
@@ -97,7 +102,7 @@ live-account validation of the cloud/SDK adapters against real endpoints.
 |---|---|---|---|
 | Multi-tenant SaaS hosting | Designed | C | Stand up a production environment (#20/#26). Architecture done; nothing deployed. |
 | Real-customer connector pilot (A1) | Pending | A | Run the shipped edge agent against a live customer DB (#25). |
-| Auto-extracted lineage — SQL/query-log half | Partial | Lineage | dbt path ships. SQL→edges parser ships (node-sql-parser, AST + MERGE heuristic); Snowflake `ACCOUNT_USAGE.QUERY_HISTORY` fetch → parse → reconcile into `source:'sql'` edges ships (`POST /data-lineage/extract-sql`). UI surfacing ships: the Lineage page renders `sql` edges (colour/legend/marker) and an "Extract from query history" action, and the asset Impact panel now walks the AssetLineageEdge graph to show downstream (derived) assets. Remaining: column-level lineage. = **#1**. |
+| Auto-extracted lineage — SQL/query-log half | Built | Lineage | Ships end-to-end for Snowflake query history. Parsers: table-to-table (node-sql-parser, AST + MERGE heuristic) and column-to-column (astify projection walk). `POST /data-lineage/extract-sql` fetches `ACCOUNT_USAGE.QUERY_HISTORY`, then reconciles both grains into `source:'sql'` AssetLineageEdge + ColumnLineageEdge rows (idempotent upsert/prune, link-only to governed assets/columns). Surfaced on the Lineage page (asset + column tables, `sql` colour/legend/marker, an "Extract from query history" action) and in the asset Impact blast radius. Only an operational pilot against a real warehouse remains. |
 
 ### P1 — important, not blocking
 | Item | State | Track | Next step / gap |
@@ -105,8 +110,8 @@ live-account validation of the cloud/SDK adapters against real endpoints.
 | Multi-vendor AI providers | Built | AI | **Shipped end-to-end.** Vendor-neutral `ChatProvider` seam + adapters for **Anthropic / OpenAI (incl. Azure + self-hosted OpenAI-compatible) / Gemini / Bedrock**, selectable **deployment-level** via `AI_PROVIDER` *and* **per-tenant**: each org sets its own provider/model/base-URL + key (encrypted at rest, admin-gated, resolved per AI call with deployment fallback) via the Settings → AI picker (`/api/v1/ai/org-config`). |
 | On-prem deployment validation | Designed | B2 | Chart lints/templates in CI; never `helm install`-ed live. |
 | Managed / HA Postgres | Pending | B1 | Replace the bundled single-replica StatefulSet (#26). |
-| Column-level lineage | Not Started | Lineage | Edges are table-to-table; needs a SQL parser. = **#2**. |
-| Impact analysis from lineage | Partial | Lineage | WhereUsed shows direct relations; walk the graph N hops. = **#24**. |
+| Column-level lineage | Built | Lineage | Column-to-column edges (`ColumnLineageEdge`) derived from query-history projections, reconciled into the catalog and shown as a "Column-level lineage" table on the Lineage page. = **#2**. |
+| Impact analysis from lineage | Built | Lineage | `GET /data-assets/:id/impact` walks the `AssetLineageEdge` graph (BFS, depth-capped) to list downstream derived assets in the blast radius, alongside the process-mapping impact. = **#24**. |
 | Audit export / compliance reports | Partial | — | Audit log queryable; build SOX/GDPR/HIPAA templates. |
 | DQ profiling / column-level auto-stats | Partial | — | Row count + freshness only; add null%/distinct/min-max/histograms. |
 | Business Capability level above Data Domain | Not Started | D1 | Add the top rung of the data hierarchy. |
@@ -124,7 +129,7 @@ live-account validation of the cloud/SDK adapters against real endpoints.
 | Governance approval workflows (BPMN-style) | Partial | Task lifecycle state machine ships; no multi-stage approver routing (Camunda/Temporal). |
 | Anomaly detection on DQ (ML) | Not Started | Statistical drift/outlier detection. |
 | Replace `setInterval` scheduler with a job queue | Backlog | BullMQ / EventBridge so restarts don't reset cadence. = **#4**. |
-| Additional auto-lineage connectors (warehouse query logs) | Backlog | Snowflake/Databricks/BigQuery query-history after #1. = **#23**. |
+| Additional auto-lineage connectors (warehouse query logs) | Backlog | Snowflake query-history ships (#1); extend the same parse→reconcile pipeline to Databricks/BigQuery. = **#23**. |
 | BI-tool integration | Not Started | Tableau/Power BI/Looker. |
 | Data-product marketplace / catalog | Not Started | New data-product entity + access workflow. |
 | OpenAPI spec coverage | Partial | Hand-authored spec at `/api/v1/docs`; covers core entities, not all routers. |
@@ -167,11 +172,12 @@ Explicitly **not** being pursued now:
 
 ## Recommendations
 
-1. **Highest-leverage build: SQL query-history lineage (#1 / Track Lineage).**
-   The only High-priority open backlog item and the main thing separating
-   Procela's lineage from Alation/Atlan. One connector (Snowflake
-   `ACCOUNT_USAGE.QUERY_HISTORY` + sqlglot) unlocks the pattern; column-level (#2)
-   and other warehouses (#23) follow the same shape.
+1. **SQL query-history lineage now ships (was #1 / Track Lineage).** The
+   High-priority lineage gap vs Alation/Atlan is closed for Snowflake — table
+   *and* column grain (#1, #2), reconciled into the catalog and surfaced in the
+   UI + impact blast radius (#24). Next along the same parse→reconcile shape:
+   additional warehouses (Databricks/BigQuery query logs, #23); a run against a
+   real warehouse is the only validation left.
 2. **The go-live path is short.** Only the two P0s — production/multi-tenant
    hosting and the A1 pilot — stand between "feature-complete" and a real
    customer. Sequencing A vs B vs C is a go-to-market call.
@@ -306,9 +312,9 @@ incumbents' comparable coverage.*
 | Connections · Connection testing | Built | P1 | Yes | Yes | Yes | Yes |
 | Connections · Discovery (browse contents) | Built | P0 | Yes | Yes | Yes | Yes |
 | Lineage · Manual lineage links | Built | P1 | Yes | Yes | Yes | Yes |
-| Lineage · Auto-extracted lineage (SQL/dbt) | **Partial** | P0 | Yes | Best-in-class | Best-in-class (dbt) | Yes |
-| Lineage · Column-level lineage | **Not Started** | P1 | Yes | Yes | Yes | Yes |
-| Lineage · Impact analysis from lineage | **Partial** | P1 | Yes | Yes | Yes | Yes |
+| Lineage · Auto-extracted lineage (SQL/dbt) | Built | P0 | Yes | Best-in-class | Best-in-class (dbt) | Yes |
+| Lineage · Column-level lineage | Built | P1 | Yes | Yes | Yes | Yes |
+| Lineage · Impact analysis from lineage | Built | P1 | Yes | Yes | Yes | Yes |
 | Data quality · Rules engine | Built | P1 | Add-on | Add-on | Partner | Best-in-class |
 | Data quality · Quality dimensions | Built | P1 | Yes | Yes | Yes | Yes |
 | Data quality · Profiling (auto-stats) | **Partial** | P1 | Yes | Yes | Yes | Yes |
