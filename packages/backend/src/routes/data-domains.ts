@@ -9,7 +9,8 @@ import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
 import { dataAssets } from './data-assets';
-import { aiService } from '../services/ai.service';
+import { getAiServiceForOrg } from '../services/ai.service';
+import type { AuthenticatedRequest } from '../middleware/auth';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
@@ -185,7 +186,8 @@ router.post('/generate', requireAiEnabled, enforceAiBudget, async (req: Request,
     return;
   }
   try {
-    const suggestions = await aiService.generateDataDomains(industry);
+    const svc = await getAiServiceForOrg((req as AuthenticatedRequest).user?.orgId);
+    const suggestions = await svc.generateDataDomains(industry);
     // The shared extractJson helper always returns a parsed value; we
     // still want a friendly error when the AI returned a *valid* but
     // wrong-shaped response (e.g. `{ items: [...] }` instead of the
@@ -242,7 +244,8 @@ router.post('/generate-subdomains', requireAiEnabled, enforceAiBudget, async (re
     return;
   }
   try {
-    const suggestions = await aiService.generateSubDomains(
+    const svc = await getAiServiceForOrg((req as AuthenticatedRequest).user?.orgId);
+    const suggestions = await svc.generateSubDomains(
       industry,
       parentName,
       typeof parentDescription === 'string' ? parentDescription : undefined,

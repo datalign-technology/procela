@@ -77,7 +77,7 @@ test('OpenAiProvider: system-leading messages, token budget, json mode, choice u
       },
     },
   };
-  const p = new OpenAiProvider(fake);
+  const p = new OpenAiProvider({ client: fake });
 
   const text = await p.complete({ ...baseReq, jsonMode: true });
   assert.equal(text, 'the answer');
@@ -89,7 +89,7 @@ test('OpenAiProvider: system-leading messages, token budget, json mode, choice u
   assert.equal(captured.messages.length, 4);
   assert.deepEqual(captured.response_format, { type: 'json_object' });
 
-  const chunks = await collect(new OpenAiProvider(fake).stream(baseReq));
+  const chunks = await collect(new OpenAiProvider({ client: fake }).stream(baseReq));
   assert.deepEqual(chunks, ['A', 'B']);
   assert.equal(captured.stream, true);
   // No jsonMode this time → no response_format forced.
@@ -117,7 +117,7 @@ test('Gemini: assistant→model role map, systemInstruction, responseMimeType, t
     },
   };
 
-  const text = await new GeminiProvider(fake).complete({ ...baseReq, jsonMode: true });
+  const text = await new GeminiProvider({ client: fake }).complete({ ...baseReq, jsonMode: true });
   assert.equal(text, 'gemini says hi');
   assert.equal(modelCfg.model, 'm-1');
   assert.equal(modelCfg.systemInstruction, 'SYS');
@@ -127,7 +127,7 @@ test('Gemini: assistant→model role map, systemInstruction, responseMimeType, t
   assert.deepEqual(genArg.contents.map((c: any) => c.role), ['user', 'model', 'user']);
   assert.equal(genArg.contents[0].parts[0].text, 'hello');
 
-  const chunks = await collect(new GeminiProvider(fake).stream(baseReq));
+  const chunks = await collect(new GeminiProvider({ client: fake }).stream(baseReq));
   assert.deepEqual(chunks, ['x', 'y']);
 });
 
@@ -153,7 +153,7 @@ test('Bedrock: Converse input mapping and multi-block text join', async () => {
     },
   };
 
-  const text = await new BedrockProvider(fake).complete(baseReq);
+  const text = await new BedrockProvider({ client: fake }).complete(baseReq);
   assert.equal(text, 'Customer'); // two content blocks joined
   assert.equal(converseInput.modelId, 'm-1');
   assert.deepEqual(converseInput.system, [{ text: 'SYS' }]);
@@ -161,7 +161,7 @@ test('Bedrock: Converse input mapping and multi-block text join', async () => {
   assert.deepEqual(converseInput.messages[0], { role: 'user', content: [{ text: 'hello' }] });
   assert.deepEqual(converseInput.messages[1], { role: 'assistant', content: [{ text: 'hi' }] });
 
-  const chunks = await collect(new BedrockProvider(fake).stream(baseReq));
+  const chunks = await collect(new BedrockProvider({ client: fake }).stream(baseReq));
   assert.deepEqual(chunks, ['Cus', 'tomer']);
   assert.equal(streamInput.modelId, 'm-1');
 });
@@ -174,6 +174,6 @@ test('Bedrock: omits the system block when there is no system prompt', async () 
       return { output: { message: { content: [{ text: 'ok' }] } } };
     },
   };
-  await new BedrockProvider(fake).complete({ ...baseReq, system: '' });
+  await new BedrockProvider({ client: fake }).complete({ ...baseReq, system: '' });
   assert.equal(converseInput.system, undefined);
 });

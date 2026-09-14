@@ -1,12 +1,13 @@
 import config from '../config';
 import { ProcessContext, OrgContext, ChatMessage } from '../types';
 import { ChatProvider, createChatProvider } from './llm-provider';
+import { resolveOrgProvider } from './org-ai-config';
 
-// The active provider's default model (before any in-app override). Each
-// vendor reads its own <PROVIDER>_MODEL env (see config); this picks the one
-// that matches AI_PROVIDER.
-function activeProviderModel(): string {
-  switch (config.aiProvider) {
+// A provider's default model (before any override). Each vendor reads its own
+// <PROVIDER>_MODEL env (see config). Used both for the deployment default and
+// as the fallback when a per-org config names a provider but no model.
+function defaultModelForProvider(name: string): string {
+  switch (name) {
     case 'openai':
     case 'azure':
     case 'azure-openai':
@@ -20,6 +21,11 @@ function activeProviderModel(): string {
     default:
       return config.anthropicModel;
   }
+}
+
+// The active (deployment) provider's default model.
+function activeProviderModel(): string {
+  return defaultModelForProvider(config.aiProvider);
 }
 
 // Model resolution: admin override (set via Settings → AI, wins)
@@ -237,17 +243,25 @@ export interface AiService {
 export class AiServiceImpl implements AiService {
   // Transport is delegated to a ChatProvider so no model-vendor SDK is
   // referenced in this file — it owns only prompts and JSON extraction.
-  // A test can inject a specific provider; the default singleton resolves
-  // the vendor selected by AI_PROVIDER lazily (getActiveProvider). Phase 3
-  // will resolve it per org (bring-your-own-vendor) instead.
+  // A test (or the per-org path) can inject a specific provider and a model
+  // resolver; the default singleton resolves the vendor selected by
+  // AI_PROVIDER lazily (getActiveProvider) and the deployment model
+  // (getConfiguredModel). getAiServiceForOrg builds a per-tenant instance
+  // bound to an org's provider + model.
   private readonly injectedProvider: ChatProvider | null;
+  private readonly modelResolver: () => string;
 
-  constructor(provider?: ChatProvider) {
+  constructor(provider?: ChatProvider, modelResolver?: () => string) {
     this.injectedProvider = provider ?? null;
+    this.modelResolver = modelResolver ?? getConfiguredModel;
   }
 
   private get provider(): ChatProvider {
     return this.injectedProvider ?? getActiveProvider();
+  }
+
+  private model(): string {
+    return this.modelResolver();
   }
 
   /**
@@ -320,7 +334,7 @@ Guidelines:
   async generateIndustryTemplate(industry: string, specialization?: IndustryTemplateSpecialization): Promise<object> {
     const { system, user } = this.buildTemplatePrompt(industry, specialization);
     const text = await this.provider.complete({
-      model: getConfiguredModel(),
+      model: this.model(),
       // See generateIndustryTemplateStream for the streaming path
       // that lets us go higher. This non-streaming call is kept for
       // callers that don't need progress events (tests, admin
@@ -353,7 +367,7 @@ Guidelines:
     let chars = 0;
     let full = '';
     for await (const delta of this.provider.stream({
-      model: getConfiguredModel(),
+      model: this.model(),
       maxTokens: 32000,
       system,
       messages: [{ role: 'user', content: user }],
@@ -375,7 +389,7 @@ Guidelines:
    */
   async generateDataDomains(industry: string): Promise<object> {
     const text = await this.provider.complete({
-      model: getConfiguredModel(),
+      model: this.model(),
       // See generateIndustryTemplate for the max_tokens rationale.
       // Smaller here since domain suggestions are a flatter list.
       maxTokens: 8192,
@@ -416,7 +430,7 @@ Guidelines:
    */
   async generateSubDomains(industry: string, parentName: string, parentDescription?: string): Promise<object> {
     const text = await this.provider.complete({
-      model: getConfiguredModel(),
+      model: this.model(),
       maxTokens: 4096,
       system: `You are a data governance expert for the Procela platform. Given an industry and a top-level data domain, suggest the sub-domains that break that domain down into more granular, separately-stewarded subject areas.
 
@@ -452,7 +466,7 @@ Guidelines:
    */
   async suggestDataAssets(context: ProcessContext): Promise<object> {
     const text = await this.provider.complete({
-      model: getConfiguredModel(),
+      model: this.model(),
       // See generateIndustryTemplate — headroom for JSON list
       // output that new-gen models render more verbosely.
       maxTokens: 8192,
@@ -491,7 +505,7 @@ Guidelines:
       ...(c.description ? { description: c.description } : {}),
     }));
     const text = await this.provider.complete({
-      model: getConfiguredModel(),
+      model: this.model(),
       maxTokens: 4096,
       system: `You are a data privacy and compliance classifier. Given a data asset's metadata, decide which sensitivity tags apply.
 
@@ -616,7 +630,7 @@ Return [] when no tag applies with any confidence.`,
    */
   async chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string> {
     return this.provider.complete({
-      model: getConfiguredModel(),
+      model: this.model(),
       maxTokens: 2048,
       system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({
@@ -634,7 +648,7 @@ Return [] when no tag applies with any confidence.`,
    *  format the client expects (SSE, WebSocket, plain HTTP chunked). */
   async *chatStream(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): AsyncIterable<string> {
     yield* this.provider.stream({
-      model: getConfiguredModel(),
+      model: this.model(),
       maxTokens: 2048,
       system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
@@ -677,7 +691,7 @@ Return [] when no tag applies with any confidence.`,
     lines.push('\nPerform this activity now and produce your draft deliverable.');
 
     return this.provider.complete({
-      model: getConfiguredModel(),
+      model: this.model(),
       maxTokens: 3000,
       system,
       messages: [{ role: 'user', content: lines.join('\n') }],
@@ -686,6 +700,51 @@ Return [] when no tag applies with any confidence.`,
 }
 
 export const aiService: AiService = new AiServiceImpl();
+
+/**
+ * Resolve the AiService to use for a given org (multi-vendor, phase 3).
+ *
+ * When the org has an enabled per-tenant config that names a provider, this
+ * returns a service bound to that org's vendor + model + decrypted key. When
+ * it doesn't (no org id, no config, config disabled), it returns the shared
+ * deployment-default `aiService` — so every existing single-tenant / no-config
+ * deployment behaves exactly as before.
+ *
+ * Every AI route should resolve its service through this (passing the
+ * authenticated `req.user.orgId`) rather than importing `aiService` directly,
+ * so each org's calls hit its own vendor.
+ */
+export async function getAiServiceForOrg(orgId: string | null | undefined): Promise<AiService> {
+  if (!orgId) return aiService;
+  const resolved = await resolveOrgProvider(orgId);
+  if (!resolved) return aiService;
+  const provider = createChatProvider(resolved.provider, resolved.creds);
+  const model = resolved.model || defaultModelForProvider(resolved.provider);
+  return new AiServiceImpl(provider, () => model);
+}
+
+/**
+ * One-token reachability probe for the vendor an org's calls will actually
+ * use — its per-tenant provider when configured, else the deployment default.
+ * Powers the org-scoped "Test now" button; never throws (a red badge is the
+ * point). `source` tells the UI whether it validated the org's own config or
+ * the deployment fallback.
+ */
+export async function probeAiForOrg(
+  orgId: string | null | undefined,
+): Promise<{ ok: boolean; provider: string; model: string; message: string; source: 'org' | 'deployment' }> {
+  const resolved = orgId ? await resolveOrgProvider(orgId) : null;
+  const providerName = resolved ? resolved.provider : config.aiProvider;
+  const provider = resolved ? createChatProvider(resolved.provider, resolved.creds) : getActiveProvider();
+  const model = resolved ? (resolved.model || defaultModelForProvider(resolved.provider)) : getConfiguredModel();
+  const source: 'org' | 'deployment' = resolved ? 'org' : 'deployment';
+  try {
+    await provider.complete({ model, system: '', messages: [{ role: 'user', content: 'ok' }], maxTokens: 1 });
+    return { ok: true, provider: providerName, model, message: 'Model reachable.', source };
+  } catch (err) {
+    return { ok: false, provider: providerName, model, message: (err as { message?: string })?.message || 'unknown error', source };
+  }
+}
 
 // Internal helper exposed for unit tests. Not part of the public API.
 export const _extractJsonForTests = extractJson;

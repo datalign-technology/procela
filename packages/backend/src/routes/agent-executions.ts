@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { config } from '../config';
 import logger from '../lib/logger';
-import { aiService, GovernanceActivityRun } from '../services/ai.service';
+import { getAiServiceForOrg, GovernanceActivityRun } from '../services/ai.service';
 import { enforceAiBudget } from '../middleware/ai-budget';
 import { agents } from './agents';
 import { processNodes, isGovernanceNode } from './process-catalog';
@@ -303,7 +303,8 @@ export async function runAgentExecution(params: {
   });
 
   try {
-    const output = await aiService.performGovernanceActivity(run);
+    const svc = await getAiServiceForOrg(orgId);
+    const output = await svc.performGovernanceActivity(run);
     const completedAt = new Date();
     execution.status = 'SUCCESS';
     execution.output = output;

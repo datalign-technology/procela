@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { aiService } from '../services/ai.service';
+import { getAiServiceForOrg } from '../services/ai.service';
 import { ChatMessage } from '../types';
 import logger from '../lib/logger';
 import { loadStore, registerStore } from '../lib/persistence';
@@ -521,7 +521,7 @@ router.post('/', async (req: Request, res: Response) => {
     };
 
     const snapshot = await buildOrgSnapshot(orgId);
-    const reply = await aiService.chat(chatMessages, context, snapshot);
+    const reply = await (await getAiServiceForOrg(orgId)).chat(chatMessages, context, snapshot);
     const entities = await buildEntityIndex(orgId);
 
     res.json({ success: true, data: { reply, entities } });
@@ -598,7 +598,8 @@ router.post('/stream', async (req: Request, res: Response) => {
     };
     const snapshot = await buildOrgSnapshot(orgId);
 
-    for await (const chunk of aiService.chatStream(chatMessages, context, snapshot)) {
+    const svc = await getAiServiceForOrg(orgId);
+    for await (const chunk of svc.chatStream(chatMessages, context, snapshot)) {
       send('chunk', { text: chunk });
     }
     // Entity index lands once at the end of the stream. The frontend

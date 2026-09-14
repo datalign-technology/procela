@@ -7,7 +7,7 @@ import { isOwnershipLevel, getCachedOrgList } from '../lib/org-scope';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { REGULATORY_SENSITIVITY_TAGS } from '../services/ai.service';
 import { auditService } from '../services/audit.service';
-import { aiService, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
+import { getAiServiceForOrg, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
 import logger from '../lib/logger';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
@@ -1982,7 +1982,8 @@ router.post('/:id/suggest-sensitivity', requireAiEnabled, enforceAiBudget, async
     .map((c) => ({ name: c.columnName, dataType: c.dataType, description: c.description }));
   const system = asset.systemId ? allSystems.find((s) => s.id === asset.systemId) : undefined;
   try {
-    const suggestions = await aiService.suggestAssetSensitivity({
+    const svc = await getAiServiceForOrg(asset.orgId);
+    const suggestions = await svc.suggestAssetSensitivity({
       name: asset.name,
       description: asset.description,
       systemType: system?.systemType,
