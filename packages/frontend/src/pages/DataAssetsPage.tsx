@@ -2378,6 +2378,7 @@ export default function DataAssetsPage({
                   assetId={viewing360.asset.id}
                   onNavigateToActivity={(nodeId) => { setViewing360(null); navigate(`/processes?node=${encodeURIComponent(nodeId)}`); }}
                   onNavigateToPerson={(personId) => { setViewing360(null); navigate(`/people/${encodeURIComponent(personId)}`); }}
+                  onNavigateToAsset={(id) => { void open360(id); }}
                 />
 
                 {/* Cross-layer view — same WhereUsed shape used on Systems,

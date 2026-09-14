@@ -1817,11 +1817,12 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
 
-  const [allProcessNodes, allMappings, allPeople, allDomains] = await Promise.all([
+  const [allProcessNodes, allMappings, allPeople, allDomains, allAssets] = await Promise.all([
     processNodesRepo().list(),
     mappingsRepo().list(),
     peopleRepo().list(),
     dataDomainsRepo().list(),
+    dataAssetsRepo.list(),
   ]);
 
   // Build a per-node ancestor breadcrumb.
@@ -1879,6 +1880,62 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
     };
   });
 
+  // Downstream data lineage — assets *derived from* this one via the
+  // AssetLineageEdge graph (this asset is a source; follow source→target
+  // transitively). dbt manifests and warehouse query-history extraction
+  // populate these edges, so the blast radius now includes the data that
+  // depends on this asset, not just the activities that touch it. Walk
+  // breadth-first, capping depth so a cyclic graph can't loop forever.
+  // Lazy require avoids an init cycle (data-lineage imports this module's
+  // `dataAssets` store).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { assetLineageEdges } = require('./data-lineage');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getAssetLineageEdgesRepository } = require('../db/asset-lineage-edges.repo');
+  const orgEdges = (await getAssetLineageEdgesRepository(assetLineageEdges).list())
+    .filter((e: { orgId: string }) => e.orgId === asset.orgId);
+  const outBySource = new Map<string, Array<{ targetAssetId: string; source: string }>>();
+  for (const e of orgEdges as Array<{ sourceAssetId: string; targetAssetId: string; source: string }>) {
+    const arr = outBySource.get(e.sourceAssetId) || [];
+    arr.push({ targetAssetId: e.targetAssetId, source: e.source });
+    outBySource.set(e.sourceAssetId, arr);
+  }
+  const MAX_LINEAGE_DEPTH = 25;
+  const downstreamMap = new Map<string, { depth: number; via: Set<string> }>();
+  const visited = new Set<string>([asset.id]);
+  let frontier: Array<{ id: string; depth: number }> = [{ id: asset.id, depth: 0 }];
+  while (frontier.length > 0) {
+    const next: Array<{ id: string; depth: number }> = [];
+    for (const { id, depth } of frontier) {
+      if (depth >= MAX_LINEAGE_DEPTH) continue;
+      for (const edge of outBySource.get(id) || []) {
+        const t = edge.targetAssetId;
+        if (t === asset.id) continue; // a cycle back to the origin isn't "downstream"
+        const existing = downstreamMap.get(t);
+        if (existing) {
+          existing.via.add(edge.source);
+          if (depth + 1 < existing.depth) existing.depth = depth + 1;
+        } else {
+          downstreamMap.set(t, { depth: depth + 1, via: new Set([edge.source]) });
+        }
+        if (!visited.has(t)) { visited.add(t); next.push({ id: t, depth: depth + 1 }); }
+      }
+    }
+    frontier = next;
+  }
+  const downstreamAssets = Array.from(downstreamMap.entries())
+    .map(([id, info]) => {
+      const a = allAssets.find((x) => x.id === id);
+      return {
+        id,
+        name: a?.name || '(deleted)',
+        governanceTier: a?.governanceTier ?? null,
+        depth: info.depth,
+        via: Array.from(info.via).sort(),
+      };
+    })
+    .sort((a, b) => a.depth - b.depth || a.name.localeCompare(b.name));
+
   // Domain owners and stewards always need to know about changes to
   // assets in their domain.
   const domain = allDomains.find((d) => d.dataAssetIds && d.dataAssetIds.includes(asset.id));
@@ -1929,8 +1986,10 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
         processCount: uniqueProcessIds.size,
         valueStreamCount: uniqueVsIds.size,
         peopleCount: peopleList.length,
+        downstreamAssetCount: downstreamAssets.length,
       },
       activities: activityRows,
+      downstreamAssets,
       people: peopleList,
       domain: domain ? {
         id: domain.id,

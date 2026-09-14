@@ -28,6 +28,8 @@ const { dataDomains } = require('../routes/data-domains');
 const { processNodes } = require('../routes/process-catalog');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { mappings } = require('../routes/mappings');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { assetLineageEdges } = require('../routes/data-lineage');
 
 function request(port: number, method: string, path: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -80,6 +82,7 @@ describe('GET /data-assets/:id/impact', () => {
     sweep(dataDomains, (d: any) => d.id?.startsWith(P));
     sweep(processNodes, (n: any) => n.id?.startsWith(P));
     sweep(mappings, (m: any) => m.id?.startsWith(P));
+    sweep(assetLineageEdges, (e: any) => e.id?.startsWith(P));
     await new Promise<void>((r) => server.close(() => r()));
   });
 
@@ -92,6 +95,7 @@ describe('GET /data-assets/:id/impact', () => {
     sweep(dataDomains, (d: any) => d.id?.startsWith(P));
     sweep(processNodes, (n: any) => n.id?.startsWith(P));
     sweep(mappings, (m: any) => m.id?.startsWith(P));
+    sweep(assetLineageEdges, (e: any) => e.id?.startsWith(P));
 
     const now = new Date().toISOString();
     people.push(
@@ -113,9 +117,63 @@ describe('GET /data-assets/:id/impact', () => {
     assert.strictEqual(res.body.data.summary.processCount, 0);
     assert.strictEqual(res.body.data.summary.valueStreamCount, 0);
     assert.strictEqual(res.body.data.summary.peopleCount, 0);
+    assert.strictEqual(res.body.data.summary.downstreamAssetCount, 0);
     assert.deepStrictEqual(res.body.data.activities, []);
+    assert.deepStrictEqual(res.body.data.downstreamAssets, []);
     assert.deepStrictEqual(res.body.data.people, []);
     assert.strictEqual(res.body.data.domain, null);
+  });
+
+  it('surfaces downstream assets reachable via AssetLineageEdge, with depth + via', async () => {
+    const now = new Date().toISOString();
+    // Extra assets to form a lineage chain: asset → mid → leaf, plus a
+    // direct sql edge asset → leaf so `leaf` carries two `via` sources and
+    // resolves to the shorter depth.
+    const midId = P + 'mid';
+    const leafId = P + 'leaf';
+    dataAssets.push(
+      { id: midId, orgId, name: 'Mid Asset', description: '', systemId: '', owner: '', ownerPersonId: null, stewardIds: [], governanceTier: 'SILVER', healthScore: 0, createdAt: now, updatedAt: now },
+      { id: leafId, orgId, name: 'Leaf Asset', description: '', systemId: '', owner: '', ownerPersonId: null, stewardIds: [], governanceTier: 'GOLD', healthScore: 0, createdAt: now, updatedAt: now },
+    );
+    assetLineageEdges.push(
+      { id: P + 'e1', orgId, sourceAssetId: assetId, targetAssetId: midId, source: 'dbt', sourceRef: 'model.p.mid', lastSeenAt: now, createdAt: now },
+      { id: P + 'e2', orgId, sourceAssetId: midId, targetAssetId: leafId, source: 'dbt', sourceRef: 'model.p.leaf', lastSeenAt: now, createdAt: now },
+      { id: P + 'e3', orgId, sourceAssetId: assetId, targetAssetId: leafId, source: 'sql', sourceRef: 'sql:a->leaf', lastSeenAt: now, createdAt: now },
+    );
+
+    const res = await request(port, 'GET', `/data-assets/${assetId}/impact`);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.data.summary.downstreamAssetCount, 2);
+    const rows = res.body.data.downstreamAssets;
+    const mid = rows.find((r: any) => r.id === midId);
+    const leaf = rows.find((r: any) => r.id === leafId);
+    assert.ok(mid && leaf, 'both downstream assets present');
+    assert.strictEqual(mid.depth, 1);
+    assert.deepStrictEqual(mid.via, ['dbt']);
+    assert.strictEqual(mid.governanceTier, 'SILVER');
+    // leaf is reachable at depth 2 (via mid) AND depth 1 (direct sql) → the
+    // shorter depth wins, and both sources appear in `via`.
+    assert.strictEqual(leaf.depth, 1);
+    assert.deepStrictEqual(leaf.via, ['dbt', 'sql']);
+    // Ordered by depth ascending.
+    assert.ok(rows[0].depth <= rows[rows.length - 1].depth);
+  });
+
+  it('does not treat a lineage cycle back to the origin as downstream', async () => {
+    const now = new Date().toISOString();
+    const midId = P + 'cyc-mid';
+    dataAssets.push(
+      { id: midId, orgId, name: 'Cycle Mid', description: '', systemId: '', owner: '', ownerPersonId: null, stewardIds: [], governanceTier: 'BRONZE', healthScore: 0, createdAt: now, updatedAt: now },
+    );
+    assetLineageEdges.push(
+      { id: P + 'c1', orgId, sourceAssetId: assetId, targetAssetId: midId, source: 'sql', sourceRef: 'sql:a->mid', lastSeenAt: now, createdAt: now },
+      { id: P + 'c2', orgId, sourceAssetId: midId, targetAssetId: assetId, source: 'sql', sourceRef: 'sql:mid->a', lastSeenAt: now, createdAt: now },
+    );
+    const res = await request(port, 'GET', `/data-assets/${assetId}/impact`);
+    assert.strictEqual(res.status, 200);
+    // Only `mid` is downstream; the edge back to the origin is not counted.
+    assert.strictEqual(res.body.data.summary.downstreamAssetCount, 1);
+    assert.strictEqual(res.body.data.downstreamAssets[0].id, midId);
   });
 
   it('returns 404 for an unknown asset', async () => {
