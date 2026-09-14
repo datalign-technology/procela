@@ -187,14 +187,25 @@ Viewer            — read-only access to the full catalog
 - **Migrations**: Managed via Flyway or Alembic — version-controlled, repeatable
 
 ### AI Services
-- **Provider**: Anthropic Claude API
-- **Model**: `claude-sonnet-5` (update model string as newer versions release)
+- **Provider**: pluggable. Anthropic Claude is the default; OpenAI (incl. Azure
+  OpenAI and self-hosted OpenAI-compatible servers), Google Gemini, and AWS
+  Bedrock are selectable via `AI_PROVIDER` (see env vars). Every AI capability
+  is defined on a vendor-neutral `AiService` interface; the transport is a
+  `ChatProvider` adapter (`services/llm-provider.ts`) — the only place a
+  vendor SDK is referenced. Adding a vendor is one adapter, no business-logic
+  change. (Per-tenant provider selection is the next phase; today it's
+  deployment-level.)
+- **Model**: the active provider's `<PROVIDER>_MODEL` (default
+  `claude-sonnet-5` on Anthropic), overridable in-app via Settings → AI.
 - **Uses**:
   - Industry template generation (process hierarchy)
   - Data and system suggestions per process step
   - AI assistant (conversational, context-aware)
-- **Pattern**: AI calls are made server-side only. The API key is never exposed to the frontend.
+- **Pattern**: AI calls are made server-side only. Credentials are never exposed to the frontend.
 - **Prompt context**: Each AI call receives relevant org context (industry, process, existing catalog) as system prompt content.
+- **Structured output**: prompts request JSON and a defensive extractor
+  (`extractJson`) tolerates fences/prose from any vendor; object-returning
+  calls also opt into the vendor's native JSON mode where available.
 
 ### Identity Integration
 - **AWS**: Use Amazon Cognito as the identity broker (federates with AD, Azure AD, Okta via SAML/OIDC)
@@ -350,7 +361,32 @@ SAML_ISSUER=
 JWT_SECRET=
 
 # AI
+# Which model vendor answers server-side AI calls (deployment-level today;
+# per-tenant selection is planned). One of: anthropic (default) | openai |
+# gemini | bedrock. Azure OpenAI and self-hosted / OpenAI-compatible servers
+# (Ollama, vLLM, LiteLLM, OpenRouter) use AI_PROVIDER=openai with
+# OPENAI_BASE_URL pointed at them. Only the selected provider's SDK loads
+# (lazily) and only its credentials/model below are read.
+AI_PROVIDER=anthropic
+
+# Anthropic (default provider)
 ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-5
+# OpenAI / Azure OpenAI / self-hosted (AI_PROVIDER=openai)
+OPENAI_API_KEY=
+OPENAI_BASE_URL=          # e.g. Azure/Ollama/vLLM/LiteLLM endpoint; empty = api.openai.com
+OPENAI_MODEL=gpt-4o
+# Google Gemini (AI_PROVIDER=gemini) — GEMINI_API_KEY or GOOGLE_API_KEY
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-1.5-pro
+# AWS Bedrock (AI_PROVIDER=bedrock) — uses the standard AWS credential chain;
+# BEDROCK_REGION falls back to AWS_REGION. Model is a Bedrock model id.
+BEDROCK_REGION=us-east-1
+BEDROCK_MODEL=anthropic.claude-3-5-sonnet-20240620-v1:0
+# The *_MODEL defaults drift as vendors release models — set them per
+# deployment. The boot probe validates the resolved model at startup, and an
+# in-app Settings → AI override wins over the env model.
+
 # Master switch for every AI integration feature (template generation, data/
 # asset suggestions, sensitivity classifier, the assistant, AI agents).
 # Defaults on; set to false to turn them all off — the backend refuses the AI

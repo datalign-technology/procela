@@ -35,6 +35,13 @@ export interface LlmRequest {
   system: string;
   messages: LlmMessage[];
   maxTokens: number;
+  /** Ask the provider to constrain output to a JSON object where the vendor
+   *  supports it natively (OpenAI response_format, Gemini responseMimeType).
+   *  A hint, not a guarantee — the AiService's extractJson stays the safety
+   *  net regardless, and providers without a native mode ignore it. Only set
+   *  it for OBJECT-returning prompts: OpenAI's json_object mode rejects a
+   *  top-level array, so array-returning calls must leave it off. */
+  jsonMode?: boolean;
 }
 
 /** The transport contract every vendor adapter implements. `complete`
@@ -115,6 +122,200 @@ export class AnthropicProvider implements ChatProvider {
         yield event.delta.text;
       }
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// OpenAI-compatible adapter — covers OpenAI, Azure OpenAI, and any
+// self-hosted / OpenAI-compatible server (Ollama, vLLM, LiteLLM, OpenRouter)
+// via OPENAI_BASE_URL. The SDK loads lazily so a build that never selects
+// this provider never pulls it in.
+// ─────────────────────────────────────────────────────────────────────────
+export class OpenAiProvider implements ChatProvider {
+  private clientPromise: Promise<any> | null = null;
+
+  // `injectedClient` lets a test drive the adapter with a fake `chat`
+  // surface — no SDK, no network. Production passes nothing.
+  constructor(private injectedClient?: any) {}
+
+  private async getClient(): Promise<any> {
+    if (this.injectedClient) return this.injectedClient;
+    if (!this.clientPromise) {
+      this.clientPromise = (async () => {
+        const { default: OpenAI } = await import('openai');
+        const apiKey = config.openaiApiKey || process.env.OPENAI_API_KEY || '';
+        if (!apiKey && !config.openaiBaseUrl) {
+          throw new Error('OPENAI_API_KEY is not set (or set OPENAI_BASE_URL for a keyless self-hosted endpoint).');
+        }
+        return new OpenAI({ apiKey: apiKey || 'not-required', baseURL: config.openaiBaseUrl || undefined });
+      })();
+    }
+    return this.clientPromise;
+  }
+
+  // OpenAI carries the system prompt as a leading system message rather
+  // than a top-level field.
+  private toMessages(req: LlmRequest) {
+    return [{ role: 'system' as const, content: req.system }, ...req.messages];
+  }
+
+  private params(req: LlmRequest): Record<string, unknown> {
+    return {
+      model: req.model,
+      max_tokens: req.maxTokens,
+      messages: this.toMessages(req),
+      ...(req.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+    };
+  }
+
+  async complete(req: LlmRequest): Promise<string> {
+    const client = await this.getClient();
+    const res = await client.chat.completions.create(this.params(req));
+    return res?.choices?.[0]?.message?.content ?? '';
+  }
+
+  async *stream(req: LlmRequest): AsyncIterable<string> {
+    const client = await this.getClient();
+    const s = await client.chat.completions.create({ ...this.params(req), stream: true });
+    for await (const chunk of s) {
+      const delta = chunk?.choices?.[0]?.delta?.content;
+      if (typeof delta === 'string' && delta) yield delta;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Google Gemini adapter.
+// ─────────────────────────────────────────────────────────────────────────
+export class GeminiProvider implements ChatProvider {
+  private clientPromise: Promise<any> | null = null;
+
+  constructor(private injectedClient?: any) {}
+
+  private async getClient(): Promise<any> {
+    if (this.injectedClient) return this.injectedClient;
+    if (!this.clientPromise) {
+      this.clientPromise = (async () => {
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+        if (!apiKey) throw new Error('GEMINI_API_KEY (or GOOGLE_API_KEY) is not set.');
+        return new GoogleGenerativeAI(apiKey);
+      })();
+    }
+    return this.clientPromise;
+  }
+
+  // Gemini names the assistant turn "model"; the system prompt is a
+  // dedicated systemInstruction, not a message.
+  private toContents(req: LlmRequest) {
+    return req.messages.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+  }
+
+  private async getModel(req: LlmRequest): Promise<any> {
+    const client = await this.getClient();
+    return client.getGenerativeModel({
+      model: req.model,
+      ...(req.system ? { systemInstruction: req.system } : {}),
+      generationConfig: {
+        maxOutputTokens: req.maxTokens,
+        ...(req.jsonMode ? { responseMimeType: 'application/json' } : {}),
+      },
+    });
+  }
+
+  async complete(req: LlmRequest): Promise<string> {
+    const model = await this.getModel(req);
+    const res = await model.generateContent({ contents: this.toContents(req) });
+    return res?.response?.text?.() ?? '';
+  }
+
+  async *stream(req: LlmRequest): AsyncIterable<string> {
+    const model = await this.getModel(req);
+    const res = await model.generateContentStream({ contents: this.toContents(req) });
+    for await (const chunk of res.stream) {
+      const t = chunk?.text?.();
+      if (typeof t === 'string' && t) yield t;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AWS Bedrock adapter — uses the Converse API, which is uniform across every
+// Bedrock model family (Anthropic, Llama, Mistral, Titan, Cohere), so one
+// adapter covers all of them. Credentials come from the standard AWS chain.
+// ─────────────────────────────────────────────────────────────────────────
+export class BedrockProvider implements ChatProvider {
+  private clientPromise: Promise<any> | null = null;
+
+  constructor(private injectedClient?: any) {}
+
+  private async getClient(): Promise<any> {
+    if (this.injectedClient) return this.injectedClient;
+    if (!this.clientPromise) {
+      this.clientPromise = (async () => {
+        const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
+        return new BedrockRuntimeClient({ region: config.bedrockRegion });
+      })();
+    }
+    return this.clientPromise;
+  }
+
+  private toInput(req: LlmRequest): Record<string, unknown> {
+    return {
+      modelId: req.model,
+      ...(req.system ? { system: [{ text: req.system }] } : {}),
+      messages: req.messages.map((m) => ({ role: m.role, content: [{ text: m.content }] })),
+      inferenceConfig: { maxTokens: req.maxTokens },
+    };
+  }
+
+  async complete(req: LlmRequest): Promise<string> {
+    const client = await this.getClient();
+    const { ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime');
+    const out: any = await client.send(new ConverseCommand(this.toInput(req) as any));
+    const blocks: any[] = out?.output?.message?.content ?? [];
+    return blocks.map((b) => b?.text ?? '').join('');
+  }
+
+  async *stream(req: LlmRequest): AsyncIterable<string> {
+    const client = await this.getClient();
+    const { ConverseStreamCommand } = await import('@aws-sdk/client-bedrock-runtime');
+    const out: any = await client.send(new ConverseStreamCommand(this.toInput(req) as any));
+    for await (const ev of out?.stream ?? []) {
+      const t = ev?.contentBlockDelta?.delta?.text;
+      if (typeof t === 'string' && t) yield t;
+    }
+  }
+}
+
+/**
+ * Resolve a provider name (from `AI_PROVIDER`) to its adapter. Unknown names
+ * throw rather than silently falling back, so a typo surfaces on first AI use
+ * instead of quietly routing to the wrong vendor. Called lazily (first AI
+ * call / boot probe), never at module load, so a bad value never crashes the
+ * whole backend at boot.
+ */
+export function createChatProvider(name?: string): ChatProvider {
+  switch ((name || 'anthropic').trim().toLowerCase()) {
+    case '':
+    case 'anthropic':
+    case 'claude':
+      return new AnthropicProvider();
+    case 'openai':
+    case 'azure':
+    case 'azure-openai':
+      return new OpenAiProvider();
+    case 'gemini':
+    case 'google':
+      return new GeminiProvider();
+    case 'bedrock':
+    case 'aws':
+      return new BedrockProvider();
+    default:
+      throw new Error(`Unknown AI_PROVIDER "${name}". Use one of: anthropic, openai, gemini, bedrock.`);
   }
 }
 

@@ -570,7 +570,7 @@ const server = app.listen(PORT, () => {
 // deployment where you'd rather roll back than serve traffic with a
 // dead AI backend. Enabled by default in production when the API
 // key is configured.
-import { getConfiguredModel } from './services/ai.service';
+import { getConfiguredModel, getActiveProvider } from './services/ai.service';
 // Known-good Anthropic model IDs surfaced in the error message so an
 // operator hitting an invalid-model error has an immediately-runnable
 // fix to try. Kept short + current — bump alongside real model
@@ -586,39 +586,32 @@ async function pingAiModel(): Promise<void> {
     logger.info('AI: features turned off (AI_FEATURES_ENABLED=false) — skipping startup model probe');
     return;
   }
-  const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) {
-    logger.info('AI: API key not configured — skipping startup model probe');
-    return;
-  }
+  const provider = config.aiProvider;
   const model = getConfiguredModel();
   const failFast = process.env.FAIL_FAST_ON_AI_PROBE === '1'
     || (config.nodeEnv === 'production' && process.env.FAIL_FAST_ON_AI_PROBE !== '0');
   const bail = (msg: string, ctx: Record<string, unknown>): void => {
+    const hint = provider === 'anthropic' ? SUGGESTED_MODEL_IDS : undefined;
     if (failFast) {
-      logger.error({ ...ctx, tryOneOf: SUGGESTED_MODEL_IDS }, `${msg} — exiting (set FAIL_FAST_ON_AI_PROBE=0 to skip)`);
+      logger.error({ ...ctx, provider, ...(hint ? { tryOneOf: hint } : {}) }, `${msg} — exiting (set FAIL_FAST_ON_AI_PROBE=0 to skip)`);
       process.exit(1);
     }
-    logger.error({ ...ctx, tryOneOf: SUGGESTED_MODEL_IDS }, `${msg} — set ANTHROPIC_MODEL to a supported id or configure via Settings → AI`);
+    logger.error({ ...ctx, provider, ...(hint ? { tryOneOf: hint } : {}) }, `${msg} — check the <PROVIDER>_MODEL / credentials for AI_PROVIDER=${provider}, or configure via Settings → AI`);
   };
+  // Probe through the active provider's own transport — a one-token
+  // completion — so it validates whatever vendor AI_PROVIDER selects
+  // (Anthropic, OpenAI, Gemini, Bedrock) with one code path. A missing
+  // key/credential makes the adapter throw, which lands in catch below.
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] }),
+    await getActiveProvider().complete({
+      model,
+      system: '',
+      messages: [{ role: 'user', content: 'ok' }],
+      maxTokens: 1,
     });
-    if (res.ok) {
-      logger.info({ model }, 'AI: startup probe succeeded');
-      return;
-    }
-    const text = await res.text().catch(() => '');
-    bail('AI: startup probe failed', { model, status: res.status, response: text.slice(0, 300) });
+    logger.info({ provider, model }, 'AI: startup probe succeeded');
   } catch (err) {
-    bail('AI: startup probe threw (network error)', { err, model });
+    bail('AI: startup probe failed', { model, err: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -650,8 +643,21 @@ function warnOnMissingProdConfig(): void {
       missing.push({ name: 'JWT_PRIVATE_KEY / JWT_PUBLIC_KEY', impact: 'signing with HS256 (symmetric secret). Anyone with the secret can forge tokens; downstream services cannot verify without sharing it. Set both RSA PEMs to sign with RS256 and publish a JWKS at /api/v1/auth/jwks.json' });
     }
   }
-  if (!config.anthropicApiKey) {
-    missing.push({ name: 'ANTHROPIC_API_KEY', impact: 'AI features (template generation, suggestions, assistant) will fail when invoked' });
+  // Credential check for the ACTIVE AI provider only — a deployment on
+  // OpenAI/Gemini/Bedrock shouldn't be warned about a missing Anthropic key.
+  if (config.aiFeaturesEnabled) {
+    const p = config.aiProvider;
+    const cred =
+      p === 'openai' || p === 'azure' || p === 'azure-openai'
+        ? { ok: !!(config.openaiApiKey || config.openaiBaseUrl), name: 'OPENAI_API_KEY (or OPENAI_BASE_URL)' }
+      : p === 'gemini' || p === 'google'
+        ? { ok: !!config.geminiApiKey, name: 'GEMINI_API_KEY (or GOOGLE_API_KEY)' }
+      : p === 'bedrock' || p === 'aws'
+        ? { ok: true, name: '' } // AWS credential chain — no single env var to check
+        : { ok: !!config.anthropicApiKey, name: 'ANTHROPIC_API_KEY' };
+    if (!cred.ok && cred.name) {
+      missing.push({ name: cred.name, impact: `AI features (templates, suggestions, assistant) will fail when invoked (AI_PROVIDER=${p})` });
+    }
   }
   if (!process.env.MFA_ENCRYPTION_KEY) {
     missing.push({ name: 'MFA_ENCRYPTION_KEY', impact: 'TOTP secrets are stored in plaintext on the Person record — a database leak exposes every enrolled user\'s second factor' });

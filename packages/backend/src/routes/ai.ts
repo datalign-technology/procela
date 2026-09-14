@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import { currentUsage } from '../middleware/ai-budget';
 import { isEnabled as aiUsageEnabled, getConfiguredLimits } from '../services/ai-usage';
-import { aiService, getConfiguredModel, setModelOverride } from '../services/ai.service';
+import { aiService, getConfiguredModel, setModelOverride, getActiveProvider } from '../services/ai.service';
 // INDUSTRIES / Industry no longer imported — validation is
 // free-form; the enum lives only on the frontend combobox as
 // autocomplete hints.
@@ -248,19 +248,29 @@ interface AnthropicModel {
 router.get('/settings', async (_req: Request, res: Response) => {
   const s = (await settingsRepo.get<StoredAiSettings>('aiSettings')) ?? {};
   const overrideModel = s.model || null;
-  const envModel = process.env.ANTHROPIC_MODEL || null;
-  const resolved = getConfiguredModel();
+  const provider = config.aiProvider;
+  // Report the ACTIVE provider's model env + credential, so the Settings UI
+  // reflects whatever vendor AI_PROVIDER selects rather than always Anthropic.
+  const providerInfo: { envModel: string | null; defaultModel: string; credConfigured: boolean } =
+    provider === 'openai' || provider === 'azure' || provider === 'azure-openai'
+      ? { envModel: process.env.OPENAI_MODEL || null, defaultModel: config.openaiModel, credConfigured: !!(config.openaiApiKey || config.openaiBaseUrl) }
+    : provider === 'gemini' || provider === 'google'
+      ? { envModel: process.env.GEMINI_MODEL || null, defaultModel: config.geminiModel, credConfigured: !!config.geminiApiKey }
+    : provider === 'bedrock' || provider === 'aws'
+      ? { envModel: process.env.BEDROCK_MODEL || null, defaultModel: config.bedrockModel, credConfigured: true }
+    : { envModel: process.env.ANTHROPIC_MODEL || null, defaultModel: config.anthropicModel, credConfigured: !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY) };
   const source: 'override' | 'env' | 'default' =
-    overrideModel ? 'override' : envModel ? 'env' : 'default';
+    overrideModel ? 'override' : providerInfo.envModel ? 'env' : 'default';
   res.json({
     success: true,
     data: {
-      resolvedModel: resolved,
+      provider,
+      resolvedModel: getConfiguredModel(),
       overrideModel,
-      envModel,
-      defaultModel: config.anthropicModel,
+      envModel: providerInfo.envModel,
+      defaultModel: providerInfo.defaultModel,
       source,
-      apiKeyConfigured: !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY),
+      apiKeyConfigured: providerInfo.credConfigured,
       updatedAt: s.updatedAt || null,
       updatedBy: s.updatedBy || null,
     },
@@ -287,6 +297,14 @@ router.put('/settings', async (req: Request, res: Response) => {
  *  can access, straight from Anthropic. Used by the Settings UI
  *  as the source of truth (no hardcoded ID lists to drift). */
 router.get('/models', async (_req: Request, res: Response) => {
+  // Only Anthropic exposes a stable "list models the key can access" endpoint
+  // that we mirror as the picker's source of truth. For the other providers
+  // there's no universal model-list API, so surface the single configured
+  // model — the admin sets the exact id via <PROVIDER>_MODEL / Settings → AI.
+  if (config.aiProvider !== 'anthropic') {
+    res.json({ success: true, data: [{ id: getConfiguredModel() }] });
+    return;
+  }
   const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) {
     res.status(503).json({ success: false, error: 'Anthropic API key is not configured.' });
@@ -318,46 +336,25 @@ router.get('/models', async (_req: Request, res: Response) => {
 });
 
 /** POST /api/v1/ai/test — one-token probe against the currently-
- *  resolved model. Used by the "Test now" button and by the boot
- *  ping in index.ts. Returns { ok, model, message } — never
- *  throws upstream errors, since a red badge is the point. */
+ *  resolved model, THROUGH the active provider's adapter, so it validates
+ *  whatever vendor AI_PROVIDER selects with one code path. Used by the
+ *  "Test now" button and mirrors the boot probe in index.ts. Returns
+ *  { ok, provider, model, message } — never throws upstream errors, since a
+ *  red badge is the point. */
 router.post('/test', async (_req: Request, res: Response) => {
   const model = getConfiguredModel();
-  const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) {
-    res.json({ success: true, data: { ok: false, model, message: 'ANTHROPIC_API_KEY is not set.' } });
-    return;
-  }
+  const provider = config.aiProvider;
   try {
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ok' }],
-      }),
+    await getActiveProvider().complete({
+      model,
+      system: '',
+      messages: [{ role: 'user', content: 'ok' }],
+      maxTokens: 1,
     });
-    if (upstream.ok) {
-      res.json({ success: true, data: { ok: true, model, message: 'Model reachable.' } });
-      return;
-    }
-    const text = await upstream.text().catch(() => '');
-    res.json({
-      success: true,
-      data: {
-        ok: false,
-        model,
-        message: `Anthropic returned ${upstream.status}: ${text.slice(0, 250)}`,
-      },
-    });
+    res.json({ success: true, data: { ok: true, provider, model, message: 'Model reachable.' } });
   } catch (err) {
     const msg = (err as { message?: string })?.message || 'unknown error';
-    res.json({ success: true, data: { ok: false, model, message: `Network error: ${msg}` } });
+    res.json({ success: true, data: { ok: false, provider, model, message: msg } });
   }
 });
 

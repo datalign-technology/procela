@@ -35,6 +35,15 @@ export const config = {
   jwtKid: process.env.JWT_KID || 'procela-1',
 
   // AI
+  // Which model vendor answers server-side AI calls. One of:
+  //   anthropic (default) | openai | gemini | bedrock
+  // OpenAI-compatible endpoints — Azure OpenAI, or a self-hosted server
+  // (Ollama / vLLM / LiteLLM) — use provider 'openai' with OPENAI_BASE_URL
+  // pointed at them. This is a deployment-level selector today; per-tenant
+  // selection lands in a later phase. The vendor SDK is only ever loaded
+  // for the selected provider (lazy), so unused vendors cost nothing.
+  aiProvider: (process.env.AI_PROVIDER || 'anthropic').trim().toLowerCase(),
+
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   // Master switch for every AI integration feature (industry template
   // generation, data-domain + asset suggestions, the sensitivity
@@ -57,6 +66,27 @@ export const config = {
   // deployment-gated rollouts. Supported ids as of this release:
   //   claude-sonnet-5, claude-opus-4-8, claude-haiku-4-5-20251001
   anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
+
+  // Per-provider model + credentials. Only the ACTIVE provider's values
+  // are used (see aiProvider). getConfiguredModel() returns the active
+  // provider's model unless an in-app Settings → AI override is set. Each
+  // default model id is a sensible starting point but WILL drift as vendors
+  // release new models — set the matching *_MODEL env per deployment. The
+  // boot probe (index.ts) validates the resolved model on startup.
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
+  // Base URL for OpenAI-compatible servers: Azure OpenAI, Ollama, vLLM,
+  // LiteLLM, OpenRouter, etc. Empty = api.openai.com. When set, this alone
+  // (no key) is enough for keyless self-hosted endpoints.
+  openaiBaseUrl: process.env.OPENAI_BASE_URL || '',
+  openaiModel: process.env.OPENAI_MODEL || 'gpt-4o',
+  // Gemini reads GEMINI_API_KEY, falling back to GOOGLE_API_KEY.
+  geminiApiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-pro',
+  // Bedrock uses the standard AWS credential chain (env / profile / role);
+  // no explicit key here. Region falls back to AWS_REGION. Model id is a
+  // Bedrock model id, e.g. anthropic.claude-*, meta.llama*, mistral.*.
+  bedrockRegion: process.env.BEDROCK_REGION || process.env.AWS_REGION || 'us-east-1',
+  bedrockModel: process.env.BEDROCK_MODEL || 'anthropic.claude-3-5-sonnet-20240620-v1:0',
 
   // Storage
   storageProvider: process.env.STORAGE_PROVIDER || 'local',

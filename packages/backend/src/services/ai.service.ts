@@ -1,18 +1,50 @@
 import config from '../config';
 import { ProcessContext, OrgContext, ChatMessage } from '../types';
-import { AnthropicProvider, ChatProvider } from './llm-provider';
+import { ChatProvider, createChatProvider } from './llm-provider';
+
+// The active provider's default model (before any in-app override). Each
+// vendor reads its own <PROVIDER>_MODEL env (see config); this picks the one
+// that matches AI_PROVIDER.
+function activeProviderModel(): string {
+  switch (config.aiProvider) {
+    case 'openai':
+    case 'azure':
+    case 'azure-openai':
+      return config.openaiModel;
+    case 'gemini':
+    case 'google':
+      return config.geminiModel;
+    case 'bedrock':
+    case 'aws':
+      return config.bedrockModel;
+    default:
+      return config.anthropicModel;
+  }
+}
 
 // Model resolution: admin override (set via Settings → AI, wins)
-// → ANTHROPIC_MODEL env → config default. Kept as a getter so
-// changing the override at runtime affects the next call without a
-// restart. See routes/ai.ts (settings + models endpoints) and the
-// startup ping in index.ts.
+// → the active provider's <PROVIDER>_MODEL env → config default. Kept as a
+// getter so changing the override at runtime affects the next call without a
+// restart. See routes/ai.ts (settings + models endpoints) and the startup
+// probe in index.ts.
 let _modelOverride: string | null = null;
 export function getConfiguredModel(): string {
-  return _modelOverride || config.anthropicModel;
+  return _modelOverride || activeProviderModel();
 }
 export function setModelOverride(model: string | null): void {
   _modelOverride = model && model.trim() ? model.trim() : null;
+}
+
+// The transport adapter for the configured vendor (AI_PROVIDER). Memoized on
+// first use — lazy, so a bad AI_PROVIDER surfaces on first AI use rather than
+// crashing the whole backend at boot, and the vendor SDK loads only when its
+// provider is actually selected. Exposed for the boot probe and the
+// /ai/test + /ai/settings routes so they exercise the SAME provider real
+// calls use.
+let _activeProvider: ChatProvider | null = null;
+export function getActiveProvider(): ChatProvider {
+  if (!_activeProvider) _activeProvider = createChatProvider(config.aiProvider);
+  return _activeProvider;
 }
 
 /**
@@ -205,12 +237,17 @@ export interface AiService {
 export class AiServiceImpl implements AiService {
   // Transport is delegated to a ChatProvider so no model-vendor SDK is
   // referenced in this file — it owns only prompts and JSON extraction.
-  // Defaults to Anthropic today; Phase 3 will resolve the provider per
-  // org (bring-your-own-vendor) instead of hard-defaulting here.
-  private readonly provider: ChatProvider;
+  // A test can inject a specific provider; the default singleton resolves
+  // the vendor selected by AI_PROVIDER lazily (getActiveProvider). Phase 3
+  // will resolve it per org (bring-your-own-vendor) instead.
+  private readonly injectedProvider: ChatProvider | null;
 
-  constructor(provider: ChatProvider = new AnthropicProvider()) {
-    this.provider = provider;
+  constructor(provider?: ChatProvider) {
+    this.injectedProvider = provider ?? null;
+  }
+
+  private get provider(): ChatProvider {
+    return this.injectedProvider ?? getActiveProvider();
   }
 
   /**
@@ -292,6 +329,9 @@ Guidelines:
       maxTokens: 16000,
       system,
       messages: [{ role: 'user', content: user }],
+      // Template output is a single JSON OBJECT, so vendors with a native
+      // JSON mode may enforce it (extractJson stays the safety net).
+      jsonMode: true,
     });
 
     return extractJson(text) as object;
@@ -317,6 +357,7 @@ Guidelines:
       maxTokens: 32000,
       system,
       messages: [{ role: 'user', content: user }],
+      jsonMode: true, // single JSON object — see generateIndustryTemplate
     })) {
       chars += delta.length;
       full += delta;
