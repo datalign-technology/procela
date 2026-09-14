@@ -11,6 +11,10 @@ import { getSystemsRepository } from '../db/systems.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
 import { getDbtAssetMappingsRepository, getDbtTestMappingsRepository } from '../db/dbt-mappings.repo';
+import { assertOrgAccess } from '../lib/tenant-scope';
+import type { AuthenticatedRequest } from '../middleware/auth';
+import { fetchSnowflakeQueryHistory } from '../lib/db-source/snowflake-query-history';
+import { reconcileSqlLineage } from '../lib/sql-lineage/reconcile';
 
 export interface DataLineageLink {
   id: string;
@@ -50,12 +54,15 @@ export interface AssetLineageEdge {
   orgId: string;
   sourceAssetId: string;
   targetAssetId: string;
-  /** Where this edge came from. 'manual' is reserved for future
-   *  hand-drawn asset-level edges; today only dbt populates this store. */
-  source: 'dbt' | 'manual';
+  /** Where this edge came from. 'dbt' from a dbt manifest, 'sql' derived
+   *  from warehouse query history (auto-lineage), 'manual' reserved for
+   *  future hand-drawn asset-level edges. The value scopes reconcile/prune
+   *  so each producer only touches its own edges. */
+  source: 'dbt' | 'sql' | 'manual';
   /** Free-form provenance string the importer fills in. For dbt this is
-   *  the model's unique_id (e.g. "model.project.orders") - useful for
-   *  debugging which manifest entry produced the edge. */
+   *  the model's unique_id (e.g. "model.project.orders"); for sql it's a
+   *  stable `sql:<sourceAssetId>-><targetAssetId>` key — useful for
+   *  debugging which derivation produced the edge and for prune lookups. */
   sourceRef?: string;
   /** Last time this edge was seen by the importer. A re-import touches
    *  the timestamp; stale edges (whose sourceRef is no longer in the
@@ -246,7 +253,9 @@ router.get('/asset-edges', async (req: Request, res: Response) => {
     const src = allAssets.find((a) => a.id === e.sourceAssetId);
     const tgt = allAssets.find((a) => a.id === e.targetAssetId);
     const ageMs = now - new Date(e.lastSeenAt).getTime();
-    const isStale = e.source === 'dbt' && ageMs > STALE_AFTER_MS;
+    // Auto-derived edges (dbt + sql) go stale when a re-run stops seeing
+    // them; manual edges never do.
+    const isStale = (e.source === 'dbt' || e.source === 'sql') && ageMs > STALE_AFTER_MS;
     return {
       ...e,
       sourceAssetName: src?.name || null,
@@ -462,6 +471,84 @@ router.post('/import-dbt', async (req: Request, res: Response) => {
     res.json({ success: true, summary });
   } catch (e: any) {
     res.status(400).json({ success: false, error: e?.message || 'manifest reconciliation failed' });
+  }
+});
+
+// POST /extract-sql — derive asset-to-asset lineage from a warehouse's query
+// history. Reads recent write-shaped statements from the connection's
+// Snowflake account, parses each to table-to-table lineage, resolves the
+// tables to existing governed DataAssets by name, and reconciles the result
+// into `source: 'sql'` AssetLineageEdge rows (idempotent upsert-then-prune).
+// Snowflake-only for now — the query-history view is vendor-specific.
+router.post('/extract-sql', async (req: AuthenticatedRequest, res: Response) => {
+  const { connectionId, days, limit } = (req.body ?? {}) as {
+    connectionId?: string;
+    days?: number;
+    limit?: number;
+  };
+  if (!connectionId || typeof connectionId !== 'string') {
+    res.status(400).json({ success: false, error: 'connectionId is required' });
+    return;
+  }
+
+  // Lazy require of the connection-side modules avoids a module import cycle
+  // (connections → connector.service → … → data-lineage) at load time.
+  const { getConnectionsRepository } = require('../db/connections.repo');
+  const { connections } = require('./connections');
+  const { toSnowflakeRequest } = require('../services/connector.service');
+  const { decryptCredentials } = require('../services/connection-secrets');
+
+  const conn = await getConnectionsRepository(connections).get(connectionId);
+  if (!conn) {
+    res.status(404).json({ success: false, error: 'Connection profile not found' });
+    return;
+  }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
+
+  const profile = { ...conn, credentials: await decryptCredentials(conn.credentials) };
+  const sfReq = toSnowflakeRequest(profile);
+  if (!sfReq) {
+    res.status(400).json({
+      success: false,
+      error: 'SQL lineage extraction currently supports Snowflake data-warehouse connections only.',
+    });
+    return;
+  }
+
+  try {
+    const rows = await fetchSnowflakeQueryHistory(sfReq, {
+      days: typeof days === 'number' ? days : undefined,
+      limit: typeof limit === 'number' ? limit : undefined,
+    });
+    const assets = (await dataAssetsRepo().list())
+      .filter((a) => a.orgId === conn.orgId)
+      .map((a) => ({ id: a.id, name: a.name }));
+    const summary = await reconcileSqlLineage({
+      orgId: conn.orgId,
+      statements: rows.map((r) => ({
+        sql: r.queryText,
+        defaultCatalog: r.database,
+        defaultSchema: r.schema,
+      })),
+      assets,
+      edges: assetLineageEdgesRepo,
+    });
+    auditService.log(
+      conn.orgId,
+      req.user?.sub || null,
+      'ConnectionProfile',
+      conn.id,
+      'EXTRACT_SQL_LINEAGE',
+      null,
+      { ...summary, statements: rows.length },
+    );
+    res.json({ success: true, summary });
+  } catch (err) {
+    logger.error({ err, connectionId }, 'SQL lineage extraction failed');
+    res.status(500).json({
+      success: false,
+      error: err instanceof Error ? err.message : 'SQL lineage extraction failed',
+    });
   }
 });
 
