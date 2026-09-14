@@ -1398,6 +1398,21 @@ model AssetLineageEdge {
   @@map("asset_lineage_edges")
 }
 
+model ColumnLineageEdge {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  sourceColumnId String   @db.Uuid
+  targetColumnId String   @db.Uuid
+  source         String   @default("manual")
+  sourceRef      String?
+  lastSeenAt     String
+  createdAt      DateTime @default(now())
+
+  @@index([orgId])
+  @@index([orgId, sourceRef])
+  @@map("column_lineage_edges")
+}
+
 model DataQualityRule {
   id                String   @id @default(uuid()) @db.Uuid
   orgId             String   @db.Uuid

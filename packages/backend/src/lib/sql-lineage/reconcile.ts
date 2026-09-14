@@ -69,7 +69,7 @@ function refKey(ref: TableRef): string {
  *  qualified form first. Assets are commonly named `schema.table` (the dbt
  *  importer's convention) or bare `table`, so we try both plus the fully
  *  qualified `catalog.schema.table`. */
-function makeResolver(assets: AssetLite[]): (ref: TableRef) => string | null {
+export function makeResolver(assets: AssetLite[]): (ref: TableRef) => string | null {
   const byName = new Map<string, string>();
   for (const a of assets) {
     const k = a.name.trim().toLowerCase();

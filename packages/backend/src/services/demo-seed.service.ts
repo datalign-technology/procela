@@ -39,7 +39,7 @@ import { raciOverrides } from '../routes/dashboard';
 import { sops } from '../routes/sops';
 import { glossaryTerms } from '../routes/business-glossary';
 import { operationsManuals } from '../routes/operations-manuals';
-import { dataLineageLinks, assetLineageEdges } from '../routes/data-lineage';
+import { dataLineageLinks, assetLineageEdges, columnLineageEdges } from '../routes/data-lineage';
 import { maturitySnapshots } from '../routes/maturity-trends';
 import { gapSnapshots } from '../services/digest.service';
 import { agentSchedules } from '../routes/agent-schedules';
@@ -86,6 +86,7 @@ import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
 import { getOperationsManualsRepository } from '../db/operations-manuals.repo';
 import { getDataLineageLinksRepository } from '../db/data-lineage-links.repo';
 import { getAssetLineageEdgesRepository } from '../db/asset-lineage-edges.repo';
+import { getColumnLineageEdgesRepository } from '../db/column-lineage-edges.repo';
 import { getMaturitySnapshotsRepository } from '../db/maturity-snapshots.repo';
 import { getGapSnapshotsRepository } from '../db/gap-snapshots.repo';
 import { getAgentSchedulesRepository } from '../db/agent-schedules.repo';
@@ -206,6 +207,7 @@ interface DemoRepos {
   operationsManuals: Repository<any>;
   dataLineageLinks: Repository<any>;
   assetLineageEdges: Repository<any>;
+  columnLineageEdges: Repository<any>;
   maturitySnapshots: Repository<any>;
   gapSnapshots: Repository<any>;
   agentSchedules: Repository<any>;
@@ -251,6 +253,7 @@ function buildRepos(): DemoRepos {
     operationsManuals: getOperationsManualsRepository(operationsManuals as any),
     dataLineageLinks: getDataLineageLinksRepository(dataLineageLinks as any),
     assetLineageEdges: getAssetLineageEdgesRepository(assetLineageEdges as any),
+    columnLineageEdges: getColumnLineageEdgesRepository(columnLineageEdges as any),
     maturitySnapshots: getMaturitySnapshotsRepository(maturitySnapshots as any),
     gapSnapshots: getGapSnapshotsRepository(gapSnapshots as any),
     agentSchedules: getAgentSchedulesRepository(agentSchedules as any),
@@ -342,6 +345,7 @@ async function sweep(repos: DemoRepos): Promise<void> {
   await sweepRepo(repos.agentSchedules);
   await sweepRepo(repos.gapSnapshots);
   await sweepRepo(repos.maturitySnapshots);
+  await sweepRepo(repos.columnLineageEdges);
   await sweepRepo(repos.assetLineageEdges);
   await sweepRepo(repos.dataLineageLinks);
   await sweepRepo(repos.operationsManuals);
