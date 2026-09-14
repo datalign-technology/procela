@@ -99,6 +99,24 @@ interface AssetLineageEdgeRow {
   staleAfterDays?: number;
 }
 
+/** A column-grain lineage edge (from GET /column-edges): one upstream column
+ *  feeding one downstream column, enriched with asset + column names. */
+interface ColumnLineageEdgeRow {
+  id: string;
+  orgId: string;
+  sourceColumnId: string;
+  targetColumnId: string;
+  source: 'dbt' | 'sql' | 'manual';
+  sourceRef?: string;
+  sourceAssetName: string | null;
+  sourceColumnName: string | null;
+  targetAssetName: string | null;
+  targetColumnName: string | null;
+  lastSeenAt: string;
+  isStale?: boolean;
+  staleAfterDays?: number;
+}
+
 /** A connection profile, trimmed to what the query-history extractor needs.
  *  Only Snowflake data-warehouse profiles are eligible today. */
 interface ConnectionRow {
@@ -108,13 +126,21 @@ interface ConnectionRow {
   config?: { warehouseType?: string; account?: string; database?: string };
 }
 
-/** Result of POST /data-lineage/extract-sql. */
+/** Result of POST /data-lineage/extract-sql (table grain). */
 interface SqlLineageSummary {
   statementsParsed: number;
   edgesCreated: number;
   edgesTouched: number;
   edgesRemoved: number;
   unresolvedRefs: number;
+}
+
+/** Column-grain half of the extract-sql result. */
+interface SqlColumnLineageSummary {
+  edgesCreated: number;
+  edgesTouched: number;
+  edgesRemoved: number;
+  unresolvedColumns: number;
 }
 
 type DbtPollFrequency = 'NEVER' | 'HOURLY' | 'DAILY' | 'WEEKLY';
@@ -270,6 +296,9 @@ export default function DataLineagePage() {
   // Asset-level edges derived from imports. Shown in a tabbed section
   // beneath the existing system-lineage table.
   const [assetEdges, setAssetEdges] = useState<AssetLineageEdgeRow[]>([]);
+  // Column-grain edges (from /column-edges), shown beneath the asset-level
+  // table when any exist.
+  const [columnEdges, setColumnEdges] = useState<ColumnLineageEdgeRow[]>([]);
 
   // Query-history lineage extraction (Snowflake). Reads recent warehouse
   // statements and derives asset-to-asset edges from what actually ran.
@@ -278,6 +307,7 @@ export default function DataLineagePage() {
   const [sqlExtractConnId, setSqlExtractConnId] = useState('');
   const [sqlExtracting, setSqlExtracting] = useState(false);
   const [sqlExtractSummary, setSqlExtractSummary] = useState<SqlLineageSummary | null>(null);
+  const [sqlExtractColumnSummary, setSqlExtractColumnSummary] = useState<SqlColumnLineageSummary | null>(null);
   const [sqlExtractError, setSqlExtractError] = useState<string | null>(null);
   const sqlModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(sqlModalRef, showSqlExtract);
@@ -285,16 +315,18 @@ export default function DataLineagePage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [linksRes, systemsRes, assetsRes, edgesRes] = await Promise.all([
+      const [linksRes, systemsRes, assetsRes, edgesRes, colEdgesRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: LineageLink[] }>(`/data-lineage${query}`),
         apiClient.get<{ success: boolean; data: SystemRef[] }>(`/systems${query}`),
         apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${query}`),
         apiClient.get<{ success: boolean; data: AssetLineageEdgeRow[] }>(`/data-lineage/asset-edges${query}`),
+        apiClient.get<{ success: boolean; data: ColumnLineageEdgeRow[] }>(`/data-lineage/column-edges${query}`),
       ]);
       setLinks(linksRes.data || []);
       setSystemsList(systemsRes.data || []);
       setAssetsList(assetsRes.data || []);
       setAssetEdges(edgesRes.data || []);
+      setColumnEdges(colEdgesRes.data || []);
       setLoadError(null);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load data lineage');
@@ -361,14 +393,16 @@ export default function DataLineagePage() {
     setSqlExtracting(true);
     setSqlExtractError(null);
     setSqlExtractSummary(null);
+    setSqlExtractColumnSummary(null);
     try {
-      const res = await apiClient.post<{ success: boolean; summary: SqlLineageSummary; error?: string }>(
+      const res = await apiClient.post<{ success: boolean; summary: SqlLineageSummary; columnSummary?: SqlColumnLineageSummary; error?: string }>(
         '/data-lineage/extract-sql',
         { connectionId: sqlExtractConnId },
       );
       if (!res.success) throw new Error(res.error || 'Extraction failed');
       setSqlExtractSummary(res.summary);
-      await fetchData(); // surface the new sql edges
+      setSqlExtractColumnSummary(res.columnSummary ?? null);
+      await fetchData(); // surface the new sql + column edges
     } catch (e) {
       setSqlExtractError(errorMessage(e, 'Extraction failed'));
     } finally {
@@ -610,7 +644,7 @@ export default function DataLineagePage() {
             <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />
             {snowflakeConns.length > 0 && (
               <IconButton icon="download" label="Extract lineage from query history"
-                onClick={() => { setSqlExtractSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
+                onClick={() => { setSqlExtractSummary(null); setSqlExtractColumnSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
             )}
             {links.length > 0 && (
               <ExportMenu build={() => ({
@@ -850,6 +884,63 @@ export default function DataLineagePage() {
               </div>
             );
           })()}
+          {columnEdges.length > 0 && (() => {
+            const staleCount = columnEdges.filter((e) => e.isStale).length;
+            const colLabel = (asset: string | null, col: string | null) =>
+              col ? `${asset || '(deleted)'}.${col}` : <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>;
+            return (
+              <div style={{ marginTop: 32 }}>
+                <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 4 }}>
+                  Column-level lineage <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>({columnEdges.length} edges)</span>
+                  {staleCount > 0 && (
+                    <span style={{
+                      marginLeft: 10, fontSize: 10, fontWeight: 700, padding: '2px 6px',
+                      borderRadius: 3, background: '#fef3c7', color: '#92400e',
+                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}>
+                      {staleCount} stale
+                    </span>
+                  )}
+                </h2>
+                <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 12 }}>
+                  Which upstream column feeds which — derived from warehouse query history (Snowflake) by parsing each statement&rsquo;s projection. Only columns that match a governed data asset&rsquo;s columns appear.
+                </p>
+                <Card padding={0} shadow="none">
+                  <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-bg)' }}>
+                        <th scope="col" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source column</th>
+                        <th scope="col" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Target column</th>
+                        <th scope="col" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source</th>
+                        <th scope="col" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Last seen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {columnEdges.map((e) => (
+                        <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)', opacity: e.isStale ? 0.7 : 1 }}>
+                          <td style={{ padding: '6px 12px', fontSize: 13 }}>{colLabel(e.sourceAssetName, e.sourceColumnName)}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 13 }}>{colLabel(e.targetAssetName, e.targetColumnName)}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{e.source === 'sql' ? 'query history' : e.source}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                            {new Date(e.lastSeenAt).toLocaleString()}
+                            {e.isStale && (
+                              <span style={{
+                                marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 5px',
+                                borderRadius: 3, background: '#fef3c7', color: '#92400e',
+                                textTransform: 'uppercase', letterSpacing: '0.04em',
+                              }}>stale</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  </div>
+                </Card>
+              </div>
+            );
+          })()}
         </>
       ) : (
         /* Visualization View - three lenses sharing the toolbar:
@@ -1052,6 +1143,13 @@ export default function DataLineagePage() {
                 {sqlExtractSummary.unresolvedRefs > 0 && (
                   <div style={{ marginTop: 4 }}>
                     {sqlExtractSummary.unresolvedRefs} referenced tables matched no governed asset and were skipped.
+                  </div>
+                )}
+                {sqlExtractColumnSummary && (
+                  <div style={{ marginTop: 4 }}>
+                    Column lineage: {sqlExtractColumnSummary.edgesCreated} new, {sqlExtractColumnSummary.edgesTouched} refreshed,
+                    {' '}{sqlExtractColumnSummary.edgesRemoved} removed
+                    {sqlExtractColumnSummary.unresolvedColumns > 0 && ` · ${sqlExtractColumnSummary.unresolvedColumns} columns unmatched`}.
                   </div>
                 )}
               </div>
