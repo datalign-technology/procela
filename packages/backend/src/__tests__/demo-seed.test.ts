@@ -83,7 +83,7 @@ const { glossaryTerms } = require('../routes/business-glossary');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { operationsManuals } = require('../routes/operations-manuals');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { dataLineageLinks, assetLineageEdges } = require('../routes/data-lineage');
+const { dataLineageLinks, assetLineageEdges, columnLineageEdges } = require('../routes/data-lineage');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { maturitySnapshots } = require('../routes/maturity-trends');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -189,6 +189,7 @@ describe('demo-seed endpoint', () => {
       [operationsManuals, 'operationsManuals'],
       [dataLineageLinks, 'dataLineageLinks'],
       [assetLineageEdges, 'assetLineageEdges'],
+      [columnLineageEdges, 'columnLineageEdges'],
       [maturitySnapshots, 'maturitySnapshots'],
       [gapSnapshots, 'gapSnapshots'],
       [agentSchedules, 'agentSchedules'],
@@ -226,7 +227,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith(DEMO_ID_SENTINEL)) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals, dataLineageLinks, assetLineageEdges, maturitySnapshots, gapSnapshots, agentSchedules, agentExecutions, comments, tags, attachments, reports, analysisReports, savedViews, dataAssetColumns, dataAssetBindings, connections]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals, dataLineageLinks, assetLineageEdges, columnLineageEdges, maturitySnapshots, gapSnapshots, agentSchedules, agentExecutions, comments, tags, attachments, reports, analysisReports, savedViews, dataAssetColumns, dataAssetBindings, connections]) sweep(s);
     // RACI overrides key on nodeId (no id) — clear demo-prefixed nodes.
     for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith(DEMO_ID_SENTINEL)) raciOverrides.splice(i, 1);
   });
@@ -528,7 +529,9 @@ describe('demo-seed endpoint', () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
       const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));
       assert.strictEqual(demo(connections).length, 1, 'connection');
-      assert.strictEqual(demo(dataAssetColumns).length, 4, 'asset columns');
+      // Utilities also seeds 2 upstream Meter Reads columns for the
+      // column-level lineage demo; shipbuilding has just the 4 spotlight cols.
+      assert.strictEqual(demo(dataAssetColumns).length, industry === 'utilities' ? 6 : 4, 'asset columns');
       assert.strictEqual(demo(dataAssetBindings).length, 1, 'asset binding');
       assert.strictEqual(demo(comments).length, 2, 'comments');
       assert.strictEqual(demo(tags).length, 3, 'tags');

@@ -1295,6 +1295,18 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // Collaboration + reporting + connections.
   await seedCollabAndReporting(repos, ts, { orgId: orgTidewater.id, assetId: assetCustomerMaster.id, systemId: sysCIS.id, personId: natalie.id, personName: 'Natalie Greer' });
 
+  // Column-level lineage: a couple of upstream columns on Meter Reads feeding
+  // Customer Master's columns (which seedCollabAndReporting just created), so
+  // the Lineage page's column grain lights up alongside the asset edge above.
+  await createAll(repos.dataAssetColumns, [
+    { id: demoId('mr-col-id'), dataAssetId: assetMeterReads.id, columnName: 'meter_id', dataType: 'UUID', description: 'Meter identifier.', sourceConnectionId: null, sourceAsset: null, sourceColumn: null, createdAt: ts, updatedAt: ts },
+    { id: demoId('mr-col-account'), dataAssetId: assetMeterReads.id, columnName: 'account_name', dataType: 'String', description: 'Account display name.', sourceConnectionId: null, sourceAsset: null, sourceColumn: null, createdAt: ts, updatedAt: ts },
+  ]);
+  await createAll(repos.columnLineageEdges, [
+    { id: demoId('coledge-1'), orgId: orgTidewater.id, sourceColumnId: demoId('mr-col-id'), targetColumnId: demoId('col-id'), source: 'manual', sourceRef: null, lastSeenAt: ts, createdAt: ts },
+    { id: demoId('coledge-2'), orgId: orgTidewater.id, sourceColumnId: demoId('mr-col-account'), targetColumnId: demoId('col-name'), source: 'manual', sourceRef: null, lastSeenAt: ts, createdAt: ts },
+  ]);
+
   logger.info({ persona: susan.name }, 'Demo data seeded');
 
   return {
