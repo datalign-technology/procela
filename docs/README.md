@@ -32,8 +32,8 @@ Standalone documents that don't belong in the app or the code.
 > two P0 gates) plus an appended FedRAMP High gap analysis. It is **not**
 > auto-synced — it lives outside the repo, so a material change here (a track
 > opening/closing, a P0 moving, a shipped item) needs a manual artifact refresh
-> and a version bump. Last synced: **v1.2 · 2026-09-14** (added the multi-vendor
-> AI roadmap entry). The in-app `/roadmap`
+> and a version bump. Last synced: **v1.3 · 2026-09-14** (multi-vendor AI shipped
+> end-to-end). The in-app `/roadmap`
 > page, by contrast, reads `STATUS.md` live and needs no refresh.
 
 ### Architecture & data model
