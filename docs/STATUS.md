@@ -102,7 +102,7 @@ live-account validation of the cloud/SDK adapters against real endpoints.
 ### P1 — important, not blocking
 | Item | State | Track | Next step / gap |
 |---|---|---|---|
-| Multi-vendor AI providers | Partial | AI | Vendor-neutral `ChatProvider` seam + adapters ship for **Anthropic / OpenAI (incl. Azure + self-hosted OpenAI-compatible) / Gemini / Bedrock**, selectable via `AI_PROVIDER` (deployment-level). **Per-tenant** config also ships on the backend: each org can set its own provider/model/base-URL + a key (encrypted at rest), admin-gated, resolved per AI call with deployment fallback (`/api/v1/ai/org-config`). **Next:** the Settings → AI provider picker (frontend) to drive it. |
+| Multi-vendor AI providers | Built | AI | **Shipped end-to-end.** Vendor-neutral `ChatProvider` seam + adapters for **Anthropic / OpenAI (incl. Azure + self-hosted OpenAI-compatible) / Gemini / Bedrock**, selectable **deployment-level** via `AI_PROVIDER` *and* **per-tenant**: each org sets its own provider/model/base-URL + key (encrypted at rest, admin-gated, resolved per AI call with deployment fallback) via the Settings → AI picker (`/api/v1/ai/org-config`). |
 | On-prem deployment validation | Designed | B2 | Chart lints/templates in CI; never `helm install`-ed live. |
 | Managed / HA Postgres | Pending | B1 | Replace the bundled single-replica StatefulSet (#26). |
 | Column-level lineage | Not Started | Lineage | Edges are table-to-table; needs a SQL parser. = **#2**. |
