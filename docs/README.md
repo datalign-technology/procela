@@ -10,6 +10,18 @@ Standalone documents that don't belong in the app or the code.
 | [`demo-playbook.html`](./demo-playbook.html) | Presenter's runbook for the 45-minute Procela demo against the Tidewater Utilities fixture. Open in a browser or Cmd/Ctrl-P to print. |
 | [`edge-connector-demo.md`](./edge-connector-demo.md) | One-command Docker demo (`docker compose --profile demo up --build`) that runs real on-prem edge connectors against a seeded source database — split by industry (a Tidewater Utilities connector scans `utility`, a Momentum Industries connector scans `shipbuilder`) to show discovery and connector-measured data quality. |
 
+### Go-to-market & marketing
+
+| File | Purpose |
+|---|---|
+| [`marketing/README.md`](./marketing/README.md) | **Start here for GTM.** The kit index, the strategy in one paragraph, and the ordered "start Monday" list for the first two weeks. |
+| [`marketing/GTM_PLAN.md`](./marketing/GTM_PLAN.md) | Positioning against the four incumbents, ICP and personas, target-list sourcing by industry, channel ranking, funnel math with diagnostic thresholds, the 90-day calendar, budget, and the weekly scorecard. |
+| [`marketing/MESSAGING.md`](./marketing/MESSAGING.md) | The words: positioning statement, three pillars, per-persona messaging, proof points, objection handling, competitive framing, and a **claims-discipline table** binding every public claim to a *Built* row in `STATUS.md`. |
+| [`marketing/EMAIL_CAMPAIGNS.md`](./marketing/EMAIL_CAMPAIGNS.md) | Nine ready-to-send sequences with full copy (cold outbound per persona, stalled-catalog play, founding-partner invite, webinar lifecycle, post-demo, POC offer, nurture), plus deliverability mechanics and CAN-SPAM / GDPR / CASL guardrails. |
+| [`marketing/DEMO_PROGRAM.md`](./marketing/DEMO_PROGRAM.md) | Five online demo formats built as cuts of [`demo-playbook.html`](./demo-playbook.html) — the 6-minute async demo, the biweekly public demo, the tailored 1:1, the Gap Teardown working session, and the association webinar — with run-of-show, environment checklist, and conversion targets. |
+| [`marketing/DESIGN_PARTNER_PROGRAM.md`](./marketing/DESIGN_PARTNER_PROGRAM.md) | The reduced-licensing POC offer: ten slots by industry, pilot scope, mutual commitments, success criteria, pricing anchors and discount discipline, the 90-day pilot plan, agreement structure, and partner-qualification scoring. |
+| [`marketing/READINESS_GATES.md`](./marketing/READINESS_GATES.md) | What must be true before outbound starts, before the first pilot, and before the fourth concurrent pilot — drawn from `STATUS.md` and the go-live checklist. **Read before sending the first email.** |
+
 ### Go-live & operations
 
 | File | Purpose |
