@@ -240,7 +240,19 @@ router.delete('/all', async (req: AuthenticatedRequest, res: Response) => {
     res.status(403).json({ success: false, error: 'Only super admins can delete all organizations' });
     return;
   }
-  const ids = (await orgRepo.list()).map((o) => o.id);
+  // Delete leaf-first so a parent is never removed while a child still
+  // references it via parentId — the self-relation FK has no ON DELETE
+  // CASCADE, so on Postgres the wrong order violates
+  // `organizations_parentId_fkey`. Deepest depth first guarantees the order.
+  const all = await orgRepo.list();
+  const parentById = new Map(all.map((o) => [o.id, o.parentId] as const));
+  const depth = (id: string): number => {
+    let d = 0;
+    let pid = parentById.get(id) ?? null;
+    while (pid) { d++; pid = parentById.get(pid) ?? null; }
+    return d;
+  };
+  const ids = all.map((o) => o.id).sort((a, b) => depth(b) - depth(a));
   const count = ids.length;
   for (const id of ids) {
     await orgRepo.delete(id);
@@ -778,11 +790,25 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
     }
   } else {
     // Delete every descendant; the root org is removed at the end.
-    for (const o of allOrgs) {
-      if (subtreeIds.has(o.id) && o.id !== org.id) {
-        await orgRepo.delete(o.id);
-        childOrgsDeleted++;
-      }
+    // IMPORTANT: delete leaf-first (deepest descendants before their parents).
+    // The organizations.parentId self-relation FK has no ON DELETE CASCADE, so
+    // on Postgres deleting a parent while a child still references it violates
+    // `organizations_parentId_fkey` — the request then throws and hangs. The
+    // in-memory/JSON store doesn't enforce FKs, which hid this. Ordering by
+    // descending depth guarantees each org's children are gone before it is.
+    const parentById = new Map(allOrgs.map((o) => [o.id, o.parentId] as const));
+    const depthFromRoot = (id: string): number => {
+      let d = 0;
+      let pid = parentById.get(id) ?? null;
+      while (pid && pid !== org.id) { d++; pid = parentById.get(pid) ?? null; }
+      return d;
+    };
+    const descendants = allOrgs
+      .filter((o) => subtreeIds.has(o.id) && o.id !== org.id)
+      .sort((a, b) => depthFromRoot(b.id) - depthFromRoot(a.id));
+    for (const o of descendants) {
+      await orgRepo.delete(o.id);
+      childOrgsDeleted++;
     }
   }
 
