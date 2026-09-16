@@ -391,25 +391,49 @@ export default function OrganizationsPage() {
   };
   const handleBulkDeleteOrgs = async () => {
     if (selectedIds.size === 0) return;
+    const totalSelected = selectedIds.size;
     // Snapshot the records we're about to delete so we can offer Undo.
     const toDelete = flatOrgs.filter((o) => selectedIds.has(o.id));
-    const ids = toDelete.map((o) => o.id);
+    // DELETE /:id cascades to an org's whole subtree server-side. So if a
+    // selected org's ancestor is ALSO selected, deleting the ancestor removes
+    // it first and a second DELETE for it 404s. Deleting every selected id
+    // naively produced a storm of those 404s, a wrong success count, and (when
+    // all the "successes" were swallowed) no toast at all — which reads as the
+    // button doing nothing. Instead delete only the top-most selected orgs —
+    // the roots of each selected subtree — and let the cascade remove the rest.
+    // Every org in `toDelete` still ends up gone.
+    const parentOf = new Map(flatOrgs.map((o) => [o.id, o.parentId] as const));
+    const hasSelectedAncestor = (o: { parentId: string | null }) => {
+      let pid = o.parentId;
+      while (pid) {
+        if (selectedIds.has(pid)) return true;
+        pid = parentOf.get(pid) ?? null;
+      }
+      return false;
+    };
+    const roots = toDelete.filter((o) => !hasSelectedAncestor(o));
     let failures = 0;
-    for (const id of ids) {
-      try { await apiClient.delete(`/organizations/${id}`); }
-      catch { failures++; }
+    let lastError = '';
+    for (const o of roots) {
+      try {
+        await apiClient.delete(`/organizations/${o.id}`);
+      } catch (err) {
+        failures++;
+        const e = err as { response?: { data?: { error?: string } } };
+        lastError = e?.response?.data?.error || errorMessage(err, 'Delete failed');
+      }
     }
     setSelectedIds(new Set());
     fetchData();
     triggerRefresh();
-    const count = ids.length - failures;
-    if (count > 0) {
-      addToast('success', `Deleted ${count} organization${count === 1 ? '' : 's'}`, {
+
+    if (failures === 0) {
+      addToast('success', `Deleted ${totalSelected} organization${totalSelected === 1 ? '' : 's'}`, {
         action: {
           label: 'Undo',
-          // Recreate each deleted record. Parents first so children can
-          // reattach via `parentId`. We don't rebuild sub-trees that
-          // were also selected — the user can re-select to include them.
+          // Recreate every deleted record, parents first so children can
+          // reattach via `parentId` (the cascade removed the descendants, so
+          // rebuild the whole snapshot, not just the roots).
           handler: async () => {
             const sortedByDepth = [...toDelete].sort((a, b) => {
               // company < division < department < team < unit (rough proxy for depth)
@@ -428,8 +452,11 @@ export default function OrganizationsPage() {
           },
         },
       });
+    } else if (failures < roots.length) {
+      addToast('error', `Deleted some organizations, but ${failures} could not be removed: ${lastError}`);
+    } else {
+      addToast('error', `Could not delete the selected organizations: ${lastError}`);
     }
-    if (failures > 0) addToast('info', `${failures} org${failures === 1 ? '' : 's'} were already removed by cascade.`);
   };
   const handleImport = async () => {
     if (!importText.trim()) return;
