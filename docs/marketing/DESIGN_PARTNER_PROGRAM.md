@@ -7,6 +7,18 @@ rate-locked commercial terms.*
 This is the primary commercial motion for the next two quarters. Everything
 in `GTM_PLAN.md` and `EMAIL_CAMPAIGNS.md` funnels here.
 
+> **Two revisions for a solo-founder team** (see
+> [`OPERATING_PLAN.md`](./OPERATING_PLAN.md) §§ 1 and 4), both of which
+> override what this document says below:
+>
+> 1. **Four slots over twelve months, run sequentially — not ten in cohorts
+>    of three.** One pilot consumes 6–8 founder-hours a week. Two concurrent
+>    is most of your selling capacity; three is all of it.
+> 2. **Charge a $12,000 implementation fee, credited in full against year
+>    one.** The licence stays free. The fee is a qualification filter, not
+>    revenue — when you can only run one pilot at a time, picking the wrong
+>    one costs a quarter you can't get back.
+
 ---
 
 ## 1. Why this offer, and not a free trial
@@ -38,23 +50,30 @@ discovery that would otherwise happen in their security review.
 
 ### Slots
 
-**Ten total, allocated by industry:**
+**Solo-founder allocation — four slots over twelve months, sequential:**
 
-| Industry | Slots |
-|---|---|
-| Utilities (electric / gas / water) | 3 |
-| Defense & shipbuilding | 2 |
-| State & local government | 2 |
-| Healthcare | 1 |
-| Manufacturing / oil & gas / transportation | 2 |
+| # | Target segment | Approx. start |
+|---|---|---|
+| 1 | Defense/shipbuilding supplier *or* the strongest warm lead, whatever its industry | Month 3 |
+| 2 | Investor-owned utility, division-level | Month 6 |
+| 3 | Mid-market manufacturer | Month 9 |
+| 4 | Opportunistic — the best-qualified prospect available | Month 11 |
 
-The scarcity is real, not a tactic: three concurrent pilots is the delivery
-ceiling for a founder-led team until Track B (HA Postgres, on-prem smoke
-deploy, load-test baseline, external pen test, DR rehearsal) is done. Run
-them as **cohorts of three with staggered start dates** and maintain a
-waitlist. A waitlist converts better than an overbooked calendar, and an
-overbooked calendar produces a bad pilot — which in these reference-dense
-industries costs more than the revenue it earned.
+Pilot 1 is whoever is warmest and best-qualified; don't hold a slot for an
+industry when a ready buyer is in front of you. Start pilot *n+1* around day
+60 of pilot *n*, when it has moved from build to govern and needs less of you.
+
+*(Team-scale allocation, for when there are more people: ten slots — 3
+utilities, 2 defense, 2 government, 1 healthcare, 2 manufacturing/oil &
+gas/transport — in cohorts of three.)*
+
+The scarcity is real, not a tactic, and the ceiling is delivery capacity —
+one concurrent pilot for a solo founder, three for a small team, and not
+above that until Track B (HA Postgres, on-prem smoke deploy, load-test
+baseline, external pen test, DR rehearsal) is done. Maintain a waitlist with
+honest start dates. A waitlist converts better than an overbooked calendar,
+and an overbooked calendar produces a bad pilot — which in these
+reference-dense industries costs more than the revenue it earned.
 
 ### Scope of a pilot
 
@@ -67,6 +86,7 @@ industries costs more than the revenue it earned.
 | Deployment | Customer's AWS account, customer's data centre, or a Procela-managed single-tenant stack — customer's choice |
 | Support | Named contact, same-business-day response, weekly 30-minute working session |
 | Licence cost | **$0 for the 90 days** |
+| Implementation fee | **$12,000, credited in full against year one** (solo-founder revision — see `OPERATING_PLAN.md` § 4) |
 
 **Deliberately out of scope** (protects both sides; put it in writing):
 
@@ -179,7 +199,7 @@ seriousness. Both properties matter.
 
 | Period | Price | Note |
 |---|---|---|
-| Days 0–90 (pilot) | **$0** | Full functionality within the scoped division |
+| Days 0–90 (pilot) | **$12,000 implementation, $0 licence** | Fee credits in full against year one. Full functionality within the scoped division |
 | Year 1 (if they continue) | **50% of list** | Standard tier → $39,000 |
 | Years 2–3 | **50% of list, locked** | Max 5% annual uplift |
 | Year 4+ | Renegotiated at then-current list | With a stated loyalty discount floor |

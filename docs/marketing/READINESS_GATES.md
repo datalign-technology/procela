@@ -53,10 +53,14 @@ executed. The first time you run it should not be the first time you need it.
 
 ---
 
-## Gate 3 — Before the fourth concurrent pilot
+## Gate 3 — Before adding a concurrent pilot
 
-Three concurrent pilots is the founder-led ceiling. Crossing it needs the
-Track B work:
+**For a solo founder the ceiling is one concurrent pilot**, and it is a
+capacity limit, not a technical one: a pilot consumes 6–8 hours a week and
+two of them is most of a selling week (`OPERATING_PLAN.md` § 1). Run them
+sequentially, overlapping only at the tails.
+
+Crossing three — at any team size — additionally needs the Track B work:
 
 | Item | Status | Track |
 |---|---|---|
@@ -66,10 +70,10 @@ Track B work:
 | External penetration test | Internal review done; third party outstanding | B4 |
 | DR rehearsal performed | Runbook only | B5 |
 
-Until then: **cohorts with start dates and a waitlist.** Say so honestly —
-*"We're running partners in cohorts of three so each one gets real attention.
-The next cohort starts [date]."* That is both true and a better sales
-posture than unlimited availability.
+Until then: **sequential pilots with honest start dates and a waitlist.**
+Say so plainly — *"We're taking four founding partners and running them one
+at a time so each gets real attention. The next start date is [date]."* That
+is both true and a better sales posture than unlimited availability.
 
 ---
 
@@ -100,12 +104,17 @@ The five that will end a deal if discovered rather than disclosed:
 Generating demand is the easy half. The expensive failure is a signed pilot
 you cannot deliver: a utility whose security team finds the HS256 fallback,
 a defense supplier who asks for the SOC 2 report you implied existed, or a
-fourth concurrent pilot that starves the other three of attention.
+second concurrent pilot that starves the first of the attention it needed to
+become your reference.
 
 In utilities, defense and state government, the buyers know each other. They
 sit on the same association committees and they compare notes. **One badly
 handled pilot is worth more negative pipeline than a quarter of cold email
 is worth positive.**
 
-Sell what's built. Disclose what isn't. Deliver three pilots extremely well
-before selling a fourth.
+For a one-person company this is sharper still: your first pilot *is* your
+reference, your case study and your Series A evidence. There is no second
+one running in parallel to cover for it.
+
+Sell what's built. Disclose what isn't. Deliver one pilot extremely well
+before selling the next.

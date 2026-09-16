@@ -1,7 +1,15 @@
 # Procela — Go-to-Market Plan
 
-*Horizon: 90 days from start. Motion: founder-led outbound + design partners.
-Goal: 6–10 signed Founding Partner pilots and 2 referenceable case studies.*
+*Horizon: 90 days from start. Motion: founder-led outbound + design partners.*
+
+> **Read [`OPERATING_PLAN.md`](./OPERATING_PLAN.md) first.** This document
+> describes the motion at team scale — its volumes, its 6–10 pilot target and
+> its calendar assume several people selling and delivering. `OPERATING_PLAN.md`
+> is the calibrated version for one founder with seed funding and a runway
+> clock: **one pilot in 90 days, warm contacts before cold email, and a
+> specific list of what to cut.** Use this document for the *thinking* —
+> positioning, ICP, personas, target sourcing, channel logic, diagnostics —
+> and that one for the *numbers and the order*.
 
 ---
 
@@ -93,7 +101,12 @@ budget is already approved and the pain is acute.
 
 ### Industry priority
 
-Ranked by regulatory pressure × process-orientation × our template quality:
+Ranked by regulatory pressure × process-orientation × our template quality.
+
+> A solo founder must also rank by **sales-cycle length**, which reorders this
+> list — defense suppliers and mid-market manufacturing move to the top, state
+> & local government drops out of direct selling entirely. See
+> [`OPERATING_PLAN.md`](./OPERATING_PLAN.md) § 3.
 
 | Rank | Industry | Why now | Entry trigger |
 |---|---|---|---|
@@ -252,6 +265,9 @@ these to set expectations and to tell you which stage is actually broken.
 ```
 
 ### Blended 90-day target
+
+> Team-scale. The solo-calibrated version — 250 contacts, 20 calls, **1 pilot**
+> — is in [`OPERATING_PLAN.md`](./OPERATING_PLAN.md) § 2.
 
 | Metric | Target |
 |---|---|

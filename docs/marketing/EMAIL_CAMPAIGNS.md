@@ -1,7 +1,12 @@
 # Procela — Email Campaigns
 
-Nine sequences, ready to send. Copy is written to be *used*, not adapted —
+Ten sequences, ready to send. Copy is written to be *used*, not adapted —
 replace the `{{merge_fields}}` and send.
+
+> **Solo founder: start with Sequence 0 (warm outreach), not Sequence 1.**
+> Your first pilot comes from someone you already know. Cold email is the
+> background process that fills quarter two — see
+> [`OPERATING_PLAN.md`](./OPERATING_PLAN.md) § 2.
 
 **Merge fields used throughout:**
 `{{first_name}}` · `{{company}}` · `{{industry}}` · `{{trigger}}` ·
@@ -30,6 +35,139 @@ replace the `{{merge_fields}}` and send.
    physical address.
 8. **Every follow-up adds something.** Never "just bumping this to the top of
    your inbox" — that teaches people you have nothing to say.
+
+---
+
+## Sequence 0 — Warm outreach (START HERE)
+
+*People you already know in the ICP but have never pitched. **This is where
+your first pilot comes from.** Warm replies at 50–70% against cold's 3–6%;
+roughly fifteen of these are worth four hundred cold emails.*
+
+**Rules that differ from every other sequence here:**
+
+- **Send by hand, from your own mailbox.** Never through the sequencer, never
+  from the cold-sending domain. These are personal emails.
+- **No sequence, no automated follow-up.** One email, then one nudge by hand
+  after 8 days if nothing comes back. That's all.
+- **Ask for advice, not a meeting.** People who know you will give you twenty
+  minutes of counsel far more readily than twenty minutes of sales. And the
+  advice conversation converts to a pilot conversation on its own, without
+  you having to steer it.
+- **Ten at a time.** Send ten, read the replies, revise, send the next
+  fifteen. Do not burn a 40-person warm list on copy you haven't tested.
+
+### 0a — The core warm email
+
+**Subject:** `starting something — would value your read on it`
+
+```
+{{first_name}} —
+
+Hope you're well. {{one_genuine_personal_line}}
+
+I've started a company and I'd value your read on it, since you've lived
+this problem from the inside.
+
+The premise: governance programs fail because they start at the data and
+wait for the business to show up. We start at the business process —
+value streams, processes, activities, owners — and the data binds behind
+it. And we generate the whole industry hierarchy with AI, so nobody's
+first day is a blank screen.
+
+I'm not pitching you. I'm trying to find out whether the premise holds
+up against what you actually saw at {{company_or_former_company}}.
+
+Twenty minutes in the next couple of weeks? Happy to show you what
+we've built, but mostly I want to hear where you think it's wrong.
+
+{{sender_name}}
+```
+
+**Why it works:** the ask is small and flattering, the premise is
+falsifiable, and "I want to hear where it's wrong" is the one framing that
+gets a genuine answer instead of a polite one. Roughly a third of these
+conversations turn into a pilot conversation without you raising it — and
+the ones that don't will give you the objection list that fixes your cold
+copy.
+
+### 0b — The hand-written nudge, day 8
+
+**Subject:** `re: starting something` *(threaded)*
+
+```
+{{first_name}} — know you're busy, no pressure at all.
+
+If a call's hard, the six-minute version is here: {{demo_link}}
+
+And if this isn't your world any more, the question I'd actually love
+an answer to: who's the sharpest person you know running data
+governance at a utility, a defense supplier, or a manufacturer?
+
+{{sender_name}}
+```
+
+**The referral question is the real content of this email.** A warm contact
+who can't help will nearly always name someone who can, and a named
+introduction from them outperforms anything else in this document.
+
+### 0c — After a good warm conversation (same day)
+
+```
+{{first_name}} — thank you, that was genuinely useful. Three things
+you said I'm taking away:
+
+· {{their_point_1}}
+· {{their_point_2}}
+· {{their_point_3}}
+
+Two asks, take either or neither:
+
+1. We're taking four founding partners — 90 days, one value stream, one
+   division. Licence free, small implementation fee that credits against
+   year one. If {{their_company}} is a fit, I'd rather you had a slot
+   than a stranger.
+
+2. If it's not, who are the two people you'd send this to?
+
+Either way I owe you one.
+
+{{sender_name}}
+```
+
+**Two asks, explicitly optional, with the referral as a genuine alternative
+rather than a consolation.** Almost nobody says no to both.
+
+### 0d — Advisor recruitment
+
+*Send to the 3–5 warmest contacts with the deepest industry credibility. A
+former utility CDO or defense-supplier compliance lead as an advisor buys you
+the buyer network the founding team doesn't have — the fastest available fix
+for that gap.*
+
+**Subject:** `advisor role — {{industry}}`
+
+```
+{{first_name}} —
+
+Following up on our conversation. I'd like to ask you something more
+concrete.
+
+We're building out a small advisory group — three or four people who
+know {{industry}} from the inside — and I'd like you to be one of them.
+
+What it is: an hour a month, honest feedback on where we're wrong, and
+introductions where you think there's a genuine fit. Nothing you'd have
+to defend to anyone. Standard advisor equity, vesting over two years,
+and I'd put real numbers in front of you before you decide anything.
+
+What I'd get is the thing I can't buy: someone who can tell me in ten
+seconds that I'm pitching the wrong person at a utility.
+
+Worth a conversation?
+
+{{sender_name}}
+```
 
 ---
 
