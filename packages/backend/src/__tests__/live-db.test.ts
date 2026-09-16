@@ -197,6 +197,32 @@ suite('live-db repository round-trips', () => {
     assert.strictEqual(await repo.get(id), null);
   });
 
+  it('Organization: parentId self-FK blocks deleting a parent before its children (route deletes leaf-first)', async () => {
+    // The organizations.parentId self-relation FK has no ON DELETE CASCADE, so
+    // deleting a parent org while a child still references it is a hard FK
+    // violation on Postgres (the JSON store doesn't enforce it, which hid a bug
+    // where the DELETE /:id cascade deleted subtree orgs in arbitrary order and
+    // hung). This locks in the invariant the route now depends on: descendants
+    // must be removed leaf-first.
+    const repo = prismaRepo(prismaOrganizationsRepository);
+    const now = new Date().toISOString();
+    const parentId = randomUUID();
+    const childId = randomUUID();
+    await repo.create({
+      id: parentId, parentId: null, name: 'Parent Co', type: 'company',
+      industry: 'utilities', description: '', headCount: 0, createdAt: now, updatedAt: now,
+    });
+    await repo.create({
+      id: childId, parentId, name: 'Child Div', type: 'division',
+      industry: 'utilities', description: '', headCount: 0, createdAt: now, updatedAt: now,
+    });
+    // Parent-first delete must reject (FK still referenced by the child).
+    await assert.rejects(() => repo.delete(parentId));
+    // Leaf-first delete succeeds: child, then parent.
+    assert.strictEqual(await repo.delete(childId), true);
+    assert.strictEqual(await repo.delete(parentId), true);
+  });
+
   it('DataDomain: create with stewardIds M2M → get resolves stewards', async () => {
     const { orgId, personId } = await seedFixture();
     const stewardIds = [personId];
