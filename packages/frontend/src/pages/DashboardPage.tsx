@@ -122,10 +122,10 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
     },
     {
       icon: renderNavIcon('/people', { size: 16 }),
-      title: 'Invite your people',
+      title: 'Assign owners & stewards',
       description: 'Set up owners and stewards so accountability is clear. Procela tracks who is responsible for each process, system, and asset.',
       done: stats.people > 0,
-      ctaLabel: 'Add people',
+      ctaLabel: 'Assign people',
       ctaTo: '/people',
       doneLabel: `${stats.people} ${stats.people === 1 ? 'person' : 'people'}`,
     },
