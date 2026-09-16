@@ -168,6 +168,11 @@ suite('live-db repository round-trips', () => {
   });
   after(async () => {
     if (SKIP) return;
+    // Leave the database clean. beforeEach truncates ahead of each test, so
+    // the last test's fixtures (e.g. the 'Live-DB org') would otherwise linger
+    // in a developer's local Postgres after the run. Truncate once more before
+    // disconnecting so the suite doesn't leave stray rows behind.
+    await truncateAll();
     await prisma?.$disconnect();
   });
   beforeEach(async () => {
@@ -816,6 +821,11 @@ const prismaRepo = <F extends (loader: () => never) => unknown>(factory: F): Ret
 suite('live-db business flows', () => {
   after(async () => {
     if (SKIP) return;
+    // Leave the database clean. beforeEach truncates ahead of each test, so
+    // the last test's fixtures (e.g. the 'Live-DB org') would otherwise linger
+    // in a developer's local Postgres after the run. Truncate once more before
+    // disconnecting so the suite doesn't leave stray rows behind.
+    await truncateAll();
     await prisma?.$disconnect();
   });
   beforeEach(async () => {

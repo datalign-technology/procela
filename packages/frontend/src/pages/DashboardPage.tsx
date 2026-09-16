@@ -19,7 +19,7 @@ import Donut from '../components/Donut';
 import MiniBarChart from '../components/MiniBarChart';
 import Sparkline from '../components/Sparkline';
 import { useTierLabel } from '../lib/governanceTier';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
@@ -75,144 +75,6 @@ const cardStyle: React.CSSProperties = {
   padding: 20,
   boxShadow: 'var(--shadow-sm)',
 };
-
-// ──────────────────────────────────────────────────────────────────────────
-// GettingStartedCard — shown on the Dashboard when an org exists but
-// hasn't been populated yet. Dropping the full stat-heavy dashboard onto
-// a brand-new tenant produces a wall of zeros and no signal about what
-// to do first; this card gives a guided four-step path through the
-// three layers (Business / Data / Systems / People).
-// ──────────────────────────────────────────────────────────────────────────
-
-function GettingStartedCard({ stats }: { stats: DashboardStats }) {
-  const aiEnabled = useAiEnabled();
-  // Steps use the same icon set as the sidebar so the numbered
-  // rows here read as "open the Processes / Systems / Data Assets /
-  // People page". Sized down to 16px to sit inline with the title.
-  const steps = [
-    {
-      icon: renderNavIcon('/processes', { size: 16 }),
-      title: 'Define your business processes',
-      description: 'Map how your organization works — value streams, processes, sub-processes, and activities. Plain business language, no technical knowledge required.',
-      done: stats.processes > 0,
-      ctaLabel: aiEnabled ? 'Generate processes' : 'Define processes',
-      // Send first-timers to the AI wizard, not the empty catalog
-      // table — the wizard is the fast path to a real hierarchy. With AI
-      // off there's no wizard, so point straight at the catalog.
-      ctaTo: aiEnabled ? '/processes/wizard' : '/processes',
-      doneLabel: `${stats.processes} ${stats.processes === 1 ? 'process' : 'processes'}`,
-    },
-    {
-      icon: renderNavIcon('/systems', { size: 16 }),
-      title: 'Register your systems',
-      description: 'Tell Procela about the applications and platforms your data lives in — ERP, CRM, data warehouses, file stores.',
-      done: stats.systems > 0,
-      ctaLabel: 'Add systems',
-      ctaTo: '/systems',
-      doneLabel: `${stats.systems} ${stats.systems === 1 ? 'system' : 'systems'}`,
-    },
-    {
-      icon: renderNavIcon('/data-assets', { size: 16 }),
-      title: 'Add your data assets',
-      description: 'Describe the data you care about in business terms — customer records, transactions, reports — so it can be tied back to processes.',
-      done: stats.dataAssets > 0,
-      ctaLabel: 'Add data assets',
-      ctaTo: '/data-assets',
-      doneLabel: `${stats.dataAssets} ${stats.dataAssets === 1 ? 'asset' : 'assets'}`,
-    },
-    {
-      icon: renderNavIcon('/people', { size: 16 }),
-      title: 'Assign owners & stewards',
-      description: 'Set up owners and stewards so accountability is clear. Procela tracks who is responsible for each process, system, and asset.',
-      done: stats.people > 0,
-      ctaLabel: 'Assign people',
-      ctaTo: '/people',
-      doneLabel: `${stats.people} ${stats.people === 1 ? 'person' : 'people'}`,
-    },
-  ];
-
-  const doneCount = steps.filter((s) => s.done).length;
-  const percent = Math.round((doneCount / steps.length) * 100);
-
-  return (
-    <div style={{
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-md)',
-      padding: 24,
-      marginBottom: 24,
-      boxShadow: 'var(--shadow-sm)',
-    }}>
-      <div style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Welcome to Procela</h2>
-        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
-          A few short steps to get your governance program off the ground.{' '}
-          {doneCount > 0 && (
-            <span style={{ color: 'var(--color-text)' }}>
-              {doneCount} of {steps.length} done.
-            </span>
-          )}
-        </p>
-      </div>
-      <Meter value={percent} height={4} style={{ marginBottom: 20 }} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {steps.map((s, i) => (
-          <div key={s.title} style={{
-            display: 'flex', alignItems: 'flex-start', gap: 14,
-            padding: 14,
-            background: s.done ? 'var(--color-bg)' : 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 14, flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: s.done ? '#dcfce7' : 'var(--color-bg)',
-              color: s.done ? '#166534' : 'var(--color-text)',
-              fontSize: 13, fontWeight: 600,
-              border: s.done ? '1px solid #86efac' : '1px solid var(--color-border)',
-            }}>
-              {s.done ? <Check size={15} strokeWidth={3} /> : i + 1}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--color-text-secondary)', flexShrink: 0 }}>{s.icon}</span>
-                <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{s.title}</h3>
-                {s.done && (
-                  <span style={{ fontSize: 11, color: '#166534', marginLeft: 'auto', fontWeight: 500 }}>
-                    {s.doneLabel}
-                  </span>
-                )}
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '4px 0 0', lineHeight: 1.5 }}>
-                {s.description}
-              </p>
-              {!s.done && (
-                <Link
-                  to={s.ctaTo}
-                  style={{
-                    display: 'inline-block', marginTop: 10,
-                    padding: '6px 14px', fontSize: 12, fontWeight: 500,
-                    background: 'var(--color-primary)', color: '#fff',
-                    borderRadius: 'var(--radius-md)', textDecoration: 'none',
-                  }}
-                >
-                  {s.ctaLabel}
-                </Link>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-
-
-
-
-
 
 
 
@@ -1335,13 +1197,17 @@ export default function DashboardPage() {
   }
 
 
-  // Brand-new orgs see a guided four-step setup card instead of a wall
-  // of zeros. Once anything's been added, the regular dashboard takes
-  // over (and the user can find any unfinished step in its bucket).
+  // Brand-new orgs are sent to the Get Started guide (/setup) — the single,
+  // richer onboarding surface — rather than shown a second, weaker checklist
+  // here. Once anything's been added, the regular dashboard takes over (and
+  // any unfinished step is still findable in the guide).
   const isEmptyOrg = stats.processes === 0
     && stats.dataAssets === 0
     && stats.systems === 0
     && stats.people === 0;
+  if (isEmptyOrg) {
+    return <Navigate to="/setup" replace />;
+  }
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myDashboard: <MyDashboard />,
@@ -1362,7 +1228,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title="Dashboard"
-        actions={!isEmptyOrg ? (
+        actions={(
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
             {/* Simple vs Detailed — Simple shows only the four essential
                 sections (personal view, KPIs, gaps, next steps); Detailed is
@@ -1406,7 +1272,7 @@ export default function DashboardPage() {
               </button>
             )}
           </div>
-        ) : undefined}
+        )}
       >
       </PageHeader>
 
@@ -1490,9 +1356,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {isEmptyOrg ? (
-        <GettingStartedCard stats={stats} />
-      ) : simple ? (
+      {simple ? (
         // Simple view — only the four essential sections, each full-width and
         // stacked, in a fixed sensible order. Independent of the Detailed
         // Customize order/width/hidden state so "Simple" is always the same
@@ -1568,11 +1432,11 @@ export default function DashboardPage() {
 }
 
 // One-time congratulations once all four setup steps (processes,
-// systems, data assets, people) have data. The GettingStartedCard
-// disappears the moment the org stops being empty, so without this
-// the user never gets an "you're set up" signal — they just silently
-// graduate to the full dashboard. Dismissal is keyed by orgId so each
-// org celebrates once.
+// systems, data assets, people) have data. An empty org is redirected
+// to the Get Started guide (/setup); the moment it stops being empty it
+// lands on the full dashboard, so without this the user never gets an
+// "you're set up" signal — they just silently graduate. Dismissal is
+// keyed by orgId so each org celebrates once.
 //
 // Company-scope caveat: if this org has descendant divisions, don't
 // declare setup complete until those divisions also have processes.
