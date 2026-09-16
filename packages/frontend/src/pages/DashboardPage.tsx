@@ -19,7 +19,7 @@ import Donut from '../components/Donut';
 import MiniBarChart from '../components/MiniBarChart';
 import Sparkline from '../components/Sparkline';
 import { useTierLabel } from '../lib/governanceTier';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
@@ -1143,6 +1143,38 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
   );
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// EmptyDashboardWelcome — the Dashboard's own empty-org state. Deliberately
+// NOT the setup checklist (that lives only on the Get Started guide, /setup);
+// a second copy of it here made the Dashboard and Setup pages mirror each
+// other. This is a minimal welcome that hands off to the guide, plus the
+// personal "My Dashboard" section so the page still carries real content.
+// ──────────────────────────────────────────────────────────────────────────
+function EmptyDashboardWelcome() {
+  return (
+    <div>
+      <Card padding={24} marginBottom={24}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Welcome to Procela</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '6px 0 16px', lineHeight: 1.5, maxWidth: 560 }}>
+          Your organization is ready, but there’s nothing to report on yet. The dashboard fills in as you add processes, systems, data assets, and owners — the Get Started guide walks you through it step by step.
+        </p>
+        <Link
+          to="/setup"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '8px 16px', fontSize: 13, fontWeight: 600,
+            background: 'var(--color-primary)', color: '#fff',
+            borderRadius: 'var(--radius-md)', textDecoration: 'none',
+          }}
+        >
+          Finish setup in Get Started &rarr;
+        </Link>
+      </Card>
+      <MyDashboard />
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -1197,17 +1229,14 @@ export default function DashboardPage() {
   }
 
 
-  // Brand-new orgs are sent to the Get Started guide (/setup) — the single,
-  // richer onboarding surface — rather than shown a second, weaker checklist
-  // here. Once anything's been added, the regular dashboard takes over (and
-  // any unfinished step is still findable in the guide).
+  // Brand-new orgs see a minimal welcome that hands off to the Get Started
+  // guide (/setup) — deliberately NOT the setup checklist, which lives only on
+  // that guide. A second copy of the checklist here made the two pages mirror
+  // each other. Once anything's been added, the regular dashboard takes over.
   const isEmptyOrg = stats.processes === 0
     && stats.dataAssets === 0
     && stats.systems === 0
     && stats.people === 0;
-  if (isEmptyOrg) {
-    return <Navigate to="/setup" replace />;
-  }
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myDashboard: <MyDashboard />,
@@ -1228,7 +1257,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title="Dashboard"
-        actions={(
+        actions={!isEmptyOrg ? (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
             {/* Simple vs Detailed — Simple shows only the four essential
                 sections (personal view, KPIs, gaps, next steps); Detailed is
@@ -1272,7 +1301,7 @@ export default function DashboardPage() {
               </button>
             )}
           </div>
-        )}
+        ) : undefined}
       >
       </PageHeader>
 
@@ -1356,7 +1385,9 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {simple ? (
+      {isEmptyOrg ? (
+        <EmptyDashboardWelcome />
+      ) : simple ? (
         // Simple view — only the four essential sections, each full-width and
         // stacked, in a fixed sensible order. Independent of the Detailed
         // Customize order/width/hidden state so "Simple" is always the same
@@ -1432,10 +1463,10 @@ export default function DashboardPage() {
 }
 
 // One-time congratulations once all four setup steps (processes,
-// systems, data assets, people) have data. An empty org is redirected
-// to the Get Started guide (/setup); the moment it stops being empty it
-// lands on the full dashboard, so without this the user never gets an
-// "you're set up" signal — they just silently graduate. Dismissal is
+// systems, data assets, people) have data. An empty org sees the minimal
+// EmptyDashboardWelcome instead of the full dashboard; the moment it stops
+// being empty it lands on the full dashboard, so without this the user never
+// gets an "you're set up" signal — they just silently graduate. Dismissal is
 // keyed by orgId so each org celebrates once.
 //
 // Company-scope caveat: if this org has descendant divisions, don't
