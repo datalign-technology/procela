@@ -156,13 +156,14 @@ export const navSections: NavSection[] = [
       { to: '/analysis',          label: 'Analysis' },
       { to: '/processes/data-map', label: 'Process ↔ Data Map' },
       { to: '/reports',           label: 'Reports' },
+      { to: '/council-dashboard', label: 'Council Dashboard' },
       { to: '/council-scorecard', label: 'Council Scorecard' },
       { to: '/gap-detection',     label: 'Gap Detection' },
       { to: '/audit-log',         label: 'Audit Log' },
     ],
     subGroups: [
       { label: 'Explore', itemTos: ['/enterprise-view', '/analysis', '/processes/data-map'] },
-      { label: 'Review',  itemTos: ['/reports', '/council-scorecard', '/gap-detection', '/audit-log'] },
+      { label: 'Review',  itemTos: ['/reports', '/council-dashboard', '/council-scorecard', '/gap-detection', '/audit-log'] },
     ],
   },
 ];
@@ -214,6 +215,8 @@ export const ROUTE_GROUPS: Record<string, string[]> = {
   '/governance-work': ['/governance-work'],
   '/enterprise-view': ['/enterprise-view', '/control-tower'],
   '/reports': ['/reports', '/report', '/scorecard'],  // /scorecard redirects to /reports
+  '/council-dashboard': ['/council-dashboard'],
+  '/council-scorecard': ['/council-scorecard'],
   '/analysis': ['/analysis'],
   '/organizations': ['/organizations'],
   '/people': ['/people'],
