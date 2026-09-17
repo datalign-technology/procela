@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import OrgSidebarTree, { type OrgTreeNode } from '../components/OrgSidebarTree';
 import { useRowSelection } from '../hooks/useRowSelection';
@@ -93,15 +94,6 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-
-// Borderless primary-text toolbar button — matches the Expand All /
-// Collapse All controls on Process Catalog, Organizations and Governance
-// Groups (the shared `btnIcon` look), rather than a grey secondary pill.
-const expandAllBtn: React.CSSProperties = {
-  background: 'none', border: 'none', borderRadius: 4,
-  padding: '2px 6px', fontSize: 12, fontWeight: 500,
-  color: 'var(--color-primary)', cursor: 'pointer',
-};
 
 interface DamaRoleAssignment {
   id: string;
@@ -673,20 +665,10 @@ export default function AgentsPage() {
         )}
         {filtered.length > 0 && (
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            <button
-              type="button"
-              style={expandAllBtn}
-              onClick={() => setExpandedAgentIds(new Set(filtered.map((a) => a.id)))}
-            >
-              Expand All
-            </button>
-            <button
-              type="button"
-              style={expandAllBtn}
-              onClick={() => setExpandedAgentIds(new Set())}
-            >
-              Collapse All
-            </button>
+            <ExpandCollapseControls
+              onExpandAll={() => setExpandedAgentIds(new Set(filtered.map((a) => a.id)))}
+              onCollapseAll={() => setExpandedAgentIds(new Set())}
+            />
           </div>
         )}
       </div>

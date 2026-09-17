@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -136,12 +137,6 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
     fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color, whiteSpace: 'nowrap',
   };
 }
-
-const textBtnStyle: React.CSSProperties = {
-  background: 'none', border: 'none', padding: '2px 4px',
-  color: 'var(--color-primary)', cursor: 'pointer',
-  fontSize: 12, fontFamily: 'inherit',
-};
 
 const chipStyle: React.CSSProperties = {
   display: 'inline-block',
@@ -561,9 +556,7 @@ export default function DecisionRightsPage() {
             }}
           />
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', fontSize: 12 }}>
-            <button onClick={expandAll}  style={textBtnStyle}>Expand all</button>
-            <span style={{ color: 'var(--color-border)' }}>·</span>
-            <button onClick={collapseAll} style={textBtnStyle}>Collapse all</button>
+            <ExpandCollapseControls onExpandAll={expandAll} onCollapseAll={collapseAll} />
           </div>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
             {filteredRows.length} of {rows.length} decisions

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient, ApiError } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import CreateScopeNotice from '../components/CreateScopeNotice';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
@@ -1374,8 +1375,7 @@ export default function ProcessCatalogPage() {
             />
             Select all
           </label>
-          <button style={{ ...btnIcon, fontSize: 12, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-          <button style={{ ...btnIcon, fontSize: 12, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
+          <ExpandCollapseControls onExpandAll={expandAll} onCollapseAll={() => setExpanded(new Set())} />
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
             Click any name or description to edit. Optional levels can be added at any time.
           </span>

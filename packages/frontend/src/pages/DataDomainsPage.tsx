@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import Spinner from '../components/Spinner';
@@ -229,8 +230,6 @@ export default function DataDomainsPage() {
     for (const d of orderedDomains) if (d.parentDomainId) s.add(d.parentDomainId);
     return s;
   }, [orderedDomains]);
-  const allCollapsed = parentsWithChildren.size > 0 && Array.from(parentsWithChildren).every((id) => collapsedIds.has(id));
-  const toggleCollapseAll = () => setCollapsedIds(allCollapsed ? new Set() : new Set(parentsWithChildren));
   // Rows that survive the fold: hide a sub-domain whose parent is collapsed.
   const visibleDomains = useMemo(
     () => orderedDomains.filter((d) => !(d.parentDomainId && collapsedIds.has(d.parentDomainId))),
@@ -766,15 +765,12 @@ export default function DataDomainsPage() {
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
               <input aria-label="Search domains" style={{ ...inputStyle, fontSize: 12, padding: '6px 10px' }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               {parentsWithChildren.size > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-                  <button
-                    type="button"
-                    onClick={toggleCollapseAll}
-                    aria-expanded={!allCollapsed}
-                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 11, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                  >
-                    {allCollapsed ? '▸ Expand all' : '▾ Collapse all'}
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 8 }}>
+                  <ExpandCollapseControls
+                    size={11}
+                    onExpandAll={() => setCollapsedIds(new Set())}
+                    onCollapseAll={() => setCollapsedIds(new Set(parentsWithChildren))}
+                  />
                 </div>
               )}
               {canWrite && filteredDomains.length > 0 && (

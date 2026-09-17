@@ -4,6 +4,7 @@ import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import StatusBadge from '../components/StatusBadge';
@@ -1000,8 +1001,7 @@ export default function GovernanceGroupsPage() {
           {/* Tree toolbar */}
           <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
             <input type="checkbox" checked={flatGroups.length > 0 && checkedIds.size === flatGroups.length} onChange={toggleCheckAll} style={{ cursor: 'pointer' }} title="Select all" />
-            <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-            <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={collapseAll}>Collapse All</button>
+            <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={collapseAll} />
           </div>
 
           {/* Tree body */}

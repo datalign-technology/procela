@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import FieldStack from '../components/FieldStack';
@@ -42,10 +43,6 @@ interface OrgFlat {
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
-};
-const btnIcon: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
 };
 const typeBadge = (type: string): React.CSSProperties => {
   const colors: Record<string, { bg: string; color: string }> = {
@@ -708,8 +705,7 @@ export default function OrganizationsPage() {
             />
             Select all
           </label>
-          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
+          <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={() => setExpanded(new Set())} />
         </div>
 
         {/* Tree — uses full page width. No inner scroll container:
