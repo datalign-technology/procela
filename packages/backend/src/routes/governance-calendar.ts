@@ -7,6 +7,9 @@ import { people } from './people';
 import logger from '../lib/logger';
 import { getCalendarEventsRepository } from '../db/calendar-events.repo';
 import { getPeopleRepository } from '../db/people.repo';
+import { createNotification } from './notifications';
+import { sendCalendarInviteEmail, isConfigured as isMailConfigured } from '../services/mail.service';
+import { getCachedOrgList } from '../lib/org-scope';
 
 const EVENT_TYPES = [
   'COUNCIL_MEETING',
@@ -64,6 +67,52 @@ const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
 async function loadPeopleById(): Promise<Map<string, string>> {
   const allPeople = await peopleRepo().list();
   return new Map(allPeople.map((p) => [p.id, p.name]));
+}
+
+// Notify each person newly added to an event's attendee list — an in-app
+// notification always, plus a transactional email when SMTP is configured.
+// Called on create (every attendee is "new") and on update (only the ids that
+// weren't already on the list). The in-app write is awaited so the API has
+// delivered it by the time it responds; the email is fire-and-forget so SMTP
+// latency never blocks the request. Best-effort throughout: a resolution or
+// delivery error is logged, never surfaced — being added must still succeed.
+async function notifyAddedAttendees(event: StoredCalendarEvent, addedIds: string[]): Promise<void> {
+  if (addedIds.length === 0) return;
+  try {
+    const allPeople = await peopleRepo().list();
+    const byId = new Map(allPeople.map((p) => [p.id, p]));
+    const orgName = getCachedOrgList().find((o) => o.id === event.orgId)?.name || 'your organization';
+    const cadence = event.cadence ? event.cadence.charAt(0) + event.cadence.slice(1).toLowerCase() : 'One-off';
+    const whenText = event.nextOccurrence
+      ? new Date(event.nextOccurrence).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      : 'Not yet scheduled';
+
+    for (const personId of addedIds) {
+      const person = byId.get(personId);
+      if (!person) continue; // an id with no matching person (e.g. an agent) — skip
+      createNotification({
+        orgId: event.orgId,
+        userId: person.id,
+        type: 'INFO',
+        title: 'Added to a governance meeting',
+        message: `You're now an attendee of "${event.name}" (${cadence} · next ${whenText}).`,
+        link: '/governance-calendar',
+      });
+      if (isMailConfigured() && person.email) {
+        void sendCalendarInviteEmail({
+          to: person.email,
+          name: person.name,
+          orgName,
+          eventName: event.name,
+          eventDescription: event.description,
+          whenText,
+          cadence,
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, eventId: event.id }, 'Failed to notify added calendar attendees');
+  }
 }
 
 // ── Helpers ──
@@ -271,6 +320,8 @@ router.post('/', async (req: Request, res: Response) => {
   await calendarEventsRepo.create(event);
   auditService.log(event.orgId, null, 'CalendarEvent', event.id, 'CREATE', null, event);
   logger.info({ eventId: event.id, name: event.name, cadence: event.cadence }, 'Created calendar event');
+  // Every attendee on a brand-new event is newly added.
+  await notifyAddedAttendees(event, event.attendees);
   res.status(201).json({ success: true, data: enrichEvent(event, await loadPeopleById()) });
 });
 
@@ -331,6 +382,13 @@ router.put('/:id', async (req: Request, res: Response) => {
   event.updatedAt = new Date().toISOString();
   await calendarEventsRepo.update(event.id, event);
   auditService.log(event.orgId, null, 'CalendarEvent', event.id, 'UPDATE', before, event);
+  // Notify only people who weren't already attendees. `before` was captured as
+  // a shallow copy before `event.attendees` was reassigned to a new array, so
+  // `before.attendees` is still the prior list to diff against.
+  if (attendees !== undefined) {
+    const prior = new Set(before.attendees || []);
+    await notifyAddedAttendees(event, event.attendees.filter((id) => !prior.has(id)));
+  }
   res.json({ success: true, data: enrichEvent(event, await loadPeopleById()) });
 });
 
