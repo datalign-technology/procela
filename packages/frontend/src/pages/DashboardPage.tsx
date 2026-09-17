@@ -239,25 +239,15 @@ function MyDashboard() {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      {/* Summary KPIs — each tile is a hyperlink to the surface where
-          that count lives. Same affordance as the org Overview strip
-          below (hover lift, muted-but-still-linked at zero, tooltip
-          announces the destination for keyboard / screen-reader). */}
+      {/* Summary KPIs — each tile is a hyperlink to the surface where that
+          count lives (hover lift, muted-but-still-linked at zero, tooltip
+          announces the destination for keyboard / screen-reader). Open Tasks
+          and Open Issues are intentionally NOT here: the Trends section owns
+          them, showing the current value + delta + sparkline in one card, so a
+          duplicate tile would just repeat that number. What's overdue / critical
+          still surfaces in the Needs Attention panel below. Only the two counts
+          with no trend counterpart — Domains and Upcoming Events — stay as tiles. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
-        <StatTile dense
-          to="/governance-work?tab=tasks"
-          label="Open Tasks"
-          value={s.openTasks || 0}
-          valueColor={(s.overdueTasks || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}
-          sub={(s.overdueTasks || 0) > 0 ? { text: `${s.overdueTasks} overdue`, color: 'var(--color-error)' } : null}
-        />
-        <StatTile dense
-          to="/governance-work?tab=issues"
-          label="Open Issues"
-          value={s.openIssues || 0}
-          valueColor={(s.criticalIssues || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}
-          sub={(s.criticalIssues || 0) > 0 ? { text: `${s.criticalIssues} critical`, color: 'var(--color-error)' } : null}
-        />
         <StatTile dense
           to="/data-domains"
           label="Domains"
