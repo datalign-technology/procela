@@ -513,6 +513,11 @@ body[data-density="compact"] textarea {
      collapse rule above still hides a widget that renders nothing. */
   .dashboard-half-grid > .dashboard-section-cell:not(:empty) {
     display: flex;
+    /* A uniform floor so the analytical cards (My Portfolio Health, Gaps,
+       Program Maturity, Catalog Coverage) read as one tight, even band that
+       sits a touch taller than the full-width Trends strip — rather than each
+       pair finding its own height. Content taller than this still grows. */
+    min-height: 210px;
   }
   .dashboard-half-grid > .dashboard-section-cell:not(:empty) > * {
     flex: 1;
