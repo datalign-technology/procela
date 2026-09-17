@@ -447,8 +447,25 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   const { name, description, ownerId, stewardIds, dataAssetIds, status, scopeDefinition } = req.body;
 
-  const hasFieldEdits = name !== undefined || description !== undefined
-    || ownerId !== undefined || stewardIds !== undefined || scopeDefinition !== undefined;
+  // Only a field whose value ACTUALLY changes counts as an edit for the
+  // status lock. A save that re-sends unchanged values (the Governance
+  // Details panel always posts ownerId + stewardIds alongside dataAssetIds)
+  // must not trip the lock — otherwise toggling a domain's data-asset
+  // membership (deliberately NOT a locked field, see below) is refused on an
+  // Active/Deprecated domain. Compare against the stored domain, not mere
+  // presence in the body.
+  const sameIdSet = (a: unknown, b: string[] | undefined): boolean => {
+    if (!Array.isArray(a)) return true; // not being changed
+    const A = [...new Set(a.filter((x): x is string => typeof x === 'string'))].sort();
+    const B = [...new Set(b || [])].sort();
+    return A.length === B.length && A.every((x, i) => x === B[i]);
+  };
+  const hasFieldEdits =
+    (name !== undefined && String(name) !== domain.name)
+    || (description !== undefined && String(description) !== (domain.description || ''))
+    || (ownerId !== undefined && (ownerId || null) !== (domain.ownerId || null))
+    || (stewardIds !== undefined && !sameIdSet(stewardIds, domain.stewardIds))
+    || (scopeDefinition !== undefined && JSON.stringify(scopeDefinition ?? null) !== JSON.stringify(domain.scopeDefinition ?? null));
   const domainOrg = getCachedOrgList().find((o) => o.id === domain.orgId) as any;
   const isAdvanced = domainOrg?.statusMode === 'advanced';
   const lockedSet = isAdvanced ? ADVANCED_LOCKED : SIMPLE_LOCKED;

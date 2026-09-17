@@ -340,8 +340,16 @@ export default function DataDomainsPage() {
 
   const handleDetailSave = async () => {
     if (!selectedDomain) return;
-    await apiClient.put(`/data-domains/${selectedDomain.id}`, { ownerId: detailOwnerId || null, stewardIds: detailStewardIds, dataAssetIds: detailAssetIds });
-    addToast('success', 'Governance details saved'); fetchData();
+    // Surface failures — a rejected save (e.g. a locked Active/Deprecated
+    // domain refusing a field edit) previously threw silently, so the panel
+    // looked like it saved nothing with no explanation.
+    try {
+      await apiClient.put(`/data-domains/${selectedDomain.id}`, { ownerId: detailOwnerId || null, stewardIds: detailStewardIds, dataAssetIds: detailAssetIds });
+      addToast('success', 'Governance details saved');
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Failed to save governance details');
+    }
   };
 
   // Explicitly assign the parent domain's owner to this sub-domain. Not a
