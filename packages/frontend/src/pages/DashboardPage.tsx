@@ -10,6 +10,7 @@ import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import { healthColorVar } from '../components/HealthBar';
 import SectionHeading from '../components/SectionHeading';
+import InfoTip from '../components/InfoTip';
 import StatTile from '../components/StatTile';
 import Meter from '../components/Meter';
 import Gauge from '../components/Gauge';
@@ -462,7 +463,7 @@ function MyPortfolioHealth() {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Portfolio Health" />
+      <SectionHeading title={<>Portfolio Health <InfoTip term="Portfolio Health" inline /></>} />
       <Card padding={20}><SkeletonRows rows={2} columnWidths={[140, null, 60]} /></Card>
     </div>
   );
@@ -471,7 +472,7 @@ function MyPortfolioHealth() {
   if (!data?.person || !p || p.domains === 0) {
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="Portfolio Health" />
+        <SectionHeading title={<>Portfolio Health <InfoTip term="Portfolio Health" inline /></>} />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             {!data?.person
@@ -496,11 +497,11 @@ function MyPortfolioHealth() {
   ];
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Portfolio Health" />
+      <SectionHeading title={<>Portfolio Health <InfoTip term="Portfolio Health" inline /></>} />
       <Card padding="18px 22px">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 20, alignItems: 'center' }}>
           <div>
-            <SectionLabel>Asset tiers</SectionLabel>
+            <SectionLabel>Asset tiers <InfoTip term="Governance Tier" inline /></SectionLabel>
             {tierTotal > 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <Link to="/data-domains" title="View my data domains" style={{ display: 'inline-flex', flexShrink: 0 }}>
@@ -581,7 +582,7 @@ function MyCoverage() {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Coverage" />
+      <SectionHeading title={<>Coverage <InfoTip term="Coverage" inline /></>} />
       <Card padding={20}><SkeletonRows rows={3} columnWidths={[120, null, 60]} /></Card>
     </div>
   );
@@ -590,7 +591,7 @@ function MyCoverage() {
   if (!data?.person || !p || p.assets === 0) {
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="Coverage" />
+        <SectionHeading title={<>Coverage <InfoTip term="Coverage" inline /></>} />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             {!data?.person
@@ -611,7 +612,7 @@ function MyCoverage() {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Coverage" />
+      <SectionHeading title={<>Coverage <InfoTip term="Coverage" inline /></>} />
       <Card padding="16px 20px">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {rows.map((r) => {
