@@ -221,7 +221,7 @@ export function renderMarkdownToHtml(markdown: string, opts: RenderHtmlOptions):
       max-width: 1100px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: 240px 1fr;
+      grid-template-columns: 190px 1fr;
       gap: 40px;
       padding: 32px 24px 80px;
     }
