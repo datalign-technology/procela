@@ -7,6 +7,7 @@ import Card from '../components/Card';
 import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ScorecardTargetsPanel from '../components/ScorecardTargetsPanel';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -49,7 +50,7 @@ export default function GovernanceFoundationPage() {
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'scope' | 'principles'>('scope');
+  const [activeTab, setActiveTab] = useState<'scope' | 'principles' | 'targets'>('scope');
   // Launch flow (mirrors the governed transition on Get Started, scoped to
   // launching from PLANNING — later lifecycle changes live on Get Started).
   const [launching, setLaunching] = useState(false);
@@ -189,7 +190,7 @@ export default function GovernanceFoundationPage() {
       {!loading && program && (
         <Card padding={24}>
           <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
-            {(['scope', 'principles'] as const).map((t) => (
+            {(['scope', 'principles', 'targets'] as const).map((t) => (
               <button key={t} onClick={() => setActiveTab(t)} style={{
                 padding: '8px 16px', fontSize: 13,
                 fontWeight: activeTab === t ? 600 : 500,
@@ -243,10 +244,20 @@ export default function GovernanceFoundationPage() {
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
-            <Button variant="secondary" onClick={() => navigate('/setup')}>Back to Setup</Button>
-            <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
-          </div>
+          {activeTab === 'targets' && (
+            // Council Scorecard thresholds — moved here from Settings. Its own
+            // Save/Reset live inside the panel (they hit a different endpoint
+            // than the program Save Changes below), so the shared footer is
+            // hidden on this tab.
+            <ScorecardTargetsPanel />
+          )}
+
+          {activeTab !== 'targets' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+              <Button variant="secondary" onClick={() => navigate('/setup')}>Back to Setup</Button>
+              <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
+            </div>
+          )}
         </Card>
       )}
 
