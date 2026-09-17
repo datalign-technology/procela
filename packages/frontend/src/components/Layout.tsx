@@ -507,7 +507,7 @@ export default function Layout() {
               }}
             >
               <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>💬</span>
-              <span>Ask AI</span>
+              <span>Ask Procela</span>
               {!chatOpen && chatMessageCount > 0 && (
                 <span
                   aria-hidden="true"
