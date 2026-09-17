@@ -103,6 +103,41 @@ interface MyDashboardData {
   myDomains?: MyDomain[];
 }
 
+// Small uppercase card header with a leading semantic icon — used by the
+// Attention (amber alert) and Schedule (blue calendar) panels so the pair is
+// told apart by glyph, not by a 4px border colour alone. The icon inherits
+// `color` via currentColor.
+function CardHeaderRow({ color, icon, label }: { color: string; icon: React.ReactNode; label: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+      <span style={{ display: 'inline-flex', color, flexShrink: 0 }}>{icon}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+    </div>
+  );
+}
+
+// Warning-triangle glyph for the "Needs My Attention" header (stroke follows
+// the wrapper's currentColor so it renders in the warning amber).
+function AttentionGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+// Bucket upcoming events into a calendar-style grouping so My Schedule reads
+// as "when", not a flat list. Empty buckets are dropped.
+function bucketUpcomingEvents(events: MyEvent[]): Array<{ label: string; items: MyEvent[] }> {
+  return [
+    { label: 'Today', items: events.filter((e) => e.daysAway <= 0) },
+    { label: 'This week', items: events.filter((e) => e.daysAway >= 1 && e.daysAway <= 6) },
+    { label: 'Later', items: events.filter((e) => e.daysAway >= 7) },
+  ].filter((g) => g.items.length > 0);
+}
+
 function MyDashboard() {
   const { user } = useAuthStore();
   const [data, setData] = useState<MyDashboardData | null>(null);
@@ -147,6 +182,16 @@ function MyDashboard() {
   }
 
   const s = data.summary || {};
+
+  // Needs-My-Attention queue: overdue tasks, critical issues, due reviews.
+  // urgentShown mirrors the per-source slice caps below so the "+N more"
+  // footer only appears when the queue genuinely runs past what's rendered.
+  const overdueTasks = (data.myTasks || []).filter((t) => t.isOverdue);
+  const criticalIssues = (data.myIssues || []).filter((i) => i.severity === 'CRITICAL');
+  const pendingReviews = data.pendingReviews || [];
+  const urgentTotal = overdueTasks.length + criticalIssues.length + pendingReviews.length;
+  const urgentShown = Math.min(overdueTasks.length, 3) + Math.min(criticalIssues.length, 3) + Math.min(pendingReviews.length, 3);
+
   const priorityColor = (p: string) => p === 'CRITICAL' ? '#dc2626' : p === 'HIGH' ? '#f59e0b' : p === 'MEDIUM' ? '#3b82f6' : '#64748b';
   const priorityBadge = (p: string): React.CSSProperties => ({
     display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
@@ -191,59 +236,72 @@ function MyDashboard() {
         />
       </div>
 
-      {/* Two-column: Attention + Schedule */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-        {/* Needs Attention */}
+      {/* Two-column: Attention (the act-now triage queue — given primacy)
+          + Schedule (the look-ahead). Asymmetric 3:2 so the pair reads as
+          "urgent now vs. what's next" rather than two equal twins. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, marginBottom: 16 }}>
+        {/* Needs Attention — the act-now triage queue. A leading alert
+            glyph (not just the amber rule) so it's told apart from Schedule
+            at a glance. Sources: overdue tasks, critical issues, due reviews;
+            each capped, with a "+N more" footer when the queue runs longer. */}
         <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-warning)' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-warning)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Needs My Attention
-          </div>
-          {(data.myTasks || []).filter((t) => t.isOverdue).length === 0 &&
-           (data.myIssues || []).filter((i) => i.severity === 'CRITICAL').length === 0 &&
-           (data.pendingReviews || []).length === 0 ? (
+          <CardHeaderRow color="var(--color-warning)" icon={<AttentionGlyph />} label="Needs My Attention" />
+          {urgentTotal === 0 ? (
             <div style={{ color: 'var(--color-success)', fontSize: 13 }}>All clear — no urgent items.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(data.myTasks || []).filter((t) => t.isOverdue).slice(0, 3).map((t) => (
+              {overdueTasks.slice(0, 3).map((t) => (
                 <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Overdue: {t.title}</span>
                   <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
-              {(data.myIssues || []).filter((i) => i.severity === 'CRITICAL').slice(0, 3).map((i) => (
+              {criticalIssues.slice(0, 3).map((i) => (
                 <div key={i.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Critical: {i.title}</span>
                   <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
-              {(data.pendingReviews || []).slice(0, 3).map((r) => (
+              {pendingReviews.slice(0, 3).map((r) => (
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12, color: r.isOverdue ? 'var(--color-error)' : 'var(--color-warning)' }}>{r.isOverdue ? 'Overdue review' : 'Review due'}: {r.name}</span>
                   <Link to="/governance-policies" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
+              {urgentTotal > urgentShown && (
+                <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 2 }}>
+                  +{urgentTotal - urgentShown} more &rarr;
+                </Link>
+              )}
             </div>
           )}
         </Card>
 
-        {/* My Schedule */}
+        {/* My Schedule — the look-ahead, grouped into time buckets (Today /
+            This week / Later) so it reads as a calendar preview rather than a
+            flat list, and never mirrors the Attention queue beside it. */}
         <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-info)' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-info)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            My Schedule
-          </div>
+          <CardHeaderRow color="var(--color-info)" icon={renderNavIcon('/governance-calendar', { size: 13 })} label="My Schedule" />
           {(data.upcomingEvents || []).length === 0 ? (
-            <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No upcoming events in the next 14 days.</div>
+            <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Nothing scheduled in the next 14 days.</div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(data.upcomingEvents || []).slice(0, 5).map((e, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12 }}>{e.name}</span>
-                  <span style={{ fontSize: 10, color: e.daysAway === 0 ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: e.daysAway === 0 ? 600 : 400 }}>
-                    {e.daysAway === 0 ? 'Today' : e.daysAway === 1 ? 'Tomorrow' : `In ${e.daysAway} days`}
-                  </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {bucketUpcomingEvents(data.upcomingEvents || []).map((g) => (
+                <div key={g.label}>
+                  <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 3 }}>{g.label}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {g.items.slice(0, 4).map((e, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 12 }}>{e.name}</span>
+                        <span style={{ fontSize: 10, color: e.daysAway <= 0 ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: e.daysAway <= 0 ? 600 : 400 }}>
+                          {e.daysAway <= 0 ? 'Today' : e.daysAway === 1 ? 'Tomorrow' : `In ${e.daysAway} days`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
-              <Link to="/governance-calendar" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 4 }}>View calendar</Link>
+              <Link to="/governance-calendar" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 2 }}>View calendar</Link>
             </div>
           )}
         </Card>
@@ -608,7 +666,7 @@ function DashboardTrends({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape' | 'quickActions';
+type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape';
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard       — personal, act-now (your overdue tasks / critical issues)
@@ -618,11 +676,12 @@ type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 
 //   5. gaps              — concrete problems to fix   ┐ narrow pair
 //   6. programMaturity   — where we are in the journey ┘
 //   7. catalogShape      — supporting analytic (Catalog Coverage)
-//   8. quickActions      — navigation shortcuts (utility)
+// Quick actions are NOT a section — they render as a compact menu bar
+// pinned under the page header (see DashboardActionBar), not in this flow.
 // The narrow analytical widgets (governancePosture → catalogShape) stay
 // contiguous so they pair two-up cleanly instead of stranding a lone card in a
 // masonry column; the surrounding full-width bands anchor the top and bottom.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'catalogShape', 'quickActions'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'catalogShape'];
 
 // ── Density: Simple vs Detailed ──
 // A first-time, non-technical visitor lands on twelve stacked analytical
@@ -664,8 +723,8 @@ type SectionWidth = 'full' | 'half';
 // sections pack two-up so the page stays tight (less vertical scrolling).
 // The user can override any of these in Customize — this is only the
 // starting layout. Chosen to keep the wide surfaces (KPI strip, the personal
-// two-column body, Quick-Action tiles) full-bleed while the analytical
-// widgets — including Governance Posture and Trends — pair up.
+// two-column body) full-bleed while the analytical widgets — including
+// Governance Posture and Trends — pair up.
 const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
   overview: 'full',
@@ -674,7 +733,6 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   gaps: 'half',
   programMaturity: 'half',
   catalogShape: 'half',
-  quickActions: 'full',
 };
 
 const SECTION_LABELS: Record<SectionKey, string> = {
@@ -685,7 +743,6 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   programMaturity: 'Program Maturity',
   gaps: 'Governance Gaps',
   catalogShape: 'Catalog Coverage',
-  quickActions: 'Quick Actions',
 };
 
 interface StoredLayout { order: string[]; hidden: string[]; width?: Record<string, SectionWidth> }
@@ -822,53 +879,50 @@ const quickActions = [
   { iconRoute: '/analysis',        label: 'Analysis',        description: 'Pivot the catalog (systems × domains, roles × people…)',       link: '/analysis' },
 ];
 
-function QuickActions() {
+// Compact action menu pinned under the page header — a horizontal row of
+// icon+label chips (the description rides the tooltip). Replaces the old
+// full-width "Quick Actions" grid of six large cards, which ate a whole
+// section of vertical space for what is really navigation chrome. Renders
+// once at the top in both Simple and Detailed views; not a customizable
+// section, so it's always available as the dashboard's "menu".
+function DashboardActionBar() {
   const aiEnabled = useAiEnabled();
   // Drop the AI-only "Run Wizard" action when AI features are turned off.
   const actions = aiEnabled ? quickActions : quickActions.filter((a) => a.link !== '/processes/wizard');
   return (
-    <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Quick Actions" />
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-        gap: 12,
-      }}>
-        {actions.map((action) => (
-          <Link
-            key={action.label}
-            to={action.link}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              gap: 6,
-              padding: '16px 12px',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: 'var(--shadow-sm)',
-              textDecoration: 'none',
-              color: 'var(--color-text)',
-              cursor: 'pointer',
-              transition: 'border-color 0.15s, box-shadow 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-primary)';
-              e.currentTarget.style.boxShadow = 'var(--shadow-md, 0 2px 8px rgba(0,0,0,0.1))';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-border)';
-              e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-            }}
-          >
-            <span style={{ display: 'inline-flex', color: 'var(--color-primary)' }}>{renderNavIcon(action.iconRoute, { size: 24, strokeWidth: 1.8 })}</span>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{action.label}</span>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.3 }}>{action.description}</span>
-          </Link>
-        ))}
-      </div>
+    <div
+      role="navigation"
+      aria-label="Dashboard quick actions"
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}
+    >
+      {actions.map((action) => (
+        <Link
+          key={action.label}
+          to={action.link}
+          title={action.description}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 999,
+            boxShadow: 'var(--shadow-sm)',
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'var(--color-text)',
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+            transition: 'border-color 0.15s, color 0.15s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text)'; }}
+        >
+          <span style={{ display: 'inline-flex', color: 'var(--color-primary)' }}>{renderNavIcon(action.iconRoute, { size: 15, strokeWidth: 1.8 })}</span>
+          {action.label}
+        </Link>
+      ))}
     </div>
   );
 }
@@ -1121,7 +1175,6 @@ export default function DashboardPage() {
     programMaturity: <ProgramMaturity />,
     gaps: <GapsOverview stats={stats} />,
     catalogShape: <CatalogShape stats={stats} />,
-    quickActions: <QuickActions />,
   };
 
   return (
@@ -1175,6 +1228,11 @@ export default function DashboardPage() {
         ) : undefined}
       >
       </PageHeader>
+
+      {/* Quick-action menu bar — pinned under the header as the dashboard's
+          "menu", in both Simple and Detailed. Hidden on an empty org, which
+          shows the welcome/setup screen instead. */}
+      {!isEmptyOrg && <DashboardActionBar />}
 
       {!simple && showCustomize && (
         <Card
