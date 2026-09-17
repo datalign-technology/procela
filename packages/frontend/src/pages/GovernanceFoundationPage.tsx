@@ -8,6 +8,7 @@ import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ScorecardTargetsPanel from '../components/ScorecardTargetsPanel';
+import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -45,6 +46,15 @@ const inputStyle: React.CSSProperties = {
 };
 const textareaStyle: React.CSSProperties = { ...inputStyle, minHeight: 80, fontFamily: 'inherit', resize: 'vertical' };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
+
+// Program status → header pill styling/label. Drives the single status pill
+// that replaced the per-tab launch banner.
+const STATUS_META: Record<Program['status'], { label: string; variant: StatusBadgeVariant }> = {
+  PLANNING: { label: 'Planning', variant: 'warning' },
+  ACTIVE: { label: 'Active', variant: 'success' },
+  PAUSED: { label: 'Paused', variant: 'warning' },
+  COMPLETED: { label: 'Completed', variant: 'info' },
+};
 
 // ScopeSelector — one catalog's in-scope picker: a coverage read-out, the
 // selected entities as removable chips, and an "add" dropdown of what's left.
@@ -112,10 +122,17 @@ export default function GovernanceFoundationPage() {
   // Foundation (Phase 1) is complete when the *saved* program has scope,
   // at least one principle, and an operating model — the same three checks the
   // backend uses. Computed off the saved program so it matches what the server
-  // will accept (unsaved edits don't count until saved).
+  // will accept (unsaved edits don't count until saved). "Scope defined" now
+  // means at least one governed entity is selected (legacy free-text still
+  // counts for programs authored before the structured picker).
   const foundationComplete = !!(
     program
-    && (program.scope?.inScope || '').trim().length > 0
+    && (
+      (program.scope?.systemIds?.length || 0) > 0
+      || (program.scope?.domainIds?.length || 0) > 0
+      || (program.scope?.valueStreamIds?.length || 0) > 0
+      || (program.scope?.inScope || '').trim().length > 0
+    )
     && (program.principles?.principles || []).length > 0
     && (program.principles?.operatingModel || '') !== ''
   );
@@ -254,9 +271,37 @@ export default function GovernanceFoundationPage() {
       <PageHeader
         title="Foundation"
         subtitle="Define your governance program's scope, guiding principles, and operating model — the Phase 1 groundwork the rest of the program builds on."
-      >
-        <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>&larr; Set up Procela</Link>
-      </PageHeader>
+        actions={program ? (
+          <>
+            <StatusBadge
+              variant={STATUS_META[program.status].variant}
+              size="md"
+              title={program.launchedAt && program.status !== 'PLANNING'
+                ? `Launched ${new Date(program.launchedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
+                : undefined}
+            >{STATUS_META[program.status].label}</StatusBadge>
+            {program.status === 'PLANNING' ? (
+              <Button
+                variant="primary"
+                disabled={!isAdmin || launching || !foundationComplete}
+                title={!isAdmin ? 'Only an admin / program owner can launch the program'
+                  : !foundationComplete ? 'Complete the Foundation — scope (at least one governed entity), one guiding principle, and an operating model — and save, before launching.'
+                  : 'Foundation is the prerequisite. Structure, roles, and policies can follow — launching with those still incomplete asks you to confirm, recorded in the audit log.'}
+                onClick={() => launchProgram()}
+              >{launching ? 'Launching…' : 'Launch program'}</Button>
+            ) : (
+              <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>Manage lifecycle &rarr;</Link>
+            )}
+          </>
+        ) : (
+          <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>&larr; Set up Procela</Link>
+        )}
+      />
+      {program && program.status === 'PLANNING' && !foundationComplete && (
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 12, lineHeight: 1.4 }}>
+          Complete the Foundation below — pick at least one governed entity, add a guiding principle, and select an operating model — then save to enable launch.
+        </div>
+      )}
 
       {loading && <Card padding={24} shadow="none"><Spinner center label="Loading…" /></Card>}
 
@@ -282,25 +327,30 @@ export default function GovernanceFoundationPage() {
           </div>
 
           {activeTab === 'scope' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>In Scope</label><textarea aria-label="In Scope" style={textareaStyle} value={inScope} onChange={(e) => setInScope(e.target.value)} placeholder="What data, systems, and processes are governed by this program?" /></div>
-              <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Out of Scope</label><textarea aria-label="Out of Scope" style={textareaStyle} value={outOfScope} onChange={(e) => setOutOfScope(e.target.value)} placeholder="What is explicitly excluded from this program?" /></div>
-              <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries &amp; Constraints</label><textarea aria-label="Boundaries & Constraints" style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational / geographic / functional boundaries, plus budget, timeline, regulatory or resource constraints to respect" /></div>
-
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
               {/* Structured scope — pick the catalogued entities this program
-                  governs. Complements the free-text "In Scope" above (which
-                  still covers anything not yet in the catalog) and turns scope
-                  into references the rest of the platform can read. */}
-              <div style={{ gridColumn: '1 / -1', marginTop: 4, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+                  governs. This IS the program's scope: selecting the systems,
+                  data domains, and value streams here is what marks Phase 1's
+                  "Scope defined" complete (the old free-text In / Out of Scope
+                  boxes duplicated this and were removed). */}
+              <div>
                 <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Governed entities</div>
                 <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-                  Select the systems, data domains, and value streams this program governs, straight from your catalog.
+                  Select the systems, data domains, and value streams this program governs, straight from your catalog. This defines what's in scope.
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
                   <ScopeSelector label="Systems" items={systems} selectedIds={systemIds} onChange={setSystemIds} />
                   <ScopeSelector label="Data Domains" items={domains} selectedIds={domainIds} onChange={setDomainIds} />
                   <ScopeSelector label="Value Streams" items={valueStreams} selectedIds={valueStreamIds} onChange={setValueStreamIds} />
                 </div>
+              </div>
+
+              <div style={{ paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries &amp; Constraints</label>
+                <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 6 }}>
+                  Guardrails the program operates within — distinct from what's in scope above.
+                </div>
+                <textarea aria-label="Boundaries & Constraints" style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational / geographic / functional boundaries, plus budget, timeline, regulatory or resource constraints to respect" />
               </div>
             </div>
           )}
@@ -354,43 +404,6 @@ export default function GovernanceFoundationPage() {
             </div>
           )}
         </Card>
-      )}
-
-      {/* Launch — Foundation is the prerequisite, so you can launch right here
-          once it's complete. Later lifecycle changes live on Get Started. */}
-      {program && program.status === 'PLANNING' && (
-        <div style={{ marginTop: 16 }}>
-          <Card padding={20}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 220 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>Launch the governance program</div>
-                <div style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-                  Foundation is the prerequisite. Structure, roles, and policies can follow — launching with those still incomplete asks you to confirm an early launch, recorded in the audit log.
-                </div>
-              </div>
-              <Button
-                variant="primary"
-                disabled={!isAdmin || launching || !foundationComplete}
-                title={!isAdmin ? 'Only an admin / program owner can launch the program'
-                  : !foundationComplete ? 'Complete the Foundation — scope, at least one guiding principle, and an operating model — and save, before launching.'
-                  : undefined}
-                onClick={() => launchProgram()}
-              >{launching ? 'Launching…' : 'Launch program'}</Button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {program && program.status !== 'PLANNING' && (
-        <div style={{ marginTop: 16 }}>
-          <Card padding={16}>
-            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-              Program is <strong style={{ color: 'var(--color-text)' }}>{program.status.charAt(0) + program.status.slice(1).toLowerCase()}</strong>
-              {program.launchedAt && <> · launched {new Date(program.launchedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</>}
-              . Manage the lifecycle on <Link to="/setup" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Set up Procela</Link>.
-            </div>
-          </Card>
-        </div>
       )}
 
       {/* Early-launch confirmation — phases 2–4 incomplete; the backend returned
