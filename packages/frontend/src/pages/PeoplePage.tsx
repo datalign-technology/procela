@@ -118,6 +118,14 @@ const DAMA_ROLE_LABELS: Record<string, string> = {
 
 // ── Styles ──
 
+// People rows carry a single line of content (name + avatar), so with the
+// shared 10px cell padding they render shorter than the two-line Agents rows.
+// Bump the vertical padding on the data-row cells so a People row matches an
+// Agents row height (~56px), keeping the two person/agent lists visually
+// aligned. Local to this table — the shared `tdStyle` (18 other pages) is
+// untouched.
+const personRowTd: React.CSSProperties = { ...tdStyle, paddingTop: 15, paddingBottom: 15 };
+
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
@@ -1118,10 +1126,10 @@ export default function PeoplePage() {
                         <tr key={person.id} id={`row-${person.id}`} style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '' }}
                           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
                           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                          <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                          <td style={{ ...personRowTd, textAlign: 'center', width: 32 }}>
                             <input type="checkbox" checked={isSelected} onChange={() => sel.toggle(person.id)} />
                           </td>
-                          <td style={{ ...tdStyle, fontWeight: 500 }}>
+                          <td style={{ ...personRowTd, fontWeight: 500 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <Avatar name={person.name} />
                               <span
@@ -1135,21 +1143,21 @@ export default function PeoplePage() {
                               )}
                             </div>
                           </td>
-                          <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
-                          <td style={tdStyle}>
+                          <td style={personRowTd}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
+                          <td style={personRowTd}>
                             {govText ? (
                               <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: 4 }}>{govText}</span>
                             ) : (
                               <span style={{ color: 'var(--color-text-muted)' }}>--</span>
                             )}
                           </td>
-                          <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                          <td style={personRowTd}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                           {selectedOrgId && (
-                            <td style={tdStyle}>
+                            <td style={personRowTd}>
                               <SkillGapBadge gap={skillCoverageByPerson[person.id]} />
                             </td>
                           )}
-                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <td style={{ ...personRowTd, textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                               <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => navigate(`/people/${person.id}`)} />
                               <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />
