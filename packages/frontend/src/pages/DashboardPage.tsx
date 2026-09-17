@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { X, ArrowLeftRight, ListTree, Database, CheckCircle2, Users, TrendingUp, Check, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Check, ChevronUp, ChevronDown } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
-import ActivityFeed from '../components/ActivityFeed';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
@@ -16,20 +15,23 @@ import Meter from '../components/Meter';
 import ProgressRing from '../components/ProgressRing';
 import Gauge from '../components/Gauge';
 import Donut from '../components/Donut';
-import MiniBarChart from '../components/MiniBarChart';
 import Sparkline from '../components/Sparkline';
 import { useTierLabel } from '../lib/governanceTier';
 import { useNavigate } from 'react-router-dom';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
-import SkillGapsWidget from '../components/SkillGapsWidget';
 import { useDomainLens } from '../stores/domainLensStore';
 import { useAuthStore } from '../stores/authStore';
 import { useAiEnabled } from '../stores/aiConfigStore';
 import { usePolling } from '../hooks/usePolling';
 
 interface DashboardStats {
+  /** Total process-hierarchy nodes across every level (value stream →
+   *  activity). The authoritative catalog-size count — individual
+   *  per-level fields below are a subset and some levels (sub-process)
+   *  are only exposed via byLevel, so prefer this for a node total. */
+  totalNodes?: number;
   valueStreams: number;
   processes: number;
   subProcesses: number;
@@ -443,24 +445,79 @@ function GovernancePosture({ stats }: { stats: DashboardStats }) {
   );
 }
 
-// ── Catalog Shape — magnitude of each process level ──
+// ── Catalog Coverage — how complete the catalog is, not how big it is ──
+//
+// Raw level counts (value streams / processes / …) duplicated the Overview
+// KPI strip and only ever climbed, so they carried little signal. This view
+// keeps the catalog framing but answers "how governed is what we've built?":
+// each dimension is covered-of-total, with a per-row proportional bar (its
+// own denominator) so a short bar always means real work remaining — unlike
+// a magnitude chart where the longest bar is just the biggest number. Rows
+// whose total is zero (nothing to cover yet) are dropped rather than shown
+// at a misleading 0%.
 function CatalogShape({ stats }: { stats: DashboardStats }) {
   const navigate = useNavigate();
+  const processNodes = stats.totalNodes ?? (stats.valueStreams + stats.processes + stats.activities);
+  const governedAssets = stats.governance.silver + stats.governance.gold;
+  const mappedTotal = stats.coverage.mapped + stats.coverage.unmapped;
+
   const rows = [
-    { label: 'Value Streams', value: stats.valueStreams, to: '/processes' },
-    { label: 'Processes', value: stats.processes, to: '/processes' },
-    { label: 'Sub-processes', value: stats.subProcesses, to: '/processes' },
-    { label: 'Activities', value: stats.activities, to: '/processes' },
-  ];
-  const total = rows.reduce((s, r) => s + r.value, 0);
+    {
+      label: 'Data mapping',
+      covered: stats.coverage.mapped,
+      total: mappedTotal,
+      hint: 'Activities linked to a data asset',
+      to: '/mappings',
+    },
+    {
+      label: 'Asset governance',
+      covered: governedAssets,
+      total: stats.dataAssets,
+      hint: 'Assets at Managed or Certified tier',
+      to: '/data-assets',
+    },
+    {
+      label: 'Ownership',
+      covered: Math.max(0, processNodes - stats.gaps.ownerlessItems),
+      total: processNodes,
+      hint: 'Catalog items with an assigned owner',
+      to: '/processes',
+    },
+  ].filter((r) => r.total > 0);
+
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Catalog Shape" />
+      <SectionHeading title="Catalog Coverage" />
       <Card padding="16px 20px">
-        {total === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No processes defined yet.</div>
+        {rows.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Nothing to cover yet — define processes and data assets to start tracking coverage.</div>
         ) : (
-          <MiniBarChart rows={rows} onRowClick={(to) => { if (to) navigate(to); }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {rows.map((r) => {
+              const pct = r.total > 0 ? Math.round((r.covered / r.total) * 100) : 0;
+              return (
+                <button
+                  key={r.label}
+                  type="button"
+                  onClick={() => navigate(r.to)}
+                  title={r.hint}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>{r.label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                      {r.covered} / {r.total}
+                      <span style={{ color: healthColorVar(pct), fontWeight: 600, marginLeft: 8 }}>{pct}%</span>
+                    </span>
+                  </div>
+                  <Meter value={pct} height={5} color={healthColorVar(pct)} />
+                </button>
+              );
+            })}
+          </div>
         )}
       </Card>
     </div>
@@ -551,7 +608,7 @@ function DashboardTrends({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity' | 'skillGaps';
+type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape' | 'quickActions';
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard       — personal, act-now (your overdue tasks / critical issues)
@@ -560,27 +617,23 @@ type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 
 //   4. trends            — direction over time (are the numbers improving?)
 //   5. gaps              — concrete problems to fix   ┐ narrow pair
 //   6. programMaturity   — where we are in the journey ┘
-//   7. skillGaps         — supporting analytic ┐ narrow pair
-//   8. catalogShape      — supporting analytic ┘
-//   9. stewardOnboarding — supporting (lone narrow → fills its own row)
-//  10. whatsNext         — recommended next steps (the call to action)
-//  11. quickActions      — navigation shortcuts (utility)
-//  12. recentActivity    — the audit feed (least glanceable, bottom)
-// The five narrow analytical widgets (gaps → stewardOnboarding) stay
+//   7. catalogShape      — supporting analytic (Catalog Coverage)
+//   8. quickActions      — navigation shortcuts (utility)
+// The narrow analytical widgets (governancePosture → catalogShape) stay
 // contiguous so they pair two-up cleanly instead of stranding a lone card in a
 // masonry column; the surrounding full-width bands anchor the top and bottom.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'skillGaps', 'catalogShape', 'stewardOnboarding', 'whatsNext', 'quickActions', 'recentActivity'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'catalogShape', 'quickActions'];
 
 // ── Density: Simple vs Detailed ──
 // A first-time, non-technical visitor lands on twelve stacked analytical
 // bands (tier donut, gauges, sparkline trends, maturity ring, skill-gap
 // charts…) — a wall of data before they've done anything. "Simple" shows
-// only the four sections that answer "what do I do next?": the personal
-// act-now view, the headline KPI strip, the concrete gap list, and the
-// recommended next steps. "Detailed" is the full customizable dashboard.
+// only the sections that answer "what do I do next?": the personal
+// act-now view, the headline KPI strip, and the concrete gap list.
+// "Detailed" is the full customizable dashboard.
 // The choice is per-user and sticky; the default is decided by whether the
 // user has ever customized their layout (see useDashboardDensity).
-const ESSENTIAL_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'gaps', 'whatsNext'];
+const ESSENTIAL_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'gaps'];
 
 type DashboardDensity = 'simple' | 'detailed';
 
@@ -611,9 +664,8 @@ type SectionWidth = 'full' | 'half';
 // sections pack two-up so the page stays tight (less vertical scrolling).
 // The user can override any of these in Customize — this is only the
 // starting layout. Chosen to keep the wide surfaces (KPI strip, the personal
-// two-column body, What's Next cards, Quick-Action tiles, the activity feed)
-// full-bleed while the analytical widgets — including Governance Posture and
-// Trends — pair up.
+// two-column body, Quick-Action tiles) full-bleed while the analytical
+// widgets — including Governance Posture and Trends — pair up.
 const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
   overview: 'full',
@@ -621,12 +673,8 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   trends: 'half',
   gaps: 'half',
   programMaturity: 'half',
-  skillGaps: 'half',
   catalogShape: 'half',
-  stewardOnboarding: 'half',
-  whatsNext: 'full',
   quickActions: 'full',
-  recentActivity: 'full',
 };
 
 const SECTION_LABELS: Record<SectionKey, string> = {
@@ -636,12 +684,8 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   trends: 'Trends',
   programMaturity: 'Program Maturity',
   gaps: 'Governance Gaps',
-  catalogShape: 'Catalog Shape',
-  skillGaps: 'Skill Gaps',
-  whatsNext: "What's Next",
-  stewardOnboarding: 'Steward Onboarding',
+  catalogShape: 'Catalog Coverage',
   quickActions: 'Quick Actions',
-  recentActivity: 'Recent Activity',
 };
 
 interface StoredLayout { order: string[]; hidden: string[]; width?: Record<string, SectionWidth> }
@@ -830,141 +874,6 @@ function QuickActions() {
 }
 
 
-function WhatsNext({ stats }: { stats: DashboardStats }) {
-  const aiEnabled = useAiEnabled();
-  // Build suggestions based on current state
-  const suggestions: Array<{ icon: React.ReactNode; title: string; description: string; link: string }> = [];
-
-  const sIcon = { size: 20, strokeWidth: 1.8 } as const;
-
-  // Phase 1: No processes yet
-  if (stats.valueStreams === 0) {
-    suggestions.push({
-      icon: <ListTree {...sIcon} />,
-      title: 'Define your first value stream',
-      description: aiEnabled
-        ? 'Start by mapping out how your organization delivers value. Use the AI wizard to generate a process hierarchy from your industry.'
-        : 'Start by mapping out how your organization delivers value in the Process Catalog.',
-      link: aiEnabled ? '/processes/wizard' : '/processes',
-    });
-  }
-
-  // Phase 2: Processes exist but no data assets
-  if (stats.valueStreams > 0 && stats.dataAssets === 0) {
-    suggestions.push({
-      icon: <Database {...sIcon} />,
-      title: 'Register your data assets',
-      description: `You have ${stats.valueStreams} value stream${stats.valueStreams > 1 ? 's' : ''} defined. Now describe the data your processes depend on.`,
-      link: '/data-assets',
-    });
-  }
-
-  // Phase 3: Assets exist but no mappings
-  if (stats.dataAssets > 0 && stats.mappings === 0) {
-    suggestions.push({
-      icon: <ArrowLeftRight size={20} strokeWidth={1.8} />,
-      title: 'Map data to processes',
-      description: `You have ${stats.dataAssets} data asset${stats.dataAssets > 1 ? 's' : ''} but none are linked to process activities. Data Mapping reveals dependencies and gaps.`,
-      link: '/mappings',
-    });
-  }
-
-  // (Low-coverage guidance intentionally lives only in the "Governance
-  // Gaps" section — its "Unmapped activities" row is the canonical
-  // place for that. A duplicate "Improve coverage" card here said the
-  // same thing twice in adjacent sections.)
-
-  // Phase 5: Low health
-  if (stats.dataAssets > 0 && stats.averageHealth < 80) {
-    suggestions.push({
-      icon: <CheckCircle2 {...sIcon} />,
-      title: 'Improve data quality',
-      description: `Average health is ${stats.averageHealth}%. Add quality rules to your data assets to identify and fix issues.`,
-      link: '/data-quality',
-    });
-  }
-
-  // Phase 6: No people assigned
-  if (stats.people === 0 && stats.valueStreams > 0) {
-    suggestions.push({
-      icon: <Users {...sIcon} />,
-      title: 'Add your team',
-      description: 'Assign owners and stewards to your processes and data assets so everyone knows who is responsible.',
-      link: '/people',
-    });
-  }
-
-  // Phase 7: catalogue is dominated by uncertified (BRONZE-tier) assets
-  if (stats.governance.bronze > 0 && stats.governance.gold === 0) {
-    suggestions.push({
-      icon: <TrendingUp {...sIcon} />,
-      title: 'Elevate governance tiers',
-      description: `All ${stats.governance.bronze} data assets are Uncertified. Promote them to Managed or Certified as you define ownership and quality rules.`,
-      link: '/data-assets',
-    });
-  }
-
-  // Limit to 3 suggestions
-  const shown = suggestions.slice(0, 3);
-
-  if (shown.length === 0) {
-    // Empty state instead of hiding — no recommendations means the org is in
-    // good shape, which is worth saying rather than showing nothing.
-    return (
-      <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="What's Next" />
-        <Card padding="16px 20px">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-            <CheckCircle2 size={18} strokeWidth={1.8} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
-            You&rsquo;re all caught up — no recommended next steps right now.
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="What's Next" />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {shown.map((s) => (
-          <Link key={s.link} to={s.link} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '12px 16px',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            textDecoration: 'none', color: 'var(--color-text)',
-            transition: 'border-color 0.15s',
-          }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-          >
-            <span style={{ fontSize: 20, flexShrink: 0 }}>{s.icon}</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{s.title}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{s.description}</div>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Legacy Dashboard widget; now a thin wrapper around the shared
- *  ActivityFeed so org-wide recent activity, per-entity timelines, and
- *  the "what I did" feed all share rendering, enrichment, and timestamp
- *  behaviour. */
-function RecentActivity() {
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Recent Activity" right={<Link to="/audit-log" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View full audit log →</Link>} />
-      <ActivityFeed inline />
-    </div>
-  );
-}
-
 interface ProgramPhase { name: string; completed: boolean; progress: number }
 interface ProgramStatus {
   currentPhase: number;
@@ -1007,9 +916,12 @@ function ProgramMaturity() {
         {/* Header — overall progress + the current phase. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
           <ProgressRing percent={status.overallProgress} size={48} stroke={5} showLabel />
+          {/* Label the ring by what it measures (overall %), with the current
+              phase as a subtitle — otherwise the big number reads as the
+              progress of the phase named beside it. */}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>Phase {status.currentPhase}: {phaseNames[status.currentPhase]}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Overall program progress</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Overall program progress</div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Currently in Phase {status.currentPhase}: {phaseNames[status.currentPhase]}</div>
           </div>
         </div>
 
@@ -1044,68 +956,6 @@ function ProgramMaturity() {
 
         <Link to="/setup" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 10, display: 'inline-block', flexShrink: 0 }}>
           View full program →
-        </Link>
-      </Card>
-    </div>
-  );
-}
-
-function StewardOnboarding() {
-  const { activeOrgId } = useOrgContext();
-  const [data, setData] = useState<{ total: number; completed: number; overdue: number } | null>(null);
-
-  useEffect(() => {
-    if (!activeOrgId) { setData(null); return; }
-    (async () => {
-      try {
-        interface StewardTask { linkedObjectType?: string; status?: string; dueDate?: string }
-        const tasksRes = await apiClient.get<{ success: boolean; data: StewardTask[] }>(`/governance-tasks?orgId=${activeOrgId}&taskType=STEWARDSHIP`);
-        const tasks = tasksRes.data || [];
-        const onboarding = tasks.filter((t) => t.linkedObjectType === 'DamaRole');
-        const completed = onboarding.filter((t) => t.status === 'COMPLETED').length;
-        const overdue = onboarding.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate) < new Date()).length;
-        setData({ total: onboarding.length, completed, overdue });
-      } catch { /* */ }
-    })();
-  }, [activeOrgId]);
-
-  if (!data) return null; // still loading / failed — stay quiet to avoid a flash
-  if (data.total === 0) {
-    // Empty state instead of hiding once we know there are no onboarding tasks.
-    return (
-      <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="Steward Onboarding" />
-        <Card padding="16px 20px">
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-            No stewardship onboarding tasks yet. Assign data stewards to domains and assets, and
-            their onboarding progress will appear here.
-            <div style={{ marginTop: 8 }}>
-              <Link to="/governance-work?tab=tasks" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View stewardship tasks &rarr;</Link>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  const rate = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Steward Onboarding" />
-      <Card padding="16px 20px">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{rate}% complete</span>
-          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{data.completed} of {data.total} tasks</span>
-        </div>
-        <Meter value={rate} height={8} color={rate === 100 ? 'var(--color-success)' : 'var(--color-primary)'} />
-        {data.overdue > 0 && (
-          <div style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 6 }}>
-            {data.overdue} overdue task{data.overdue !== 1 ? 's' : ''}
-          </div>
-        )}
-        <Link to="/governance-work?tab=tasks" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 6, display: 'inline-block' }}>
-          View all stewardship tasks
         </Link>
       </Card>
     </div>
@@ -1271,11 +1121,7 @@ export default function DashboardPage() {
     programMaturity: <ProgramMaturity />,
     gaps: <GapsOverview stats={stats} />,
     catalogShape: <CatalogShape stats={stats} />,
-    skillGaps: <SkillGapsWidget />,
-    whatsNext: <WhatsNext stats={stats} />,
-    stewardOnboarding: <StewardOnboarding />,
     quickActions: <QuickActions />,
-    recentActivity: <RecentActivity />,
   };
 
   return (
