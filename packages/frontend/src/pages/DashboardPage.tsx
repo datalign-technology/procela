@@ -16,7 +16,6 @@ import Meter from '../components/Meter';
 import ProgressRing from '../components/ProgressRing';
 import Gauge from '../components/Gauge';
 import Donut from '../components/Donut';
-import MiniBarChart from '../components/MiniBarChart';
 import Sparkline from '../components/Sparkline';
 import { useTierLabel } from '../lib/governanceTier';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +29,11 @@ import { useAiEnabled } from '../stores/aiConfigStore';
 import { usePolling } from '../hooks/usePolling';
 
 interface DashboardStats {
+  /** Total process-hierarchy nodes across every level (value stream →
+   *  activity). The authoritative catalog-size count — individual
+   *  per-level fields below are a subset and some levels (sub-process)
+   *  are only exposed via byLevel, so prefer this for a node total. */
+  totalNodes?: number;
   valueStreams: number;
   processes: number;
   subProcesses: number;
@@ -443,24 +447,79 @@ function GovernancePosture({ stats }: { stats: DashboardStats }) {
   );
 }
 
-// ── Catalog Shape — magnitude of each process level ──
+// ── Catalog Coverage — how complete the catalog is, not how big it is ──
+//
+// Raw level counts (value streams / processes / …) duplicated the Overview
+// KPI strip and only ever climbed, so they carried little signal. This view
+// keeps the catalog framing but answers "how governed is what we've built?":
+// each dimension is covered-of-total, with a per-row proportional bar (its
+// own denominator) so a short bar always means real work remaining — unlike
+// a magnitude chart where the longest bar is just the biggest number. Rows
+// whose total is zero (nothing to cover yet) are dropped rather than shown
+// at a misleading 0%.
 function CatalogShape({ stats }: { stats: DashboardStats }) {
   const navigate = useNavigate();
+  const processNodes = stats.totalNodes ?? (stats.valueStreams + stats.processes + stats.activities);
+  const governedAssets = stats.governance.silver + stats.governance.gold;
+  const mappedTotal = stats.coverage.mapped + stats.coverage.unmapped;
+
   const rows = [
-    { label: 'Value Streams', value: stats.valueStreams, to: '/processes' },
-    { label: 'Processes', value: stats.processes, to: '/processes' },
-    { label: 'Sub-processes', value: stats.subProcesses, to: '/processes' },
-    { label: 'Activities', value: stats.activities, to: '/processes' },
-  ];
-  const total = rows.reduce((s, r) => s + r.value, 0);
+    {
+      label: 'Data mapping',
+      covered: stats.coverage.mapped,
+      total: mappedTotal,
+      hint: 'Activities linked to a data asset',
+      to: '/mappings',
+    },
+    {
+      label: 'Asset governance',
+      covered: governedAssets,
+      total: stats.dataAssets,
+      hint: 'Assets at Managed or Certified tier',
+      to: '/data-assets',
+    },
+    {
+      label: 'Ownership',
+      covered: Math.max(0, processNodes - stats.gaps.ownerlessItems),
+      total: processNodes,
+      hint: 'Catalog items with an assigned owner',
+      to: '/processes',
+    },
+  ].filter((r) => r.total > 0);
+
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Catalog Shape" />
+      <SectionHeading title="Catalog Coverage" />
       <Card padding="16px 20px">
-        {total === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No processes defined yet.</div>
+        {rows.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Nothing to cover yet — define processes and data assets to start tracking coverage.</div>
         ) : (
-          <MiniBarChart rows={rows} onRowClick={(to) => { if (to) navigate(to); }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {rows.map((r) => {
+              const pct = r.total > 0 ? Math.round((r.covered / r.total) * 100) : 0;
+              return (
+                <button
+                  key={r.label}
+                  type="button"
+                  onClick={() => navigate(r.to)}
+                  title={r.hint}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>{r.label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                      {r.covered} / {r.total}
+                      <span style={{ color: healthColorVar(pct), fontWeight: 600, marginLeft: 8 }}>{pct}%</span>
+                    </span>
+                  </div>
+                  <Meter value={pct} height={5} color={healthColorVar(pct)} />
+                </button>
+              );
+            })}
+          </div>
         )}
       </Card>
     </div>
@@ -636,7 +695,7 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   trends: 'Trends',
   programMaturity: 'Program Maturity',
   gaps: 'Governance Gaps',
-  catalogShape: 'Catalog Shape',
+  catalogShape: 'Catalog Coverage',
   skillGaps: 'Skill Gaps',
   whatsNext: "What's Next",
   stewardOnboarding: 'Steward Onboarding',
