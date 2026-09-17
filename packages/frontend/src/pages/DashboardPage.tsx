@@ -965,27 +965,31 @@ function RecentActivity() {
   );
 }
 
-interface ProgramStatus { currentPhase: number; overallProgress: number; }
-interface ProgramRecommendation { action: string; link: string; priority: string; }
+interface ProgramPhase { name: string; completed: boolean; progress: number }
+interface ProgramStatus {
+  currentPhase: number;
+  overallProgress: number;
+  phases?: { phase1?: ProgramPhase; phase2?: ProgramPhase; phase3?: ProgramPhase; phase4?: ProgramPhase };
+}
+
+// Fixed card-body height so the widget lines up with the Trends widget (the
+// dashboard half-grid uses align-items:start, so heights are content-driven —
+// this pins Program Maturity to the same height). Tuned to match Trends.
+const PROGRAM_MATURITY_BODY_HEIGHT = 184;
 
 function ProgramMaturity() {
   const { activeOrgId } = useOrgContext();
   const [status, setStatus] = useState<ProgramStatus | null>(null);
-  const [recommendations, setRecommendations] = useState<ProgramRecommendation[]>([]);
 
   useEffect(() => {
-    if (!activeOrgId) { setStatus(null); setRecommendations([]); return; }
+    if (!activeOrgId) { setStatus(null); return; }
     (async () => {
       try {
         const progRes = await apiClient.get<{ data: { id?: string } | null }>(`/governance-program?orgId=${activeOrgId}`);
         const prog = progRes.data;
         if (!prog?.id) return;
-        const [statusRes, recRes] = await Promise.all([
-          apiClient.get<{ data: ProgramStatus }>(`/governance-program/${prog.id}/status`),
-          apiClient.get<{ data: ProgramRecommendation[] }>(`/governance-program/${prog.id}/recommendations`),
-        ]);
+        const statusRes = await apiClient.get<{ data: ProgramStatus }>(`/governance-program/${prog.id}/status`);
         setStatus(statusRes.data);
-        setRecommendations(recRes.data || []);
       } catch { /* */ }
     })();
   }, [activeOrgId]);
@@ -993,31 +997,52 @@ function ProgramMaturity() {
   if (!status) return null;
 
   const phaseNames = ['', 'Foundation Definition', 'Structural Design', 'People & Processes', 'Operationalization'];
+  const phase = (n: number): ProgramPhase | undefined =>
+    (status.phases as Record<string, ProgramPhase | undefined> | undefined)?.[`phase${n}`];
 
   return (
     <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Program Maturity" />
-      <Card padding="16px 20px">
+      <Card padding="16px 20px" style={{ height: PROGRAM_MATURITY_BODY_HEIGHT, display: 'flex', flexDirection: 'column' }}>
+        {/* Header — overall progress + the current phase. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-          <ProgressRing percent={status.overallProgress} size={54} stroke={5} showLabel />
-          <div>
+          <ProgressRing percent={status.overallProgress} size={48} stroke={5} showLabel />
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 600 }}>Phase {status.currentPhase}: {phaseNames[status.currentPhase]}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Overall program progress</div>
           </div>
         </div>
-        {recommendations.length > 0 && (
-          <div>
-            <SectionLabel marginBottom={6}>Next steps to advance</SectionLabel>
-            {recommendations.slice(0, 3).map((r, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 12 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: r.priority === 'HIGH' ? 'var(--color-error)' : 'var(--color-warning)', flexShrink: 0 }} />
-                <span style={{ flex: 1 }}>{r.action}</span>
-                <Link to={r.link} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: 11, flexShrink: 0 }}>Go</Link>
+
+        {/* Every phase, not just the current one — each with its own progress. */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          {[1, 2, 3, 4].map((n) => {
+            const p = phase(n);
+            const name = p?.name || phaseNames[n];
+            const progress = p?.progress ?? 0;
+            const done = !!p?.completed;
+            const isCurrent = n === status.currentPhase;
+            return (
+              <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{
+                  width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                  display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700,
+                  background: done ? '#dcfce7' : isCurrent ? 'var(--color-primary-light)' : 'var(--color-bg)',
+                  color: done ? '#166534' : isCurrent ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  border: '1px solid ' + (done ? '#86efac' : isCurrent ? 'var(--color-primary)' : 'var(--color-border)'),
+                }}>{done ? '✓' : n}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: isCurrent ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{progress}%</span>
+                  </div>
+                  <Meter value={progress} height={4} style={{ marginTop: 3 }} />
+                </div>
               </div>
-            ))}
-          </div>
-        )}
-        <Link to="/setup" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 8, display: 'inline-block' }}>
+            );
+          })}
+        </div>
+
+        <Link to="/setup" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 10, display: 'inline-block', flexShrink: 0 }}>
           View full program →
         </Link>
       </Card>
