@@ -1066,9 +1066,12 @@ function ProgramMaturity() {
         {/* Header — overall progress + the current phase. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
           <ProgressRing percent={status.overallProgress} size={48} stroke={5} showLabel />
+          {/* Label the ring by what it measures (overall %), with the current
+              phase as a subtitle — otherwise the big number reads as the
+              progress of the phase named beside it. */}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>Phase {status.currentPhase}: {phaseNames[status.currentPhase]}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Overall program progress</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Overall program progress</div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Currently in Phase {status.currentPhase}: {phaseNames[status.currentPhase]}</div>
           </div>
         </div>
 

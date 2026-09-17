@@ -489,7 +489,11 @@ body[data-density="compact"] textarea {
   display: grid;
   grid-template-columns: 1fr;
   column-gap: 16px;
-  row-gap: 10px;
+  /* Match the 16px vertical rhythm full-width sections use (their
+     marginBottom) so a half-width section stacked below another — e.g.
+     Catalog Coverage under Program Maturity, or any pair on a narrow
+     single-column viewport — gets the same breathing room above it. */
+  row-gap: 16px;
   align-items: start;
 }
 @media (min-width: 700px) {
