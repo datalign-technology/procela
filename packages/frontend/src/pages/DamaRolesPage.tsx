@@ -656,6 +656,23 @@ export default function DamaRolesPage({
                       <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
                     ))}
                   </optgroup>
+                  {/* Entity-attached roles (Data Owner, stewards, custodians,
+                      architect, …) belong here too. Without this optgroup a
+                      "+ Assign" on any of those rows pre-selected a roleType the
+                      dropdown had no <option> for, so it silently displayed the
+                      first option (Chief Data Officer) instead of the chosen role. */}
+                  <optgroup label="Entity-attached">
+                    {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Entity-attached').map((rt) => (
+                      <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
+                    ))}
+                  </optgroup>
+                  {/* Anything without a known category still needs to be
+                      selectable, so it can't fall through to a wrong default. */}
+                  <optgroup label="Other">
+                    {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => !CATEGORY_ORDER.includes(ROLE_CATEGORIES[rt] as any)).map((rt) => (
+                      <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
+                    ))}
+                  </optgroup>
                 </select>
               )}
             </div>
