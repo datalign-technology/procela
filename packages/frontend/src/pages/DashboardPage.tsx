@@ -87,8 +87,11 @@ const cardStyle: React.CSSProperties = {
 
 interface MyTask { id: string; title: string; isOverdue?: boolean; priority: string; dueDate?: string; status: string; }
 interface MyIssue { id: string; title: string; severity: string; status: string; domainName?: string; }
-interface MyReview { id: string; name: string; isOverdue?: boolean; }
+interface MyReview { id: string; name: string; isOverdue?: boolean; nextReviewDate?: string | null; }
 interface MyEvent { name: string; daysAway: number; }
+// Unified time-ordered entry for My Schedule — a calendar event, a task due
+// date, or a policy review due date, all reduced to "what & when".
+interface ScheduleItem { id: string; kind: 'event' | 'task' | 'review'; name: string; daysAway: number; to: string; }
 interface MyDomain { id: string; name: string; relation: string; assetCount: number; totalAssets: number; healthyAssets: number; }
 interface MyDashboardData {
   person?: { name: string };
@@ -128,13 +131,24 @@ function AttentionGlyph() {
   );
 }
 
-// Bucket upcoming events into a calendar-style grouping so My Schedule reads
-// as "when", not a flat list. Empty buckets are dropped.
-function bucketUpcomingEvents(events: MyEvent[]): Array<{ label: string; items: MyEvent[] }> {
+// Whole-days from today to a YYYY-MM-DD date string (negative = past).
+// Used to place task/review due dates on the same daysAway axis as the
+// server-computed calendar-event offsets.
+function daysUntilDate(dateStr: string): number {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return Infinity;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
+}
+
+// Bucket any daysAway-bearing items into a calendar-style grouping so My
+// Schedule reads as "when", not a flat list. Empty buckets are dropped.
+function bucketByDaysAway<T extends { daysAway: number }>(items: T[]): Array<{ label: string; items: T[] }> {
   return [
-    { label: 'Today', items: events.filter((e) => e.daysAway <= 0) },
-    { label: 'This week', items: events.filter((e) => e.daysAway >= 1 && e.daysAway <= 6) },
-    { label: 'Later', items: events.filter((e) => e.daysAway >= 7) },
+    { label: 'Today', items: items.filter((e) => e.daysAway <= 0) },
+    { label: 'This week', items: items.filter((e) => e.daysAway >= 1 && e.daysAway <= 6) },
+    { label: 'Later', items: items.filter((e) => e.daysAway >= 7) },
   ].filter((g) => g.items.length > 0);
 }
 
@@ -183,14 +197,35 @@ function MyDashboard() {
 
   const s = data.summary || {};
 
-  // Needs-My-Attention queue: overdue tasks, critical issues, due reviews.
+  // Needs-My-Attention queue (the "now" side): things that are late or at
+  // risk right now — overdue tasks, critical issues, overdue policy reviews,
+  // and domains I own/steward that have slipped below the 80%-healthy bar.
+  // Reviews that are merely *upcoming* (not yet overdue) belong to Schedule,
+  // not here, so the two panels never show the same review twice.
   // urgentShown mirrors the per-source slice caps below so the "+N more"
   // footer only appears when the queue genuinely runs past what's rendered.
   const overdueTasks = (data.myTasks || []).filter((t) => t.isOverdue);
   const criticalIssues = (data.myIssues || []).filter((i) => i.severity === 'CRITICAL');
-  const pendingReviews = data.pendingReviews || [];
-  const urgentTotal = overdueTasks.length + criticalIssues.length + pendingReviews.length;
-  const urgentShown = Math.min(overdueTasks.length, 3) + Math.min(criticalIssues.length, 3) + Math.min(pendingReviews.length, 3);
+  const overdueReviews = (data.pendingReviews || []).filter((r) => r.isOverdue);
+  const atRiskDomains = (data.myDomains || []).filter((d) => d.totalAssets > 0 && d.healthyAssets / d.totalAssets < 0.8);
+  const urgentTotal = overdueTasks.length + criticalIssues.length + overdueReviews.length + atRiskDomains.length;
+  const urgentShown = Math.min(overdueTasks.length, 3) + Math.min(criticalIssues.length, 3)
+    + Math.min(overdueReviews.length, 3) + Math.min(atRiskDomains.length, 3);
+
+  // My Schedule (the "next" side): every future-dated thing within 14 days,
+  // on one axis — calendar events (server-dated), plus task and review due
+  // dates that aren't overdue (those are Attention's). Sorted soonest-first.
+  const scheduleItems: ScheduleItem[] = [
+    ...(data.upcomingEvents || []).map((e, i): ScheduleItem => ({ id: `event-${i}`, kind: 'event', name: e.name, daysAway: e.daysAway, to: '/governance-calendar' })),
+    ...(data.myTasks || [])
+      .filter((t) => t.dueDate && !t.isOverdue)
+      .map((t): ScheduleItem => ({ id: t.id, kind: 'task', name: t.title, daysAway: daysUntilDate(t.dueDate!), to: '/governance-work?tab=tasks' }))
+      .filter((t) => t.daysAway >= 0 && t.daysAway <= 14),
+    ...(data.pendingReviews || [])
+      .filter((r) => r.nextReviewDate && !r.isOverdue)
+      .map((r): ScheduleItem => ({ id: r.id, kind: 'review', name: r.name, daysAway: daysUntilDate(r.nextReviewDate!), to: '/governance-policies' }))
+      .filter((r) => r.daysAway >= 0 && r.daysAway <= 14),
+  ].sort((a, b) => a.daysAway - b.daysAway);
 
   const priorityColor = (p: string) => p === 'CRITICAL' ? '#dc2626' : p === 'HIGH' ? '#f59e0b' : p === 'MEDIUM' ? '#3b82f6' : '#64748b';
   const priorityBadge = (p: string): React.CSSProperties => ({
@@ -242,8 +277,9 @@ function MyDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, marginBottom: 16 }}>
         {/* Needs Attention — the act-now triage queue. A leading alert
             glyph (not just the amber rule) so it's told apart from Schedule
-            at a glance. Sources: overdue tasks, critical issues, due reviews;
-            each capped, with a "+N more" footer when the queue runs longer. */}
+            at a glance. Sources: overdue tasks, critical issues, overdue
+            reviews, at-risk domains; each capped, with a "+N more" footer
+            when the queue runs longer. */}
         <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-warning)' }}>
           <CardHeaderRow color="var(--color-warning)" icon={<AttentionGlyph />} label="Needs My Attention" />
           {urgentTotal === 0 ? (
@@ -262,12 +298,21 @@ function MyDashboard() {
                   <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
-              {pendingReviews.slice(0, 3).map((r) => (
+              {overdueReviews.slice(0, 3).map((r) => (
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: r.isOverdue ? 'var(--color-error)' : 'var(--color-warning)' }}>{r.isOverdue ? 'Overdue review' : 'Review due'}: {r.name}</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Overdue review: {r.name}</span>
                   <Link to="/governance-policies" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
+              {atRiskDomains.slice(0, 3).map((d) => {
+                const pct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
+                return (
+                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: 'var(--color-warning)' }}>Low health: {d.name} ({pct}% healthy)</span>
+                    <Link to="/data-domains" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
+                  </div>
+                );
+              })}
               {urgentTotal > urgentShown && (
                 <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 2 }}>
                   +{urgentTotal - urgentShown} more &rarr;
@@ -277,26 +322,34 @@ function MyDashboard() {
           )}
         </Card>
 
-        {/* My Schedule — the look-ahead, grouped into time buckets (Today /
-            This week / Later) so it reads as a calendar preview rather than a
-            flat list, and never mirrors the Attention queue beside it. */}
+        {/* My Schedule — the look-ahead. Calendar events, upcoming task due
+            dates and upcoming review dates on one time axis, grouped into
+            buckets (Today / This week / Later) so it reads as a calendar
+            preview rather than a flat list, and never mirrors the Attention
+            queue beside it. A muted kind tag distinguishes a task/review due
+            date from a meeting. */}
         <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-info)' }}>
           <CardHeaderRow color="var(--color-info)" icon={renderNavIcon('/governance-calendar', { size: 13 })} label="My Schedule" />
-          {(data.upcomingEvents || []).length === 0 ? (
+          {scheduleItems.length === 0 ? (
             <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Nothing scheduled in the next 14 days.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {bucketUpcomingEvents(data.upcomingEvents || []).map((g) => (
+              {bucketByDaysAway(scheduleItems).map((g) => (
                 <div key={g.label}>
                   <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 3 }}>{g.label}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {g.items.slice(0, 4).map((e, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <span style={{ fontSize: 12 }}>{e.name}</span>
-                        <span style={{ fontSize: 10, color: e.daysAway <= 0 ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: e.daysAway <= 0 ? 600 : 400 }}>
-                          {e.daysAway <= 0 ? 'Today' : e.daysAway === 1 ? 'Tomorrow' : `In ${e.daysAway} days`}
+                    {g.items.slice(0, 5).map((item) => (
+                      <Link key={item.id} to={item.to} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, textDecoration: 'none', color: 'var(--color-text)' }}>
+                        <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.kind !== 'event' && (
+                            <span style={{ color: 'var(--color-text-muted)' }}>{item.kind === 'task' ? 'Task' : 'Review'}: </span>
+                          )}
+                          {item.name}
                         </span>
-                      </div>
+                        <span style={{ fontSize: 10, color: item.daysAway <= 0 ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: item.daysAway <= 0 ? 600 : 400, flexShrink: 0 }}>
+                          {item.daysAway <= 0 ? 'Today' : item.daysAway === 1 ? 'Tomorrow' : `In ${item.daysAway} days`}
+                        </span>
+                      </Link>
                     ))}
                   </div>
                 </div>
