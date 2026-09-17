@@ -723,18 +723,21 @@ type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard       — personal, act-now (your overdue tasks / critical issues)
-//   2. overview          — the headline KPI strip, scannable at a glance
-//   3. governancePosture — the state-of-governance hero visual (tier donut + gauges)
-//   4. trends            — direction over time (are the numbers improving?)
-//   5. gaps              — concrete problems to fix   ┐ narrow pair
-//   6. programMaturity   — where we are in the journey ┘
-//   7. catalogShape      — supporting analytic (Catalog Coverage)
-// Quick actions are NOT a section — they render as a compact menu bar
+//   2. governancePosture — the state-of-governance hero visual (tier donut + gauges)
+//   3. trends            — direction over time (are the numbers improving?)
+//   4. gaps              — concrete problems to fix   ┐ narrow pair
+//   5. programMaturity   — where we are in the journey ┘
+//   6. catalogShape      — supporting analytic (Catalog Coverage)
+// The Overview KPI strip is NOT in the Detailed flow: its counts are inventory
+// and its stateful KPIs (coverage / avg health) are already carried, better,
+// by Governance Posture and Trends. It survives only as the orientation strip
+// in the Simple view (see ESSENTIAL_SECTIONS), which has neither of those.
+// Quick actions are NOT a section either — they render as a compact menu bar
 // pinned under the page header (see DashboardActionBar), not in this flow.
 // The narrow analytical widgets (governancePosture → catalogShape) stay
 // contiguous so they pair two-up cleanly instead of stranding a lone card in a
 // masonry column; the surrounding full-width bands anchor the top and bottom.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'catalogShape'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'catalogShape'];
 
 // ── Density: Simple vs Detailed ──
 // A first-time, non-technical visitor lands on twelve stacked analytical
