@@ -94,7 +94,7 @@ test.describe('Procela demo path', () => {
     // the org has data — an empty org shows the "Welcome to Procela" setup
     // card instead — so they prove the aggregated dashboard rendered.
     await expect(page.locator('body')).toContainText(/My Dashboard/i, { timeout: 10_000 });
-    await expect(page.locator('body')).toContainText(/Catalog Coverage/i, { timeout: 5_000 });
+    await expect(page.locator('body')).toContainText(/Governance Gaps/i, { timeout: 5_000 });
     await expect(page.locator('body')).toContainText(/Program Maturity/i, { timeout: 5_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });

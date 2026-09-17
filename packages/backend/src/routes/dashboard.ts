@@ -926,9 +926,10 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
     return;
   }
 
-  const [people, governanceTasks, governanceIssues, calendarEvents, governancePolicies, dataAssets, dataDomains] = await Promise.all([
+  const [people, governanceTasks, governanceIssues, calendarEvents, governancePolicies, dataAssets, dataDomains, mappingRows] = await Promise.all([
     peopleRepo.list(), governanceTasksRepo.list(), governanceIssuesRepo.list(),
     calendarEventsRepo.list(), governancePoliciesRepo.list(), dataAssetsRepo.list(), dataDomainsRepo.list(),
+    mappingsRepo.list(),
   ]);
 
   const person = people.find((p) => p.email?.toLowerCase() === email);
@@ -1027,6 +1028,11 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
   const myAssetIds = new Set<string>();
   for (const d of myDomainRows) for (const id of d.dataAssetIds) myAssetIds.add(id);
   const myAssets = dataAssets.filter((a) => myAssetIds.has(a.id));
+  // Assets referenced by at least one process→data mapping (same "linked"
+  // signal /stats uses) and assets with an accountable owner — the two
+  // coverage dimensions the personal "My Coverage" widget reports alongside
+  // governance tier.
+  const linkedAssetIds = new Set(mappingRows.filter((m) => !!m.dataAssetId).map((m) => m.dataAssetId!));
   const portfolio = {
     domains: myDomains.length,
     domainsOwned: myDomains.filter((d) => d.relation === 'owner').length,
@@ -1037,6 +1043,9 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
     // At-risk = my domains with assets but under 80% healthy — mirrors the
     // frontend's Attention "low health" threshold.
     atRiskDomains: myDomains.filter((d) => d.totalAssets > 0 && d.healthyAssets / d.totalAssets < 0.8).length,
+    // Coverage of my assets: mapped to an activity, and with an owner assigned.
+    mappedAssets: myAssets.filter((a) => linkedAssetIds.has(a.id)).length,
+    ownedAssets: myAssets.filter((a) => !!a.ownerPersonId).length,
     tiers: {
       gold: myAssets.filter((a) => a.governanceTier === 'GOLD').length,
       silver: myAssets.filter((a) => a.governanceTier === 'SILVER').length,
@@ -1237,6 +1246,65 @@ router.get('/trends', async (req: Request, res: Response) => {
     mappings: p.mappings,
   }));
   res.json({ success: true, data: { points, synthesized: true } });
+});
+
+/**
+ * GET /api/v1/dashboard/my-trends — a real weekly series of the signed-in
+ * person's open governance tasks, open issues, and overdue tasks over the
+ * last 10 weeks. Unlike the org /trends series (which snapshots), this is
+ * reconstructed from each record's createdAt + close timestamp, so it needs
+ * no per-user snapshotting: a record counts as open at week boundary W when
+ * it was created on/before W and either isn't closed or closed after W.
+ */
+router.get('/my-trends', async (req: AuthenticatedRequest, res: Response) => {
+  const email = (req.user?.email || '').toLowerCase();
+  const empty = { points: [] as Array<{ date: string; openTasks: number; openIssues: number; overdue: number }> };
+  if (!email) { res.json({ success: true, data: empty }); return; }
+
+  const [people, tasks, issues] = await Promise.all([
+    peopleRepo.list(), governanceTasksRepo.list(), governanceIssuesRepo.list(),
+  ]);
+  const person = people.find((p) => p.email?.toLowerCase() === email);
+  if (!person) { res.json({ success: true, data: empty }); return; }
+
+  const CLOSED_TASK = new Set(['COMPLETED', 'CANCELLED']);
+  const CLOSED_ISSUE = new Set(['CLOSED', 'RESOLVED', 'WONT_FIX']);
+  const myTasks = tasks.filter((t: StoredGovernanceTask) => t.assigneeId === person.id);
+  const myIssues = issues.filter((i: StoredGovernanceIssue) => i.assignedTo === person.id);
+
+  const parse = (s?: string | null): number | null => { const n = s ? Date.parse(s) : NaN; return isNaN(n) ? null : n; };
+  const taskOpenAt = (t: StoredGovernanceTask, ts: number): boolean => {
+    const created = parse(t.createdAt);
+    if (created === null || created > ts) return false;
+    if (!CLOSED_TASK.has(t.status)) return true;
+    const closed = parse(t.completedAt) ?? parse(t.updatedAt);
+    return closed === null ? false : closed > ts;
+  };
+  const issueOpenAt = (i: StoredGovernanceIssue, ts: number): boolean => {
+    const created = parse(i.createdAt);
+    if (created === null || created > ts) return false;
+    if (!CLOSED_ISSUE.has(i.status)) return true;
+    const closed = parse(i.closedAt) ?? parse(i.updatedAt);
+    return closed === null ? false : closed > ts;
+  };
+
+  const WEEKS = 10;
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const points = Array.from({ length: WEEKS }, (_, i) => {
+    const ts = now - (WEEKS - 1 - i) * weekMs;
+    return {
+      date: new Date(ts).toISOString(),
+      openTasks: myTasks.filter((t) => taskOpenAt(t, ts)).length,
+      openIssues: myIssues.filter((iss) => issueOpenAt(iss, ts)).length,
+      overdue: myTasks.filter((t) => {
+        if (!taskOpenAt(t, ts)) return false;
+        const due = parse(t.dueDate);
+        return due !== null && due < ts;
+      }).length,
+    };
+  });
+  res.json({ success: true, data: { points } });
 });
 
 export default router;

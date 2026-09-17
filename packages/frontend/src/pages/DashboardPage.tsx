@@ -96,6 +96,7 @@ interface MyDomain { id: string; name: string; relation: string; assetCount: num
 interface MyPortfolio {
   domains: number; domainsOwned: number; domainsSteward: number;
   assets: number; healthyAssets: number; avgHealth: number; atRiskDomains: number;
+  mappedAssets: number; ownedAssets: number;
   tiers: { gold: number; silver: number; bronze: number };
 }
 interface MyDashboardData {
@@ -573,133 +574,130 @@ function MyPortfolioHealth() {
 // a magnitude chart where the longest bar is just the biggest number. Rows
 // whose total is zero (nothing to cover yet) are dropped rather than shown
 // at a misleading 0%.
-function CatalogShape({ stats }: { stats: DashboardStats }) {
+// ── My Coverage — how governed the assets *I* own or steward are: data
+//    mapping, governance tier, and ownership, each covered-of-total for my
+//    portfolio (a you-scoped replacement for the org Catalog Coverage).
+//    Self-fetches /dashboard/my-dashboard for the `portfolio` aggregate. ──
+function MyCoverage() {
+  const { user } = useAuthStore();
   const navigate = useNavigate();
-  const processNodes = stats.totalNodes ?? (stats.valueStreams + stats.processes + stats.activities);
-  const governedAssets = stats.governance.silver + stats.governance.gold;
-  const mappedTotal = stats.coverage.mapped + stats.coverage.unmapped;
+  const [data, setData] = useState<MyDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    if (!user?.email) { setLoading(false); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>('/dashboard/my-dashboard');
+        setData(res.data);
+      } catch { /* */ } finally { setLoading(false); }
+    })();
+  }, [user?.email]);
+
+  if (loading) return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeading title="My Coverage" />
+      <Card padding={20}><SkeletonRows rows={3} columnWidths={[120, null, 60]} /></Card>
+    </div>
+  );
+
+  const p = data?.portfolio;
+  if (!data?.person || !p || p.assets === 0) {
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <SectionHeading title="My Coverage" />
+        <Card padding="16px 20px">
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            {!data?.person
+              ? 'Link your profile to track mapping, governance and ownership coverage of the assets you own.'
+              : 'No assets in your domains yet — their mapping, governance and ownership coverage will show up here.'}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const governed = p.tiers.silver + p.tiers.gold;
   const rows = [
-    {
-      label: 'Data mapping',
-      covered: stats.coverage.mapped,
-      total: mappedTotal,
-      hint: 'Activities linked to a data asset',
-      to: '/mappings',
-    },
-    {
-      label: 'Asset governance',
-      covered: governedAssets,
-      total: stats.dataAssets,
-      hint: 'Assets at Managed or Certified tier',
-      to: '/data-assets',
-    },
-    {
-      label: 'Ownership',
-      covered: Math.max(0, processNodes - stats.gaps.ownerlessItems),
-      total: processNodes,
-      hint: 'Catalog items with an assigned owner',
-      to: '/processes',
-    },
-  ].filter((r) => r.total > 0);
+    { label: 'Data mapping', covered: p.mappedAssets, total: p.assets, hint: 'My assets linked to a process activity', to: '/mappings' },
+    { label: 'Asset governance', covered: governed, total: p.assets, hint: 'My assets at Managed or Certified tier', to: '/data-assets' },
+    { label: 'Ownership', covered: p.ownedAssets, total: p.assets, hint: 'My assets with an accountable owner', to: '/data-assets' },
+  ];
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Catalog Coverage" />
+      <SectionHeading title="My Coverage" />
       <Card padding="16px 20px">
-        {rows.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Nothing to cover yet — define processes and data assets to start tracking coverage.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {rows.map((r) => {
-              const pct = r.total > 0 ? Math.round((r.covered / r.total) * 100) : 0;
-              return (
-                <button
-                  key={r.label}
-                  type="button"
-                  onClick={() => navigate(r.to)}
-                  title={r.hint}
-                  style={{
-                    display: 'block', width: '100%', textAlign: 'left',
-                    background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>{r.label}</span>
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                      {r.covered} / {r.total}
-                      <span style={{ color: healthColorVar(pct), fontWeight: 600, marginLeft: 8 }}>{pct}%</span>
-                    </span>
-                  </div>
-                  <Meter value={pct} height={5} color={healthColorVar(pct)} />
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {rows.map((r) => {
+            const pct = r.total > 0 ? Math.round((r.covered / r.total) * 100) : 0;
+            return (
+              <button
+                key={r.label}
+                type="button"
+                onClick={() => navigate(r.to)}
+                title={r.hint}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>{r.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                    {r.covered} / {r.total}
+                    <span style={{ color: healthColorVar(pct), fontWeight: 600, marginLeft: 8 }}>{pct}%</span>
+                  </span>
+                </div>
+                <Meter value={pct} height={5} color={healthColorVar(pct)} />
+              </button>
+            );
+          })}
+        </div>
       </Card>
     </div>
   );
 }
 
-// ── Trends — sparklines + week-over-window deltas from /dashboard/trends ──
-interface TrendPoint { date: string; coverage: number; avgHealth: number; gaps: number; dataAssets: number; mappings: number; }
-function DashboardTrends({ stats }: { stats: DashboardStats }) {
-  const { activeOrgId } = useOrgContext();
-  const [points, setPoints] = useState<TrendPoint[] | null>(null);
-  // When an org has < 2 real snapshots the backend returns a synthesized
-  // (illustrative) series — the current value is live but the history is
-  // projected. Surfaced as a "Sample" badge so it isn't read as measured.
-  const [synthesized, setSynthesized] = useState(false);
+// ── My Trends — a real weekly series of MY open governance tasks, open
+//    issues, and overdue tasks, reconstructed server-side from record
+//    timestamps (see /dashboard/my-trends). A you-scoped replacement for the
+//    org Trends strip; no "Sample" badge because the history is real, not
+//    synthesized. Full-width, so the three cards sit compact in one row. ──
+interface MyTrendPoint { date: string; openTasks: number; openIssues: number; overdue: number; }
+function MyTrends() {
+  const { user } = useAuthStore();
+  const [points, setPoints] = useState<MyTrendPoint[] | null>(null);
   useEffect(() => {
-    if (!activeOrgId) { setPoints(null); return; }
+    if (!user?.email) { setPoints([]); return; }
     (async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: { points: TrendPoint[]; synthesized?: boolean } }>(`/dashboard/trends?orgId=${activeOrgId}`);
+        const res = await apiClient.get<{ success: boolean; data: { points: MyTrendPoint[] } }>('/dashboard/my-trends');
         setPoints(res.data?.points || []);
-        setSynthesized(!!res.data?.synthesized);
-      } catch { setPoints([]); setSynthesized(false); }
+      } catch { setPoints([]); }
     })();
-  }, [activeOrgId]);
+  }, [user?.email]);
 
   if (!points) return null;           // loading — stay quiet to avoid a flash
   if (points.length < 1) return null; // no history to draw
 
-  // Live "now" values, so the trend's headline always agrees with the KPI
-  // tiles above it. The snapshots form the historical trail; the current
-  // stats are appended as the final point.
-  const g = stats.gaps || ({} as DashboardStats['gaps']);
-  const liveGaps = (g.unmappedActivities || g.unmappedSteps || 0) + (g.ungovernedAssets || 0)
-    + (g.ownerlessItems || 0) + (g.orphanAssets || 0) + (g.ungovernedDomains || 0);
-  const live = { coverage: stats.coverage.percentage, avgHealth: stats.averageHealth, gaps: liveGaps };
-
   const metrics = [
-    { key: 'coverage' as const, label: 'Coverage', unit: '%', to: '/mappings', goodUp: true },
-    { key: 'avgHealth' as const, label: 'Avg Health', unit: '%', to: '/data-assets?sort=healthScore&dir=asc', goodUp: true },
-    { key: 'gaps' as const, label: 'Open Gaps', unit: '', to: '/gap-detection', goodUp: false },
+    { key: 'openTasks' as const, label: 'My Open Tasks', to: '/governance-work?tab=tasks', goodUp: false },
+    { key: 'openIssues' as const, label: 'My Open Issues', to: '/governance-work?tab=issues', goodUp: false },
+    { key: 'overdue' as const, label: 'My Overdue', to: '/governance-work?tab=tasks', goodUp: false },
   ];
-  const weeksAgo = points.length;
+  const spanWeeks = points.length - 1; // weekly boundaries → intervals
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Trends" right={
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {synthesized && (
-            <span
-              title="Projected trend — the current value is live, but the history shown is illustrative until Procela has captured at least two daily snapshots for this org."
-              style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-warning)', border: '1px solid var(--color-warning)', borderRadius: 4, padding: '1px 6px', cursor: 'help' }}
-            >
-              Sample
-            </span>
-          )}
-          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {weeksAgo} weeks</span>
-        </span>
+      <SectionHeading title="My Trends" right={
+        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {points.length} weeks</span>
       } />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         {metrics.map((m) => {
-          const series = [...points.map((p) => p[m.key]), live[m.key]];
+          const series = points.map((pt) => pt[m.key]);
           const first = series[0];
-          const last = live[m.key];
+          const last = series[series.length - 1];
           const delta = last - first;
           const improved = m.goodUp ? delta >= 0 : delta <= 0;
           const deltaColor = delta === 0 ? 'var(--color-text-muted)' : improved ? 'var(--color-success)' : 'var(--color-error)';
@@ -709,12 +707,12 @@ function DashboardTrends({ stats }: { stats: DashboardStats }) {
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</div>
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
                 <div style={{ lineHeight: 1.1 }}>
-                  <span style={{ fontSize: 22, fontWeight: 700 }}>{last}{m.unit}</span>
+                  <span style={{ fontSize: 22, fontWeight: 700 }}>{last}</span>
                   <div style={{ fontSize: 11, fontWeight: 600, color: deltaColor, marginTop: 2 }}>
-                    {arrow} {Math.abs(delta)}{m.unit} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs {weeksAgo}w ago</span>
+                    {arrow} {Math.abs(delta)} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs {spanWeeks}w ago</span>
                   </div>
                 </div>
-                <Sparkline points={series} color="var(--color-primary)" title={`${m.label}, last ${weeksAgo} weeks`} />
+                <Sparkline points={series} color="var(--color-primary)" title={`${m.label}, last ${points.length} weeks`} />
               </div>
             </Link>
           );
@@ -726,46 +724,47 @@ function DashboardTrends({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'myPortfolio' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape';
+type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'programMaturity' | 'gaps' | 'myCoverage';
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard    — personal, act-now (your overdue tasks / critical issues)
-//   2. trends         — direction over time, a full-width compact strip
+//   2. myTrends       — my open tasks/issues/overdue over time, full-width strip
 //   3. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
 //   4. gaps           — concrete problems to fix                          ┘
 //   5. programMaturity— where we are in the journey  ┐ pair
-//   6. catalogShape   — supporting analytic          ┘
+//   6. myCoverage     — mapping/governance/ownership of my assets         ┘
 // Quick actions are NOT a section — they render as a compact menu bar pinned
 // under the page header (see DashboardActionBar), not in this flow. The four
-// narrow analytical widgets (myPortfolio → catalogShape) stay contiguous so
-// they pair two-up cleanly; Trends is full-width so its cards sit compact in a
-// single row, and the tall Governance Posture is gone (replaced by the
-// compact, personal My Portfolio Health).
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'trends', 'myPortfolio', 'gaps', 'programMaturity', 'catalogShape'];
+// narrow analytical widgets (myPortfolio → myCoverage) stay contiguous so they
+// pair two-up cleanly; My Trends is full-width so its cards sit compact in a
+// single row. The dashboard is you-scoped: the org-wide Governance Posture /
+// Trends / Catalog Coverage are replaced by My Portfolio Health / My Trends /
+// My Coverage, leaving Program Maturity and Governance Gaps as shared context.
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTrends', 'myPortfolio', 'gaps', 'programMaturity', 'myCoverage'];
 
 type SectionWidth = 'full' | 'half';
 
 // Default width per section. `full` takes its own row; consecutive `half`
 // sections pack two-up so the page stays tight (less vertical scrolling).
 // The user can override any of these in Customize — this is only the starting
-// layout. The personal two-column body (My Dashboard) and the Trends strip go
-// full-bleed; the analytical widgets pair up as compact equal-height cards.
+// layout. The personal two-column body (My Dashboard) and the My Trends strip
+// go full-bleed; the analytical widgets pair up as compact equal-height cards.
 const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
-  trends: 'full',
+  myTrends: 'full',
   myPortfolio: 'half',
   gaps: 'half',
   programMaturity: 'half',
-  catalogShape: 'half',
+  myCoverage: 'half',
 };
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
   myPortfolio: 'My Portfolio Health',
-  trends: 'Trends',
+  myTrends: 'My Trends',
   programMaturity: 'Program Maturity',
   gaps: 'Governance Gaps',
-  catalogShape: 'Catalog Coverage',
+  myCoverage: 'My Coverage',
 };
 
 interface StoredLayout { order: string[]; hidden: string[]; width?: Record<string, SectionWidth> }
@@ -1183,10 +1182,10 @@ export default function DashboardPage() {
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myDashboard: <MyDashboard />,
     myPortfolio: <MyPortfolioHealth />,
-    trends: <DashboardTrends stats={stats} />,
+    myTrends: <MyTrends />,
     programMaturity: <ProgramMaturity />,
     gaps: <GapsOverview stats={stats} />,
-    catalogShape: <CatalogShape stats={stats} />,
+    myCoverage: <MyCoverage />,
   };
 
   return (
