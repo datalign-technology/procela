@@ -759,8 +759,9 @@ export default function DataDomainsPage() {
           action={{ label: 'Add Domain', onClick: openAdd }}
           secondaryAction={canWrite && aiEnabled ? { label: 'Generate from Industry', onClick: handleGenerate, variant: 'secondary' } : undefined} />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
-          {/* Left: Domain index */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(460px, 640px) 1fr', gap: 16, alignItems: 'start' }}>
+          {/* Left: Domain index — width matches the Governance Groups tree
+              column (minmax(460px, 640px)) so the two pages line up. */}
           <Card padding={0} shadow="none" style={{ overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
               <input aria-label="Search domains" style={{ ...inputStyle, fontSize: 12, padding: '6px 10px' }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
