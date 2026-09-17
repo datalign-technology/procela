@@ -176,7 +176,6 @@ function MyDashboard() {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Dashboard" />
       <Card padding={20}><SkeletonRows rows={4} columnWidths={[180, null, 90]} /></Card>
     </div>
   );
@@ -187,7 +186,6 @@ function MyDashboard() {
     // imported). The section still shows so an enabled widget doesn't vanish.
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="My Dashboard" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             This is your personal view — the tasks, issues, and domains assigned to you will show up
@@ -241,11 +239,6 @@ function MyDashboard() {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Dashboard" marginBottom={4} />
-      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-        Welcome back, {data.person.name}. Here’s what needs your attention.
-      </p>
-
       {/* Summary KPIs — each tile is a hyperlink to the surface where
           that count lives. Same affordance as the org Overview strip
           below (hover lift, muted-but-still-linked at zero, tooltip
@@ -267,7 +260,7 @@ function MyDashboard() {
         />
         <StatTile dense
           to="/data-domains"
-          label="My Domains"
+          label="Domains"
           value={(s.domainsOwned || 0) + (s.domainsSteward || 0)}
         />
         <StatTile dense
@@ -287,7 +280,7 @@ function MyDashboard() {
             reviews, at-risk domains; each capped, with a "+N more" footer
             when the queue runs longer. */}
         <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-warning)' }}>
-          <CardHeaderRow color="var(--color-warning)" icon={<AttentionGlyph />} label="Needs My Attention" />
+          <CardHeaderRow color="var(--color-warning)" icon={<AttentionGlyph />} label="Needs Attention" />
           {urgentTotal === 0 ? (
             <div style={{ color: 'var(--color-success)', fontSize: 13 }}>All clear — no urgent items.</div>
           ) : (
@@ -335,7 +328,7 @@ function MyDashboard() {
             queue beside it. A muted kind tag distinguishes a task/review due
             date from a meeting. */}
         <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-info)' }}>
-          <CardHeaderRow color="var(--color-info)" icon={renderNavIcon('/governance-calendar', { size: 13 })} label="My Schedule" />
+          <CardHeaderRow color="var(--color-info)" icon={renderNavIcon('/governance-calendar', { size: 13 })} label="Schedule" />
           {scheduleItems.length === 0 ? (
             <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Nothing scheduled in the next 14 days.</div>
           ) : (
@@ -369,14 +362,14 @@ function MyDashboard() {
       {/* My Domains */}
       {(data.myDomains || []).length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <SectionLabel>My Domains</SectionLabel>
+          <SectionLabel>Domains</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
             {(data.myDomains || []).map((d) => {
               const healthPct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
               return (
                 <Link key={d.id} to="/data-domains" style={{ ...cardStyle, padding: '10px 14px', textDecoration: 'none', color: 'var(--color-text)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{d.name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)' }}>{d.name}</span>
                     <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
@@ -392,7 +385,7 @@ function MyDashboard() {
       {(data.myTasks || []).length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <SectionLabel marginBottom={0}>My Tasks</SectionLabel>
+            <SectionLabel marginBottom={0}>Tasks</SectionLabel>
             <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks?.length ?? 0}</Link>
           </div>
           <Card padding={0} style={{ overflow: 'hidden' }}>
@@ -412,7 +405,7 @@ function MyDashboard() {
       {(data.myIssues || []).length > 0 && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <SectionLabel marginBottom={0}>My Issues</SectionLabel>
+            <SectionLabel marginBottom={0}>Issues</SectionLabel>
             <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues?.length ?? 0}</Link>
           </div>
           <Card padding={0} style={{ overflow: 'hidden' }}>
@@ -479,7 +472,7 @@ function MyPortfolioHealth() {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Portfolio Health" />
+      <SectionHeading title="Portfolio Health" />
       <Card padding={20}><SkeletonRows rows={2} columnWidths={[140, null, 60]} /></Card>
     </div>
   );
@@ -488,7 +481,7 @@ function MyPortfolioHealth() {
   if (!data?.person || !p || p.domains === 0) {
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="My Portfolio Health" />
+        <SectionHeading title="Portfolio Health" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             {!data?.person
@@ -513,11 +506,11 @@ function MyPortfolioHealth() {
   ];
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Portfolio Health" />
+      <SectionHeading title="Portfolio Health" />
       <Card padding="18px 22px">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 20, alignItems: 'center' }}>
           <div>
-            <SectionLabel>My asset tiers</SectionLabel>
+            <SectionLabel>Asset tiers</SectionLabel>
             {tierTotal > 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <Link to="/data-domains" title="View my data domains" style={{ display: 'inline-flex', flexShrink: 0 }}>
@@ -595,7 +588,7 @@ function MyCoverage() {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Coverage" />
+      <SectionHeading title="Coverage" />
       <Card padding={20}><SkeletonRows rows={3} columnWidths={[120, null, 60]} /></Card>
     </div>
   );
@@ -604,7 +597,7 @@ function MyCoverage() {
   if (!data?.person || !p || p.assets === 0) {
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="My Coverage" />
+        <SectionHeading title="Coverage" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             {!data?.person
@@ -625,7 +618,7 @@ function MyCoverage() {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Coverage" />
+      <SectionHeading title="Coverage" />
       <Card padding="16px 20px">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {rows.map((r) => {
@@ -681,15 +674,15 @@ function MyTrends() {
   if (points.length < 1) return null; // no history to draw
 
   const metrics = [
-    { key: 'openTasks' as const, label: 'My Open Tasks', to: '/governance-work?tab=tasks', goodUp: false },
-    { key: 'openIssues' as const, label: 'My Open Issues', to: '/governance-work?tab=issues', goodUp: false },
-    { key: 'overdue' as const, label: 'My Overdue', to: '/governance-work?tab=tasks', goodUp: false },
+    { key: 'openTasks' as const, label: 'Open Tasks', to: '/governance-work?tab=tasks', goodUp: false },
+    { key: 'openIssues' as const, label: 'Open Issues', to: '/governance-work?tab=issues', goodUp: false },
+    { key: 'overdue' as const, label: 'Overdue', to: '/governance-work?tab=tasks', goodUp: false },
   ];
   const spanWeeks = points.length - 1; // weekly boundaries → intervals
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Trends" right={
+      <SectionHeading title="Trends" right={
         <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {points.length} weeks</span>
       } />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
@@ -755,10 +748,10 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
 };
 
 const SECTION_LABELS: Record<SectionKey, string> = {
-  myDashboard: 'My Dashboard',
-  myPortfolio: 'My Portfolio Health',
-  myTrends: 'My Trends',
-  myCoverage: 'My Coverage',
+  myDashboard: 'Dashboard',
+  myPortfolio: 'Portfolio Health',
+  myTrends: 'Trends',
+  myCoverage: 'Coverage',
 };
 
 interface StoredLayout { order: string[]; hidden: string[]; width?: Record<string, SectionWidth> }
