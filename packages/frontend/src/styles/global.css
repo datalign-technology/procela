@@ -494,11 +494,39 @@ body[data-density="compact"] textarea {
      Catalog Coverage under Program Maturity, or any pair on a narrow
      single-column viewport — gets the same breathing room above it. */
   row-gap: 16px;
-  align-items: start;
+  /* Stretch (not start) so the two cells in a two-up row share the height
+     of the taller one — paired widgets line up flush at the bottom instead
+     of one card ending short. On the single-column layout below 700px each
+     row holds one cell, so stretch is a no-op there. */
+  align-items: stretch;
 }
 @media (min-width: 700px) {
   .dashboard-half-grid {
     grid-template-columns: 1fr 1fr;
+  }
+  /* Equal-height pairs: the grid stretches each cell to the row's tallest
+     sibling; propagate that height down so the widget's content block (Card,
+     trend grid, gap list…) fills the cell rather than leaving the shorter
+     widget's card ending mid-cell. Each widget is `wrapper > [heading,
+     content]`, so the wrapper becomes a flex column and its last child (the
+     content block) grows. Scoped to non-empty cells so the `:empty`
+     collapse rule above still hides a widget that renders nothing. */
+  .dashboard-half-grid > .dashboard-section-cell:not(:empty) {
+    display: flex;
+  }
+  .dashboard-half-grid > .dashboard-section-cell:not(:empty) > * {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .dashboard-half-grid > .dashboard-section-cell:not(:empty) > * > :last-child {
+    flex: 1;
+    /* Keep the content anchored to the top so the extra height a stretched
+       cell gains lands as clean trailing space — not as ballooned inner rows
+       (e.g. the Trends mini-cards, whose grid would otherwise stretch each
+       row to fill). Card-based widgets ignore this; grid/flex ones honor it. */
+    align-content: start;
   }
 }
 

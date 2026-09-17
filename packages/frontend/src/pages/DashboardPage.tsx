@@ -991,11 +991,6 @@ interface ProgramStatus {
   phases?: { phase1?: ProgramPhase; phase2?: ProgramPhase; phase3?: ProgramPhase; phase4?: ProgramPhase };
 }
 
-// Fixed card-body height so the widget lines up with the Trends widget (the
-// dashboard half-grid uses align-items:start, so heights are content-driven —
-// this pins Program Maturity to the same height). Tuned to match Trends.
-const PROGRAM_MATURITY_BODY_HEIGHT = 184;
-
 function ProgramMaturity() {
   const { activeOrgId } = useOrgContext();
   const [status, setStatus] = useState<ProgramStatus | null>(null);
@@ -1022,7 +1017,9 @@ function ProgramMaturity() {
   return (
     <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Program Maturity" />
-      <Card padding="16px 20px" style={{ height: PROGRAM_MATURITY_BODY_HEIGHT, display: 'flex', flexDirection: 'column' }}>
+      {/* Fills the equal-height cell (see .dashboard-half-grid) — its
+          flex column spreads the phase rows to match the paired widget. */}
+      <Card padding="16px 20px" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Header — overall progress + the current phase. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
           <ProgressRing percent={status.overallProgress} size={48} stroke={5} showLabel />
