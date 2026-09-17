@@ -83,3 +83,51 @@ describe('Governance program structured scope', () => {
     assert.deepEqual(scope.domainIds, ['d1']);
   });
 });
+
+// Phase 1's "Scope defined" check is now satisfied by selecting governed
+// entities — the free-text In/Out of Scope boxes were removed from the UI.
+// Legacy free-text still counts so programs authored before the picker
+// don't regress.
+describe('Phase 1 "Scope defined" — governed entities', () => {
+  let server: http.Server; let port: number; let programId: string;
+  const scopeCheck = (status: any) => status.phases.phase1.checks.find((c: any) => c.label === 'Scope defined');
+
+  before(async () => {
+    const app = express(); app.use(express.json()); app.use('/', programRouter);
+    server = http.createServer(app);
+    await new Promise<void>((r) => server.listen(0, () => r()));
+    port = (server.address() as AddressInfo).port;
+    const created = await req(port, 'GET', `/?orgId=phase1scope-org`);
+    programId = created.body.data.id;
+  });
+
+  after(async () => {
+    for (let i = governancePrograms.length - 1; i >= 0; i--) {
+      if (governancePrograms[i].orgId === 'phase1scope-org') governancePrograms.splice(i, 1);
+    }
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('is NOT defined with no entities and no free-text', async () => {
+    const status = await req(port, 'GET', `/${programId}/status`);
+    assert.equal(status.status, 200);
+    assert.equal(scopeCheck(status.body.data).done, false);
+  });
+
+  it('IS defined once a governed entity is selected (no free-text needed)', async () => {
+    await req(port, 'PUT', `/${programId}`, { scope: { domainIds: ['dom-1'] } });
+    const status = await req(port, 'GET', `/${programId}/status`);
+    assert.equal(scopeCheck(status.body.data).done, true, 'a governed data domain defines scope');
+  });
+
+  it('still honours legacy free-text scope when no entities are selected', async () => {
+    const other = await req(port, 'GET', `/?orgId=phase1scope-org-legacy`);
+    const legacyId = other.body.data.id;
+    await req(port, 'PUT', `/${legacyId}`, { scope: { inScope: 'Everything the finance org touches.' } });
+    const status = await req(port, 'GET', `/${legacyId}/status`);
+    assert.equal(scopeCheck(status.body.data).done, true, 'legacy free-text still counts');
+    for (let i = governancePrograms.length - 1; i >= 0; i--) {
+      if (governancePrograms[i].orgId === 'phase1scope-org-legacy') governancePrograms.splice(i, 1);
+    }
+  });
+});

@@ -175,8 +175,16 @@ async function computePhaseStatus(program: StoredGovernanceProgram): Promise<Pha
   // ── Phase 1 — Foundation Definition
   const phase1Checks: PhaseCheck[] = [
     {
+      // Scope is now defined by selecting the catalogued entities the program
+      // governs (systems / data domains / value streams). The legacy free-text
+      // `inScope` still counts so programs authored before the structured
+      // picker don't regress.
       label: 'Scope defined',
-      done: (program.scope?.inScope || '').trim().length > 0,
+      done:
+        (program.scope?.systemIds?.length || 0) > 0
+        || (program.scope?.domainIds?.length || 0) > 0
+        || (program.scope?.valueStreamIds?.length || 0) > 0
+        || (program.scope?.inScope || '').trim().length > 0,
     },
     {
       label: 'Guiding principles established',
