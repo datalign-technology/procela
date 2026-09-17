@@ -12,6 +12,7 @@ import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Button from '../components/Button';
+import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
 import { SkeletonRows } from '../components/Skeleton';
 
@@ -195,8 +196,10 @@ export default function OperationsManualPage({
                 <input type="checkbox" checked={selectedIds.size === manuals.length && manuals.length > 0} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} /> Select all
               </label>
             )}
-            <Button variant="secondary" size="sm" onClick={() => setExpandedCards(new Set(manuals.map((m) => m.id)))}>Expand All</Button>
-            <Button variant="secondary" size="sm" onClick={() => setExpandedCards(new Set())}>Collapse All</Button>
+            <ExpandCollapseControls
+              onExpandAll={() => setExpandedCards(new Set(manuals.map((m) => m.id)))}
+              onCollapseAll={() => setExpandedCards(new Set())}
+            />
           </div>
 
           <BulkActionBar count={selectedIds.size} onClear={() => setSelectedIds(new Set())}>

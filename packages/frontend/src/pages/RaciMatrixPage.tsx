@@ -1,4 +1,5 @@
 import { SkeletonRows } from '../components/Skeleton';
+import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
@@ -365,8 +366,7 @@ export default function RaciMatrixPage({
             <ExportMenu build={buildExport} disabled={!data} />
             <IconButton icon="download" label="Print / PDF" variant="primary" onClick={() => window.print()} />
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
-            <button onClick={expandAll} style={{ fontSize: 11, padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', color: 'var(--color-primary)' }}>Expand All</button>
-            <button onClick={collapseAll} style={{ fontSize: 11, padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', color: 'var(--color-primary)' }}>Collapse All</button>
+            <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={collapseAll} />
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
             <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Show columns by:</label>
             <select
