@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useOrgContext } from '../stores/orgContext';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PersonPicker — one shared control for assigning people anywhere in the
@@ -156,11 +157,18 @@ export default function PersonPicker({
   // label without the user opening the popover. The module-level cache
   // dedupes — a page with 50 pickers still fires exactly one request
   // per (orgScope, withGroups) key.
+  // Default the people scope to the org selected in the header when the caller
+  // doesn't pin one, so every picker lists that org's people by default (and a
+  // super-admin can't accidentally reach into a sibling tenant). An explicit
+  // `orgId` prop — including a deliberate wider scope — still wins.
+  const activeOrgId = useOrgContext((s) => s.activeOrgId);
+  const effectiveOrgId = orgId !== undefined ? orgId : (activeOrgId || undefined);
+
   useEffect(() => {
     let alive = true;
-    loadPickerData(orgId, showGroups).then((d) => { if (alive) setData(d); });
+    loadPickerData(effectiveOrgId, showGroups).then((d) => { if (alive) setData(d); });
     return () => { alive = false; };
-  }, [orgId, showGroups]);
+  }, [effectiveOrgId, showGroups]);
 
   // Close on outside click / Escape.
   useEffect(() => {
