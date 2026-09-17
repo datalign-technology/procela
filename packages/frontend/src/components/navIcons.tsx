@@ -305,6 +305,18 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M12 7 V12 L15 14" />
     </NavSvg>
   ),
+  // Council Dashboard: a briefing board — a header bar over a small grid of
+  // panels, the at-a-glance meeting-prep view the council opens first.
+  '/council-dashboard': (
+    <NavSvg>
+      <rect x="3.5" y="4" width="17" height="16" rx="1.5" />
+      <path d="M3.5 8.5 H20.5" />
+      <path d="M8 12 H11.5" />
+      <path d="M8 15.5 H11.5" />
+      <path d="M14 12 H17" />
+      <path d="M14 15.5 H17" />
+    </NavSvg>
+  ),
   // Council Scorecard: a report card — rows of measures each with a
   // status mark on the right, the per-division rating the council reads.
   '/council-scorecard': (
