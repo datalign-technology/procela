@@ -63,17 +63,17 @@ async function apiPost(token: string, path: string, body: unknown): Promise<Reco
 }
 
 test.describe('Procela demo path', () => {
-  test('Beat 1: a populated org renders KPI tiles on the dashboard', async ({ page }) => {
+  test('Beat 1: a populated org renders the analytical dashboard', async ({ page }) => {
     const errors = attachConsoleWatcher(page);
     const token = await loginAsEleanor(page);
     const orgId = await createOrg(token, uniqueName('Demo Path Beat1'));
     await setActiveOrg(page, orgId, 'Demo Path Beat1');
 
-    // Seed one system + one asset + one activity so the KPI tiles have
-    // non-zero counts to render. Dashboard's Overview strip reads these
-    // via the summary endpoints — if the aggregation query breaks we
-    // see zeroes even with rows in the store, so asserting on the
-    // rendered number catches that regression.
+    // Seed one system + one asset + a value stream/process so the org is no
+    // longer "empty" — the dashboard then renders its analytical widgets
+    // (fed by the /dashboard/stats aggregation) instead of the setup-welcome
+    // card. Asserting on the rendered widgets catches an aggregation break
+    // that would otherwise leave the populated org stuck on the welcome view.
     const sys = await apiPost(token, '/systems', { orgId, name: 'Beat1 CIS', description: '', systemType: 'CIS' });
     await apiPost(token, '/data-assets', {
       orgId, name: 'Beat1 Customers', description: 'accts',
@@ -89,13 +89,13 @@ test.describe('Procela demo path', () => {
     });
 
     await gotoWithOrg(page, '/', orgId, 'Demo Path Beat1');
-    // Dashboard KPI tiles carry the count as visible text; the labels
-    // are stable ("Data Assets", "Systems", "Value Streams"). Wait for
-    // any of them to become non-zero rather than asserting an exact
-    // number — the dev backend may already have rows in other orgs.
-    await expect(page.locator('body')).toContainText(/Data Assets/i, { timeout: 10_000 });
-    await expect(page.locator('body')).toContainText(/Systems/i, { timeout: 5_000 });
-    await expect(page.locator('body')).toContainText(/Value Streams/i, { timeout: 5_000 });
+    // A populated org renders the single (Detailed) dashboard: the personal
+    // header plus the analytical widget band. These headings only appear once
+    // the org has data — an empty org shows the "Welcome to Procela" setup
+    // card instead — so they prove the aggregated dashboard rendered.
+    await expect(page.locator('body')).toContainText(/My Dashboard/i, { timeout: 10_000 });
+    await expect(page.locator('body')).toContainText(/Catalog Coverage/i, { timeout: 5_000 });
+    await expect(page.locator('body')).toContainText(/Program Maturity/i, { timeout: 5_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

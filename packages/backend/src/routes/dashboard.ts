@@ -1019,6 +1019,31 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
       };
     });
 
+  // ── Portfolio aggregate: my owned/stewarded domains' assets, deduped ──
+  // Powers the personal "My Portfolio Health" dashboard widget: the tier mix
+  // and health of the assets I'm accountable for, so the page reads as mine
+  // rather than the whole org's.
+  const myDomainRows = dataDomains.filter((d) => d.ownerId === person.id || (d.stewardIds || []).includes(person.id));
+  const myAssetIds = new Set<string>();
+  for (const d of myDomainRows) for (const id of d.dataAssetIds) myAssetIds.add(id);
+  const myAssets = dataAssets.filter((a) => myAssetIds.has(a.id));
+  const portfolio = {
+    domains: myDomains.length,
+    domainsOwned: myDomains.filter((d) => d.relation === 'owner').length,
+    domainsSteward: myDomains.filter((d) => d.relation === 'steward').length,
+    assets: myAssets.length,
+    healthyAssets: myAssets.filter((a) => effHealth(a) >= 80).length,
+    avgHealth: myAssets.length ? Math.round(myAssets.reduce((s, a) => s + effHealth(a), 0) / myAssets.length) : 0,
+    // At-risk = my domains with assets but under 80% healthy — mirrors the
+    // frontend's Attention "low health" threshold.
+    atRiskDomains: myDomains.filter((d) => d.totalAssets > 0 && d.healthyAssets / d.totalAssets < 0.8).length,
+    tiers: {
+      gold: myAssets.filter((a) => a.governanceTier === 'GOLD').length,
+      silver: myAssets.filter((a) => a.governanceTier === 'SILVER').length,
+      bronze: myAssets.filter((a) => a.governanceTier === 'BRONZE').length,
+    },
+  };
+
   // ── Upcoming calendar events (within 14 days, status ACTIVE) ──
   const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
   const upcomingEvents = calendarEvents
@@ -1093,6 +1118,7 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
       myDomains,
       upcomingEvents,
       pendingReviews,
+      portfolio,
       summary,
     },
   });

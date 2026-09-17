@@ -18,10 +18,7 @@ import Donut from '../components/Donut';
 import Sparkline from '../components/Sparkline';
 import { useTierLabel } from '../lib/governanceTier';
 import { useNavigate } from 'react-router-dom';
-import DomainLensToggle from '../components/DomainLensToggle';
-import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { renderNavIcon } from '../components/navIcons';
-import { useDomainLens } from '../stores/domainLensStore';
 import { useAuthStore } from '../stores/authStore';
 import { useAiEnabled } from '../stores/aiConfigStore';
 import { usePolling } from '../hooks/usePolling';
@@ -93,8 +90,17 @@ interface MyEvent { name: string; daysAway: number; }
 // date, or a policy review due date, all reduced to "what & when".
 interface ScheduleItem { id: string; kind: 'event' | 'task' | 'review'; name: string; daysAway: number; to: string; }
 interface MyDomain { id: string; name: string; relation: string; assetCount: number; totalAssets: number; healthyAssets: number; }
+// Aggregate over the assets in the domains I own or steward — powers the
+// personal "My Portfolio Health" widget (the tier mix + health of what I'm
+// accountable for), a you-scoped stand-in for the org-wide Governance Posture.
+interface MyPortfolio {
+  domains: number; domainsOwned: number; domainsSteward: number;
+  assets: number; healthyAssets: number; avgHealth: number; atRiskDomains: number;
+  tiers: { gold: number; silver: number; bronze: number };
+}
 interface MyDashboardData {
   person?: { name: string };
+  portfolio?: MyPortfolio;
   summary?: {
     openTasks?: number; overdueTasks?: number; openIssues?: number; criticalIssues?: number;
     domainsOwned?: number; domainsSteward?: number; upcomingEventsCount?: number;
@@ -426,49 +432,6 @@ function MyDashboard() {
 }
 
 
-// ── Stats Overview — compact KPI strip ──
-
-function StatsOverview({ stats }: { stats: DashboardStats }) {
-  // Each KPI tile is a hyperlink to the surface where that count lives.
-  // Two derived metrics get more specific deep-links:
-  //   - Coverage → Data Mapping (the page that surfaces unmapped-activity
-  //     and unlinked-asset banners natively).
-  //   - Avg Health → Data Assets sorted by health ascending, so the
-  //     cohort dragging the average down is at the top of the table.
-  // Zero counts still link through, but render with a muted cursor so
-  // users land on the empty-state CTA on the destination page rather
-  // than dead-clicking from a 0 tile.
-  // Counts wear plain ink — the label carries identity; colour is spent only
-  // where the number is a *state* (coverage / health), via healthColorVar.
-  const kpis: Array<{ label: string; value: string | number; color?: string; to: string; zero: boolean }> = [
-    { label: 'Value Streams', value: stats.valueStreams, to: '/processes', zero: stats.valueStreams === 0 },
-    { label: 'Processes',     value: stats.processes,    to: '/processes', zero: stats.processes === 0 },
-    { label: 'Data Assets',   value: stats.dataAssets,   to: '/data-assets', zero: stats.dataAssets === 0 },
-    { label: 'Systems',       value: stats.systems,      to: '/systems', zero: stats.systems === 0 },
-    { label: 'Coverage',      value: `${stats.coverage.percentage}%`,
-      color: healthColorVar(stats.coverage.percentage),
-      to: '/mappings', zero: stats.coverage.percentage === 0 },
-    { label: 'Avg Health',    value: `${stats.averageHealth}%`,
-      color: healthColorVar(stats.averageHealth),
-      to: '/data-assets?sort=healthScore&dir=asc', zero: stats.averageHealth === 0 },
-  ];
-  return (
-    <div style={{ marginBottom: 16 }}>
-      {/* Heading row carries the lens toggle so the user can sweep the
-          KPI strip between operational and governance work without
-          leaving the dashboard. Value Streams / Processes / Coverage
-          numbers refetch with `?domain=…`; Data Assets / Systems / Avg
-          Health stay constant — they are not domain-tagged. */}
-      <SectionHeading title="Overview" right={<DomainLensToggle pageKey="dashboard" />} />
-      <DomainLensActiveBanner pageKey="dashboard" entityLabel="process counts" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
-        {kpis.map((k) => (
-          <StatTile dense key={k.label} label={k.label} value={k.value} to={k.to} valueColor={k.color} zero={k.zero} />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // Tier donut fills — a bronze / silver / gold medal ramp. Validated for
 // CVD + normal-vision separation (the grey "silver" is intentional and always
@@ -494,61 +457,105 @@ function GaugeLink({ to, children, title }: { to: string; title: string; childre
   );
 }
 
-// ── Governance Posture — tier donut + coverage / health gauges, all
-//    hyperlinked for drill-down ──
-function GovernancePosture({ stats }: { stats: DashboardStats }) {
+// ── My Portfolio Health — the tier mix + health of the assets in the domains
+//    I own or steward. A you-scoped replacement for the org-wide Governance
+//    Posture: one gauge (not two) keeps it compact enough to sit in a single
+//    horizontal row. Self-fetches /dashboard/my-dashboard like MyDashboard. ──
+function MyPortfolioHealth() {
+  const { user } = useAuthStore();
+  const [data, setData] = useState<MyDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
   const tierLabel = useTierLabel();
-  const g = stats.governance;
-  const tierTotal = g.gold + g.silver + g.bronze;
-  // key drives the ?tier= deep-link; label respects the terminology toggle.
+
+  useEffect(() => {
+    if (!user?.email) { setLoading(false); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>('/dashboard/my-dashboard');
+        setData(res.data);
+      } catch { /* */ } finally { setLoading(false); }
+    })();
+  }, [user?.email]);
+
+  if (loading) return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeading title="My Portfolio Health" />
+      <Card padding={20}><SkeletonRows rows={2} columnWidths={[140, null, 60]} /></Card>
+    </div>
+  );
+
+  const p = data?.portfolio;
+  if (!data?.person || !p || p.domains === 0) {
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <SectionHeading title="My Portfolio Health" />
+        <Card padding="16px 20px">
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            {!data?.person
+              ? 'Link your profile to see the tier mix and health of the domains and assets you own.'
+              : 'You don’t own or steward any domains yet — the tier mix and health of your assets will show up here once you do.'}
+            <div style={{ marginTop: 8 }}>
+              <Link to={!data?.person ? '/people' : '/data-domains'} style={{ fontSize: 12, color: 'var(--color-primary)' }}>
+                {!data?.person ? 'Link your profile in People →' : 'View data domains →'}
+              </Link>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const tierTotal = p.tiers.gold + p.tiers.silver + p.tiers.bronze;
   const tiers = [
-    { key: 'GOLD', label: tierLabel('GOLD'), value: g.gold, color: TIER_CHART_COLOR.GOLD },
-    { key: 'SILVER', label: tierLabel('SILVER'), value: g.silver, color: TIER_CHART_COLOR.SILVER },
-    { key: 'BRONZE', label: tierLabel('BRONZE'), value: g.bronze, color: TIER_CHART_COLOR.BRONZE },
+    { key: 'GOLD', label: tierLabel('GOLD'), value: p.tiers.gold, color: TIER_CHART_COLOR.GOLD },
+    { key: 'SILVER', label: tierLabel('SILVER'), value: p.tiers.silver, color: TIER_CHART_COLOR.SILVER },
+    { key: 'BRONZE', label: tierLabel('BRONZE'), value: p.tiers.bronze, color: TIER_CHART_COLOR.BRONZE },
   ];
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Governance Posture" />
+      <SectionHeading title="My Portfolio Health" />
       <Card padding="18px 22px">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 24, alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 20, alignItems: 'center' }}>
           <div>
-            <SectionLabel>Governance tier mix</SectionLabel>
+            <SectionLabel>My asset tiers</SectionLabel>
             {tierTotal > 0 ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                {/* The ring links to the whole catalog; each legend row filters
-                    Data Assets to that tier. */}
-                <Link to="/data-assets" title="View all data assets" style={{ display: 'inline-flex', flexShrink: 0 }}>
-                  <Donut segments={tiers} centerLabel="Assets" size={116} thickness={16} legend={false} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <Link to="/data-domains" title="View my data domains" style={{ display: 'inline-flex', flexShrink: 0 }}>
+                  <Donut segments={tiers} centerLabel="Assets" size={96} thickness={14} legend={false} />
                 </Link>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
                   {tiers.map((t) => (
                     <Link
                       key={t.key}
                       to={`/data-assets?tier=${t.key}`}
                       title={`View ${t.label} data assets`}
-                      style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, textDecoration: 'none', color: 'inherit', padding: '2px 4px', borderRadius: 4, transition: 'background 0.15s' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, textDecoration: 'none', color: 'inherit', padding: '1px 4px', borderRadius: 4, transition: 'background 0.15s' }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
                     >
                       <span style={{ width: 10, height: 10, borderRadius: 2, background: t.color, flexShrink: 0 }} />
                       <span style={{ color: 'var(--color-text-secondary)', flex: 1, whiteSpace: 'nowrap' }}>{t.label}</span>
                       <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{t.value}</span>
-                      <span style={{ color: 'var(--color-text-muted)', minWidth: 34, textAlign: 'right' }}>{tierTotal > 0 ? Math.round((t.value / tierTotal) * 100) : 0}%</span>
+                      <span style={{ color: 'var(--color-text-muted)', minWidth: 34, textAlign: 'right' }}>{Math.round((t.value / tierTotal) * 100)}%</span>
                     </Link>
                   ))}
                 </div>
               </div>
             ) : (
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No data assets yet.</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No governed assets in your domains yet.</div>
             )}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-around', gap: 16, flexWrap: 'wrap' }}>
-            <GaugeLink to="/mappings" title="Coverage — open the Data Mapping view to close unmapped activities">
-              <Gauge value={stats.coverage.percentage} label="Coverage" />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', gap: 12, flexWrap: 'wrap' }}>
+            <GaugeLink to="/data-assets?sort=healthScore&dir=asc" title="Health of the assets in your domains — opens Data Assets, lowest health first">
+              <Gauge value={p.avgHealth} label="Asset health" />
             </GaugeLink>
-            <GaugeLink to="/data-assets?sort=healthScore&dir=asc" title="Avg Health — open Data Assets sorted by lowest health first">
-              <Gauge value={stats.averageHealth} label="Avg Health" />
-            </GaugeLink>
+            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6, minWidth: 0 }}>
+              <div><strong style={{ color: 'var(--color-text)' }}>{p.domains}</strong> domain{p.domains === 1 ? '' : 's'} <span style={{ color: 'var(--color-text-muted)' }}>({p.domainsOwned} owned · {p.domainsSteward} steward)</span></div>
+              <div><strong style={{ color: 'var(--color-text)' }}>{p.assets}</strong> asset{p.assets === 1 ? '' : 's'} <span style={{ color: 'var(--color-text-muted)' }}>· {p.healthyAssets} healthy</span></div>
+              {p.atRiskDomains > 0 && (
+                <div style={{ color: 'var(--color-warning)', fontWeight: 600 }}>{p.atRiskDomains} domain{p.atRiskDomains === 1 ? '' : 's'} at risk</div>
+              )}
+            </div>
           </div>
         </div>
       </Card>
@@ -719,73 +726,34 @@ function DashboardTrends({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'overview' | 'governancePosture' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape';
+type SectionKey = 'myDashboard' | 'myPortfolio' | 'trends' | 'programMaturity' | 'gaps' | 'catalogShape';
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
-//   1. myDashboard       — personal, act-now (your overdue tasks / critical issues)
-//   2. governancePosture — the state-of-governance hero visual (tier donut + gauges)
-//   3. trends            — direction over time (are the numbers improving?)
-//   4. gaps              — concrete problems to fix   ┐ narrow pair
-//   5. programMaturity   — where we are in the journey ┘
-//   6. catalogShape      — supporting analytic (Catalog Coverage)
-// The Overview KPI strip is NOT in the Detailed flow: its counts are inventory
-// and its stateful KPIs (coverage / avg health) are already carried, better,
-// by Governance Posture and Trends. It survives only as the orientation strip
-// in the Simple view (see ESSENTIAL_SECTIONS), which has neither of those.
-// Quick actions are NOT a section either — they render as a compact menu bar
-// pinned under the page header (see DashboardActionBar), not in this flow.
-// The narrow analytical widgets (governancePosture → catalogShape) stay
-// contiguous so they pair two-up cleanly instead of stranding a lone card in a
-// masonry column; the surrounding full-width bands anchor the top and bottom.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'governancePosture', 'trends', 'gaps', 'programMaturity', 'catalogShape'];
-
-// ── Density: Simple vs Detailed ──
-// A first-time, non-technical visitor lands on twelve stacked analytical
-// bands (tier donut, gauges, sparkline trends, maturity ring, skill-gap
-// charts…) — a wall of data before they've done anything. "Simple" shows
-// only the sections that answer "what do I do next?": the personal
-// act-now view, the headline KPI strip, and the concrete gap list.
-// "Detailed" is the full customizable dashboard.
-// The choice is per-user and sticky; the default is decided by whether the
-// user has ever customized their layout (see useDashboardDensity).
-const ESSENTIAL_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'gaps'];
-
-type DashboardDensity = 'simple' | 'detailed';
-
-function useDashboardDensity(hasSavedLayout: boolean) {
-  const userId = useAuthStore((s) => s.user?.id) ?? 'anon';
-  const KEY = `procela_dashboard_density:${userId}`;
-  const [density, setDensityState] = useState<DashboardDensity>(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw === 'simple' || raw === 'detailed') return raw;
-    } catch { /* localStorage unavailable — fall through to the default */ }
-    // First visit (no explicit choice yet): a user who has already
-    // customized their dashboard layout has engaged with the full view —
-    // leave them in Detailed. A brand-new user starts in Simple so the
-    // first impression is a focused four-section page, not a wall of charts.
-    return hasSavedLayout ? 'detailed' : 'simple';
-  });
-  const setDensity = (d: DashboardDensity) => {
-    setDensityState(d);
-    try { localStorage.setItem(KEY, d); } catch { /* best-effort persistence */ }
-  };
-  return { density, setDensity };
-}
+//   1. myDashboard    — personal, act-now (your overdue tasks / critical issues)
+//   2. trends         — direction over time, a full-width compact strip
+//   3. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
+//   4. gaps           — concrete problems to fix                          ┘
+//   5. programMaturity— where we are in the journey  ┐ pair
+//   6. catalogShape   — supporting analytic          ┘
+// Quick actions are NOT a section — they render as a compact menu bar pinned
+// under the page header (see DashboardActionBar), not in this flow. The four
+// narrow analytical widgets (myPortfolio → catalogShape) stay contiguous so
+// they pair two-up cleanly; Trends is full-width so its cards sit compact in a
+// single row, and the tall Governance Posture is gone (replaced by the
+// compact, personal My Portfolio Health).
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'trends', 'myPortfolio', 'gaps', 'programMaturity', 'catalogShape'];
 
 type SectionWidth = 'full' | 'half';
 
 // Default width per section. `full` takes its own row; consecutive `half`
 // sections pack two-up so the page stays tight (less vertical scrolling).
-// The user can override any of these in Customize — this is only the
-// starting layout. Chosen to keep the wide surfaces (KPI strip, the personal
-// two-column body) full-bleed while the analytical widgets — including
-// Governance Posture and Trends — pair up.
+// The user can override any of these in Customize — this is only the starting
+// layout. The personal two-column body (My Dashboard) and the Trends strip go
+// full-bleed; the analytical widgets pair up as compact equal-height cards.
 const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
-  overview: 'full',
-  governancePosture: 'half',
-  trends: 'half',
+  trends: 'full',
+  myPortfolio: 'half',
   gaps: 'half',
   programMaturity: 'half',
   catalogShape: 'half',
@@ -793,8 +761,7 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
-  overview: 'Overview',
-  governancePosture: 'Governance Posture',
+  myPortfolio: 'My Portfolio Health',
   trends: 'Trends',
   programMaturity: 'Program Maturity',
   gaps: 'Governance Gaps',
@@ -1161,21 +1128,16 @@ export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Dashboard-scoped lens — defaults to ALL and refetches when the
-  // user changes it so KPIs (process-side) reflect the chosen domain.
-  // Assets / Systems / People are cross-cutting and stay unfiltered.
-  const dashboardLens = useDomainLens('dashboard', 'ALL');
 
   const fetchData = useCallback(async () => {
     if (!activeOrgId) { setStats(null); return; }
     try {
-      const domainQS = dashboardLens === 'ALL' ? '' : `&domain=${dashboardLens}`;
-      const res = await apiClient.get<{ success: boolean; data: DashboardStats }>(`/dashboard/stats?orgId=${activeOrgId}${domainQS}`);
+      const res = await apiClient.get<{ success: boolean; data: DashboardStats }>(`/dashboard/stats?orgId=${activeOrgId}`);
       setStats(res.data);
     } catch (err) {
       setError(errorMessage(err, 'Failed to load dashboard'));
     }
-  }, [activeOrgId, dashboardLens]);
+  }, [activeOrgId]);
 
   useEffect(() => {
     fetchData();
@@ -1184,9 +1146,7 @@ export default function DashboardPage() {
   usePolling(fetchData, 30000);
 
   const layout = useDashboardLayout();
-  const { density, setDensity } = useDashboardDensity(layout.hasSaved);
   const [showCustomize, setShowCustomize] = useState(false);
-  const simple = density === 'simple';
 
   if (error) {
     return (
@@ -1222,8 +1182,7 @@ export default function DashboardPage() {
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myDashboard: <MyDashboard />,
-    overview: <StatsOverview stats={stats} />,
-    governancePosture: <GovernancePosture stats={stats} />,
+    myPortfolio: <MyPortfolioHealth />,
     trends: <DashboardTrends stats={stats} />,
     programMaturity: <ProgramMaturity />,
     gaps: <GapsOverview stats={stats} />,
@@ -1236,58 +1195,34 @@ export default function DashboardPage() {
         title="Dashboard"
         actions={!isEmptyOrg ? (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {/* Simple vs Detailed — Simple shows only the four essential
-                sections (personal view, KPIs, gaps, next steps); Detailed is
-                the full customizable dashboard. A first-time visitor defaults
-                to Simple so the landing isn't a wall of charts. */}
-            <div role="group" aria-label="Dashboard density" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
-              {(['simple', 'detailed'] as const).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => { setDensity(d); if (d === 'simple') setShowCustomize(false); }}
-                  aria-pressed={density === d}
-                  title={d === 'simple' ? 'Show only the essentials' : 'Show all dashboard sections'}
-                  style={{
-                    padding: '5px 12px', fontSize: 11, fontWeight: density === d ? 600 : 500,
-                    border: 'none', cursor: 'pointer', textTransform: 'capitalize',
-                    background: density === d ? 'var(--color-primary)' : 'var(--color-surface)',
-                    color: density === d ? '#fff' : 'var(--color-text-secondary)',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-            {/* Customize governs the Detailed layout only — hide it in Simple. */}
-            {!simple && (
-              <button
-                onClick={() => setShowCustomize((v) => !v)}
-                aria-expanded={showCustomize}
-                title="Reorder or hide dashboard sections"
-                style={{
-                  padding: '5px 12px', fontSize: 11, fontWeight: 500,
-                  background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
-                  color: showCustomize ? '#fff' : 'var(--color-text-secondary)',
-                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
-              >
-                {showCustomize ? 'Done' : 'Customize'}
-              </button>
-            )}
+            {/* Customize lets the user reorder / hide / resize the dashboard
+                sections. There's a single dashboard view now (the former
+                Simple/Detailed toggle is gone), so it's always available. */}
+            <button
+              onClick={() => setShowCustomize((v) => !v)}
+              aria-expanded={showCustomize}
+              title="Reorder or hide dashboard sections"
+              style={{
+                padding: '5px 12px', fontSize: 11, fontWeight: 500,
+                background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: showCustomize ? '#fff' : 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >
+              {showCustomize ? 'Done' : 'Customize'}
+            </button>
           </div>
         ) : undefined}
       >
       </PageHeader>
 
       {/* Quick-action menu bar — pinned under the header as the dashboard's
-          "menu", in both Simple and Detailed. Hidden on an empty org, which
-          shows the welcome/setup screen instead. */}
+          "menu". Hidden on an empty org, which shows the welcome/setup screen
+          instead. */}
       {!isEmptyOrg && <DashboardActionBar />}
 
-      {!simple && showCustomize && (
+      {showCustomize && (
         <Card
           padding={16}
           marginBottom={24}
@@ -1369,30 +1304,6 @@ export default function DashboardPage() {
 
       {isEmptyOrg ? (
         <EmptyDashboardWelcome />
-      ) : simple ? (
-        // Simple view — only the four essential sections, each full-width and
-        // stacked, in a fixed sensible order. Independent of the Detailed
-        // Customize order/width/hidden state so "Simple" is always the same
-        // predictable, low-density landing. A footer nudge points to Detailed.
-        <>
-          <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
-          <div>
-            {ESSENTIAL_SECTIONS.map((key) => (
-              <div key={key} className="dashboard-section-cell">{sectionMap[key]}</div>
-            ))}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-            Showing the essentials.{' '}
-            <button
-              type="button"
-              onClick={() => setDensity('detailed')}
-              style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' }}
-            >
-              Switch to Detailed
-            </button>{' '}
-            for trends, governance posture, program maturity and more.
-          </div>
-        </>
       ) : (
         <>
           <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
