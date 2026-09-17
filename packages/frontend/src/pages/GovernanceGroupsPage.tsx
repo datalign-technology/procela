@@ -23,6 +23,7 @@ import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
+import PersonPicker from '../components/PersonPicker';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ── Types ──
@@ -1226,17 +1227,21 @@ export default function GovernanceGroupsPage() {
                                   <div style={{ marginTop: 8, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                                     {canAddPerson && (
                                       <>
-                                        <select
-                                          aria-label="Person"
-                                          style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px' }}
-                                          value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
-                                          onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); if (e.target.value) setAssignRoleAgentId(''); }}
-                                        >
-                                          <option value="">Person...</option>
-                                          {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
-                                            <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
-                                          ))}
-                                        </select>
+                                        {/* Shared PersonPicker (search / org tree / by-group),
+                                            not a flat native <select>, so assigning a role holder
+                                            looks and works like every other person selector in the
+                                            app. Gated to people not already holding this role. */}
+                                        <div style={{ minWidth: 190, maxWidth: 260 }}>
+                                          <PersonPicker
+                                            mode="single"
+                                            valueMode="id"
+                                            orgId={activeOrgId || undefined}
+                                            value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
+                                            onChange={(id: string | null) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(id || ''); if (id) setAssignRoleAgentId(''); }}
+                                            placeholder="Person…"
+                                            eligibleKeys={new Set(people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => p.id))}
+                                          />
+                                        </div>
                                         <Button
                                           variant="primary"
                                           size="sm"
