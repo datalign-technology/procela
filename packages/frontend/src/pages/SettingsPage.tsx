@@ -22,7 +22,6 @@ import LoadDemoDataPanel from '../components/LoadDemoDataPanel';
 import { useAuthStore } from '@/stores/authStore';
 import { Link } from 'react-router-dom';
 import { useOrgContext } from '../stores/orgContext';
-import { useSetupStore, type GetStartedVisibility } from '@/stores/setupStore';
 
 interface AuthConfigData {
   provider: string;
@@ -126,17 +125,10 @@ export default function SettingsPage() {
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [confirmLifecycle, setConfirmLifecycle] = useState<'simple' | 'review' | 'advanced' | null>(null);
   const [lifecycleMigrationMsg, setLifecycleMigrationMsg] = useState<string | null>(null);
-  // "Get Started" guide visibility — a per-user, client-side preference read
-  // and set straight from setupStore (no API; it's a UI nudge, not org data).
-  // Scoped to the signed-in user (browser storage keyed by user id), and not
-  // keyed by org: the show/hide choice follows the user across every org.
-  const getStartedVisibility = useSetupStore((s) => s.visibility);
-  const setGetStartedVisibility = useSetupStore((s) => s.setVisibility);
-  const GET_STARTED_OPTIONS: Array<{ key: GetStartedVisibility; label: string }> = [
-    { key: 'auto', label: 'Auto' },
-    { key: 'shown', label: 'Always' },
-    { key: 'hidden', label: 'Hidden' },
-  ];
+  // "Get Started" guide visibility is a per-user display preference — it now
+  // lives in the top-right user menu (Display preferences), next to Terminology
+  // and Density, via <GetStartedVisibilityToggle/>. Kept off this admin,
+  // org-scoped Settings page.
   useEffect(() => {
     if (!activeOrgId) return;
     apiClient
@@ -545,49 +537,6 @@ export default function SettingsPage() {
                   }}
                 >
                   {lifecycleBusy && confirmLifecycle === mode ? '…' : mode}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Get Started guide — user control over the "Get Started with
-          Procela" onboarding entry in the sidebar. Auto (default) keeps the
-          old behaviour (show while setup is incomplete, step aside at 100%);
-          Always pins it; Hidden removes it. Stored as a per-user preference in
-          setupStore (client-side, scoped to the signed-in user), so it follows
-          the user across every org. */}
-      <Card padding="1.5rem">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={sectionTitleStyle}>Get Started guide</h2>
-            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-              Controls the <strong>Get Started with Procela</strong> onboarding entry in the sidebar. This is a personal preference — it&rsquo;s tied to your account on this browser and applies across all of your organizations.
-            </p>
-            <ul style={{ fontSize: 12, color: 'var(--color-text-secondary)', paddingLeft: 18, listStyle: 'disc', marginBottom: 0 }}>
-              <li><strong>Auto</strong> — show it while setup is incomplete, then hide it once the active org is fully set up. The default.</li>
-              <li><strong>Always</strong> — keep it pinned in the sidebar even after setup is complete, so you can revisit the steps.</li>
-              <li><strong>Hidden</strong> — remove it from the sidebar entirely.</li>
-            </ul>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-            <SectionLabel marginBottom={0}>Sidebar entry</SectionLabel>
-            <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 6, overflow: 'hidden' }}>
-              {GET_STARTED_OPTIONS.map((opt, i) => (
-                <button
-                  key={opt.key}
-                  onClick={() => opt.key !== getStartedVisibility && setGetStartedVisibility(opt.key)}
-                  style={{
-                    padding: '6px 14px', fontSize: 13, fontWeight: 500,
-                    background: opt.key === getStartedVisibility ? 'var(--color-primary)' : 'var(--color-surface)',
-                    color: opt.key === getStartedVisibility ? '#fff' : 'var(--color-text)',
-                    border: 'none',
-                    borderLeft: i > 0 ? '1px solid var(--color-border)' : undefined,
-                    cursor: opt.key === getStartedVisibility ? 'default' : 'pointer',
-                  }}
-                >
-                  {opt.label}
                 </button>
               ))}
             </div>

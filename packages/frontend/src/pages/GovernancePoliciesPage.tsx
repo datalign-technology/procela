@@ -8,6 +8,7 @@ import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
+import AttachmentsPanel from '../components/AttachmentsPanel';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
@@ -406,11 +407,11 @@ export default function GovernancePoliciesPage() {
     },
   ].filter(Boolean) as DataTableColumn<Policy>[]);
 
-  // A document is expandable only if it has something to show below the row:
-  // a Controls panel (POLICY docType) or a Source panel (promoted from an
-  // agent draft). Otherwise it shows no caret and never opens an empty row.
-  const isPolicyExpandable = (p: Policy) =>
-    (p.documentType || 'POLICY') === 'POLICY' || !!promotionsByPolicy[p.id];
+  // Every document is expandable — the expansion always carries a "Linked
+  // documents" panel (point at the real file on SharePoint, a web page, a file
+  // server, or upload a copy), plus Controls (POLICY docType) and a Source
+  // panel (promoted from an agent draft) when those apply.
+  const isPolicyExpandable = (_p: Policy) => true;
 
   const renderPolicyExpansion = (pol: Policy) => {
     const promo = promotionsByPolicy[pol.id];
@@ -533,6 +534,17 @@ export default function GovernancePoliciesPage() {
             )}
           </div>
         )}
+
+        {/* Linked documents — point this governance document at the real file
+            wherever it lives (SharePoint, a web page, a file server) or upload
+            a copy. Shown for every document type. */}
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Linked documents</h3>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 6px' }}>
+            Point to the source document (SharePoint, a website, a file server) or upload a copy. Procela stores the link, not the document&rsquo;s contents.
+          </p>
+          <AttachmentsPanel entityType="GovernancePolicy" entityId={pol.id} orgId={activeOrgId ?? undefined} disabled={!canWrite} hideHeader />
+        </div>
       </div>
     );
   };
