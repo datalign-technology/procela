@@ -45,6 +45,13 @@ export interface StoredGovernanceProgram {
     outOfScope: string;
     boundaries: string;
     constraints: string;
+    // Structured scope: the catalog entities this program governs, referenced
+    // by id. Optional + additive — the free-text `inScope` above still stands
+    // for anything not yet catalogued. Drives the Foundation page's in-scope
+    // coverage read-out. Absent on programs saved before this field existed.
+    systemIds?: string[];
+    domainIds?: string[];
+    valueStreamIds?: string[];
   };
   principles: {
     vision: string;
@@ -110,7 +117,7 @@ function buildDefaultProgram(orgId: string): StoredGovernanceProgram {
     id: uuid(),
     orgId,
     name: 'Data Governance Program',
-    scope: { inScope: '', outOfScope: '', boundaries: '', constraints: '' },
+    scope: { inScope: '', outOfScope: '', boundaries: '', constraints: '', systemIds: [], domainIds: [], valueStreamIds: [] },
     principles: { vision: '', principles: [], decisionRights: '', operatingModel: '' },
     targetStartDate: null,
     targetLaunchDate: null,
@@ -498,11 +505,18 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (name !== undefined) program.name = String(name);
 
   if (scope !== undefined && scope && typeof scope === 'object') {
+    // Sanitize a reference-id array: only string ids, deduped. Absent key =>
+    // keep the stored value (partial saves don't clobber the other refs).
+    const idList = (v: unknown, prev: string[] | undefined): string[] =>
+      Array.isArray(v) ? Array.from(new Set(v.filter((x): x is string => typeof x === 'string'))) : (prev || []);
     program.scope = {
       inScope: typeof scope.inScope === 'string' ? scope.inScope : program.scope.inScope,
       outOfScope: typeof scope.outOfScope === 'string' ? scope.outOfScope : program.scope.outOfScope,
       boundaries: typeof scope.boundaries === 'string' ? scope.boundaries : program.scope.boundaries,
       constraints: typeof scope.constraints === 'string' ? scope.constraints : program.scope.constraints,
+      systemIds: scope.systemIds !== undefined ? idList(scope.systemIds, program.scope.systemIds) : program.scope.systemIds,
+      domainIds: scope.domainIds !== undefined ? idList(scope.domainIds, program.scope.domainIds) : program.scope.domainIds,
+      valueStreamIds: scope.valueStreamIds !== undefined ? idList(scope.valueStreamIds, program.scope.valueStreamIds) : program.scope.valueStreamIds,
     };
   }
 

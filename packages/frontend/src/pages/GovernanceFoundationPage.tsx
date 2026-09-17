@@ -26,11 +26,16 @@ import { useRefreshOnFocus } from '../hooks/usePolling';
 
 interface Program {
   id: string;
-  scope: { inScope: string; outOfScope: string; boundaries: string; constraints: string };
+  scope: {
+    inScope: string; outOfScope: string; boundaries: string; constraints: string;
+    systemIds?: string[]; domainIds?: string[]; valueStreamIds?: string[];
+  };
   principles: { vision: string; principles: string[]; decisionRights: string; operatingModel: 'CENTRALIZED' | 'FEDERATED' | 'HYBRID' | '' };
   status: 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
   launchedAt?: string | null;
 }
+
+interface CatalogItem { id: string; name: string }
 
 interface IncompletePhase { phase: number; name: string; missing: string[] }
 
@@ -40,6 +45,53 @@ const inputStyle: React.CSSProperties = {
 };
 const textareaStyle: React.CSSProperties = { ...inputStyle, minHeight: 80, fontFamily: 'inherit', resize: 'vertical' };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
+
+// ScopeSelector — one catalog's in-scope picker: a coverage read-out, the
+// selected entities as removable chips, and an "add" dropdown of what's left.
+// Turns the free-text scope into references the rest of the platform can read.
+function ScopeSelector({ label, items, selectedIds, onChange }: {
+  label: string; items: CatalogItem[]; selectedIds: string[]; onChange: (ids: string[]) => void;
+}) {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  // Only ids that still resolve to a catalog item (an entity deleted after
+  // being scoped is dropped rather than shown as "Unknown").
+  const selected = selectedIds.filter((id) => byId.has(id));
+  const available = items.filter((i) => !selectedIds.includes(i.id)).sort((a, b) => a.name.localeCompare(b.name));
+  const add = (id: string) => { if (id && !selectedIds.includes(id)) onChange([...selectedIds, id]); };
+  const remove = (id: string) => onChange(selectedIds.filter((x) => x !== id));
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+        <label style={{ fontSize: 12, fontWeight: 500 }}>{label}</label>
+        <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+          {items.length === 0 ? 'none in catalog' : `${selected.length} of ${items.length} in scope`}
+        </span>
+      </div>
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {selected.map((id) => (
+            <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '3px 6px 3px 10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 999 }}>
+              {byId.get(id)!.name}
+              <button type="button" onClick={() => remove(id)} aria-label={`Remove ${byId.get(id)!.name}`} title="Remove from scope" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 14, lineHeight: 1, padding: 0 }}><span aria-hidden="true">&times;</span></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <select
+        aria-label={`Add ${label} to scope`}
+        style={{ ...selectStyle, color: available.length === 0 ? 'var(--color-text-muted)' : 'var(--color-text)' }}
+        value=""
+        disabled={available.length === 0}
+        onChange={(e) => { add(e.target.value); e.target.value = ''; }}
+      >
+        <option value="" disabled>
+          {items.length === 0 ? `No ${label.toLowerCase()} catalogued yet` : available.length === 0 ? `All ${label.toLowerCase()} in scope` : `Add ${label.toLowerCase().replace(/s$/, '')}…`}
+        </option>
+        {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+      </select>
+    </div>
+  );
+}
 
 export default function GovernanceFoundationPage() {
   const { activeOrgId } = useOrgContext();
@@ -103,6 +155,14 @@ export default function GovernanceFoundationPage() {
   const [newPrinciple, setNewPrinciple] = useState('');
   const [decisionRights, setDecisionRights] = useState('');
   const [operatingModel, setOperatingModel] = useState<Program['principles']['operatingModel']>('');
+  // Structured scope — the catalog entities the program governs, by id, plus
+  // the catalogs to resolve them to names / drive the coverage read-out.
+  const [systemIds, setSystemIds] = useState<string[]>([]);
+  const [domainIds, setDomainIds] = useState<string[]>([]);
+  const [valueStreamIds, setValueStreamIds] = useState<string[]>([]);
+  const [systems, setSystems] = useState<CatalogItem[]>([]);
+  const [domains, setDomains] = useState<CatalogItem[]>([]);
+  const [valueStreams, setValueStreams] = useState<CatalogItem[]>([]);
 
   const hydrate = (p: Program) => {
     setInScope(p.scope?.inScope || '');
@@ -110,6 +170,9 @@ export default function GovernanceFoundationPage() {
     // Boundaries absorbed the former separate Constraints field — fold any
     // existing constraints text in on load so nothing is lost.
     setBoundaries([p.scope?.boundaries, p.scope?.constraints].map((s) => (s || '').trim()).filter(Boolean).join('\n\n'));
+    setSystemIds(Array.isArray(p.scope?.systemIds) ? p.scope!.systemIds! : []);
+    setDomainIds(Array.isArray(p.scope?.domainIds) ? p.scope!.domainIds! : []);
+    setValueStreamIds(Array.isArray(p.scope?.valueStreamIds) ? p.scope!.valueStreamIds! : []);
     setVision(p.principles?.vision || '');
     setPrinciples(Array.isArray(p.principles?.principles) ? p.principles.principles : []);
     setDecisionRights(p.principles?.decisionRights || '');
@@ -130,6 +193,22 @@ export default function GovernanceFoundationPage() {
   useEffect(() => { fetchProgram(); }, [fetchProgram]);
   useRefreshOnFocus(fetchProgram);
 
+  // Load the catalogs that the structured scope selects from. Independent of
+  // the program fetch and best-effort: a failing list just yields an empty
+  // picker, never blocks the page. Value streams come back as a nested tree;
+  // only the top-level id + name are needed here.
+  const fetchCatalogs = useCallback(async () => {
+    const [sysRes, domRes, vsRes] = await Promise.allSettled([
+      apiClient.get<{ data: CatalogItem[] }>('/systems'),
+      apiClient.get<{ data: CatalogItem[] }>('/data-domains'),
+      apiClient.get<{ data: CatalogItem[] }>('/value-streams'),
+    ]);
+    if (sysRes.status === 'fulfilled') setSystems((sysRes.value.data || []).map((s) => ({ id: s.id, name: s.name })));
+    if (domRes.status === 'fulfilled') setDomains((domRes.value.data || []).map((d) => ({ id: d.id, name: d.name })));
+    if (vsRes.status === 'fulfilled') setValueStreams((vsRes.value.data || []).map((v) => ({ id: v.id, name: v.name })));
+  }, []);
+  useEffect(() => { fetchCatalogs(); }, [fetchCatalogs, activeOrgId]);
+
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!program) return;
@@ -138,7 +217,7 @@ export default function GovernanceFoundationPage() {
       const payload = {
         // constraints merged into boundaries; write it empty so the two
         // can't drift back apart.
-        scope: { inScope, outOfScope, boundaries, constraints: '' },
+        scope: { inScope, outOfScope, boundaries, constraints: '', systemIds, domainIds, valueStreamIds },
         principles: { vision, principles, decisionRights, operatingModel },
       };
       const res = await apiClient.put<{ success: boolean; data: Program }>(`/governance-program/${program.id}`, payload);
@@ -207,6 +286,22 @@ export default function GovernanceFoundationPage() {
               <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>In Scope</label><textarea aria-label="In Scope" style={textareaStyle} value={inScope} onChange={(e) => setInScope(e.target.value)} placeholder="What data, systems, and processes are governed by this program?" /></div>
               <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Out of Scope</label><textarea aria-label="Out of Scope" style={textareaStyle} value={outOfScope} onChange={(e) => setOutOfScope(e.target.value)} placeholder="What is explicitly excluded from this program?" /></div>
               <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries &amp; Constraints</label><textarea aria-label="Boundaries & Constraints" style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational / geographic / functional boundaries, plus budget, timeline, regulatory or resource constraints to respect" /></div>
+
+              {/* Structured scope — pick the catalogued entities this program
+                  governs. Complements the free-text "In Scope" above (which
+                  still covers anything not yet in the catalog) and turns scope
+                  into references the rest of the platform can read. */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 4, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Governed entities</div>
+                <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+                  Select the systems, data domains, and value streams this program governs, straight from your catalog.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+                  <ScopeSelector label="Systems" items={systems} selectedIds={systemIds} onChange={setSystemIds} />
+                  <ScopeSelector label="Data Domains" items={domains} selectedIds={domainIds} onChange={setDomainIds} />
+                  <ScopeSelector label="Value Streams" items={valueStreams} selectedIds={valueStreamIds} onChange={setValueStreamIds} />
+                </div>
+              </div>
             </div>
           )}
 
