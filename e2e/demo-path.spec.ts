@@ -89,13 +89,13 @@ test.describe('Procela demo path', () => {
     });
 
     await gotoWithOrg(page, '/', orgId, 'Demo Path Beat1');
-    // A populated org renders the single (Detailed) dashboard: the personal
-    // header plus the analytical widget band. These headings only appear once
-    // the org has data — an empty org shows the "Welcome to Procela" setup
-    // card instead — so they prove the aggregated dashboard rendered.
-    await expect(page.locator('body')).toContainText(/My Dashboard/i, { timeout: 10_000 });
-    await expect(page.locator('body')).toContainText(/Governance Gaps/i, { timeout: 5_000 });
-    await expect(page.locator('body')).toContainText(/Program Maturity/i, { timeout: 5_000 });
+    // A populated org renders the personal dashboard widget band. These
+    // analytical-widget headings only appear once the org has data — an empty
+    // org shows the "Welcome to Procela" setup card instead — so they prove the
+    // aggregated dashboard rendered. (The page's own "Dashboard" header renders
+    // either way, so it isn't a useful signal here.)
+    await expect(page.locator('body')).toContainText(/Portfolio Health/i, { timeout: 10_000 });
+    await expect(page.locator('body')).toContainText(/Coverage/i, { timeout: 5_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

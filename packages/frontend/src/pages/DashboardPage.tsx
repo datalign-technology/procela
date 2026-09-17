@@ -12,7 +12,6 @@ import { healthColorVar } from '../components/HealthBar';
 import SectionHeading from '../components/SectionHeading';
 import StatTile from '../components/StatTile';
 import Meter from '../components/Meter';
-import ProgressRing from '../components/ProgressRing';
 import Gauge from '../components/Gauge';
 import Donut from '../components/Donut';
 import Sparkline from '../components/Sparkline';
@@ -177,7 +176,6 @@ function MyDashboard() {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Dashboard" />
       <Card padding={20}><SkeletonRows rows={4} columnWidths={[180, null, 90]} /></Card>
     </div>
   );
@@ -188,7 +186,6 @@ function MyDashboard() {
     // imported). The section still shows so an enabled widget doesn't vanish.
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="My Dashboard" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             This is your personal view — the tasks, issues, and domains assigned to you will show up
@@ -242,11 +239,6 @@ function MyDashboard() {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Dashboard" marginBottom={4} />
-      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-        Welcome back, {data.person.name}. Here’s what needs your attention.
-      </p>
-
       {/* Summary KPIs — each tile is a hyperlink to the surface where
           that count lives. Same affordance as the org Overview strip
           below (hover lift, muted-but-still-linked at zero, tooltip
@@ -268,7 +260,7 @@ function MyDashboard() {
         />
         <StatTile dense
           to="/data-domains"
-          label="My Domains"
+          label="Domains"
           value={(s.domainsOwned || 0) + (s.domainsSteward || 0)}
         />
         <StatTile dense
@@ -288,7 +280,7 @@ function MyDashboard() {
             reviews, at-risk domains; each capped, with a "+N more" footer
             when the queue runs longer. */}
         <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-warning)' }}>
-          <CardHeaderRow color="var(--color-warning)" icon={<AttentionGlyph />} label="Needs My Attention" />
+          <CardHeaderRow color="var(--color-warning)" icon={<AttentionGlyph />} label="Needs Attention" />
           {urgentTotal === 0 ? (
             <div style={{ color: 'var(--color-success)', fontSize: 13 }}>All clear — no urgent items.</div>
           ) : (
@@ -336,7 +328,7 @@ function MyDashboard() {
             queue beside it. A muted kind tag distinguishes a task/review due
             date from a meeting. */}
         <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-info)' }}>
-          <CardHeaderRow color="var(--color-info)" icon={renderNavIcon('/governance-calendar', { size: 13 })} label="My Schedule" />
+          <CardHeaderRow color="var(--color-info)" icon={renderNavIcon('/governance-calendar', { size: 13 })} label="Schedule" />
           {scheduleItems.length === 0 ? (
             <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Nothing scheduled in the next 14 days.</div>
           ) : (
@@ -370,14 +362,14 @@ function MyDashboard() {
       {/* My Domains */}
       {(data.myDomains || []).length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <SectionLabel>My Domains</SectionLabel>
+          <SectionLabel>Domains</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
             {(data.myDomains || []).map((d) => {
               const healthPct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
               return (
                 <Link key={d.id} to="/data-domains" style={{ ...cardStyle, padding: '10px 14px', textDecoration: 'none', color: 'var(--color-text)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{d.name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)' }}>{d.name}</span>
                     <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
@@ -393,7 +385,7 @@ function MyDashboard() {
       {(data.myTasks || []).length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <SectionLabel marginBottom={0}>My Tasks</SectionLabel>
+            <SectionLabel marginBottom={0}>Tasks</SectionLabel>
             <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks?.length ?? 0}</Link>
           </div>
           <Card padding={0} style={{ overflow: 'hidden' }}>
@@ -413,7 +405,7 @@ function MyDashboard() {
       {(data.myIssues || []).length > 0 && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <SectionLabel marginBottom={0}>My Issues</SectionLabel>
+            <SectionLabel marginBottom={0}>Issues</SectionLabel>
             <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues?.length ?? 0}</Link>
           </div>
           <Card padding={0} style={{ overflow: 'hidden' }}>
@@ -480,7 +472,7 @@ function MyPortfolioHealth() {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Portfolio Health" />
+      <SectionHeading title="Portfolio Health" />
       <Card padding={20}><SkeletonRows rows={2} columnWidths={[140, null, 60]} /></Card>
     </div>
   );
@@ -489,7 +481,7 @@ function MyPortfolioHealth() {
   if (!data?.person || !p || p.domains === 0) {
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="My Portfolio Health" />
+        <SectionHeading title="Portfolio Health" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             {!data?.person
@@ -514,11 +506,11 @@ function MyPortfolioHealth() {
   ];
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Portfolio Health" />
+      <SectionHeading title="Portfolio Health" />
       <Card padding="18px 22px">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 20, alignItems: 'center' }}>
           <div>
-            <SectionLabel>My asset tiers</SectionLabel>
+            <SectionLabel>Asset tiers</SectionLabel>
             {tierTotal > 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <Link to="/data-domains" title="View my data domains" style={{ display: 'inline-flex', flexShrink: 0 }}>
@@ -596,7 +588,7 @@ function MyCoverage() {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Coverage" />
+      <SectionHeading title="Coverage" />
       <Card padding={20}><SkeletonRows rows={3} columnWidths={[120, null, 60]} /></Card>
     </div>
   );
@@ -605,7 +597,7 @@ function MyCoverage() {
   if (!data?.person || !p || p.assets === 0) {
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="My Coverage" />
+        <SectionHeading title="Coverage" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             {!data?.person
@@ -626,7 +618,7 @@ function MyCoverage() {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Coverage" />
+      <SectionHeading title="Coverage" />
       <Card padding="16px 20px">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {rows.map((r) => {
@@ -682,15 +674,15 @@ function MyTrends() {
   if (points.length < 1) return null; // no history to draw
 
   const metrics = [
-    { key: 'openTasks' as const, label: 'My Open Tasks', to: '/governance-work?tab=tasks', goodUp: false },
-    { key: 'openIssues' as const, label: 'My Open Issues', to: '/governance-work?tab=issues', goodUp: false },
-    { key: 'overdue' as const, label: 'My Overdue', to: '/governance-work?tab=tasks', goodUp: false },
+    { key: 'openTasks' as const, label: 'Open Tasks', to: '/governance-work?tab=tasks', goodUp: false },
+    { key: 'openIssues' as const, label: 'Open Issues', to: '/governance-work?tab=issues', goodUp: false },
+    { key: 'overdue' as const, label: 'Overdue', to: '/governance-work?tab=tasks', goodUp: false },
   ];
   const spanWeeks = points.length - 1; // weekly boundaries → intervals
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="My Trends" right={
+      <SectionHeading title="Trends" right={
         <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {points.length} weeks</span>
       } />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
@@ -724,23 +716,22 @@ function MyTrends() {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'programMaturity' | 'gaps' | 'myCoverage';
+type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'myCoverage';
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard    — personal, act-now (your overdue tasks / critical issues)
 //   2. myTrends       — my open tasks/issues/overdue over time, full-width strip
 //   3. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
-//   4. gaps           — concrete problems to fix                          ┘
-//   5. programMaturity— where we are in the journey  ┐ pair
-//   6. myCoverage     — mapping/governance/ownership of my assets         ┘
+//   4. myCoverage     — mapping/governance/ownership of my assets          ┘
 // Quick actions are NOT a section — they render as a compact menu bar pinned
-// under the page header (see DashboardActionBar), not in this flow. The four
-// narrow analytical widgets (myPortfolio → myCoverage) stay contiguous so they
+// under the page header (see DashboardActionBar), not in this flow. The two
+// narrow analytical widgets (myPortfolio, myCoverage) stay contiguous so they
 // pair two-up cleanly; My Trends is full-width so its cards sit compact in a
-// single row. The dashboard is you-scoped: the org-wide Governance Posture /
-// Trends / Catalog Coverage are replaced by My Portfolio Health / My Trends /
-// My Coverage, leaving Program Maturity and Governance Gaps as shared context.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTrends', 'myPortfolio', 'gaps', 'programMaturity', 'myCoverage'];
+// single row. The dashboard is fully you-scoped: the org-wide Governance
+// Posture / Trends / Catalog Coverage / Program Maturity / Governance Gaps
+// widgets are all replaced or dropped in favour of My Portfolio Health /
+// My Trends / My Coverage.
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTrends', 'myPortfolio', 'myCoverage'];
 
 type SectionWidth = 'full' | 'half';
 
@@ -753,18 +744,14 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
   myTrends: 'full',
   myPortfolio: 'half',
-  gaps: 'half',
-  programMaturity: 'half',
   myCoverage: 'half',
 };
 
 const SECTION_LABELS: Record<SectionKey, string> = {
-  myDashboard: 'My Dashboard',
-  myPortfolio: 'My Portfolio Health',
-  myTrends: 'My Trends',
-  programMaturity: 'Program Maturity',
-  gaps: 'Governance Gaps',
-  myCoverage: 'My Coverage',
+  myDashboard: 'Dashboard',
+  myPortfolio: 'Portfolio Health',
+  myTrends: 'Trends',
+  myCoverage: 'Coverage',
 };
 
 interface StoredLayout { order: string[]; hidden: string[]; width?: Record<string, SectionWidth> }
@@ -949,148 +936,6 @@ function DashboardActionBar() {
   );
 }
 
-
-interface ProgramPhase { name: string; completed: boolean; progress: number }
-interface ProgramStatus {
-  currentPhase: number;
-  overallProgress: number;
-  phases?: { phase1?: ProgramPhase; phase2?: ProgramPhase; phase3?: ProgramPhase; phase4?: ProgramPhase };
-}
-
-function ProgramMaturity() {
-  const { activeOrgId } = useOrgContext();
-  const [status, setStatus] = useState<ProgramStatus | null>(null);
-
-  useEffect(() => {
-    if (!activeOrgId) { setStatus(null); return; }
-    (async () => {
-      try {
-        const progRes = await apiClient.get<{ data: { id?: string } | null }>(`/governance-program?orgId=${activeOrgId}`);
-        const prog = progRes.data;
-        if (!prog?.id) return;
-        const statusRes = await apiClient.get<{ data: ProgramStatus }>(`/governance-program/${prog.id}/status`);
-        setStatus(statusRes.data);
-      } catch { /* */ }
-    })();
-  }, [activeOrgId]);
-
-  if (!status) return null;
-
-  const phaseNames = ['', 'Foundation Definition', 'Structural Design', 'People & Processes', 'Operationalization'];
-  const phase = (n: number): ProgramPhase | undefined =>
-    (status.phases as Record<string, ProgramPhase | undefined> | undefined)?.[`phase${n}`];
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Program Maturity" />
-      {/* Fills the equal-height cell (see .dashboard-half-grid) — its
-          flex column spreads the phase rows to match the paired widget. */}
-      <Card padding="16px 20px" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {/* Header — overall progress + the current phase. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-          <ProgressRing percent={status.overallProgress} size={48} stroke={5} showLabel />
-          {/* Label the ring by what it measures (overall %), with the current
-              phase as a subtitle — otherwise the big number reads as the
-              progress of the phase named beside it. */}
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>Overall program progress</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Currently in Phase {status.currentPhase}: {phaseNames[status.currentPhase]}</div>
-          </div>
-        </div>
-
-        {/* Every phase, not just the current one — each with its own progress. */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          {[1, 2, 3, 4].map((n) => {
-            const p = phase(n);
-            const name = p?.name || phaseNames[n];
-            const progress = p?.progress ?? 0;
-            const done = !!p?.completed;
-            const isCurrent = n === status.currentPhase;
-            return (
-              <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{
-                  width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                  display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700,
-                  background: done ? '#dcfce7' : isCurrent ? 'var(--color-primary-light)' : 'var(--color-bg)',
-                  color: done ? '#166534' : isCurrent ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  border: '1px solid ' + (done ? '#86efac' : isCurrent ? 'var(--color-primary)' : 'var(--color-border)'),
-                }}>{done ? '✓' : n}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: isCurrent ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{progress}%</span>
-                  </div>
-                  <Meter value={progress} height={4} style={{ marginTop: 3 }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <Link to="/setup" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 10, display: 'inline-block', flexShrink: 0 }}>
-          View full program →
-        </Link>
-      </Card>
-    </div>
-  );
-}
-
-function GapsOverview({ stats }: { stats: DashboardStats }) {
-  const gaps = stats.gaps;
-  if (!gaps) return null;
-  const items = [
-    { label: 'Unmapped activities', count: gaps.unmappedActivities || gaps.unmappedSteps || 0, severity: 'critical' as const, link: '/mappings' },
-    { label: 'Ownerless processes', count: gaps.ownerlessItems || 0, severity: 'critical' as const, link: '/processes' },
-    { label: 'Ungoverned assets (Uncertified)', count: gaps.ungovernedAssets || 0, severity: 'warning' as const, link: '/data-assets' },
-    { label: 'Unowned domains', count: gaps.ungovernedDomains || 0, severity: 'warning' as const, link: '/data-domains' },
-    { label: 'Orphan data assets (no process uses them)', count: gaps.orphanAssets || 0, severity: 'warning' as const, link: '/data-assets?mapping=unmapped' },
-  ];
-  const total = items.reduce((s, i) => s + i.count, 0);
-  const sevColors = { critical: 'var(--color-error)', warning: 'var(--color-warning)', info: 'var(--color-info)' };
-  const criticalTotal = items.filter((i) => i.severity === 'critical').reduce((s, i) => s + i.count, 0);
-  const warningTotal = items.filter((i) => i.severity === 'warning').reduce((s, i) => s + i.count, 0);
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Governance Gaps" />
-      {total === 0 ? (
-        <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--color-success)', fontSize: 13, fontWeight: 500 }}>
-          No gaps detected — all processes are mapped and ownership is assigned.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {/* Severity split — the balance of critical vs warning at a glance,
-              before reading the individual rows. Status colours carry an
-              explicit count label beside them, never colour alone. */}
-          <div style={{ marginBottom: 4 }}>
-            <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', background: 'var(--color-bg)', gap: 2 }}>
-              {criticalTotal > 0 && <div title={`${criticalTotal} critical`} style={{ flex: criticalTotal, background: sevColors.critical, borderRadius: 5 }} />}
-              {warningTotal > 0 && <div title={`${warningTotal} warning`} style={{ flex: warningTotal, background: sevColors.warning, borderRadius: 5 }} />}
-            </div>
-            <div style={{ display: 'flex', gap: 14, marginTop: 6, fontSize: 11 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-text-secondary)' }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: sevColors.critical }} /> {criticalTotal} critical
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-text-secondary)' }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: sevColors.warning }} /> {warningTotal} warning
-              </span>
-            </div>
-          </div>
-          {items.filter((i) => i.count > 0).map((item) => (
-            <Link key={item.label} to={item.link} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit', transition: 'background 0.1s' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: sevColors[item.severity], minWidth: 28 }}>{item.count}</span>
-              <span style={{ fontSize: 13, flex: 1 }}>{item.label}</span>
-              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Fix →</span>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ──────────────────────────────────────────────────────────────────────────
 // EmptyDashboardWelcome — the Dashboard's own empty-org state. Deliberately
 // NOT the setup checklist (that lives only on the Get Started guide, /setup);
@@ -1183,8 +1028,6 @@ export default function DashboardPage() {
     myDashboard: <MyDashboard />,
     myPortfolio: <MyPortfolioHealth />,
     myTrends: <MyTrends />,
-    programMaturity: <ProgramMaturity />,
-    gaps: <GapsOverview stats={stats} />,
     myCoverage: <MyCoverage />,
   };
 
