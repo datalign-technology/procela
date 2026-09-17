@@ -311,6 +311,68 @@ export async function sendDigestEmail(args: {
   }
 }
 
+/** Notify a person that they were added to a governance meeting's attendee
+ *  list. Transactional (like the password-reset / support mails), so it sends
+ *  whenever SMTP is configured — it is not gated on the digest opt-in. Returns
+ *  true on successful send, false otherwise (not configured, no recipient, or a
+ *  delivery error); the caller writes the in-app notification regardless. */
+export async function sendCalendarInviteEmail(args: {
+  to: string;
+  name: string;
+  orgName: string;
+  eventName: string;
+  eventDescription?: string;
+  whenText: string;      // e.g. "Fri, Sep 18" or "Not yet scheduled"
+  cadence: string;       // e.g. "Weekly"
+}): Promise<boolean> {
+  if (!isConfigured() || !transporter || !config || !args.to) return false;
+
+  const link = `${config.appUrl.replace(/\/$/, '')}/governance-calendar`;
+  const subject = `You're on the invite list: ${args.eventName}`;
+  const desc = (args.eventDescription || '').trim();
+
+  const text = [
+    `Hi ${args.name || 'there'},`,
+    '',
+    `You've been added to the attendee list for a governance meeting in ${args.orgName}:`,
+    '',
+    `  ${args.eventName}`,
+    `  ${args.cadence} · Next: ${args.whenText}`,
+    ...(desc ? ['', desc] : []),
+    '',
+    `See it on the governance calendar:`,
+    link,
+    '',
+    '— Procela',
+  ].join('\n');
+
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; color: #1e293b; max-width: 520px;">
+      <p>Hi ${escapeHtml(args.name || 'there')},</p>
+      <p>You've been added to the attendee list for a governance meeting in <strong>${escapeHtml(args.orgName)}</strong>:</p>
+      <table style="font-size: 14px; color: #334155; border-collapse: collapse; margin: 4px 0 12px;">
+        <tr><td style="padding: 2px 0;"><strong>${escapeHtml(args.eventName)}</strong></td></tr>
+        <tr><td style="padding: 2px 0; font-size: 13px; color: #64748b;">${escapeHtml(args.cadence)} · Next: ${escapeHtml(args.whenText)}</td></tr>
+      </table>
+      ${desc ? `<p style="font-size: 13px; color: #64748b; white-space: pre-wrap;">${escapeHtml(desc)}</p>` : ''}
+      <p>
+        <a href="${link}" style="display: inline-block; padding: 10px 18px; background: #0f4f46; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">
+          Open the governance calendar
+        </a>
+      </p>
+      <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">— Procela</p>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({ from: config.from, to: args.to, subject, text, html });
+    return true;
+  } catch (err) {
+    logger.warn({ err, to: args.to }, 'Failed to deliver calendar invite email');
+    return false;
+  }
+}
+
 /** Deliver a rendered report by email with a CSV attachment. Used by the
  *  scheduled-report sweep. Returns true on successful send, false otherwise
  *  (not configured, no recipients, or a delivery error). */
