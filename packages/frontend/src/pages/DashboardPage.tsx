@@ -530,7 +530,10 @@ function MyPortfolioHealth() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', gap: 12, flexWrap: 'wrap' }}>
             <GaugeLink to="/data-assets?sort=healthScore&dir=asc" title="Health of the assets in your domains — opens Data Assets, lowest health first">
-              <Gauge value={p.avgHealth} label="Asset health" />
+              {/* No assets yet → render the gauge neutral ("—"), not a red 0%.
+                  Health is *unmeasured*, not bad; a red zero on a brand-new
+                  portfolio reads as failure when nothing's been added. */}
+              <Gauge value={p.assets > 0 ? p.avgHealth : null} label="Asset health" />
             </GaugeLink>
             <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6, minWidth: 0 }}>
               <div><strong style={{ color: 'var(--color-text)' }}>{p.domains}</strong> domain{p.domains === 1 ? '' : 's'} <span style={{ color: 'var(--color-text-muted)' }}>({p.domainsOwned} owned · {p.domainsSteward} steward)</span></div>
@@ -672,9 +675,13 @@ function MyTrends() {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Trends" right={
-        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {points.length} weeks</span>
-      } />
+      {/* Header span is the number of week *intervals* (points − 1), matching
+          the "vs Nw ago" delta on each card — the two used to disagree
+          (e.g. "last 10 weeks" over "vs 9w ago"). Hidden until there's at
+          least one interval to compare. */}
+      <SectionHeading title="Trends" right={spanWeeks >= 1 ? (
+        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {spanWeeks} week{spanWeeks === 1 ? '' : 's'}</span>
+      ) : undefined} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         {metrics.map((m) => {
           const series = points.map((pt) => pt[m.key]);
@@ -690,9 +697,13 @@ function MyTrends() {
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
                 <div style={{ lineHeight: 1.1 }}>
                   <span style={{ fontSize: 22, fontWeight: 700 }}>{last}</span>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: deltaColor, marginTop: 2 }}>
-                    {arrow} {Math.abs(delta)} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs {spanWeeks}w ago</span>
-                  </div>
+                  {spanWeeks >= 1 ? (
+                    <div style={{ fontSize: 11, fontWeight: 600, color: deltaColor, marginTop: 2 }}>
+                      {arrow} {Math.abs(delta)} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs {spanWeeks}w ago</span>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)', marginTop: 2 }}>current</div>
+                  )}
                 </div>
                 <Sparkline points={series} color="var(--color-primary)" title={`${m.label}, last ${points.length} weeks`} />
               </div>
@@ -886,15 +897,46 @@ const quickActions = [
 // section, so it's always available as the dashboard's "menu".
 function DashboardActionBar() {
   const aiEnabled = useAiEnabled();
-  // Drop the AI-only "Run Wizard" action when AI features are turned off.
-  const actions = aiEnabled ? quickActions : quickActions.filter((a) => a.link !== '/processes/wizard');
+  // The Wizard is the recommended starting point, so it reads as a primary
+  // action, distinct from the navigation pills beside it (they're places to
+  // go, not the thing to do first). It's AI-only, so it drops out entirely
+  // when AI features are off — then the row is navigation only.
+  const wizard = aiEnabled ? quickActions.find((a) => a.link === '/processes/wizard') : undefined;
+  const navActions = quickActions.filter((a) => a.link !== '/processes/wizard');
   return (
     <div
       role="navigation"
       aria-label="Dashboard quick actions"
-      style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}
+      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 16 }}
     >
-      {actions.map((action) => (
+      {wizard && (
+        <>
+          <Link
+            key={wizard.label}
+            to={wizard.link}
+            title={wizard.description}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 14px',
+              background: 'var(--color-primary)',
+              border: '1px solid var(--color-primary)',
+              borderRadius: 999,
+              boxShadow: 'var(--shadow-sm)',
+              fontSize: 12, fontWeight: 600,
+              color: '#fff', textDecoration: 'none', whiteSpace: 'nowrap',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-primary-hover)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; }}
+          >
+            <span style={{ display: 'inline-flex', color: '#fff' }}>{renderNavIcon(wizard.iconRoute, { size: 15, strokeWidth: 1.8 })}</span>
+            {wizard.label}
+          </Link>
+          {/* Divider between the primary action and the navigation pills. */}
+          <span aria-hidden="true" style={{ width: 1, alignSelf: 'stretch', background: 'var(--color-border)', margin: '2px 2px' }} />
+        </>
+      )}
+      {navActions.map((action) => (
         <Link
           key={action.label}
           to={action.link}
