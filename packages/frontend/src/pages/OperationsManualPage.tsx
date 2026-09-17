@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import AttachmentsPanel from '../components/AttachmentsPanel';
 import { useToastStore } from '../stores/toastStore';
 import { usePermissions } from '../hooks/usePermissions';
 import { clickable } from '../lib/a11y';
@@ -328,6 +329,14 @@ export default function OperationsManualPage({
                         <textarea aria-label="Custom Content" style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit', lineHeight: 1.6, fontSize: 12 }} value={m.customContent}
                           onChange={(e) => { const v = e.target.value; setManuals((prev) => prev.map((x) => x.id === m.id ? { ...x, customContent: v } : x)); }}
                           onBlur={(e) => saveCustomContent(m.id, e.target.value)} placeholder="Paste or type additional content here..." readOnly={!canWrite} />
+                      </div>
+
+                      {/* Linked documents — point this manual at the real doc
+                          wherever it lives (SharePoint, a web page, a file
+                          server) or upload a copy. */}
+                      <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+                        <h4 style={{ fontSize: 12, fontWeight: 600, margin: '0 0 6px' }}>Linked documents</h4>
+                        <AttachmentsPanel entityType="OperationsManual" entityId={m.id} orgId={activeOrgId ?? undefined} disabled={!canWrite} hideHeader />
                       </div>
                     </div>
                   )}

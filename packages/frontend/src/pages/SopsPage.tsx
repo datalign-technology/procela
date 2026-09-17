@@ -10,6 +10,7 @@ import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
+import AttachmentsPanel from '../components/AttachmentsPanel';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
@@ -439,6 +440,13 @@ export default function SopsPage({
           </li>
         ))}
       </ol>
+
+      {/* Linked documents — point this procedure at the real doc wherever it
+          lives (SharePoint, a web page, a file server) or upload a copy. */}
+      <div style={{ marginTop: 16 }}>
+        <SectionLabel marginBottom={4}>Linked documents</SectionLabel>
+        <AttachmentsPanel entityType="Sop" entityId={sop.id} orgId={activeOrgId ?? undefined} disabled={!canWrite} hideHeader />
+      </div>
     </div>
   );
 
