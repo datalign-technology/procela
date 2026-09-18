@@ -81,6 +81,13 @@ export interface StoredGovernanceProgram {
   /** Actual go-live timestamp — set the first time the program goes ACTIVE,
    *  preserved through pause/resume/reopen. Null until first launched. */
   launchedAt: string | null;
+  /** Scope version — a monotonically increasing counter bumped whenever the
+   *  *structured* scope changes (anchors or overrides), so coverage / scorecard
+   *  snapshots can be compared apples-to-apples across time. `scopeChangedAt`
+   *  records when it last moved. Free-text scope edits don't bump it — the
+   *  version tracks what's governed, not the prose. */
+  scopeVersion?: number;
+  scopeChangedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -140,7 +147,7 @@ const scSystemsRepo = getSystemsRepository(systems);
  */
 export async function getProgramScopeForOrg(
   orgId: string,
-): Promise<{ systemIds: string[]; domainIds: string[]; valueStreamIds: string[]; includeIds: string[]; excludeIds: string[] } | null> {
+): Promise<{ systemIds: string[]; domainIds: string[]; valueStreamIds: string[]; includeIds: string[]; excludeIds: string[]; version: number; changedAt: string | null } | null> {
   if (!orgId) return null;
   const all = await governanceProgramsRepo.list();
   const p = all.find((x) => x.orgId === orgId);
@@ -151,6 +158,8 @@ export async function getProgramScopeForOrg(
     systemIds: p.scope?.systemIds || [],
     domainIds: p.scope?.domainIds || [],
     valueStreamIds: p.scope?.valueStreamIds || [],
+    version: p.scopeVersion || 1,
+    changedAt: p.scopeChangedAt || null,
   };
 }
 
@@ -168,6 +177,8 @@ function buildDefaultProgram(orgId: string): StoredGovernanceProgram {
     targetLaunchDate: null,
     status: 'PLANNING',
     launchedAt: null,
+    scopeVersion: 1,
+    scopeChangedAt: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -563,7 +574,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     // keep the stored value (partial saves don't clobber the other refs).
     const idList = (v: unknown, prev: string[] | undefined): string[] =>
       Array.isArray(v) ? Array.from(new Set(v.filter((x): x is string => typeof x === 'string'))) : (prev || []);
-    program.scope = {
+    const nextScope = {
       inScope: typeof scope.inScope === 'string' ? scope.inScope : program.scope.inScope,
       outOfScope: typeof scope.outOfScope === 'string' ? scope.outOfScope : program.scope.outOfScope,
       boundaries: typeof scope.boundaries === 'string' ? scope.boundaries : program.scope.boundaries,
@@ -574,6 +585,16 @@ router.put('/:id', async (req: Request, res: Response) => {
       includeIds: scope.includeIds !== undefined ? idList(scope.includeIds, program.scope.includeIds) : program.scope.includeIds,
       excludeIds: scope.excludeIds !== undefined ? idList(scope.excludeIds, program.scope.excludeIds) : program.scope.excludeIds,
     };
+    // Bump the scope version only when the *structured* scope (the entities the
+    // program governs) actually changes — free-text edits don't move it. A
+    // stable key over the sorted id lists makes the check order-insensitive.
+    const structuralKey = (s: { systemIds?: string[]; domainIds?: string[]; valueStreamIds?: string[]; includeIds?: string[]; excludeIds?: string[] }) =>
+      JSON.stringify([s.systemIds, s.domainIds, s.valueStreamIds, s.includeIds, s.excludeIds].map((a) => [...(a || [])].sort()));
+    if (structuralKey(nextScope) !== structuralKey(program.scope)) {
+      program.scopeVersion = (program.scopeVersion || 1) + 1;
+      program.scopeChangedAt = new Date().toISOString();
+    }
+    program.scope = nextScope;
   }
 
   if (principles !== undefined && principles && typeof principles === 'object') {
@@ -737,7 +758,7 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.get('/scope-coverage', async (req: Request, res: Response) => {
   const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : '';
-  const empty = { applied: false as const, entities: null, coverage: null, backlog: null };
+  const empty = { applied: false as const, entities: null, coverage: null, backlog: null, version: null };
   if (!orgId) { res.json({ success: true, data: empty }); return; }
   if (!assertOrgAccess(req as AuthenticatedRequest, res, orgId, 'Not found')) return;
 
@@ -779,6 +800,10 @@ router.get('/scope-coverage', async (req: Request, res: Response) => {
       },
       coverage,
       backlog,
+      // The scope version this coverage was measured against, so a reader
+      // knows the basis and period-over-period comparisons can flag a scope
+      // change between two points.
+      version: { number: anchors!.version, changedAt: anchors!.changedAt },
     },
   });
 });
