@@ -63,6 +63,11 @@ export interface StoredGovernanceProgram {
     systemIds?: string[];
     domainIds?: string[];
     valueStreamIds?: string[];
+    // Explicit overrides for the edges the anchor cascade gets wrong:
+    // `includeIds` force specific entities (any type) into scope, `excludeIds`
+    // force them out. Excludes win on conflict. See lib/governance-scope.
+    includeIds?: string[];
+    excludeIds?: string[];
   };
   principles: {
     vision: string;
@@ -135,12 +140,14 @@ const scSystemsRepo = getSystemsRepository(systems);
  */
 export async function getProgramScopeForOrg(
   orgId: string,
-): Promise<{ systemIds: string[]; domainIds: string[]; valueStreamIds: string[] } | null> {
+): Promise<{ systemIds: string[]; domainIds: string[]; valueStreamIds: string[]; includeIds: string[]; excludeIds: string[] } | null> {
   if (!orgId) return null;
   const all = await governanceProgramsRepo.list();
   const p = all.find((x) => x.orgId === orgId);
   if (!p) return null;
   return {
+    includeIds: p.scope?.includeIds || [],
+    excludeIds: p.scope?.excludeIds || [],
     systemIds: p.scope?.systemIds || [],
     domainIds: p.scope?.domainIds || [],
     valueStreamIds: p.scope?.valueStreamIds || [],
@@ -155,7 +162,7 @@ function buildDefaultProgram(orgId: string): StoredGovernanceProgram {
     id: uuid(),
     orgId,
     name: 'Data Governance Program',
-    scope: { inScope: '', outOfScope: '', boundaries: '', constraints: '', systemIds: [], domainIds: [], valueStreamIds: [] },
+    scope: { inScope: '', outOfScope: '', boundaries: '', constraints: '', systemIds: [], domainIds: [], valueStreamIds: [], includeIds: [], excludeIds: [] },
     principles: { vision: '', principles: [], decisionRights: '', operatingModel: '' },
     targetStartDate: null,
     targetLaunchDate: null,
@@ -222,6 +229,7 @@ async function computePhaseStatus(program: StoredGovernanceProgram): Promise<Pha
         (program.scope?.systemIds?.length || 0) > 0
         || (program.scope?.domainIds?.length || 0) > 0
         || (program.scope?.valueStreamIds?.length || 0) > 0
+        || (program.scope?.includeIds?.length || 0) > 0
         || (program.scope?.inScope || '').trim().length > 0,
     },
     {
@@ -563,6 +571,8 @@ router.put('/:id', async (req: Request, res: Response) => {
       systemIds: scope.systemIds !== undefined ? idList(scope.systemIds, program.scope.systemIds) : program.scope.systemIds,
       domainIds: scope.domainIds !== undefined ? idList(scope.domainIds, program.scope.domainIds) : program.scope.domainIds,
       valueStreamIds: scope.valueStreamIds !== undefined ? idList(scope.valueStreamIds, program.scope.valueStreamIds) : program.scope.valueStreamIds,
+      includeIds: scope.includeIds !== undefined ? idList(scope.includeIds, program.scope.includeIds) : program.scope.includeIds,
+      excludeIds: scope.excludeIds !== undefined ? idList(scope.excludeIds, program.scope.excludeIds) : program.scope.excludeIds,
     };
   }
 
@@ -739,7 +749,7 @@ router.get('/scope-coverage', async (req: Request, res: Response) => {
   const domains = filterByOrgScope(allDomains, orgId);
   const assets = filterByOrgScope(allAssets, orgId);
   const orgSystems = filterByOrgScope(allSystems, orgId);
-  const resolved = resolveProgramScope(anchors, { nodes, domains, assets });
+  const resolved = resolveProgramScope(anchors, { nodes, domains, assets, systems: orgSystems });
   if (!resolved) { res.json({ success: true, data: empty }); return; }
 
   const mappedAssetIds = new Set(filterByOrgScope(allMappings, orgId).map((m: any) => m.dataAssetId));
