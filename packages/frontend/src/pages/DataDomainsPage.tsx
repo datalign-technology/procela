@@ -20,6 +20,8 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import TruncatedText from '../components/TruncatedText';
+import ScopeBadge from '../components/ScopeBadge';
+import { useScopeMembership } from '../hooks/useScopeMembership';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
@@ -88,6 +90,9 @@ const roleLabelBtnStyle: React.CSSProperties = {
 
 export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();
+  // Governance-scope membership for the per-row "in scope / not governed"
+  // badge — only surfaces when the org's program has a defined scope.
+  const scope = useScopeMembership(activeOrgId);
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const { canWrite } = usePermissions();
   const aiEnabled = useAiEnabled();
@@ -881,6 +886,7 @@ export default function DataDomainsPage() {
                     {!d.criticality && d.suggestedCriticality === 'TIER_1' && (
                       <span title="Holds master data — suggest Tier-1 criticality" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-warning)', border: '1px dashed var(--color-warning)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>Tier-1?</span>
                     )}
+                    {scope.applied && <span style={{ flexShrink: 0 }}><ScopeBadge inScope={scope.has('domain', d.id)} /></span>}
                     {healthDots(d)}
                   </div>
                 );

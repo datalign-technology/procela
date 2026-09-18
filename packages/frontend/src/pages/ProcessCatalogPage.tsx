@@ -29,6 +29,7 @@ import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
 import { SkeletonRows } from '../components/Skeleton';
 import TreeNode from './process-catalog/TreeNode';
+import { useScopeMembership } from '../hooks/useScopeMembership';
 import type { AddMappingTarget } from './process-catalog/IOPanel';
 // Lazy: only renders when the user clicks "History" on a node.
 const VersionHistoryModal = lazy(() => import('../components/VersionHistoryModal'));
@@ -389,6 +390,9 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 export default function ProcessCatalogPage() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams, setActiveOrg } = useOrgContext();
+  // Governance-scope membership for the value-stream "in scope / not governed"
+  // badge — only surfaces when the org's program has a defined scope.
+  const scope = useScopeMembership(activeOrgId);
   // Block "create value stream" entry points when the active org is a
   // multi-division company (e.g. Tidewater Utilities → Electric /
   // Water). The wizard already enforces this; the manual create
@@ -1599,6 +1603,7 @@ export default function ProcessCatalogPage() {
         ) : (
           visibleTree.map((node, idx) => (
             <TreeNode key={node.id} node={node} depth={0}
+              nodeInScope={scope.applied ? (id) => scope.has('node', id) : undefined}
               onUpdate={updateNode} onDelete={deleteNode} onClone={cloneNode}
               onAddChild={(parentId) => setAddingTo(parentId)}
               expanded={expanded} toggleExpand={toggleExpand}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bot, Paperclip, Lock } from 'lucide-react';
 import { clickable } from '../../lib/a11y';
 import StatusBadge from '../../components/StatusBadge';
+import ScopeBadge from '../../components/ScopeBadge';
 import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
 import AttachmentsPanel from '../../components/AttachmentsPanel';
@@ -31,8 +32,13 @@ import { useComplianceFrameworks } from '../../stores/complianceStore';
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope }: {
   node: ProcessNode; depth: number;
+  /** Governance-scope membership test for the "in scope / not governed"
+   *  badge, or absent when no scope is defined (⇒ no badge). Rendered at the
+   *  value-stream row only — the anchor granularity: a scoped value stream's
+   *  whole subtree is in scope, so badging every descendant would be noise. */
+  nodeInScope?: (id: string) => boolean;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
   onClone: (id: string) => void;
@@ -274,6 +280,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {config.icon} {config.label}
           {config.required && <span title="Required level" style={{ fontSize: 8 }}>*</span>}
         </span>
+
+        {node.level === 'VALUE_STREAM' && nodeInScope && (
+          <span style={{ flexShrink: 0 }}><ScopeBadge inScope={nodeInScope(node.id)} /></span>
+        )}
 
         {/* Activity ID */}
         {node.activityId && (
@@ -1135,6 +1145,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
       {/* Children */}
       {isExpanded && (node.children || []).map((child, idx, arr) => (
         <TreeNode key={child.id} node={child} depth={depth + 1}
+          nodeInScope={nodeInScope}
           onUpdate={onUpdate} onDelete={onDelete} onClone={onClone} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand}
           selectedIds={selectedIds} toggleSelect={toggleSelect}
