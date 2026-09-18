@@ -482,6 +482,36 @@ for the editable case (as Data Assets does — badge for viewers/inherited
 rows, select for editors). Do NOT render a tier as plain `tierLabel(...)`
 text.
 
+### `<ScopeBadge>` + `useScopeMembership`
+
+The per-row marker that separates entities the governance program
+**governs** (in scope) from ones that are merely *connected / catalogued*
+(not governed). `<ScopeBadge inScope={…}>` composes `<StatusBadge>`
+(success "In scope" / dashed neutral "Not governed") so the pill styling
+stays consistent — do NOT hand-roll a scope pill.
+
+Pair it with the `useScopeMembership(orgId)` hook, which resolves the
+active org's governance scope once (`GET /governance-program/scope-membership`)
+and exposes `{ applied, version, has(kind, id) }`. Only render the badge —
+or a "Scope" column — when `applied` is true; with no scope defined every
+entity is governed by default, so a badge would be noise.
+
+```tsx
+import ScopeBadge from '@/components/ScopeBadge';
+import { useScopeMembership } from '@/hooks/useScopeMembership';
+
+const scope = useScopeMembership(activeOrgId);
+// …in a DataTable columns array:
+scope.applied && {
+  key: 'scope', header: 'Scope', sortable: false,
+  render: (a) => <ScopeBadge inScope={scope.has('asset', a.id)} />,
+},
+```
+
+In use on Data Assets, Systems (as a conditional column), Data Domains,
+and the Process Catalog value-stream rows (`kind`:
+`asset` / `system` / `domain` / `node`).
+
 ---
 
 ## States

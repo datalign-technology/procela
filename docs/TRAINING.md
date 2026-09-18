@@ -915,6 +915,13 @@ business model is the source of truth on both paths.
 
 Each gap clicks through to the item where you can resolve it.
 
+**Tip — narrow to what you actually govern.** If a governance program
+scope is defined (Governance → Foundation), the **All / In-scope** toggle
+in the header restricts the gaps to the entities the program governs, so
+"gaps" reads as "the work we committed to", not "everything catalogued".
+A note under the toggle confirms what it narrowed to — or, if no scope is
+set yet, that it's still showing everything and links you to define one.
+
 **Tip — work the coverage gap on the asset list.** The **Data Assets**
 page has a rules filter (*Has rules* / *No rules* / *Rules but
 unmeasured*, each with a live count). *No rules* is the same DQ-coverage
@@ -1052,6 +1059,22 @@ next to the lifecycle status on Get Started and on the Foundation page.
 only. The old *Target Start / Target Launch* date fields were removed — they
 were never surfaced anywhere; the actual Launched date above replaces them.)
 
+**Scope is the "governed vs connected" boundary — and it's load-bearing.**
+On the Foundation **Scope** tab you don't just write prose: you pick the
+catalogued entities the program governs (systems, data domains, value
+streams), fine-tune the edges with include/exclude overrides, and read a
+live coverage read-out plus a "connected, not governed" backlog. That
+choice resolves to a concrete governed set that the rest of Procela treats
+as a lens: the **All / In-scope** toggle on Gap Detection (Module 9.1), an
+**All / Governed** lens on the Council Scorecard (10.4) and the Dashboard,
+per-row **"in scope / not governed"** badges on Data Assets, Systems, Data
+Domains, and the Process Catalog, and context for the AI assistant. A
+**scope version** is stamped whenever the governed set changes, so scorecard
+snapshots taken at different times stay comparable. It's an advisory
+view/coverage lens, not access control — and with no scope defined,
+everything is governed by default, so nothing is hidden until you choose to
+narrow.
+
 ### 10.4 Council Scorecard + Exceptions
 
 The **Council Scorecard** (**Insights → Review → Council Scorecard**)
@@ -1089,6 +1112,14 @@ the open-issue age in days) ship with defaults of 80 / 70 / 0 / 0 / 30.
 An org admin can tune them under **Settings → Data → Council Scorecard
 targets**; the change re-derives the live scorecard on its next load,
 while already-saved snapshots keep the targets they were frozen with.
+
+**Governed lens.** If you defined a program scope on Foundation, the
+header's **All / Governed** toggle narrows every measure to the governed
+entities — the scorecard then reads against *what you committed to govern*,
+not the whole org tree. A "Governed scope · v{N} · changed {date}" note
+shows the basis, and a snapshot saved under the Governed lens stores its
+governed numbers stamped with the scope version, so comparing two months is
+apples-to-apples even if the scope moved between them.
 
 To feed the *Exceptions past expiry* measure, visit **Governance →
 Operate → Exceptions** and grant a waiver with an expiry date in the

@@ -1,6 +1,6 @@
 # Procela
 
-A platform that connects business processes to the data and systems that support them. Process owners define how the work runs, data stewards register the assets behind each step, and Procela handles the governance — ownership, RACI, gap detection, audit trail, and federated SSO.
+A platform that connects business processes to the data and systems that support them. Process owners define how the work runs, data stewards register the assets behind each step, and Procela handles the governance — governance-scope control (what's governed vs merely connected), ownership, RACI, gap detection, audit trail, and federated SSO.
 
 > **State.** The auth, MFA, SCIM, SAML, GDPR, audit, and at-rest encryption stacks are all real. Persistence runs on **PostgreSQL** (via Prisma) when `DATABASE_URL` is set — the cutover is complete — and falls back to JSON files under `.procela-data/` as the zero-config default for local development and demos. See [`SECURITY.md`](./SECURITY.md) for the security model and `CLAUDE.md` for the full architecture intent.
 
