@@ -49,6 +49,9 @@ interface ScopeCoverageData {
   // Catalogued entities outside the resolved scope — the "connected, not
   // governed" backlog.
   backlog: { systems: number; dataDomains: number; dataAssets: number; valueStreams: number } | null;
+  // Scope version this coverage was measured against (bumps when the governed
+  // entity set changes), so trends can be compared apples-to-apples.
+  version: { number: number; changedAt: string | null } | null;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -432,7 +435,17 @@ export default function GovernanceFoundationPage() {
                 {scopeCov?.applied && scopeCov.coverage && scopeCov.entities && (
                   <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed var(--color-border)' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>Scope coverage</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                        Scope coverage
+                        {scopeCov.version && (
+                          <span
+                            style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 999, padding: '0 6px' }}
+                            title={scopeCov.version.changedAt ? `Scope last changed ${new Date(scopeCov.version.changedAt).toLocaleString()}` : 'Scope has not changed since the program was created'}
+                          >
+                            v{scopeCov.version.number}{scopeCov.version.changedAt ? ` · changed ${new Date(scopeCov.version.changedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
+                          </span>
+                        )}
+                      </div>
                       <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                         {scopeCov.entities.dataAssets} assets · {scopeCov.entities.dataDomains} domains · {scopeCov.entities.systems} systems in scope
                       </span>

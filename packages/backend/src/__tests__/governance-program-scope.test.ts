@@ -84,6 +84,56 @@ describe('Governance program structured scope', () => {
   });
 });
 
+// Scope versioning: the version bumps only when the *structured* scope
+// changes (anchors / overrides), so coverage snapshots can be compared
+// apples-to-apples. Free-text edits and no-op re-saves don't move it.
+describe('Governance program scope versioning', () => {
+  let server: http.Server; let port: number; let id: string;
+  before(async () => {
+    const app = express(); app.use(express.json()); app.use('/', programRouter);
+    server = http.createServer(app);
+    await new Promise<void>((r) => server.listen(0, () => r()));
+    port = (server.address() as AddressInfo).port;
+    const created = await req(port, 'GET', `/?orgId=verscope-org`);
+    id = created.body.data.id;
+  });
+  after(async () => {
+    for (let i = governancePrograms.length - 1; i >= 0; i--) {
+      if (governancePrograms[i].orgId === 'verscope-org') governancePrograms.splice(i, 1);
+    }
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('starts at version 1 with no change timestamp', async () => {
+    const s = await req(port, 'GET', `/${id}/status`); // touch to ensure it exists
+    assert.equal(s.status, 200);
+    const p = governancePrograms.find((x: any) => x.id === id);
+    assert.equal(p.scopeVersion, 1);
+    assert.equal(p.scopeChangedAt, null);
+  });
+
+  it('bumps the version + stamps changedAt when the structured scope changes', async () => {
+    const r = await req(port, 'PUT', `/${id}`, { scope: { domainIds: ['d1'] } });
+    assert.equal(r.body.data.scopeVersion, 2);
+    assert.ok(r.body.data.scopeChangedAt, 'changedAt set');
+  });
+
+  it('does NOT bump on a no-op re-save of the same scope', async () => {
+    const r = await req(port, 'PUT', `/${id}`, { scope: { domainIds: ['d1'] } });
+    assert.equal(r.body.data.scopeVersion, 2, 'unchanged structured scope keeps the version');
+  });
+
+  it('does NOT bump on a free-text-only edit', async () => {
+    const r = await req(port, 'PUT', `/${id}`, { scope: { boundaries: 'Some guardrails.' } });
+    assert.equal(r.body.data.scopeVersion, 2, 'free-text does not move the scope version');
+  });
+
+  it('bumps again when the entity set actually changes', async () => {
+    const r = await req(port, 'PUT', `/${id}`, { scope: { domainIds: ['d1', 'd2'], excludeIds: ['a9'] } });
+    assert.equal(r.body.data.scopeVersion, 3);
+  });
+});
+
 // Phase 1's "Scope defined" check is now satisfied by selecting governed
 // entities — the free-text In/Out of Scope boxes were removed from the UI.
 // Legacy free-text still counts so programs authored before the picker
