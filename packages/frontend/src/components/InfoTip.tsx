@@ -42,6 +42,10 @@ export const GLOSSARY: Record<string, string> = {
     'An organizational body (Council, Office, Committee, Working Group) that oversees data governance decisions.',
   'Domain Lens':
     'Filters the page between operational work (running the business) and governance work (looking after the data and the rules). Pick "All" to see both. Each page remembers its own choice.',
+  'Portfolio Health':
+    'The tier mix and overall health of the data domains and assets you own or steward — your accountable slice of the catalog.',
+  'Coverage':
+    'How much of your portfolio meets a governance bar: assets mapped to a process, governed to a managed tier, and with an accountable owner — each shown as a share of your total.',
 };
 
 interface InfoTipProps {
