@@ -54,7 +54,7 @@ interface DashStats {
   };
 }
 
-interface ProgPhase { name: string; completed: boolean; progress: number; checks: { done: boolean }[] }
+interface ProgPhase { name: string; completed: boolean; progress: number; checks: { label: string; done: boolean }[] }
 interface ProgStatus {
   currentPhase: 1 | 2 | 3 | 4;
   phases: { phase1: ProgPhase; phase2: ProgPhase; phase3: ProgPhase; phase4: ProgPhase };
@@ -219,6 +219,12 @@ export default function SetupHubPage() {
     const s = stats;
     const gt = (n?: number) => (n ?? 0) > 0;
     const ph = status?.phases;
+    // "Scope defined" is Foundation's (Phase 1) first check, surfaced as its
+    // own Govern row so the boundary decision — which systems / domains /
+    // value streams the program governs — reads on the board, not only inside
+    // the Foundation rollup. Keyed by label, not index, so reordering the
+    // backend checks can't silently point this at the wrong row.
+    const scopeDone = !!ph?.phase1.checks.find((c) => c.label === 'Scope defined')?.done;
 
     const capture: StageItem[] = [
       { label: 'Organization', done: orgCount > 0, to: '/organizations', src: 'here', detail: 'No organization yet', cta: 'Add organization' },
@@ -244,6 +250,8 @@ export default function SetupHubPage() {
         detail: !s ? undefined : s.dataAssets === 0 ? 'Add data assets first' : `${plural(s.gaps.ownerlessAssets, 'asset')} need an owner` },
     ];
     const govern: StageItem[] = [
+      { label: 'Scope defined', done: scopeDone, to: '/governance/foundation', src: 'here', cta: 'Define scope',
+        detail: 'Pick the systems, domains & value streams you govern' },
       { label: 'Connect data to processes', done: !!s && s.activities > 0 && s.coverage.percentage >= COVERAGE_DONE_THRESHOLD, to: '/mappings', src: 'here', cta: 'Connect data',
         detail: !s ? undefined : s.activities === 0 ? 'Add activities first' : `${plural(s.gaps.unmappedActivities, 'activity', 'activities')} need data linked (${s.coverage.percentage}% covered)` },
       { label: 'Tier & grade assets', done: !!s && s.dataAssets > 0 && s.gaps.ungovernedAssets === 0, to: '/data-assets', src: 'here', cta: 'Grade assets',
