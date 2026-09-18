@@ -4,7 +4,7 @@
 consolidates what used to live across separate files — the post-cutover roadmap,
 the itemized backlog, the competitor coverage matrix, the discovery survey, the
 go-live checklist, the AWS hardening guide, and the GA tightening audit. The
-in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-14.***
+in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-18.***
 
 > **How to read this.** Priorities: **P0** = required for a credible production
 > v1 · **P1** = important, not blocking · **P2** = differentiator/nice-to-have ·
@@ -27,7 +27,7 @@ in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-14.*
 
 ## Snapshot
 
-- **Functionally near-complete.** Of ~80 tracked capabilities, **67 are Built**;
+- **Functionally near-complete.** Of ~81 tracked capabilities, **68 are Built**;
   13 are not (4 Partial · 2 Designed · 7 Not Started). Phases 1 (Define) and 2
   (Connect) ship in full; Phase 3 (Discover) is built for direct-connect and
   needs a real-customer pilot. The Postgres cutover and the GA tightening audit
@@ -40,6 +40,19 @@ in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-14.*
   **and** column-to-column edges, reconciled into the governed catalog and
   surfaced on the Lineage page (asset + column grains) and in the asset impact
   blast radius. Only an operational pilot against a real warehouse remains.
+- **Governance scope is now a control plane, not just a definition.** A
+  program's business-process scope (systems / data domains / value streams,
+  plus include/exclude overrides) resolves through one engine
+  (`lib/governance-scope`) to the concrete **governed** entity set, separating
+  what the program is accountable for from what's merely *connected /
+  catalogued*. That boundary is load-bearing end to end: it drives gap
+  detection, a coverage metric, the "connected, not governed" backlog, and a
+  **scope version** for apples-to-apples trend comparison — and it surfaces as
+  a governed lens on the **Council Scorecard** and **Dashboard**, a "Scope
+  defined" step on **Get Started**, per-row **"in scope / not governed"**
+  badges across Data Assets / Systems / Data Domains / Process Catalog, and in
+  the **AI assistant's** answers. One resolver, one version stamp, every
+  surface.
 - Everything else is a deliberate P2/P3 defer, a go-to-market-gated bet, or
   polish-level backlog. Sequencing Tracks A / B / C is a go-to-market call, not a
   technical one, and is intentionally left open.
@@ -327,6 +340,7 @@ incumbents' comparable coverage.*
 | Governance · Operations manuals | Built | P2 | Yes | No | No | No |
 | Governance · Calendar / cadence | Built | P1 | Yes | No | Limited | Yes |
 | Governance · Program / structure | Built | P1 | Yes | No | Limited | Yes |
+| Governance · Program scope as control plane (governed vs connected) | Built | P1 | Partial | No | No | Limited |
 | Governance · Maturity scoring | Built | P1 | Yes | Limited | Limited | Yes |
 | Governance · Council scorecard (division rollup) | Built | P1 | Partial | No | No | Limited |
 | Governance · Policy-exceptions register | Built | P1 | Yes | No | No | Limited |
