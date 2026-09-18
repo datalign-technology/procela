@@ -40,6 +40,13 @@ interface CatalogItem { id: string; name: string }
 
 interface IncompletePhase { phase: number; name: string; missing: string[] }
 
+interface Ratio { covered: number; total: number; pct: number }
+interface ScopeCoverageData {
+  applied: boolean;
+  entities: { systems: number; dataDomains: number; valueStreamNodes: number; dataAssets: number } | null;
+  coverage: { assets: number; mapped: Ratio; governed: Ratio; owned: Ratio } | null;
+}
+
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
@@ -180,6 +187,8 @@ export default function GovernanceFoundationPage() {
   const [systems, setSystems] = useState<CatalogItem[]>([]);
   const [domains, setDomains] = useState<CatalogItem[]>([]);
   const [valueStreams, setValueStreams] = useState<CatalogItem[]>([]);
+  // How governed the *saved* scope is — a live read-out under Governed entities.
+  const [scopeCov, setScopeCov] = useState<ScopeCoverageData | null>(null);
 
   const hydrate = (p: Program) => {
     setInScope(p.scope?.inScope || '');
@@ -226,6 +235,18 @@ export default function GovernanceFoundationPage() {
   }, []);
   useEffect(() => { fetchCatalogs(); }, [fetchCatalogs, activeOrgId]);
 
+  // Scope coverage — governed/mapped/owned share of the assets the *saved*
+  // scope reaches. Re-fetched on org change and after each save (scope edits
+  // move it). Best-effort: a failure just hides the read-out.
+  const fetchScopeCoverage = useCallback(async () => {
+    if (!activeOrgId) { setScopeCov(null); return; }
+    try {
+      const res = await apiClient.get<{ data: ScopeCoverageData }>(`/governance-program/scope-coverage?orgId=${activeOrgId}`);
+      setScopeCov(res.data || null);
+    } catch { setScopeCov(null); }
+  }, [activeOrgId]);
+  useEffect(() => { fetchScopeCoverage(); }, [fetchScopeCoverage]);
+
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!program) return;
@@ -239,6 +260,7 @@ export default function GovernanceFoundationPage() {
       };
       const res = await apiClient.put<{ success: boolean; data: Program }>(`/governance-program/${program.id}`, payload);
       if (res.data) { setProgram(res.data); hydrate(res.data); }
+      fetchScopeCoverage();  // scope edits move the read-out
       addToast('success', 'Foundation saved');
     } catch (err) {
       addToast('error', errorMessage(err, 'Failed to save foundation'));
@@ -343,6 +365,47 @@ export default function GovernanceFoundationPage() {
                   <ScopeSelector label="Data Domains" items={domains} selectedIds={domainIds} onChange={setDomainIds} />
                   <ScopeSelector label="Value Streams" items={valueStreams} selectedIds={valueStreamIds} onChange={setValueStreamIds} />
                 </div>
+
+                {/* Scope coverage — how governed the assets this scope reaches
+                    actually are. Reflects the *saved* scope, so it updates after
+                    Save. Hidden until scope is defined (no anchors ⇒ nothing to
+                    measure). */}
+                {scopeCov?.applied && scopeCov.coverage && scopeCov.entities && (
+                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed var(--color-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>Scope coverage</div>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                        {scopeCov.entities.dataAssets} assets · {scopeCov.entities.dataDomains} domains · {scopeCov.entities.systems} systems in scope
+                      </span>
+                    </div>
+                    {scopeCov.coverage.assets === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                        No data assets in scope yet — coverage appears once your scoped domains or systems hold assets.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+                        {[
+                          { label: 'Mapped', r: scopeCov.coverage.mapped },
+                          { label: 'Governed', r: scopeCov.coverage.governed },
+                          { label: 'Owned', r: scopeCov.coverage.owned },
+                        ].map(({ label, r }) => (
+                          <div key={label}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                              <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{label}</span>
+                              <span style={{ color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{r.covered}/{r.total} · {r.pct}%</span>
+                            </div>
+                            <div style={{ height: 5, borderRadius: 999, background: 'var(--color-bg)', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${r.pct}%`, background: 'var(--color-primary)' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 8, lineHeight: 1.4 }}>
+                      Share of the assets your scope reaches that are linked to a process, governed to a managed tier, and have an owner. <Link to="/gap-detection" style={{ color: 'var(--color-primary)' }}>See in-scope gaps &rarr;</Link>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div style={{ paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>

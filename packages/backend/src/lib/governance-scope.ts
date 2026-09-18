@@ -48,6 +48,37 @@ export interface ResolvedScope {
   systemIds: Set<string>;
 }
 
+export interface CoverageRatio { covered: number; total: number; pct: number }
+export interface ScopeCoverage {
+  assets: number;
+  mapped: CoverageRatio;    // in-scope assets linked to a process
+  governed: CoverageRatio;  // in-scope assets at Managed (Silver) or Certified (Gold) tier
+  owned: CoverageRatio;     // in-scope assets with an accountable owner
+}
+
+/**
+ * How governed the in-scope assets are — the "scope coverage" read-out. Given a
+ * resolved scope and the asset/mapping facts, reports the mapped / governed /
+ * owned share of the assets the program governs. This is the honest
+ * denominator the scope model exists to give: governed-of-in-scope, not
+ * governed-of-everything.
+ */
+export function computeScopeCoverage(
+  resolved: ResolvedScope,
+  data: {
+    assets: Array<{ id: string; governanceTier?: string | null; owner?: string | null; ownerPersonId?: string | null }>;
+    mappedAssetIds: Set<string>;
+  },
+): ScopeCoverage {
+  const inScope = data.assets.filter((a) => resolved.assetIds.has(a.id));
+  const total = inScope.length;
+  const mapped = inScope.filter((a) => data.mappedAssetIds.has(a.id)).length;
+  const governed = inScope.filter((a) => a.governanceTier === 'SILVER' || a.governanceTier === 'GOLD').length;
+  const owned = inScope.filter((a) => !!(a.ownerPersonId || a.owner)).length;
+  const ratio = (covered: number): CoverageRatio => ({ covered, total, pct: total > 0 ? Math.round((100 * covered) / total) : 0 });
+  return { assets: total, mapped: ratio(mapped), governed: ratio(governed), owned: ratio(owned) };
+}
+
 const cleanIds = (ids?: string[]): string[] =>
   [...new Set((ids || []).filter((x) => typeof x === 'string' && x.trim().length > 0))];
 
