@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { resolveProgramScope } from '../lib/governance-scope';
+import { resolveProgramScope, computeScopeCoverage } from '../lib/governance-scope';
 
 // A small catalog:
 //   value stream vs1 → process p1 → activity a1 (runs on sysA)
@@ -76,5 +76,34 @@ describe('resolveProgramScope', () => {
     assert.ok(r.nodeIds.has('a1'));
     assert.deepEqual(sorted(r.domainIds), ['dom2']);
     assert.deepEqual(sorted(r.assetIds), ['asset3']);
+  });
+});
+
+describe('computeScopeCoverage', () => {
+  // Scope the domain dom1 → assets asset1, asset2 are in scope.
+  const resolved = resolveProgramScope({ domainIds: ['dom1'] }, catalog)!;
+
+  it('reports mapped / governed / owned share of in-scope assets', () => {
+    const assets = [
+      { id: 'asset1', governanceTier: 'GOLD', ownerPersonId: 'p1' },   // governed + owned
+      { id: 'asset2', governanceTier: 'BRONZE', owner: null },          // neither
+      { id: 'asset4', governanceTier: 'GOLD', ownerPersonId: 'p9' },   // out of scope — ignored
+    ];
+    const mappedAssetIds = new Set(['asset1']); // asset1 mapped, asset2 not
+    const c = computeScopeCoverage(resolved, { assets, mappedAssetIds });
+    assert.equal(c.assets, 2, 'only the two in-scope assets count');
+    assert.deepEqual(c.mapped, { covered: 1, total: 2, pct: 50 });
+    assert.deepEqual(c.governed, { covered: 1, total: 2, pct: 50 });
+    assert.deepEqual(c.owned, { covered: 1, total: 2, pct: 50 });
+  });
+
+  it('is zero-safe when no in-scope assets carry the trait', () => {
+    const c = computeScopeCoverage(resolved, { assets: [], mappedAssetIds: new Set() });
+    assert.deepEqual(c, {
+      assets: 0,
+      mapped: { covered: 0, total: 0, pct: 0 },
+      governed: { covered: 0, total: 0, pct: 0 },
+      owned: { covered: 0, total: 0, pct: 0 },
+    });
   });
 });

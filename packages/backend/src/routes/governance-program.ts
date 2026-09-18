@@ -8,6 +8,15 @@ import { hasPermission } from '../lib/permissions';
 import { AuthenticatedRequest } from '../middleware/auth';
 import logger from '../lib/logger';
 import { getGovernanceProgramsRepository } from '../db/governance-programs.repo';
+import { resolveProgramScope, computeScopeCoverage } from '../lib/governance-scope';
+import { processNodes } from './process-catalog';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { dataDomains } from './data-domains';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { dataAssets } from './data-assets';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { mappings } from './mappings';
+import { getMappingsRepository } from '../db/mappings.repo';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,6 +117,12 @@ export const governancePrograms: StoredGovernanceProgram[] =
 registerStore('governancePrograms', governancePrograms);
 
 const governanceProgramsRepo = getGovernanceProgramsRepository(governancePrograms);
+// Catalog repos for the scope-coverage read-out (Postgres in DB mode, the
+// in-memory arrays in JSON mode).
+const scProcessNodesRepo = getProcessNodesRepository(processNodes);
+const scDataDomainsRepo = getDataDomainsRepository(dataDomains);
+const scDataAssetsRepo = getDataAssetsRepository(dataAssets);
+const scMappingsRepo = getMappingsRepository(mappings);
 
 /**
  * Read-only accessor for an org's program *scope anchors* (systems / data
@@ -697,6 +712,47 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 
   res.json({ success: true, data: program });
+});
+
+/**
+ * GET /api/v1/governance-program/scope-coverage?orgId= — how governed the
+ * program's in-scope assets are. Resolves the org's scope anchors, then reports
+ * the mapped / governed / owned share of the in-scope assets, plus the in-scope
+ * entity counts. `applied:false` when the org has no program or an empty scope
+ * (nothing to measure yet) — the caller then shows "define scope" rather than a
+ * misleading 0%. Registered before `/:id/...` so the literal path wins.
+ */
+router.get('/scope-coverage', async (req: Request, res: Response) => {
+  const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : '';
+  const empty = { applied: false as const, entities: null, coverage: null };
+  if (!orgId) { res.json({ success: true, data: empty }); return; }
+  if (!assertOrgAccess(req as AuthenticatedRequest, res, orgId, 'Not found')) return;
+
+  const anchors = await getProgramScopeForOrg(orgId);
+  const [allNodes, allDomains, allAssets, allMappings] = await Promise.all([
+    scProcessNodesRepo.list(), scDataDomainsRepo.list(), scDataAssetsRepo.list(), scMappingsRepo.list(),
+  ]);
+  const nodes = filterByOrgScope(allNodes, orgId);
+  const domains = filterByOrgScope(allDomains, orgId);
+  const assets = filterByOrgScope(allAssets, orgId);
+  const resolved = resolveProgramScope(anchors, { nodes, domains, assets });
+  if (!resolved) { res.json({ success: true, data: empty }); return; }
+
+  const mappedAssetIds = new Set(filterByOrgScope(allMappings, orgId).map((m: any) => m.dataAssetId));
+  const coverage = computeScopeCoverage(resolved, { assets: assets as any[], mappedAssetIds });
+  res.json({
+    success: true,
+    data: {
+      applied: true,
+      entities: {
+        systems: resolved.systemIds.size,
+        dataDomains: resolved.domainIds.size,
+        valueStreamNodes: resolved.nodeIds.size,
+        dataAssets: resolved.assetIds.size,
+      },
+      coverage,
+    },
+  });
 });
 
 /** GET /api/v1/governance-program/:id/status — compute current phase */
