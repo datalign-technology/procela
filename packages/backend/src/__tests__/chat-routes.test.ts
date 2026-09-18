@@ -56,6 +56,8 @@ const { dataQualityRules } = require('../routes/data-quality');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { connections, connectionSystemLinks } = require('../routes/connections');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governancePrograms } = require('../routes/governance-program');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { aiService } = require('../services/ai.service');
 
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
@@ -356,6 +358,35 @@ describe('chat routes + buildOrgSnapshot', () => {
       const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## DATA CONNECTIONS/);
       assert.match(out!, /Systems\.csv \(file storage, status:connected, systems:Epic EHR, Systems_2\)/);
+    });
+
+    // Governance scope — the boundary the assistant answers "what's in scope"
+    // against. With no program the section says everything is governed; with a
+    // defined scope it names the governed entities + counts and the guidance.
+    it('reports "no scope defined" when the org has no program', async () => {
+      const out = await buildOrgSnapshot(orgId);
+      assert.match(out!, /## GOVERNANCE SCOPE/);
+      assert.match(out!, /No program scope is defined/);
+    });
+
+    it('summarises the governed set when a program scope is defined', async () => {
+      governancePrograms.push({
+        id: PREFIX + 'prog', orgId, name: 'P',
+        scope: { inScope: '', outOfScope: '', boundaries: '', constraints: '', systemIds: [], domainIds: [], valueStreamIds: [vsId], includeIds: [], excludeIds: [] },
+        scopeVersion: 2, scopeChangedAt: '2026-09-10T00:00:00.000Z',
+      } as any);
+      try {
+        const out = await buildOrgSnapshot(orgId);
+        assert.match(out!, /## GOVERNANCE SCOPE/);
+        assert.match(out!, /A governance program scope IS defined \(version 2/);
+        assert.match(out!, /In scope: .*1\/1 value streams/);
+        assert.match(out!, /Governed value streams: Patient care VS/);
+        assert.match(out!, /gaps within scope/);
+      } finally {
+        for (let i = governancePrograms.length - 1; i >= 0; i--) {
+          if (governancePrograms[i].id === PREFIX + 'prog') governancePrograms.splice(i, 1);
+        }
+      }
     });
   });
 
