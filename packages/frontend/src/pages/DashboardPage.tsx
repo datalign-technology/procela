@@ -750,10 +750,10 @@ type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'myCoverage' | 'm
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard    — personal, act-now (your overdue tasks / critical issues)
-//   2. myDomains      — the data domains I own or steward, full-width card grid
-//   3. myTrends       — my open tasks/issues/overdue over time, full-width strip
-//   4. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
-//   5. myCoverage     — mapping/governance/ownership of my assets          ┘
+//   2. myTrends       — my open tasks/issues/overdue over time, full-width strip
+//   3. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
+//   4. myCoverage     — mapping/governance/ownership of my assets          ┘
+//   5. myDomains      — the data domains I own or steward, full-width card grid
 // Quick actions are NOT a section — they render as a compact menu bar pinned
 // under the page header (see DashboardActionBar), not in this flow. The two
 // narrow analytical widgets (myPortfolio, myCoverage) stay contiguous so they
@@ -762,7 +762,7 @@ type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'myCoverage' | 'm
 // Posture / Trends / Catalog Coverage / Program Maturity / Governance Gaps
 // widgets are all replaced or dropped in favour of My Portfolio Health /
 // My Trends / My Coverage.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myDomains', 'myTrends', 'myPortfolio', 'myCoverage'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTrends', 'myPortfolio', 'myCoverage', 'myDomains'];
 
 type SectionWidth = 'full' | 'half';
 
