@@ -37,6 +37,8 @@ import { getCalendarEventsRepository } from '../db/calendar-events.repo';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 import { getStatsSnapshotsRepository } from '../db/stats-snapshots.repo';
 import { effectiveHealthScore } from '../lib/asset-health';
+import { getProgramScopeForOrg } from './governance-program';
+import { resolveProgramScope } from '../lib/governance-scope';
 
 const processNodesRepo = getProcessNodesRepository(processNodes);
 const dataAssetsRepo = getDataAssetsRepository(dataAssets);
@@ -926,10 +928,10 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
     return;
   }
 
-  const [people, governanceTasks, governanceIssues, calendarEvents, governancePolicies, dataAssets, dataDomains, mappingRows] = await Promise.all([
+  const [people, governanceTasks, governanceIssues, calendarEvents, governancePolicies, dataAssets, dataDomains, mappingRows, scNodes, scSystems] = await Promise.all([
     peopleRepo.list(), governanceTasksRepo.list(), governanceIssuesRepo.list(),
     calendarEventsRepo.list(), governancePoliciesRepo.list(), dataAssetsRepo.list(), dataDomainsRepo.list(),
-    mappingsRepo.list(),
+    mappingsRepo.list(), processNodesRepo.list(), systemsRepo.list(),
   ]);
 
   const person = people.find((p) => p.email?.toLowerCase() === email);
@@ -1000,15 +1002,38 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
       return sa - sb;
     });
 
+  // ── Governed lens (optional) ──
+  // With ?lens=governed, narrow "my" domains + portfolio to the entities the
+  // org's governance program governs (its resolved scope). No program / an
+  // empty scope ⇒ null ("govern everything"), so the lens is a safe no-op. The
+  // predicates default to always-true, so the default ('all') path — and every
+  // other section that doesn't pass a lens — is byte-for-byte unchanged.
+  const lens = String(req.query.lens ?? 'all').toLowerCase() === 'governed' ? 'governed' : 'all';
+  const scopeOrgId = (typeof req.query.orgId === 'string' && req.query.orgId)
+    ? req.query.orgId
+    : (person as { orgId?: string }).orgId;
+  let resolvedScope: ReturnType<typeof resolveProgramScope> = null;
+  if (lens === 'governed' && scopeOrgId) {
+    const anchors = await getProgramScopeForOrg(scopeOrgId);
+    resolvedScope = resolveProgramScope(anchors, {
+      nodes: scNodes as { id: string; parentId?: string | null; systemIds?: string[] }[],
+      domains: dataDomains as { id: string; parentDomainId?: string | null; dataAssetIds?: string[] }[],
+      assets: dataAssets as { id: string; systemId?: string | null }[],
+      systems: scSystems as { id: string }[],
+    });
+  }
+  const inScopeDomain = (id: string) => !resolvedScope || resolvedScope.domainIds.has(id);
+  const inScopeAsset = (id: string) => !resolvedScope || resolvedScope.assetIds.has(id);
+
   // ── Domains I own or steward ──
   // Effective health: measured DQ score, or 0 when no measured rule backs it.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const measuredCounts = await (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset();
   const effHealth = (a: { id: string; healthScore: number }) => effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0);
   const myDomains = dataDomains
-    .filter((d) => d.ownerId === person.id || (d.stewardIds || []).includes(person.id))
+    .filter((d) => (d.ownerId === person.id || (d.stewardIds || []).includes(person.id)) && inScopeDomain(d.id))
     .map((d) => {
-      const domainAssets = dataAssets.filter((a) => d.dataAssetIds.includes(a.id));
+      const domainAssets = dataAssets.filter((a) => d.dataAssetIds.includes(a.id) && inScopeAsset(a.id));
       const healthyAssets = domainAssets.filter((a) => effHealth(a) >= 80).length;
       return {
         id: d.id,
@@ -1024,9 +1049,9 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
   // Powers the personal "My Portfolio Health" dashboard widget: the tier mix
   // and health of the assets I'm accountable for, so the page reads as mine
   // rather than the whole org's.
-  const myDomainRows = dataDomains.filter((d) => d.ownerId === person.id || (d.stewardIds || []).includes(person.id));
+  const myDomainRows = dataDomains.filter((d) => (d.ownerId === person.id || (d.stewardIds || []).includes(person.id)) && inScopeDomain(d.id));
   const myAssetIds = new Set<string>();
-  for (const d of myDomainRows) for (const id of d.dataAssetIds) myAssetIds.add(id);
+  for (const d of myDomainRows) for (const id of d.dataAssetIds) if (inScopeAsset(id)) myAssetIds.add(id);
   const myAssets = dataAssets.filter((a) => myAssetIds.has(a.id));
   // Assets referenced by at least one process→data mapping (same "linked"
   // signal /stats uses) and assets with an accountable owner — the two
