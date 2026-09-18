@@ -109,6 +109,26 @@ registerStore('governancePrograms', governancePrograms);
 
 const governanceProgramsRepo = getGovernanceProgramsRepository(governancePrograms);
 
+/**
+ * Read-only accessor for an org's program *scope anchors* (systems / data
+ * domains / value streams it governs), or null when the org has no program
+ * yet. Consumed by the governance-scope resolver (gap detection today; coverage
+ * and the scorecard next) so "what is governed" has one source of truth.
+ */
+export async function getProgramScopeForOrg(
+  orgId: string,
+): Promise<{ systemIds: string[]; domainIds: string[]; valueStreamIds: string[] } | null> {
+  if (!orgId) return null;
+  const all = await governanceProgramsRepo.list();
+  const p = all.find((x) => x.orgId === orgId);
+  if (!p) return null;
+  return {
+    systemIds: p.scope?.systemIds || [],
+    domainIds: p.scope?.domainIds || [],
+    valueStreamIds: p.scope?.valueStreamIds || [],
+  };
+}
+
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 function buildDefaultProgram(orgId: string): StoredGovernanceProgram {

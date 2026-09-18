@@ -107,6 +107,15 @@ interface GapSummary {
   totalGaps: number;
 }
 
+// Echoes what the backend applied for the ?scope filter. `applied` is false
+// when program scope was requested but the org has no program / an empty
+// scope, so the toggle can explain why the view didn't narrow.
+interface GapScopeInfo {
+  mode: 'all' | 'program';
+  applied: boolean;
+  entities: { processNodes: number; dataDomains: number; dataAssets: number; systems: number } | null;
+}
+
 // ── Gap section config ──
 
 type Severity = 'critical' | 'warning' | 'info';
@@ -217,20 +226,30 @@ export default function GapDetectionPage() {
   const [loading, setLoading] = useState(true);
   const [selectedKey, setSelectedKey] = useState<keyof GapData | null>(null);
   const [severityFilter, setSeverityFilter] = useState<Severity | null>(null);
+  // Program-scope filter: 'all' = the whole catalog (default), 'program' =
+  // only the entities the governance program governs (its value streams /
+  // domains / systems, cascaded). `scopeInfo` echoes what the backend actually
+  // applied so we can tell "scoped to N entities" from "program has no scope".
+  const [scopeMode, setScopeMode] = useState<'all' | 'program'>('all');
+  const [scopeInfo, setScopeInfo] = useState<GapScopeInfo | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const res = await apiClient.get<{ success: boolean; data: GapData; summary: GapSummary }>(`/gap-detection${query}`);
+      const params = new URLSearchParams();
+      if (activeOrgId) params.set('orgId', activeOrgId);
+      if (scopeMode === 'program') params.set('scope', 'program');
+      const qs = params.toString();
+      const res = await apiClient.get<{ success: boolean; data: GapData; summary: GapSummary; scope?: GapScopeInfo }>(`/gap-detection${qs ? `?${qs}` : ''}`);
       setData(res.data || null);
       setSummary(res.summary || null);
+      setScopeInfo(res.scope || null);
       // Nothing is expanded by default — the user picks a gap tile to drill
       // into. (The severity summary cards up top still call out where the
       // gaps are, and clicking one selects the first matching section.)
       setSelectedKey(null);
     } catch { /* */ }
     finally { setLoading(false); }
-  }, [activeOrgId]);
+  }, [activeOrgId, scopeMode]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -284,7 +303,40 @@ export default function GapDetectionPage() {
       <PageHeader
         title="Gap Detection"
         subtitle="Identifies gaps in process coverage, data governance, ownership, and data quality across the organization."
+        actions={
+          <div role="group" aria-label="Scope" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+            {([['all', 'All'], ['program', 'In scope']] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setScopeMode(mode)}
+                aria-pressed={scopeMode === mode}
+                title={mode === 'program'
+                  ? 'Only the systems, domains and value streams your governance program governs'
+                  : 'Every catalogued entity, governed or not'}
+                style={{
+                  padding: '5px 12px', fontSize: 12, fontWeight: scopeMode === mode ? 600 : 500,
+                  border: 'none', cursor: 'pointer',
+                  background: scopeMode === mode ? 'var(--color-primary)' : 'transparent',
+                  color: scopeMode === mode ? '#fff' : 'var(--color-text-secondary)',
+                }}
+              >{label}</button>
+            ))}
+          </div>
+        }
       />
+
+      {/* Scope note — confirms what "In scope" actually narrowed to, or explains
+          why it didn't (no program / empty scope ⇒ still showing everything). */}
+      {scopeMode === 'program' && scopeInfo && (
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 12, lineHeight: 1.4 }}>
+          {scopeInfo.applied && scopeInfo.entities ? (
+            <>Showing gaps within your governance program's scope — {scopeInfo.entities.processNodes} process nodes · {scopeInfo.entities.dataDomains} domains · {scopeInfo.entities.dataAssets} assets · {scopeInfo.entities.systems} systems. <Link to="/governance/foundation" style={{ color: 'var(--color-primary)' }}>Manage scope →</Link></>
+          ) : (
+            <>Your governance program has no scope defined yet, so this shows all catalogued entities. <Link to="/governance/foundation" style={{ color: 'var(--color-primary)' }}>Define scope →</Link></>
+          )}
+        </div>
+      )}
 
       {/* Severity summary — a slim proportion bar + legend that doubles as a
           severity filter over the gap tiles below. Replaces the old KPI card
