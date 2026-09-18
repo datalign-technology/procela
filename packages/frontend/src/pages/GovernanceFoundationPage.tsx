@@ -30,6 +30,7 @@ interface Program {
   scope: {
     inScope: string; outOfScope: string; boundaries: string; constraints: string;
     systemIds?: string[]; domainIds?: string[]; valueStreamIds?: string[];
+    includeIds?: string[]; excludeIds?: string[];
   };
   principles: { vision: string; principles: string[]; decisionRights: string; operatingModel: 'CENTRALIZED' | 'FEDERATED' | 'HYBRID' | '' };
   status: 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
@@ -106,6 +107,50 @@ function ScopeSelector({ label, items, selectedIds, onChange }: {
       >
         <option value="" disabled>
           {items.length === 0 ? `No ${label.toLowerCase()} catalogued yet` : available.length === 0 ? `All ${label.toLowerCase()} in scope` : `Add ${label.toLowerCase().replace(/s$/, '')}…`}
+        </option>
+        {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// OverridePicker — a chip + dropdown for the explicit include/exclude scope
+// overrides. Same shape as ScopeSelector but with include (primary) or exclude
+// (red) tone and override-appropriate copy, over the data-asset catalog.
+function OverridePicker({ label, hint, items, selectedIds, onChange, tone }: {
+  label: string; hint: string; items: CatalogItem[]; selectedIds: string[]; onChange: (ids: string[]) => void; tone: 'include' | 'exclude';
+}) {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const selected = selectedIds.filter((id) => byId.has(id));
+  const available = items.filter((i) => !selectedIds.includes(i.id)).sort((a, b) => a.name.localeCompare(b.name));
+  const add = (id: string) => { if (id && !selectedIds.includes(id)) onChange([...selectedIds, id]); };
+  const remove = (id: string) => onChange(selectedIds.filter((x) => x !== id));
+  const chip = tone === 'include'
+    ? { bg: 'var(--color-primary-light)', fg: 'var(--color-primary)', border: 'var(--color-primary)' }
+    : { bg: '#fee2e2', fg: '#991b1b', border: '#fecaca' };
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 6 }}>{hint}</div>
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {selected.map((id) => (
+            <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '3px 6px 3px 10px', background: chip.bg, color: chip.fg, border: `1px solid ${chip.border}`, borderRadius: 999 }}>
+              {byId.get(id)!.name}
+              <button type="button" onClick={() => remove(id)} aria-label={`Remove ${byId.get(id)!.name}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 14, lineHeight: 1, padding: 0 }}><span aria-hidden="true">&times;</span></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <select
+        aria-label={label}
+        style={{ ...selectStyle, color: available.length === 0 ? 'var(--color-text-muted)' : 'var(--color-text)' }}
+        value=""
+        disabled={available.length === 0}
+        onChange={(e) => { add(e.target.value); e.target.value = ''; }}
+      >
+        <option value="" disabled>
+          {items.length === 0 ? 'No data assets catalogued yet' : available.length === 0 ? 'All assets selected' : 'Add a data asset…'}
         </option>
         {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
       </select>
@@ -190,6 +235,13 @@ export default function GovernanceFoundationPage() {
   const [systems, setSystems] = useState<CatalogItem[]>([]);
   const [domains, setDomains] = useState<CatalogItem[]>([]);
   const [valueStreams, setValueStreams] = useState<CatalogItem[]>([]);
+  // Explicit overrides — force specific data assets in/out of scope, for the
+  // edges the anchor cascade gets wrong. Backend supports any entity id; the UI
+  // exposes assets (systems/domains/value streams are already anchorable).
+  const [includeIds, setIncludeIds] = useState<string[]>([]);
+  const [excludeIds, setExcludeIds] = useState<string[]>([]);
+  const [assetCatalog, setAssetCatalog] = useState<CatalogItem[]>([]);
+  const [showOverrides, setShowOverrides] = useState(false);
   // How governed the *saved* scope is — a live read-out under Governed entities.
   const [scopeCov, setScopeCov] = useState<ScopeCoverageData | null>(null);
 
@@ -202,6 +254,8 @@ export default function GovernanceFoundationPage() {
     setSystemIds(Array.isArray(p.scope?.systemIds) ? p.scope!.systemIds! : []);
     setDomainIds(Array.isArray(p.scope?.domainIds) ? p.scope!.domainIds! : []);
     setValueStreamIds(Array.isArray(p.scope?.valueStreamIds) ? p.scope!.valueStreamIds! : []);
+    setIncludeIds(Array.isArray(p.scope?.includeIds) ? p.scope!.includeIds! : []);
+    setExcludeIds(Array.isArray(p.scope?.excludeIds) ? p.scope!.excludeIds! : []);
     setVision(p.principles?.vision || '');
     setPrinciples(Array.isArray(p.principles?.principles) ? p.principles.principles : []);
     setDecisionRights(p.principles?.decisionRights || '');
@@ -227,14 +281,16 @@ export default function GovernanceFoundationPage() {
   // picker, never blocks the page. Value streams come back as a nested tree;
   // only the top-level id + name are needed here.
   const fetchCatalogs = useCallback(async () => {
-    const [sysRes, domRes, vsRes] = await Promise.allSettled([
+    const [sysRes, domRes, vsRes, assetRes] = await Promise.allSettled([
       apiClient.get<{ data: CatalogItem[] }>('/systems'),
       apiClient.get<{ data: CatalogItem[] }>('/data-domains'),
       apiClient.get<{ data: CatalogItem[] }>('/value-streams'),
+      apiClient.get<{ data: CatalogItem[] }>('/data-assets'),
     ]);
     if (sysRes.status === 'fulfilled') setSystems((sysRes.value.data || []).map((s) => ({ id: s.id, name: s.name })));
     if (domRes.status === 'fulfilled') setDomains((domRes.value.data || []).map((d) => ({ id: d.id, name: d.name })));
     if (vsRes.status === 'fulfilled') setValueStreams((vsRes.value.data || []).map((v) => ({ id: v.id, name: v.name })));
+    if (assetRes.status === 'fulfilled') setAssetCatalog((assetRes.value.data || []).map((a) => ({ id: a.id, name: a.name })));
   }, []);
   useEffect(() => { fetchCatalogs(); }, [fetchCatalogs, activeOrgId]);
 
@@ -258,7 +314,7 @@ export default function GovernanceFoundationPage() {
       const payload = {
         // constraints merged into boundaries; write it empty so the two
         // can't drift back apart.
-        scope: { inScope, outOfScope, boundaries, constraints: '', systemIds, domainIds, valueStreamIds },
+        scope: { inScope, outOfScope, boundaries, constraints: '', systemIds, domainIds, valueStreamIds, includeIds, excludeIds },
         principles: { vision, principles, decisionRights, operatingModel },
       };
       const res = await apiClient.put<{ success: boolean; data: Program }>(`/governance-program/${program.id}`, payload);
@@ -439,6 +495,42 @@ export default function GovernanceFoundationPage() {
                     </div>
                   );
                 })()}
+
+                {/* Overrides — fine-tune the edges the cascade gets wrong.
+                    Collapsed by default (advanced). Assets only in the UI;
+                    systems / domains / value streams are already anchorable
+                    above, so their include is covered there. */}
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--color-border)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowOverrides((v) => !v)}
+                    aria-expanded={showOverrides}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <span aria-hidden="true" style={{ fontSize: 10 }}>{showOverrides ? '▼' : '▶'}</span>
+                    Fine-tune scope{(includeIds.length + excludeIds.length) > 0 ? ` (${includeIds.length + excludeIds.length})` : ''}
+                  </button>
+                  {showOverrides && (
+                    <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                      <OverridePicker
+                        tone="include"
+                        label="Also govern these assets"
+                        hint="Individual data assets to pull into scope even if no anchor reaches them."
+                        items={assetCatalog}
+                        selectedIds={includeIds}
+                        onChange={setIncludeIds}
+                      />
+                      <OverridePicker
+                        tone="exclude"
+                        label="Exclude these assets"
+                        hint="Data assets an anchor pulled in that you want to defer — removed from scope."
+                        items={assetCatalog}
+                        selectedIds={excludeIds}
+                        onChange={setExcludeIds}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div style={{ paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>

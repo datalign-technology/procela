@@ -91,7 +91,7 @@ router.get('/', async (req: Request, res: Response) => {
   let resolvedScope: ResolvedScope | null = null;
   if (scopeMode === 'program' && typeof orgId === 'string' && orgId) {
     const anchors = await getProgramScopeForOrg(orgId);
-    resolvedScope = resolveProgramScope(anchors, { nodes, domains, assets });
+    resolvedScope = resolveProgramScope(anchors, { nodes, domains, assets, systems: scopeListForRequest(req, systems) });
   }
   if (resolvedScope) {
     const inNodes = resolvedScope.nodeIds;

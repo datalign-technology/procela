@@ -77,6 +77,38 @@ describe('resolveProgramScope', () => {
     assert.deepEqual(sorted(r.domainIds), ['dom2']);
     assert.deepEqual(sorted(r.assetIds), ['asset3']);
   });
+
+  it('excludeIds remove an entity the cascade pulled in', () => {
+    // dom1 → dom1a → assets asset1, asset2; exclude asset1.
+    const r = resolveProgramScope({ domainIds: ['dom1'], excludeIds: ['asset1'] }, catalog)!;
+    assert.deepEqual(sorted(r.domainIds), ['dom1', 'dom1a']);
+    assert.deepEqual(sorted(r.assetIds), ['asset2'], 'excluded asset dropped');
+  });
+
+  it('includeIds force a stray entity in — and count as a scope choice on their own', () => {
+    // No anchors, just an explicit include of an asset in no scoped domain.
+    const r = resolveProgramScope({ includeIds: ['asset3'] }, catalog);
+    assert.notEqual(r, null, 'an include alone defines scope');
+    assert.deepEqual(sorted(r!.assetIds), ['asset3']);
+    assert.equal(r!.domainIds.size, 0, 'include does not cascade the asset\'s domain');
+  });
+
+  it('excludeIds win over includeIds on conflict', () => {
+    const r = resolveProgramScope({ domainIds: ['dom1'], includeIds: ['asset1'], excludeIds: ['asset1'] }, catalog)!;
+    assert.ok(!r.assetIds.has('asset1'), 'exclude beats include');
+    assert.ok(r.assetIds.has('asset2'));
+  });
+
+  it('excludeIds alone do NOT define scope (still govern everything)', () => {
+    assert.equal(resolveProgramScope({ excludeIds: ['asset1'] }, catalog), null);
+  });
+
+  it('classifies an include by which catalog it is in (system needs the systems list)', () => {
+    const withSystems = { ...catalog, systems: [{ id: 'sysA' }, { id: 'sysB' }] };
+    const r = resolveProgramScope({ includeIds: ['sysB'] }, withSystems)!;
+    assert.deepEqual(sorted(r.systemIds), ['sysB']);
+    assert.equal(r.assetIds.size, 0, 'including a system does not cascade its assets');
+  });
 });
 
 describe('computeScopeCoverage', () => {

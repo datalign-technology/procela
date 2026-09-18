@@ -29,16 +29,25 @@ export interface ScopeAnchors {
   systemIds?: string[];
   domainIds?: string[];
   valueStreamIds?: string[];
+  // Explicit overrides for the edges the cascade gets wrong. `includeIds` force
+  // specific entities (any type) into scope even if no anchor reaches them (a
+  // stray asset); `excludeIds` force them out even if an anchor pulled them in
+  // (an asset in a scoped domain you want to defer). Excludes win on conflict.
+  includeIds?: string[];
+  excludeIds?: string[];
 }
 
 export interface ScopeNode { id: string; parentId?: string | null; systemIds?: string[] }
 export interface ScopeDomain { id: string; parentDomainId?: string | null; dataAssetIds?: string[] }
 export interface ScopeAsset { id: string; systemId?: string | null }
+export interface ScopeSystem { id: string }
 
 export interface ScopeCatalog {
   nodes: ScopeNode[];
   domains: ScopeDomain[];
   assets: ScopeAsset[];
+  // Only needed to classify an explicit `includeIds` entry as a system.
+  systems?: ScopeSystem[];
 }
 
 export interface ResolvedScope {
@@ -96,9 +105,13 @@ export function resolveProgramScope(
   const sysAnchors = cleanIds(anchors?.systemIds);
   const domAnchors = cleanIds(anchors?.domainIds);
   const vsAnchors = cleanIds(anchors?.valueStreamIds);
+  const includeIds = cleanIds(anchors?.includeIds);
+  const excludeIds = cleanIds(anchors?.excludeIds);
 
-  // No anchors ⇒ whole catalog is in scope (null sentinel).
-  if (sysAnchors.length === 0 && domAnchors.length === 0 && vsAnchors.length === 0) {
+  // No positive scope choice ⇒ whole catalog is in scope (null sentinel). An
+  // explicit include counts as a choice; an exclude alone does not (excluding
+  // from "everything" is meaningless).
+  if (sysAnchors.length === 0 && domAnchors.length === 0 && vsAnchors.length === 0 && includeIds.length === 0) {
     return null;
   }
 
@@ -170,6 +183,27 @@ export function resolveProgramScope(
   for (const aid of assetIds) {
     const sid = assetById.get(aid)?.systemId;
     if (sid) systemIds.add(sid);
+  }
+
+  // ── Explicit overrides (edges the cascade got wrong) ──
+  // Includes force specific entities in (classified by which catalog they're
+  // in — no cascade, so scope stays bounded); excludes force them out. Excludes
+  // are applied last, so they win any include/exclude conflict.
+  if (includeIds.length > 0) {
+    const systemSet = new Set((catalog.systems || []).map((s) => s.id));
+    for (const id of includeIds) {
+      if (nodeById.has(id)) nodeIds.add(id);
+      else if (domainById.has(id)) domainIds.add(id);
+      else if (assetById.has(id)) assetIds.add(id);
+      else if (systemSet.has(id)) systemIds.add(id);
+      // an id that matches no catalog is ignored (stale reference)
+    }
+  }
+  for (const id of excludeIds) {
+    nodeIds.delete(id);
+    domainIds.delete(id);
+    assetIds.delete(id);
+    systemIds.delete(id);
   }
 
   return { nodeIds, domainIds, assetIds, systemIds };
