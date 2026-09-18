@@ -23,6 +23,8 @@ import { getConnectionsRepository } from '../db/connections.repo';
 import { getSystemsRepository } from '../db/systems.repo';
 import { getMappingsRepository } from '../db/mappings.repo';
 import { mappings } from './mappings';
+import { getProgramScopeForOrg } from './governance-program';
+import { resolveProgramScope, type ResolvedScope } from '../lib/governance-scope';
 
 const processNodesRepo = getProcessNodesRepository(processNodes);
 const dataAssetsRepo = getDataAssetsRepository(dataAssets);
@@ -66,11 +68,43 @@ router.get('/', async (req: Request, res: Response) => {
 
   // Scope by org — enforces the caller's visible-org set plus any explicit
   // ?orgId, and handles multi-org process nodes (orgId + orgIds[]).
-  const nodes = scopeListForRequest(req, processNodes);
-  const assets = scopeListForRequest(req, dataAssets);
-  const domains = scopeListForRequest(req, dataDomains);
+  let nodes = scopeListForRequest(req, processNodes);
+  let assets = scopeListForRequest(req, dataAssets);
+  let domains = scopeListForRequest(req, dataDomains);
 
-  const filteredMappings = scopeListForRequest(req, mappings);
+  let filteredMappings = scopeListForRequest(req, mappings);
+
+  // ── Program-scope filter (optional, advisory) ──
+  // With ?scope=program, narrow the gaps from the whole catalog to just the
+  // entities the org's governance program governs — its value streams, data
+  // domains, and systems, cascaded down (see lib/governance-scope). This makes
+  // "gaps" mean "what we committed to govern" instead of "everything
+  // catalogued". Default (?scope=all or absent), an org with no program, or a
+  // program whose scope is empty ⇒ no narrowing, i.e. the whole catalog, so
+  // this never silently hides work and empty scope never means "govern
+  // nothing". The unassigned-people and connection gaps go empty under the
+  // program lens (see their sites below): an unassigned person or an unlinked
+  // connection isn't tied to any scope anchor, so they're an org-scope (All)
+  // concern — people enter scope only by owning an in-scope entity, which the
+  // ownership gaps already reflect.
+  const scopeMode = String(req.query.scope ?? 'all').toLowerCase() === 'program' ? 'program' : 'all';
+  let resolvedScope: ResolvedScope | null = null;
+  if (scopeMode === 'program' && typeof orgId === 'string' && orgId) {
+    const anchors = await getProgramScopeForOrg(orgId);
+    resolvedScope = resolveProgramScope(anchors, { nodes, domains, assets });
+  }
+  if (resolvedScope) {
+    const inNodes = resolvedScope.nodeIds;
+    const inAssets = resolvedScope.assetIds;
+    const inDomains = resolvedScope.domainIds;
+    nodes = nodes.filter((n) => inNodes.has(n.id));
+    assets = assets.filter((a) => inAssets.has(a.id));
+    domains = domains.filter((d) => inDomains.has(d.id));
+    // Keep only mappings that touch an in-scope step or asset.
+    filteredMappings = filteredMappings.filter(
+      (m: any) => inNodes.has(m.processStepId) || inAssets.has(m.dataAssetId),
+    );
+  }
 
   const mappedStepIds = new Set(filteredMappings.map((m: any) => m.processStepId));
   const mappedAssetIds = new Set(filteredMappings.map((m: any) => m.dataAssetId));
@@ -170,10 +204,18 @@ router.get('/', async (req: Request, res: Response) => {
     for (const sid of d.stewardIds) ownerIds.add(sid);
   }
 
+  // Under a program-scope lens this gap is empty by definition: an
+  // *unassigned* person owns nothing, so they belong to no scope. Showing the
+  // org-wide roster of unassigned people beside a narrowed set of governed
+  // entities read as a contradiction ("in scope" yet 22 people). People enter
+  // scope only by owning an in-scope entity — which the ownership gaps above
+  // already cover — so the people gap is an org-scope (All) concern.
   const allPeople = scopeListForRequest(req, people);
-  const unassignedPeople = allPeople
-    .filter((p) => !ownerIds.has(p.id))
-    .map((p) => ({ id: p.id, name: p.name, role: p.role }));
+  const unassignedPeople = resolvedScope
+    ? []
+    : allPeople
+        .filter((p) => !ownerIds.has(p.id))
+        .map((p) => ({ id: p.id, name: p.name, role: p.role }));
 
   // 9. Connections without a system — registered but not yet wired into
   // the business view. Filter to the visible org scope when one was
@@ -183,15 +225,23 @@ router.get('/', async (req: Request, res: Response) => {
   // table through its repository (the raw array is empty in Postgres mode).
   const allLinks = await connectionSystemLinksRepo.list();
   const connectionsWithSystems = new Set(allLinks.map((l) => l.connectionId));
-  const unassignedConnections = orgScopedConnections
-    .filter((c) => !connectionsWithSystems.has(c.id))
-    .map((c) => ({ id: c.id, name: c.name, connectionType: c.connectionType, status: c.status }));
+  // A connection with no linked system can't be tied to a scope anchor, so
+  // like the people gap it's an org-scope (All) concern — empty under the
+  // program-scope lens.
+  const unassignedConnections = resolvedScope
+    ? []
+    : orgScopedConnections
+        .filter((c) => !connectionsWithSystems.has(c.id))
+        .map((c) => ({ id: c.id, name: c.name, connectionType: c.connectionType, status: c.status }));
 
   // 10. Ownerless systems — INTEGRATED systems with no business owner
   // assigned. MANUAL/EXTERNAL systems often live outside Procela's
   // ownership model so we don't penalise them here.
   const orgScopedSystems = scopeListForRequest(req, systems);
-  const ownerlessSystems = orgScopedSystems
+  const scopedSystems = resolvedScope
+    ? orgScopedSystems.filter((s) => resolvedScope!.systemIds.has(s.id))
+    : orgScopedSystems;
+  const ownerlessSystems = scopedSystems
     .filter((s) => (s.connectivity || 'INTEGRATED') === 'INTEGRATED' && !s.ownerPersonId)
     .map((s) => ({ id: s.id, name: s.name, systemType: s.systemType, businessCriticality: s.businessCriticality }));
 
@@ -288,6 +338,23 @@ router.get('/', async (req: Request, res: Response) => {
       + ungovernedColumns.reduce((s, g) => s + g.count, 0),
   };
 
+  // What the caller asked for vs. what was actually applied — `applied` is
+  // false when program scope was requested but the org has no program or an
+  // empty scope (so the UI can say "showing all — no program scope defined"
+  // rather than imply a filter that didn't happen).
+  const scope = {
+    mode: scopeMode,
+    applied: resolvedScope !== null,
+    entities: resolvedScope
+      ? {
+          processNodes: resolvedScope.nodeIds.size,
+          dataDomains: resolvedScope.domainIds.size,
+          dataAssets: resolvedScope.assetIds.size,
+          systems: resolvedScope.systemIds.size,
+        }
+      : null,
+  };
+
   res.json({
     success: true,
     data: {
@@ -306,6 +373,7 @@ router.get('/', async (req: Request, res: Response) => {
       ungovernedColumns,
     },
     summary,
+    scope,
   });
 });
 
