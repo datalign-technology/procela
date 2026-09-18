@@ -89,6 +89,7 @@ Once business intent is defined, Procela uses that context to help find, validat
 - Automatically identifies process steps with no linked data assets
 - Surfaces ungoverned or low-tier assets supporting critical processes
 - Dashboard view of coverage across the full process catalog
+- **All / In-scope toggle**: narrow gaps to the entities the governance program governs (see Governance Scope, below) so "gaps" means "what we committed to govern", not "everything catalogued"
 
 ### 6. Health & Governance Monitoring
 - Health score per data asset (initially manually set; Phase 3 will pull from source systems)
@@ -98,6 +99,7 @@ Once business intent is defined, Procela uses that context to help find, validat
 ### 7. AI Assistant
 - Natural language interface available throughout the application
 - Context-aware: knows the organization's process catalog, data assets, and mappings
+- Scope-aware: the context snapshot includes a **Governance Scope** section (see below) so the assistant answers "what's in our scope?" / "gaps within scope" against the governed entity set, not the raw catalog
 - Can answer questions like:
   - "Where are our data gaps?"
   - "What data supports our regulatory reporting process?"
@@ -114,6 +116,20 @@ Once business intent is defined, Procela uses that context to help find, validat
 - Executive dashboard: portfolio health, gap summary, governance tier breakdown
 - Operational dashboard: process coverage, ownership gaps, data health alerts
 - Export capabilities (PDF, CSV) for compliance and audit use
+
+### 10. Governance Scope (Governed vs Connected)
+Organizations can **connect** systems, processes, people, and data, and separately **manage the scope** of what the program actually governs. A governance program's scope — chosen as catalogued anchors (systems / data domains / value streams) plus explicit include/exclude overrides — resolves through one engine (`packages/backend/src/lib/governance-scope.ts`) to the concrete set of **governed** entities by cascading the catalog hierarchies. Everything else is *connected / catalogued* but not governed. Empty scope ⇒ "govern everything" (the safe, back-compatible default).
+
+This boundary is a control plane, load-bearing across the app rather than a one-off definition:
+- **Gap detection** — an All / In-scope filter.
+- **Scope coverage** — mapped / governed / owned share of the in-scope assets, plus a "connected, not governed" backlog (the on-ramp to expanding scope).
+- **Scope versioning** — a `scopeVersion` bumped only when the structured scope changes, so coverage/scorecard snapshots are comparable apples-to-apples.
+- **Council Scorecard & Dashboard** — an All / Governed **lens** that narrows the measures to the governed set (scorecard snapshots record the scope version they were taken under).
+- **Get Started** — a "Scope defined" step on the board.
+- **Entity lists** — per-row "in scope / not governed" badges on Data Assets, Systems, Data Domains, and the Process Catalog.
+- **AI Assistant** — a Governance Scope section in its context so it answers within the boundary.
+
+Scope is **advisory** (a view/coverage lens), not access enforcement. Authoring the scope lives on **Governance → Foundation** (the Scope tab: anchor pickers, coverage read-out, backlog, override fine-tuning, version pill).
 
 ---
 
