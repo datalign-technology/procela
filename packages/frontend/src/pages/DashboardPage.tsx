@@ -158,7 +158,21 @@ function bucketByDaysAway<T extends { daysAway: number }>(items: T[]): Array<{ l
   ].filter((g) => g.items.length > 0);
 }
 
-function MyDashboard() {
+type Lens = 'all' | 'governed';
+// The you-scoped sections share one endpoint; the governed lens (+ the active
+// org) rides the query string so the same call narrows "my" portfolio to the
+// governance program's scope. Default 'all' + no orgId ⇒ today's URL exactly,
+// so an un-lensed section is byte-for-byte unchanged.
+interface LensProps { lens?: Lens; orgId?: string | null }
+function myDashboardUrl(lens: Lens = 'all', orgId: string | null = null): string {
+  const params = new URLSearchParams();
+  if (orgId) params.set('orgId', orgId);
+  if (lens === 'governed') params.set('lens', 'governed');
+  const qs = params.toString();
+  return `/dashboard/my-dashboard${qs ? `?${qs}` : ''}`;
+}
+
+function MyDashboard({ lens = 'all', orgId = null }: LensProps) {
   const { user } = useAuthStore();
   const [data, setData] = useState<MyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,12 +181,12 @@ function MyDashboard() {
     if (!user?.email) { setLoading(false); return; }
     (async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>('/dashboard/my-dashboard');
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
         setData(res.data);
       } catch { /* */ }
       finally { setLoading(false); }
     })();
-  }, [user?.email]);
+  }, [user?.email, lens, orgId]);
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
@@ -403,7 +417,7 @@ function GaugeLink({ to, children, title }: { to: string; title: string; childre
 //    I own or steward. A you-scoped replacement for the org-wide Governance
 //    Posture: one gauge (not two) keeps it compact enough to sit in a single
 //    horizontal row. Self-fetches /dashboard/my-dashboard like MyDashboard. ──
-function MyPortfolioHealth() {
+function MyPortfolioHealth({ lens = 'all', orgId = null }: LensProps) {
   const { user } = useAuthStore();
   const [data, setData] = useState<MyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -413,11 +427,11 @@ function MyPortfolioHealth() {
     if (!user?.email) { setLoading(false); return; }
     (async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>('/dashboard/my-dashboard');
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
         setData(res.data);
       } catch { /* */ } finally { setLoading(false); }
     })();
-  }, [user?.email]);
+  }, [user?.email, lens, orgId]);
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
@@ -522,7 +536,7 @@ function MyPortfolioHealth() {
 //    mapping, governance tier, and ownership, each covered-of-total for my
 //    portfolio (a you-scoped replacement for the org Catalog Coverage).
 //    Self-fetches /dashboard/my-dashboard for the `portfolio` aggregate. ──
-function MyCoverage() {
+function MyCoverage({ lens = 'all', orgId = null }: LensProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [data, setData] = useState<MyDashboardData | null>(null);
@@ -532,11 +546,11 @@ function MyCoverage() {
     if (!user?.email) { setLoading(false); return; }
     (async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>('/dashboard/my-dashboard');
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
         setData(res.data);
       } catch { /* */ } finally { setLoading(false); }
     })();
-  }, [user?.email]);
+  }, [user?.email, lens, orgId]);
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
@@ -679,7 +693,7 @@ function MyTrends() {
 //    "My Dashboard" section into its own customizable section so it can be
 //    reordered / hidden / resized from Customize like the analytical widgets.
 //    Self-fetches /dashboard/my-dashboard like its siblings. ──
-function MyDomains() {
+function MyDomains({ lens = 'all', orgId = null }: LensProps) {
   const { user } = useAuthStore();
   const [data, setData] = useState<MyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -688,11 +702,11 @@ function MyDomains() {
     if (!user?.email) { setLoading(false); return; }
     (async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>('/dashboard/my-dashboard');
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
         setData(res.data);
       } catch { /* */ } finally { setLoading(false); }
     })();
-  }, [user?.email]);
+  }, [user?.email, lens, orgId]);
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
@@ -1032,10 +1046,49 @@ function EmptyDashboardWelcome() {
   );
 }
 
+// The dashboard's governed-lens note. Reuses /governance-program/scope-coverage
+// (the same source of truth the Foundation Scope tab reads) so the note's
+// "applied" + version match the program exactly, with no extra plumbing.
+function DashboardScopeNote({ orgId }: { orgId: string | null }) {
+  const [info, setInfo] = useState<{ applied: boolean; version: { number: number; changedAt: string | null } | null } | null>(null);
+  useEffect(() => {
+    if (!orgId) { setInfo(null); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: { applied: boolean; version: { number: number; changedAt: string | null } | null } }>(`/governance-program/scope-coverage?orgId=${orgId}`);
+        setInfo(res.data);
+      } catch { setInfo(null); }
+    })();
+  }, [orgId]);
+  const applied = !!info?.applied;
+  return (
+    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      {applied ? (
+        <>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999 }}>Governed scope</span>
+          <span>Showing only the domains &amp; assets your governance program governs.</span>
+          {info?.version && (
+            <span
+              title={info.version.changedAt ? `Scope last changed ${new Date(info.version.changedAt).toLocaleString()}` : 'Scope has not changed since the program was created'}
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >v{info.version.number}{info.version.changedAt ? ` · changed ${new Date(info.version.changedAt).toLocaleDateString()}` : ''}</span>
+          )}
+          <Link to="/governance/foundation" style={{ color: 'var(--color-primary)' }}>Manage scope →</Link>
+        </>
+      ) : (
+        <>Your governance program has no scope defined yet, so this shows everything you own. <Link to="/governance/foundation" style={{ color: 'var(--color-primary)' }}>Define scope →</Link></>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Governed lens: narrows the you-scoped portfolio sections to the entities
+  // the governance program governs. 'all' (default) is today's behaviour.
+  const [lens, setLens] = useState<Lens>('all');
 
   const fetchData = useCallback(async () => {
     if (!activeOrgId) { setStats(null); return; }
@@ -1089,11 +1142,11 @@ export default function DashboardPage() {
     && stats.people === 0;
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
-    myDashboard: <MyDashboard />,
-    myDomains: <MyDomains />,
-    myPortfolio: <MyPortfolioHealth />,
+    myDashboard: <MyDashboard lens={lens} orgId={activeOrgId} />,
+    myDomains: <MyDomains lens={lens} orgId={activeOrgId} />,
+    myPortfolio: <MyPortfolioHealth lens={lens} orgId={activeOrgId} />,
     myTrends: <MyTrends />,
-    myCoverage: <MyCoverage />,
+    myCoverage: <MyCoverage lens={lens} orgId={activeOrgId} />,
   };
 
   return (
@@ -1102,6 +1155,27 @@ export default function DashboardPage() {
         title="Dashboard"
         actions={!isEmptyOrg ? (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            {/* Governed lens — narrows the you-scoped portfolio sections to the
+                entities the governance program governs. 'All' is the default. */}
+            <div role="group" aria-label="Portfolio lens" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+              {([['all', 'All'], ['governed', 'Governed']] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setLens(mode)}
+                  aria-pressed={lens === mode}
+                  title={mode === 'governed'
+                    ? 'Only the domains and assets your governance program governs'
+                    : 'Everything you own or steward, governed or not'}
+                  style={{
+                    padding: '5px 12px', fontSize: 11, fontWeight: lens === mode ? 600 : 500,
+                    border: 'none', cursor: 'pointer',
+                    background: lens === mode ? 'var(--color-primary)' : 'transparent',
+                    color: lens === mode ? '#fff' : 'var(--color-text-secondary)',
+                  }}
+                >{label}</button>
+              ))}
+            </div>
             {/* Customize lets the user reorder / hide / resize the dashboard
                 sections. There's a single dashboard view now (the former
                 Simple/Detailed toggle is gone), so it's always available. */}
@@ -1128,6 +1202,10 @@ export default function DashboardPage() {
           "menu". Hidden on an empty org, which shows the welcome/setup screen
           instead. */}
       {!isEmptyOrg && <DashboardActionBar />}
+
+      {/* Governed-lens note — only when the lens is on. Explains what narrowed
+          (with the scope version) or why it didn't (no scope defined yet). */}
+      {!isEmptyOrg && lens === 'governed' && <DashboardScopeNote orgId={activeOrgId} />}
 
       {showCustomize && (
         <Card
