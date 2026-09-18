@@ -13,6 +13,12 @@ import type { AddressInfo } from 'net';
 const programRouter = require('../routes/governance-program').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { governancePrograms } = require('../routes/governance-program');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { dataDomains } = require('../routes/data-domains');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { dataAssets } = require('../routes/data-assets');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { systems } = require('../routes/systems');
 
 const orgId = 'progscope-org';
 
@@ -131,6 +137,68 @@ describe('Governance program scope versioning', () => {
   it('bumps again when the entity set actually changes', async () => {
     const r = await req(port, 'PUT', `/${id}`, { scope: { domainIds: ['d1', 'd2'], excludeIds: ['a9'] } });
     assert.equal(r.body.data.scopeVersion, 3);
+  });
+});
+
+// scope-membership resolves the org's scope to concrete id sets so an entity
+// list can badge each row "in scope / not governed". applied:false + empty
+// arrays when there's no program / an empty scope.
+describe('GET /scope-membership — resolved id sets', () => {
+  let server: http.Server; let port: number;
+  const O = 'memb-org';
+  const dM = 'memb-dM', dX = 'memb-dX', aM = 'memb-aM', aX = 'memb-aX', sM = 'memb-sM', sX = 'memb-sX';
+  let progId: string;
+
+  before(async () => {
+    const app = express(); app.use(express.json()); app.use('/', programRouter);
+    server = http.createServer(app);
+    await new Promise<void>((r) => server.listen(0, () => r()));
+    port = (server.address() as AddressInfo).port;
+    dataDomains.push(
+      { id: dM, orgId: O, name: 'M', dataAssetIds: [aM], parentDomainId: null, stewardIds: [] } as any,
+      { id: dX, orgId: O, name: 'X', dataAssetIds: [aX], parentDomainId: null, stewardIds: [] } as any,
+    );
+    dataAssets.push(
+      { id: aM, orgId: O, name: 'AM', systemId: sM } as any,
+      { id: aX, orgId: O, name: 'AX', systemId: sX } as any,
+    );
+    systems.push({ id: sM, orgId: O, name: 'SM' } as any, { id: sX, orgId: O, name: 'SX' } as any);
+    // Create the org's program and scope it to domain dM.
+    const created = await req(port, 'GET', `/?orgId=${O}`);
+    progId = created.body.data.id;
+    await req(port, 'PUT', `/${progId}`, { scope: { domainIds: [dM] } });
+  });
+
+  after(async () => {
+    const sweep = (arr: any[]) => { for (let i = arr.length - 1; i >= 0; i--) if (String(arr[i].id).startsWith('memb-') || arr[i].orgId === O) arr.splice(i, 1); };
+    sweep(governancePrograms); sweep(dataDomains); sweep(dataAssets); sweep(systems);
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('returns the in-scope id sets and marks the scope applied', async () => {
+    const res = await req(port, 'GET', `/scope-membership?orgId=${O}`);
+    assert.equal(res.status, 200);
+    const d = res.body.data;
+    assert.equal(d.applied, true);
+    assert.deepEqual([...d.domainIds].sort(), [dM]);
+    assert.deepEqual([...d.dataAssetIds].sort(), [aM]);          // dM's asset, not dX's
+    assert.deepEqual([...d.systemIds].sort(), [sM]);             // system holding the in-scope asset
+    assert.ok(!d.domainIds.includes(dX) && !d.dataAssetIds.includes(aX) && !d.systemIds.includes(sX));
+    assert.ok(d.version && typeof d.version.number === 'number');
+  });
+
+  it('is applied:false with empty sets when the scope is cleared', async () => {
+    await req(port, 'PUT', `/${progId}`, { scope: { domainIds: [] } });
+    const res = await req(port, 'GET', `/scope-membership?orgId=${O}`);
+    assert.equal(res.body.data.applied, false);
+    assert.deepEqual(res.body.data.dataAssetIds, []);
+    assert.equal(res.body.data.version, null);
+  });
+
+  it('is applied:false for an org with no program', async () => {
+    const res = await req(port, 'GET', `/scope-membership?orgId=memb-absent`);
+    assert.equal(res.body.data.applied, false);
+    assert.deepEqual(res.body.data.systemIds, []);
   });
 });
 

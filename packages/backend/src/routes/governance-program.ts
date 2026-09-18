@@ -808,6 +808,45 @@ router.get('/scope-coverage', async (req: Request, res: Response) => {
   });
 });
 
+/**
+ * GET /api/v1/governance-program/scope-membership?orgId= — the resolved
+ * in-scope id sets, so a list page can badge each row "in scope / not
+ * governed". Same resolution as scope-coverage, but returns the ids (as
+ * arrays) rather than counts. `applied:false` (empty arrays) when the org has
+ * no program or an empty scope — the caller then shows no badges (everything
+ * is "governed" by default, so a badge would be noise). Registered before
+ * `/:id/...` so the literal path wins.
+ */
+router.get('/scope-membership', async (req: Request, res: Response) => {
+  const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : '';
+  const empty = { applied: false as const, systemIds: [], domainIds: [], dataAssetIds: [], valueStreamNodeIds: [], version: null };
+  if (!orgId) { res.json({ success: true, data: empty }); return; }
+  if (!assertOrgAccess(req as AuthenticatedRequest, res, orgId, 'Not found')) return;
+
+  const anchors = await getProgramScopeForOrg(orgId);
+  const [allNodes, allDomains, allAssets, allSystems] = await Promise.all([
+    scProcessNodesRepo.list(), scDataDomainsRepo.list(), scDataAssetsRepo.list(), scSystemsRepo.list(),
+  ]);
+  const nodes = filterByOrgScope(allNodes, orgId);
+  const domains = filterByOrgScope(allDomains, orgId);
+  const assets = filterByOrgScope(allAssets, orgId);
+  const orgSystems = filterByOrgScope(allSystems, orgId);
+  const resolved = resolveProgramScope(anchors, { nodes, domains, assets, systems: orgSystems });
+  if (!resolved) { res.json({ success: true, data: empty }); return; }
+
+  res.json({
+    success: true,
+    data: {
+      applied: true,
+      systemIds: [...resolved.systemIds],
+      domainIds: [...resolved.domainIds],
+      dataAssetIds: [...resolved.assetIds],
+      valueStreamNodeIds: [...resolved.nodeIds],
+      version: { number: anchors!.version, changedAt: anchors!.changedAt },
+    },
+  });
+});
+
 /** GET /api/v1/governance-program/:id/status — compute current phase */
 router.get('/:id/status', async (req: Request, res: Response) => {
   const program = await governanceProgramsRepo.get(String(req.params.id));
