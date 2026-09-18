@@ -17,6 +17,8 @@ import { glossaryTerms } from './business-glossary';
 import { governancePolicies } from './governance-policies';
 import { governanceIssues } from './governance-issues';
 import { governanceTasks } from './governance-tasks';
+import { getProgramScopeForOrg } from './governance-program';
+import { resolveProgramScope } from '../lib/governance-scope';
 import { dataQualityRules } from './data-quality';
 import { connections, connectionSystemLinks } from './connections';
 import { filterByOrgScope, getCachedOrgList } from '../lib/org-scope';
@@ -414,6 +416,32 @@ export async function buildOrgSnapshot(orgId: string): Promise<string | undefine
       lines.push(`  - ${assetName}${col} · ${r.name} (${r.dimension.toLowerCase()}, ${r.status.toLowerCase()}, score:${r.currentScore}/${r.threshold})`);
     });
     if (failing.length > MAX_DQ) lines.push(`  …(${failing.length - MAX_DQ} more failing/warning)`);
+  }
+
+  // Governance scope — the boundary between what the program GOVERNS (in
+  // scope) and what's merely CONNECTED / catalogued (not governed). Advisory
+  // context, not a filter: the sections above still list the whole catalog so
+  // the assistant can discuss ungoverned entities, but this tells it which of
+  // them the program is accountable for so "what's in our scope?" and "gaps
+  // within scope" answer against the governed set, not the raw catalog.
+  const anchors = await getProgramScopeForOrg(orgId);
+  const resolvedScope = resolveProgramScope(anchors, { nodes, domains, assets, systems: sys });
+  lines.push('', '## GOVERNANCE SCOPE');
+  if (!resolvedScope) {
+    lines.push('  No program scope is defined for this organization, so every catalogued entity above is GOVERNED by default — "in scope" and "the whole catalog" mean the same thing here.');
+  } else {
+    const valueStreams = nodes.filter((n) => n.level === 'VALUE_STREAM');
+    const inVS = valueStreams.filter((n) => resolvedScope.nodeIds.has(n.id));
+    const inDomains = domains.filter((d) => resolvedScope.domainIds.has(d.id));
+    const inAssets = assets.filter((a) => resolvedScope.assetIds.has(a.id));
+    const inSystems = sys.filter((s) => resolvedScope.systemIds.has(s.id));
+    const changed = anchors?.changedAt ? `, last changed ${anchors.changedAt.slice(0, 10)}` : '';
+    lines.push(`  A governance program scope IS defined (version ${anchors?.version ?? 1}${changed}). It separates entities the program GOVERNS (in scope) from ones merely CONNECTED / catalogued (not governed).`);
+    lines.push(`  In scope: ${inSystems.length}/${sys.length} systems, ${inDomains.length}/${domains.length} data domains, ${inAssets.length}/${assets.length} data assets, ${inVS.length}/${valueStreams.length} value streams. The rest are connected but NOT governed.`);
+    const MAX_SCOPE_NAMES = 15;
+    if (inVS.length > 0) lines.push(`  Governed value streams: ${inVS.slice(0, MAX_SCOPE_NAMES).map((n) => n.name).join(', ')}${inVS.length > MAX_SCOPE_NAMES ? `, …(${inVS.length - MAX_SCOPE_NAMES} more)` : ''}.`);
+    if (inDomains.length > 0) lines.push(`  Governed data domains: ${inDomains.slice(0, MAX_SCOPE_NAMES).map((d) => d.name).join(', ')}${inDomains.length > MAX_SCOPE_NAMES ? `, …(${inDomains.length - MAX_SCOPE_NAMES} more)` : ''}.`);
+    lines.push('  When the user asks about "governance scope", "what we govern", "in scope", or "gaps within scope", answer using the in-scope entities only; treat the connected-but-not-governed remainder as out of scope unless they explicitly ask about the whole catalog.');
   }
 
   const header = `Snapshot of "${org?.name ?? 'this organization'}"`
