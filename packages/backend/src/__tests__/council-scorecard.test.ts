@@ -23,6 +23,10 @@ const { governanceExceptions } = require('../routes/governance-exceptions');
 const { people } = require('../routes/people');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { damaRoles } = require('../routes/dama-roles');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governancePrograms } = require('../routes/governance-program');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governanceIssues } = require('../routes/governance-issues');
 
 const P = 'csc-';
 function req(port: number, method: string, path: string, body?: unknown, user?: unknown): Promise<{ status: number; body: any }> {
@@ -186,5 +190,113 @@ describe('Council Scorecard', () => {
     // Replacing a version that belongs to another org is rejected.
     const badReplace = await req(port, 'POST', '/council-scorecard', { orgId: parent, replaceId: idA }, admin);
     assert.strictEqual(badReplace.status, 404);
+  });
+});
+
+// The governed lens narrows the measures to the entities the program governs
+// (its resolved scope), and stamps every scorecard with the scope version so a
+// saved snapshot records the basis it was measured against.
+describe('Council Scorecard — governed lens', () => {
+  let server: http.Server; let port: number;
+  const L = 'lscp-';
+  const parent = L + 'ent', divA = L + 'divA', noProg = L + 'noprog';
+  const dG = L + 'dG', dU = L + 'dU', aG = L + 'aG', aU = L + 'aU';
+  const now = new Date().toISOString();
+  const old = new Date(Date.now() - 45 * 24 * 3600 * 1000).toISOString();
+  const changedAt = '2026-09-01T00:00:00.000Z';
+  const admin = { id: 'u', role: 'ORG_ADMIN', email: 'a@x.com' };
+
+  before(async () => {
+    const app = express();
+    app.use(express.json());
+    app.use((r: any, _res, next) => { const h = r.headers['x-test-user']; if (h) r.user = JSON.parse(h); next(); });
+    app.use('/council-scorecard', councilRouter);
+    server = http.createServer(app);
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    port = (server.address() as AddressInfo).port;
+
+    organizations.push(
+      { id: parent, parentId: null, name: 'Enterprise', type: 'company', industry: '', description: '', headCount: 0 },
+      { id: divA, parentId: parent, name: 'Division A', type: 'division', industry: '', description: '', headCount: 0 },
+      { id: noProg, parentId: null, name: 'No-Program Co', type: 'company', industry: '', description: '', headCount: 0 },
+    );
+    // Two tier-1 domains under divA: dG is governed (owned + in scope), dU is
+    // out of scope (and unowned). aG is dG's asset (classified); aU is a stray
+    // out-of-scope asset (unclassified).
+    dataDomains.push(
+      { id: dG, orgId: divA, name: 'Governed', description: '', ownerId: 'p1', stewardIds: [], dataAssetIds: [aG], criticality: 'TIER_1', status: 'ACTIVE', createdAt: now, updatedAt: now },
+      { id: dU, orgId: divA, name: 'Ungoverned', description: '', ownerId: null, stewardIds: [], dataAssetIds: [aU], criticality: 'TIER_1', status: 'ACTIVE', createdAt: now, updatedAt: now },
+    );
+    dataAssets.push(
+      { id: aG, orgId: divA, name: 'AG', description: '', governanceTier: 'GOLD', healthScore: 0, sensitivityTags: ['PII'], createdAt: now, updatedAt: now },
+      { id: aU, orgId: divA, name: 'AU', description: '', governanceTier: 'BRONZE', healthScore: 0, createdAt: now, updatedAt: now },
+    );
+    // One open (>30d) issue on each asset — the out-of-scope one drops away
+    // under the governed lens because its asset isn't in scope.
+    governanceIssues.push(
+      { id: L + 'iG', orgId: divA, status: 'OPEN', createdAt: old, domainId: dG, dataAssetId: aG } as any,
+      { id: L + 'iU', orgId: divA, status: 'OPEN', createdAt: old, domainId: dU, dataAssetId: aU } as any,
+    );
+    // A past-expiry exception on divA — org-level, so it stays counted under
+    // both lenses (exceptions carry no entity link to scope by).
+    governanceExceptions.push({ id: L + 'e1', orgId: divA, title: 'Waiver', status: 'ACTIVE', grantedAt: old, expiresAt: old, createdAt: old, updatedAt: old } as any);
+    // The program governs only dG (⇒ dG + aG in scope), at scope version 3.
+    governancePrograms.push({
+      id: L + 'prog', orgId: parent, name: 'P',
+      scope: { inScope: '', outOfScope: '', boundaries: '', constraints: '', systemIds: [], domainIds: [dG], valueStreamIds: [], includeIds: [], excludeIds: [] },
+      scopeVersion: 3, scopeChangedAt: changedAt,
+    } as any);
+  });
+
+  after(async () => {
+    for (const store of [organizations, dataDomains, dataAssets, governanceIssues, governanceExceptions, governancePrograms, councilScorecards]) {
+      for (let i = store.length - 1; i >= 0; i--) {
+        const row = store[i];
+        if ((row.id && String(row.id).startsWith(L)) || row.orgId === parent || row.orgId === divA || row.orgId === noProg) store.splice(i, 1);
+      }
+    }
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('all lens (default): counts every entity, stamps the scope version but does not narrow', async () => {
+    const d = (await req(port, 'GET', `/council-scorecard/derive?orgId=${parent}`, undefined, admin)).body.data;
+    // Both tier-1 domains counted; only one owned ⇒ 50%. Both assets; one
+    // classified ⇒ 50%. Both open issues counted.
+    assert.strictEqual(d.enterprise.coverage, 50);
+    assert.strictEqual(d.enterprise.classification, 50);
+    assert.strictEqual(d.enterprise.openIssues, 2);
+    assert.strictEqual(d.scope.lens, 'all');
+    assert.strictEqual(d.scope.applied, false);
+    assert.strictEqual(d.scope.version, 3);      // stamped regardless of lens
+    assert.strictEqual(d.scope.changedAt, changedAt);
+  });
+
+  it('governed lens: narrows to the governed entities and marks the scope applied', async () => {
+    const d = (await req(port, 'GET', `/council-scorecard/derive?orgId=${parent}&lens=governed`, undefined, admin)).body.data;
+    // Only dG (owned) ⇒ 100%. Only aG (classified) ⇒ 100%. Only iG's asset is
+    // in scope ⇒ 1 open issue.
+    assert.strictEqual(d.enterprise.coverage, 100);
+    assert.strictEqual(d.enterprise.classification, 100);
+    assert.strictEqual(d.enterprise.openIssues, 1);
+    // Exceptions are org-level, so the past-expiry waiver still counts.
+    assert.strictEqual(d.enterprise.exceptions, 1);
+    assert.strictEqual(d.scope.lens, 'governed');
+    assert.strictEqual(d.scope.applied, true);
+    assert.strictEqual(d.scope.version, 3);
+  });
+
+  it('governed lens with no program defined is a safe no-op (govern everything)', async () => {
+    const d = (await req(port, 'GET', `/council-scorecard/derive?orgId=${noProg}&lens=governed`, undefined, admin)).body.data;
+    assert.strictEqual(d.scope.lens, 'governed');
+    assert.strictEqual(d.scope.applied, false);   // nothing to narrow
+    assert.strictEqual(d.scope.version, null);     // no program ⇒ no version
+  });
+
+  it('a snapshot saved under the governed lens stores governed numbers + the scope version', async () => {
+    const saved = await req(port, 'POST', '/council-scorecard', { orgId: parent, lens: 'governed', narrative: { whatMoved: 'g' } }, admin);
+    assert.strictEqual(saved.status, 201);
+    assert.strictEqual(saved.body.data.derived.scope.applied, true);
+    assert.strictEqual(saved.body.data.derived.scope.version, 3);
+    assert.strictEqual(saved.body.data.derived.enterprise.coverage, 100);
   });
 });

@@ -23,10 +23,12 @@ interface Row {
   status: string;
 }
 interface Narrative { whatMoved?: string; forCouncil?: string; whatMovedAuto?: boolean; forCouncilAuto?: boolean }
+interface ScopeInfo { lens: 'all' | 'governed'; applied: boolean; version: number | null; changedAt: string | null }
 interface Derived {
   orgId: string; orgName: string; period: string;
   targets: { coverage: number; classification: number; openIssues: number; exceptions: number; openIssuesDays: number };
   divisions: Row[]; enterprise: Row; narrative: Narrative; canEdit?: boolean;
+  scope?: ScopeInfo;
 }
 interface VersionMeta { id: string; period: string; status: string; createdBy?: string; createdAt: string }
 interface SavedVersion { id: string; orgId: string; period: string; status: string; createdBy?: string; createdAt: string; derived: Derived; overrides: Record<string, unknown>; narrative: Narrative }
@@ -121,6 +123,10 @@ export default function CouncilScorecardPage() {
   const [narrative, setNarrative] = useState<Narrative>({});
   const [versions, setVersions] = useState<VersionMeta[]>([]);
   const [viewingVersionId, setViewingVersionId] = useState<string | null>(null);
+  // Measure lens: "all" counts every entity in the org tree (default);
+  // "governed" narrows to the entities the governance program governs. Live
+  // control only — a saved version shows its own stored basis (derived.scope).
+  const [lens, setLens] = useState<'all' | 'governed'>('all');
   // Set when a save collides with an existing snapshot for the same period —
   // holds the replace target so the prompt can offer Replace vs. Save-as-new.
   const [pendingSave, setPendingSave] = useState<{ replaceId: string; period: string; savedAt: string } | null>(null);
@@ -131,7 +137,7 @@ export default function CouncilScorecardPage() {
     if (!activeOrgId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const res = await apiClient.get<{ success: boolean; data: Derived }>(`/council-scorecard/derive?orgId=${activeOrgId}`);
+      const res = await apiClient.get<{ success: boolean; data: Derived }>(`/council-scorecard/derive?orgId=${activeOrgId}&lens=${lens}`);
       setDerived(res.data);
       setNarrative(res.data.narrative || {});
       setOverrides({});
@@ -139,7 +145,7 @@ export default function CouncilScorecardPage() {
       setEditing(false);
     } catch { addToast('error', 'Failed to load the scorecard.'); }
     finally { setLoading(false); }
-  }, [activeOrgId, addToast]);
+  }, [activeOrgId, addToast, lens]);
 
   // Exit edit mode and discard unsaved edits — revert overrides + narrative to
   // the live derived baseline (live mode has no stored overrides).
@@ -182,6 +188,7 @@ export default function CouncilScorecardPage() {
         period: derived.period,
         overrides,
         narrative,
+        lens: derived.scope?.lens ?? lens,
         ...(replaceId ? { replaceId } : {}),
       });
       addToast('success', replaceId
@@ -267,6 +274,27 @@ export default function CouncilScorecardPage() {
         subtitle={`${derived.orgName} — ${derived.period}${viewingVersionId ? ' · saved version' : ''}. Four measures per division, rolled up to the enterprise.`}
         actions={(
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {!viewingVersionId && !editing && (
+              <div role="group" aria-label="Measure lens" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+                {([['all', 'All'], ['governed', 'Governed']] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setLens(mode)}
+                    aria-pressed={lens === mode}
+                    title={mode === 'governed'
+                      ? 'Only the entities your governance program governs (its resolved scope)'
+                      : 'Every catalogued entity in the org tree, governed or not'}
+                    style={{
+                      padding: '5px 12px', fontSize: 12, fontWeight: lens === mode ? 600 : 500,
+                      border: 'none', cursor: 'pointer',
+                      background: lens === mode ? 'var(--color-primary)' : 'transparent',
+                      color: lens === mode ? '#fff' : 'var(--color-text-secondary)',
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            )}
             {viewingVersionId && <Button variant="secondary" onClick={loadDerived}>Back to live</Button>}
             {canEdit && !editing && <Button variant="secondary" onClick={() => setEditing(true)}>Edit &amp; override</Button>}
             {canEdit && !editing && <Button variant="primary" onClick={attemptSave} loading={saving}>Save snapshot</Button>}
@@ -275,6 +303,29 @@ export default function CouncilScorecardPage() {
           </div>
         )}
       />
+
+      {/* Scope note — driven by what was actually measured (derived.scope), so a
+          saved version shows its own basis. Under the governed lens: the scope
+          version stamp when it narrowed, or why it didn't (no scope defined). */}
+      {derived.scope && derived.scope.lens === 'governed' && (
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 12, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {derived.scope.applied ? (
+            <>
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999 }}>Governed scope</span>
+              <span>Measured within your governance program's scope.</span>
+              {derived.scope.version != null && (
+                <span
+                  title={derived.scope.changedAt ? `Scope last changed ${new Date(derived.scope.changedAt).toLocaleString()}` : 'Scope has not changed since the program was created'}
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >v{derived.scope.version}{derived.scope.changedAt ? ` · changed ${new Date(derived.scope.changedAt).toLocaleDateString()}` : ''}</span>
+              )}
+              <Link to="/governance/foundation" style={{ color: 'var(--color-primary)' }}>Manage scope →</Link>
+            </>
+          ) : (
+            <>Your governance program has no scope defined yet, so this shows every catalogued entity. <Link to="/governance/foundation" style={{ color: 'var(--color-primary)' }}>Define scope →</Link></>
+          )}
+        </div>
+      )}
 
       {/* Enterprise KPI tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
