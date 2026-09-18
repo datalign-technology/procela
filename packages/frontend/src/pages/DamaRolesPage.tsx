@@ -130,6 +130,46 @@ function entityRoleInfo(roleType: string): EntityRoleScope | null {
   return ENTITY_SCOPED_ROLE_INFO[roleType] || null;
 }
 
+// Whether a role can have more than one holder (person or agent). Drives the
+// Single / Multiple hint in the roles list so it's clear up front whether one
+// holder fills the role or you can (and should) assign several. Source of
+// truth: the GOVERNANCE_ROLES catalog's `multiAssign` flag; entity-attached
+// roles (not in that catalog) fall back to their storage cardinality.
+function roleAllowsMultiple(roleType: string): boolean {
+  const def = GOVERNANCE_ROLES.find((r) => r.roleType === roleType);
+  if (def) return def.multiAssign;
+  const info = entityRoleInfo(roleType);
+  if (info) return info.cardinality === 'many';
+  return true;
+}
+
+// The compact Single / Multiple cardinality chip shown next to a role name.
+function CardinalityChip({ roleType }: { roleType: string }) {
+  const multiple = roleAllowsMultiple(roleType);
+  // Entity-scoped roles are single/multiple *per entity* — so the aggregate
+  // list can show several holders of a "Single" role (one per domain/system/
+  // asset). Say "per <entity>" so that reads as intended, not contradictory.
+  const info = entityRoleInfo(roleType);
+  const per = info
+    ? ` per ${info.entityType === 'domain' ? 'data domain' : info.entityType === 'system' ? 'system' : 'data asset'}`
+    : '';
+  return (
+    <span
+      title={multiple
+        ? `Multiple holders${per} — you can assign more than one person or agent.`
+        : `Single holder${per} — exactly one person or agent.`}
+      style={{
+        fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+        background: 'var(--color-bg)', color: 'var(--color-text-muted)',
+        border: '1px solid var(--color-border)',
+        textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
+      }}
+    >
+      {multiple ? 'Multiple' : 'Single'}
+    </span>
+  );
+}
+
 const ROLE_TYPE_LABELS: Record<string, string> = {
   // Executive/Strategic
   CDO: 'Chief Data Officer',
@@ -675,6 +715,11 @@ export default function DamaRolesPage({
                   </optgroup>
                 </select>
               )}
+              <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                {roleAllowsMultiple(form.roleType)
+                  ? 'Multiple holders — you can assign more than one person or agent to this role.'
+                  : 'Single holder — exactly one person or agent holds this role.'}
+              </div>
             </div>
             {form.scopeType === 'DOMAIN' ? (
               <div>
@@ -1227,6 +1272,7 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
                       Required
                     </span>
                   )}
+                  <CardinalityChip roleType={rt} />
                 </span>
               </td>
               <td style={tableTdStyle}>
@@ -1331,6 +1377,7 @@ function RolePreviewPane({
             textTransform: 'uppercase', letterSpacing: '0.04em',
           }}>Required</span>
         )}
+        <CardinalityChip roleType={roleType} />
         <button
           type="button"
           onClick={onClose}
