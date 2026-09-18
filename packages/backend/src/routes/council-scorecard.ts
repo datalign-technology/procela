@@ -25,6 +25,12 @@ import { governanceIssues } from './governance-issues';
 import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
 import { governanceExceptions, isPastExpiry } from './governance-exceptions';
 import { getGovernanceExceptionsRepository } from '../db/governance-exceptions.repo';
+import { processNodes } from './process-catalog';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { systems } from './systems';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getProgramScopeForOrg } from './governance-program';
+import { resolveProgramScope } from '../lib/governance-scope';
 
 // ── Types ──
 
@@ -49,6 +55,12 @@ export interface DerivedScorecard {
   divisions: DivisionRow[];
   enterprise: DivisionRow;
   narrative: { whatMoved: string; forCouncil: string; whatMovedAuto: boolean; forCouncilAuto: boolean };
+  // Which measure lens this scorecard was computed under, and the governance
+  // scope basis. `applied` is true only when the governed lens actually
+  // narrowed the numbers (a scope was defined). `version`/`changedAt` stamp
+  // the program's scope version so a saved snapshot records its basis and two
+  // snapshots can be compared apples-to-apples (see governance-program.ts).
+  scope: { lens: ScorecardLens; applied: boolean; version: number | null; changedAt: string | null };
 }
 
 export interface StoredCouncilScorecard {
@@ -73,6 +85,18 @@ const domainsRepo = getDataDomainsRepository(dataDomains);
 const assetsRepo = getDataAssetsRepository(dataAssets);
 const issuesRepo = getGovernanceIssuesRepository(governanceIssues);
 const exceptionsRepo = getGovernanceExceptionsRepository(governanceExceptions);
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const systemsRepo = getSystemsRepository(systems);
+
+// The measure lens: "all" counts every entity in the org subtree (today's
+// behaviour); "governed" narrows to the entities the parent org's governance
+// program actually governs — its resolved scope (see lib/governance-scope).
+// A program with no scope defined resolves to null ("govern everything"), so
+// the governed lens is a safe no-op there and never silently hides work.
+export type ScorecardLens = 'all' | 'governed';
+function parseLens(v: unknown): ScorecardLens {
+  return String(v ?? 'all').toLowerCase() === 'governed' ? 'governed' : 'all';
+}
 
 const TERMINAL_ISSUE_STATUSES = new Set(['RESOLVED', 'CLOSED', 'WONT_FIX']);
 // All four measure thresholds in one shape. `openIssuesDays` is the age (in
@@ -135,9 +159,9 @@ function childDivisions(parentId: string): { id: string; name: string }[] {
 // ── Measure computation ──
 
 interface Sources {
-  domains: Array<{ orgId: string; ownerId: string | null; criticality?: string }>;
-  assets: Array<{ orgId: string; sensitivityTags?: unknown[] }>;
-  issues: Array<{ orgId: string; status: string; createdAt?: string }>;
+  domains: Array<{ id: string; orgId: string; ownerId: string | null; criticality?: string }>;
+  assets: Array<{ id: string; orgId: string; sensitivityTags?: unknown[] }>;
+  issues: Array<{ orgId: string; status: string; createdAt?: string; domainId?: string | null; dataAssetId?: string | null }>;
   exceptions: typeof governanceExceptions;
   now: number;
 }
@@ -232,15 +256,46 @@ function autoNarrative(parentScope: Set<string>, s: Sources, enterprise: Divisio
 
 // ── Derive the whole scorecard for a parent org ──
 
-async function deriveScorecard(parentOrgId: string): Promise<DerivedScorecard> {
-  const [domains, assets, issues, exceptions] = await Promise.all([
+async function deriveScorecard(parentOrgId: string, lens: ScorecardLens = 'all'): Promise<DerivedScorecard> {
+  const [domains, assets, issues, exceptions, nodes, orgSystems] = await Promise.all([
     domainsRepo.list(), assetsRepo.list(), issuesRepo.list(), exceptionsRepo.list(),
+    processNodesRepo.list(), systemsRepo.list(),
   ]);
   const now = Date.now();
+
+  // Resolve the parent org's governed scope. Empty/absent scope ⇒ null
+  // ("govern everything"), so the governed lens narrows nothing there. The
+  // program's scope version travels with the scorecard regardless of lens, so
+  // a saved snapshot always records the basis it was measured against.
+  const anchors = await getProgramScopeForOrg(parentOrgId);
+  const resolvedScope = resolveProgramScope(anchors, {
+    nodes: nodes as { id: string; parentId?: string | null; systemIds?: string[] }[],
+    domains: domains as { id: string; parentDomainId?: string | null; dataAssetIds?: string[] }[],
+    assets: assets as { id: string; systemId?: string | null }[],
+    systems: orgSystems as { id: string }[],
+  });
+  const scopeApplied = lens === 'governed' && !!resolvedScope;
+
+  // Under the governed lens, narrow the sources to in-scope entities before
+  // any row is built, so every division and the enterprise rollup share one
+  // basis. Domains/assets filter by resolved id; an issue is in scope when the
+  // asset OR domain it is raised against is. Exceptions carry no entity link
+  // (they're org-level), so they stay org-scoped either way.
+  let srcDomains = domains as Sources['domains'];
+  let srcAssets = assets as Sources['assets'];
+  let srcIssues = issues as Sources['issues'];
+  if (scopeApplied && resolvedScope) {
+    const inD = resolvedScope.domainIds;
+    const inA = resolvedScope.assetIds;
+    srcDomains = srcDomains.filter((d) => inD.has(d.id));
+    srcAssets = srcAssets.filter((a) => inA.has(a.id));
+    srcIssues = srcIssues.filter((i) => (!!i.dataAssetId && inA.has(i.dataAssetId)) || (!!i.domainId && inD.has(i.domainId)));
+  }
+
   const s: Sources = {
-    domains: domains as Sources['domains'],
-    assets: assets as Sources['assets'],
-    issues: issues as Sources['issues'],
+    domains: srcDomains,
+    assets: srcAssets,
+    issues: srcIssues,
     exceptions,
     now,
   };
@@ -267,6 +322,12 @@ async function deriveScorecard(parentOrgId: string): Promise<DerivedScorecard> {
     divisions,
     enterprise,
     narrative: { whatMoved: narr.whatMoved, forCouncil: narr.forCouncil, whatMovedAuto: true, forCouncilAuto: true },
+    scope: {
+      lens,
+      applied: scopeApplied,
+      version: anchors?.version ?? null,
+      changedAt: anchors?.changedAt ?? null,
+    },
   };
 }
 
@@ -278,7 +339,7 @@ const router = Router();
 router.get('/derive', async (req: Request, res: Response) => {
   const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : (req as Request & { user?: { orgId?: string } }).user?.orgId;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-  const derived = await deriveScorecard(orgId);
+  const derived = await deriveScorecard(orgId, parseLens(req.query.lens));
   const canEdit = canEditScorecard((req as Request & { user?: { role?: string; email?: string } }).user);
   res.json({ success: true, data: { ...derived, canEdit } });
 });
@@ -305,11 +366,13 @@ router.get('/:id', async (req: Request, res: Response) => {
  *  createdAt and createdBy, refreshing the derived baseline + timestamp) so a
  *  same-period re-save can replace rather than stack another snapshot. */
 router.post('/', requireScorecardEditor, async (req: Request, res: Response) => {
-  const { orgId, period, derived, overrides, narrative, status, replaceId } = req.body || {};
+  const { orgId, period, derived, overrides, narrative, status, replaceId, lens } = req.body || {};
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   // Recompute derived server-side so a saved version's machine baseline is
-  // authoritative; the client only supplies overrides + narrative edits.
-  const freshDerived: DerivedScorecard = derived && derived.divisions ? derived : await deriveScorecard(orgId);
+  // authoritative; the client only supplies overrides + narrative edits. The
+  // lens is threaded through so a snapshot taken under the governed lens is
+  // stored as governed numbers, stamped with the scope version it used.
+  const freshDerived: DerivedScorecard = derived && derived.divisions ? derived : await deriveScorecard(orgId, parseLens(lens));
   const now = new Date().toISOString();
   const userId = (req as Request & { user?: { id?: string } }).user?.id || undefined;
 
