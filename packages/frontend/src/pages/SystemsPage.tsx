@@ -26,6 +26,8 @@ import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import ScopeBadge from '../components/ScopeBadge';
+import { useScopeMembership } from '../hooks/useScopeMembership';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { SkeletonRows } from '../components/Skeleton';
@@ -477,6 +479,9 @@ export default function SystemsPage({
   actionsPortal?: HTMLElement | null;
 } = {}) {
   const { activeOrgId, canCreateValueStreams } = useOrgContext();
+  // Governance-scope membership for the "in scope / not governed" row badge —
+  // only surfaces a column when the org's program has a defined scope.
+  const scope = useScopeMembership(activeOrgId);
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
   const { getOrgName } = useOrgNameLookup();
@@ -871,6 +876,10 @@ export default function SystemsPage({
           />
         </div>
       ),
+    },
+    scope.applied && {
+      key: 'scope', header: 'Scope', sortable: false,
+      render: (sys: SystemEntity) => <ScopeBadge inScope={scope.has('system', sys.id)} />,
     },
     systemCols.isVisible('type') && {
       key: 'type', header: 'Type', sortable: true,

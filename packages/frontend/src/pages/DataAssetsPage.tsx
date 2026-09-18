@@ -39,6 +39,8 @@ import { useSortedList } from '../hooks/useSortedList';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import ScopeBadge from '../components/ScopeBadge';
+import { useScopeMembership } from '../hooks/useScopeMembership';
 import HealthBar from '../components/HealthBar';
 import TierBadge from '../components/TierBadge';
 import { useToastStore } from '../stores/toastStore';
@@ -373,6 +375,9 @@ export default function DataAssetsPage({
   actionsPortal?: HTMLElement | null;
 } = {}) {
   const { activeOrgId, canCreateValueStreams } = useOrgContext();
+  // Governance-scope membership for the "in scope / not governed" row badge —
+  // only surfaces a column when the org's program has a defined scope.
+  const scope = useScopeMembership(activeOrgId);
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
   const { getOrgName } = useOrgNameLookup();
@@ -1161,6 +1166,10 @@ export default function DataAssetsPage({
           </div>
         </div>
       ),
+    },
+    scope.applied && {
+      key: 'scope', header: 'Scope', sortable: false,
+      render: (asset: DataAssetEntity) => <ScopeBadge inScope={scope.has('asset', asset.id)} />,
     },
     isVisible('system') && {
       key: 'system', header: 'System', sortable: true,
