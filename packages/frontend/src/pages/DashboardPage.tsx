@@ -11,7 +11,6 @@ import Card from '../components/Card';
 import { healthColorVar } from '../components/HealthBar';
 import SectionHeading from '../components/SectionHeading';
 import InfoTip from '../components/InfoTip';
-import StatTile from '../components/StatTile';
 import Meter from '../components/Meter';
 import Gauge from '../components/Gauge';
 import Donut from '../components/Donut';
@@ -200,8 +199,6 @@ function MyDashboard() {
     );
   }
 
-  const s = data.summary || {};
-
   // Needs-My-Attention queue (the "now" side): things that are late or at
   // risk right now — overdue tasks, critical issues, overdue policy reviews,
   // and domains I own/steward that have slipped below the 80%-healthy bar.
@@ -240,27 +237,6 @@ function MyDashboard() {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      {/* Summary KPIs — each tile is a hyperlink to the surface where that
-          count lives (hover lift, muted-but-still-linked at zero, tooltip
-          announces the destination for keyboard / screen-reader). Open Tasks
-          and Open Issues are intentionally NOT here: the Trends section owns
-          them, showing the current value + delta + sparkline in one card, so a
-          duplicate tile would just repeat that number. What's overdue / critical
-          still surfaces in the Needs Attention panel below. Only the two counts
-          with no trend counterpart — Domains and Upcoming Events — stay as tiles. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
-        <StatTile dense
-          to="/data-domains"
-          label="Domains"
-          value={(s.domainsOwned || 0) + (s.domainsSteward || 0)}
-        />
-        <StatTile dense
-          to="/governance-calendar"
-          label="Upcoming Events"
-          value={s.upcomingEventsCount || 0}
-        />
-      </div>
-
       {/* Two-column: Attention (the act-now triage queue — given primacy)
           + Schedule (the look-ahead). Asymmetric 3:2 so the pair reads as
           "urgent now vs. what's next" rather than two equal twins. */}
@@ -350,27 +326,9 @@ function MyDashboard() {
         </Card>
       </div>
 
-      {/* My Domains */}
-      {(data.myDomains || []).length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <SectionLabel>Domains</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
-            {(data.myDomains || []).map((d) => {
-              const healthPct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
-              return (
-                <Link key={d.id} to="/data-domains" style={{ ...cardStyle, padding: '10px 14px', textDecoration: 'none', color: 'var(--color-text)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)' }}>{d.name}</span>
-                    <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
-                  <Meter value={healthPct} height={4} color={healthColorVar(healthPct)} />
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* My Domains moved out to its own customizable section (MyDomains) so
+          it can be reordered / hidden / resized from Customize like the other
+          sections — it used to be baked in here with no layout control. */}
 
       {/* My Tasks (top 5) */}
       {(data.myTasks || []).length > 0 && (
@@ -716,15 +674,86 @@ function MyTrends() {
   );
 }
 
+// ── My Domains — the data domains I own or steward, each with its asset
+//    count and health, as a card grid. Promoted out of the personal
+//    "My Dashboard" section into its own customizable section so it can be
+//    reordered / hidden / resized from Customize like the analytical widgets.
+//    Self-fetches /dashboard/my-dashboard like its siblings. ──
+function MyDomains() {
+  const { user } = useAuthStore();
+  const [data, setData] = useState<MyDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.email) { setLoading(false); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>('/dashboard/my-dashboard');
+        setData(res.data);
+      } catch { /* */ } finally { setLoading(false); }
+    })();
+  }, [user?.email]);
+
+  if (loading) return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeading title="Domains" />
+      <Card padding={20}><SkeletonRows rows={2} columnWidths={[160, null, 60]} /></Card>
+    </div>
+  );
+
+  const domains = data?.myDomains || [];
+  if (!data?.person || domains.length === 0) {
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <SectionHeading title="Domains" />
+        <Card padding="16px 20px">
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            {!data?.person
+              ? 'Link your profile to see the data domains you own or steward.'
+              : 'You don’t own or steward any data domains yet.'}
+            <div style={{ marginTop: 8 }}>
+              <Link to={!data?.person ? '/people' : '/data-domains'} style={{ fontSize: 12, color: 'var(--color-primary)' }}>
+                {!data?.person ? 'Link your profile in People →' : 'View data domains →'}
+              </Link>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeading title="Domains" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+        {domains.map((d) => {
+          const healthPct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
+          return (
+            <Link key={d.id} to="/data-domains" style={{ ...cardStyle, padding: '10px 14px', textDecoration: 'none', color: 'var(--color-text)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)' }}>{d.name}</span>
+                <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
+              <Meter value={healthPct} height={4} color={healthColorVar(healthPct)} />
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'myCoverage';
+type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'myCoverage' | 'myDomains';
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard    — personal, act-now (your overdue tasks / critical issues)
-//   2. myTrends       — my open tasks/issues/overdue over time, full-width strip
-//   3. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
-//   4. myCoverage     — mapping/governance/ownership of my assets          ┘
+//   2. myDomains      — the data domains I own or steward, full-width card grid
+//   3. myTrends       — my open tasks/issues/overdue over time, full-width strip
+//   4. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
+//   5. myCoverage     — mapping/governance/ownership of my assets          ┘
 // Quick actions are NOT a section — they render as a compact menu bar pinned
 // under the page header (see DashboardActionBar), not in this flow. The two
 // narrow analytical widgets (myPortfolio, myCoverage) stay contiguous so they
@@ -733,7 +762,7 @@ type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'myCoverage';
 // Posture / Trends / Catalog Coverage / Program Maturity / Governance Gaps
 // widgets are all replaced or dropped in favour of My Portfolio Health /
 // My Trends / My Coverage.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTrends', 'myPortfolio', 'myCoverage'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myDomains', 'myTrends', 'myPortfolio', 'myCoverage'];
 
 type SectionWidth = 'full' | 'half';
 
@@ -744,6 +773,7 @@ type SectionWidth = 'full' | 'half';
 // go full-bleed; the analytical widgets pair up as compact equal-height cards.
 const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
+  myDomains: 'full',
   myTrends: 'full',
   myPortfolio: 'half',
   myCoverage: 'half',
@@ -751,6 +781,7 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'Dashboard',
+  myDomains: 'Domains',
   myPortfolio: 'Portfolio Health',
   myTrends: 'Trends',
   myCoverage: 'Coverage',
@@ -1059,6 +1090,7 @@ export default function DashboardPage() {
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myDashboard: <MyDashboard />,
+    myDomains: <MyDomains />,
     myPortfolio: <MyPortfolioHealth />,
     myTrends: <MyTrends />,
     myCoverage: <MyCoverage />,
