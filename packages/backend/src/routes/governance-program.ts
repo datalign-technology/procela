@@ -17,6 +17,8 @@ import { dataAssets } from './data-assets';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { mappings } from './mappings';
 import { getMappingsRepository } from '../db/mappings.repo';
+import { systems } from './systems';
+import { getSystemsRepository } from '../db/systems.repo';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,6 +125,7 @@ const scProcessNodesRepo = getProcessNodesRepository(processNodes);
 const scDataDomainsRepo = getDataDomainsRepository(dataDomains);
 const scDataAssetsRepo = getDataAssetsRepository(dataAssets);
 const scMappingsRepo = getMappingsRepository(mappings);
+const scSystemsRepo = getSystemsRepository(systems);
 
 /**
  * Read-only accessor for an org's program *scope anchors* (systems / data
@@ -724,22 +727,36 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.get('/scope-coverage', async (req: Request, res: Response) => {
   const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : '';
-  const empty = { applied: false as const, entities: null, coverage: null };
+  const empty = { applied: false as const, entities: null, coverage: null, backlog: null };
   if (!orgId) { res.json({ success: true, data: empty }); return; }
   if (!assertOrgAccess(req as AuthenticatedRequest, res, orgId, 'Not found')) return;
 
   const anchors = await getProgramScopeForOrg(orgId);
-  const [allNodes, allDomains, allAssets, allMappings] = await Promise.all([
-    scProcessNodesRepo.list(), scDataDomainsRepo.list(), scDataAssetsRepo.list(), scMappingsRepo.list(),
+  const [allNodes, allDomains, allAssets, allMappings, allSystems] = await Promise.all([
+    scProcessNodesRepo.list(), scDataDomainsRepo.list(), scDataAssetsRepo.list(), scMappingsRepo.list(), scSystemsRepo.list(),
   ]);
   const nodes = filterByOrgScope(allNodes, orgId);
   const domains = filterByOrgScope(allDomains, orgId);
   const assets = filterByOrgScope(allAssets, orgId);
+  const orgSystems = filterByOrgScope(allSystems, orgId);
   const resolved = resolveProgramScope(anchors, { nodes, domains, assets });
   if (!resolved) { res.json({ success: true, data: empty }); return; }
 
   const mappedAssetIds = new Set(filterByOrgScope(allMappings, orgId).map((m: any) => m.dataAssetId));
   const coverage = computeScopeCoverage(resolved, { assets: assets as any[], mappedAssetIds });
+
+  // "Connected, but not governed" backlog — catalogued entities that fall
+  // outside the resolved scope. The on-ramp to expanding scope, and proof that
+  // narrowing scope never silently drops anything: what's excluded is counted,
+  // not hidden. Value streams are the top-level process nodes only.
+  const orgValueStreams = nodes.filter((n: any) => n.level === 'VALUE_STREAM');
+  const backlog = {
+    systems: orgSystems.filter((s: any) => !resolved.systemIds.has(s.id)).length,
+    dataDomains: domains.filter((d: any) => !resolved.domainIds.has(d.id)).length,
+    dataAssets: assets.filter((a: any) => !resolved.assetIds.has(a.id)).length,
+    valueStreams: orgValueStreams.filter((n: any) => !resolved.nodeIds.has(n.id)).length,
+  };
+
   res.json({
     success: true,
     data: {
@@ -751,6 +768,7 @@ router.get('/scope-coverage', async (req: Request, res: Response) => {
         dataAssets: resolved.assetIds.size,
       },
       coverage,
+      backlog,
     },
   });
 });

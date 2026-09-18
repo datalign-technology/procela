@@ -45,6 +45,9 @@ interface ScopeCoverageData {
   applied: boolean;
   entities: { systems: number; dataDomains: number; valueStreamNodes: number; dataAssets: number } | null;
   coverage: { assets: number; mapped: Ratio; governed: Ratio; owned: Ratio } | null;
+  // Catalogued entities outside the resolved scope — the "connected, not
+  // governed" backlog.
+  backlog: { systems: number; dataDomains: number; dataAssets: number; valueStreams: number } | null;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -406,6 +409,36 @@ export default function GovernanceFoundationPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Connected, not governed — catalogued entities outside the
+                    scope. The on-ramp to expanding scope, and proof nothing is
+                    silently dropped when scope narrows. */}
+                {scopeCov?.applied && scopeCov.backlog && (() => {
+                  const b = scopeCov.backlog;
+                  const total = b.systems + b.dataDomains + b.dataAssets + b.valueStreams;
+                  const parts = [
+                    b.valueStreams ? { n: b.valueStreams, label: b.valueStreams === 1 ? 'value stream' : 'value streams', to: '/processes' } : null,
+                    b.systems ? { n: b.systems, label: b.systems === 1 ? 'system' : 'systems', to: '/systems' } : null,
+                    b.dataDomains ? { n: b.dataDomains, label: b.dataDomains === 1 ? 'data domain' : 'data domains', to: '/data-domains' } : null,
+                    b.dataAssets ? { n: b.dataAssets, label: b.dataAssets === 1 ? 'data asset' : 'data assets', to: '/data-assets' } : null,
+                  ].filter(Boolean) as Array<{ n: number; label: string; to: string }>;
+                  return (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--color-border)', fontSize: 11.5, lineHeight: 1.5 }}>
+                      {total === 0 ? (
+                        <span style={{ color: 'var(--color-text-muted)' }}>Everything catalogued for this organization is in scope.</span>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-secondary)' }}>
+                          <span style={{ fontWeight: 600 }}>Connected, not governed</span> — catalogued but outside your scope:{' '}
+                          {parts.map((p, i) => (
+                            <React.Fragment key={p.to}>
+                              <Link to={p.to} style={{ color: 'var(--color-primary)' }}>{p.n} {p.label}</Link>{i < parts.length - 1 ? ' · ' : ''}
+                            </React.Fragment>
+                          ))}. Add them above to bring them into scope.
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div style={{ paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
