@@ -124,7 +124,7 @@ function daysFromNow(n: number): string {
 
 // Industries with a hand-crafted demo fixture. Every profile is built to the
 // same feature coverage so a demo of any of them lights up every page.
-export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance';
+export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance' | 'telecom';
 
 // aiTemplateCache is keyed by industry string, not `id`, so the sweep
 // can't find demo entries by prefix. These are every cache key any
@@ -148,6 +148,8 @@ const DEMO_AI_CACHE_KEYS = new Set<string>([
   'logistics|warehousing & fulfillment',
   'insurance|policy underwriting',
   'insurance|claims management',
+  'telecom|service fulfillment',
+  'telecom|assurance & billing',
 ]);
 
 // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
@@ -750,6 +752,7 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
     government: seedGovernment,
     logistics: seedLogistics,
     insurance: seedInsurance,
+    telecom: seedTelecom,
   };
   const report = await (builders[industry] ?? seedUtilities)(repos, ts);
   // Refresh the org-scope cache so accessible-orgs and the synchronous
@@ -4008,5 +4011,385 @@ async function seedInsurance(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     calendarEvents: 1,
     statsSnapshots: STATS_WEEKS * 4,
     persona: { id: priya.id, name: priya.name },
+  };
+}
+
+/**
+ * Telecommunications profile — a Northlink Communications carrier (Network
+ * Operations + Consumer & Business + Shared Services), persona Tomás Vega
+ * (CDO). Same fixed-count skeleton and story shape as the other profiles:
+ * two planted orphan assets on the warehouse, and a failing DQ rule
+ * co-located with the ownership issue on the Bronze/critical Usage & CDR
+ * Records asset — the CPNI / subscriber-privacy story the industry page
+ * leads with.
+ */
+async function seedTelecom(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
+  // ── Organizations (company → 3 divisions → 6 departments) ──
+  const orgNorthlink = { id: demoId('org-northlink'), parentId: null, name: 'Northlink Communications', type: 'company', industry: 'Telecommunications', description: 'Telecom carrier demo tenant — network operations + consumer & business + shared services.', headCount: 0, tenantSlug: 'northlink', brandDisplayName: 'Northlink Communications', brandGlyph: '☏', ssoButtonLabel: 'Sign in with Northlink SSO', brandPrimaryColor: '#6d28d9', createdAt: ts, updatedAt: ts };
+  const orgNetOps = { id: demoId('org-netops'), parentId: orgNorthlink.id, name: 'Network Operations', type: 'division', industry: 'Telecommunications', description: 'Core, transport, and field operations', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgConsumerBiz = { id: demoId('org-consumerbiz'), parentId: orgNorthlink.id, name: 'Consumer & Business', type: 'division', industry: 'Telecommunications', description: 'Consumer and business/enterprise services', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgTelcoShared = { id: demoId('org-telcoshared'), parentId: orgNorthlink.id, name: 'Shared Services', type: 'division', industry: 'Telecommunications', description: 'IT / Regulatory & Compliance', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgCore = { id: demoId('org-core'), parentId: orgNetOps.id, name: 'Core & Transport', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgField = { id: demoId('org-field'), parentId: orgNetOps.id, name: 'Field Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgConsumer = { id: demoId('org-consumer'), parentId: orgConsumerBiz.id, name: 'Consumer Services', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgEnterprise = { id: demoId('org-enterprise'), parentId: orgConsumerBiz.id, name: 'Business & Enterprise', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgTelcoIT = { id: demoId('org-telcoit'), parentId: orgTelcoShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgTelcoReg = { id: demoId('org-telcoreg'), parentId: orgTelcoShared.id, name: 'Regulatory & Compliance', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.organizations, [orgNorthlink, orgNetOps, orgConsumerBiz, orgTelcoShared, orgCore, orgField, orgConsumer, orgEnterprise, orgTelcoIT, orgTelcoReg]);
+
+  // ── People (24) — persona Tomás Vega (CDO) ──
+  const tomas = { id: demoId('person-tomas-vega'), orgIds: [orgNorthlink.id], accessibleOrgIds: [orgNorthlink.id, orgNetOps.id, orgConsumerBiz.id, orgTelcoShared.id, orgCore.id, orgField.id, orgConsumer.id, orgEnterprise.id, orgTelcoIT.id, orgTelcoReg.id], name: 'Tomás Vega', email: 'tomas.vega@northlink.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const marlene = { id: demoId('person-marlene'), orgIds: [orgNorthlink.id], accessibleOrgIds: [orgNorthlink.id], name: 'Marlene Hart', email: 'marlene.hart@northlink.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const colin = { id: demoId('person-colin'), orgIds: [orgNetOps.id], accessibleOrgIds: [orgNetOps.id], name: 'Colin Brewer', email: 'colin.brewer@northlink.com', role: 'ORG_ADMIN', title: 'Data Owner Network Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const aditya = { id: demoId('person-aditya'), orgIds: [orgCore.id], accessibleOrgIds: [orgCore.id, orgNetOps.id], name: 'Aditya Sharma', email: 'aditya.sharma@northlink.com', role: 'EDITOR', title: 'Director Core & Transport', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const bella = { id: demoId('person-bella'), orgIds: [orgCore.id], accessibleOrgIds: [orgCore.id], name: 'Bella Moreau', email: 'bella.moreau@northlink.com', role: 'CONTRIBUTOR', title: 'Network Data Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const quentin = { id: demoId('person-quentin'), orgIds: [orgCore.id], accessibleOrgIds: [orgCore.id], name: 'Quentin Hale', email: 'quentin.hale@northlink.com', role: 'CONTRIBUTOR', title: 'Data Steward Network', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sable = { id: demoId('person-sable'), orgIds: [orgCore.id], accessibleOrgIds: [orgCore.id], name: 'Sable Nguyen', email: 'sable.nguyen@northlink.com', role: 'CONTRIBUTOR', title: 'Transport Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const duncan = { id: demoId('person-duncan'), orgIds: [orgField.id], accessibleOrgIds: [orgField.id], name: 'Duncan Ferro', email: 'duncan.ferro@northlink.com', role: 'EDITOR', title: 'Manager Field Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const yara = { id: demoId('person-yara'), orgIds: [orgField.id], accessibleOrgIds: [orgField.id], name: 'Yara Kovac', email: 'yara.kovac@northlink.com', role: 'CONTRIBUTOR', title: 'Data Steward Field Ops', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const nabil = { id: demoId('person-nabil'), orgIds: [orgField.id], accessibleOrgIds: [orgField.id], name: 'Nabil Farouk', email: 'nabil.farouk@northlink.com', role: 'CONTRIBUTOR', title: 'Field Technician Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const delia = { id: demoId('person-delia'), orgIds: [orgConsumerBiz.id], accessibleOrgIds: [orgConsumerBiz.id], name: 'Delia Wren', email: 'delia.wren@northlink.com', role: 'ORG_ADMIN', title: 'Data Owner Consumer & Business', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const preston = { id: demoId('person-preston'), orgIds: [orgConsumer.id], accessibleOrgIds: [orgConsumer.id, orgConsumerBiz.id], name: 'Preston Vaughn', email: 'preston.vaughn@northlink.com', role: 'EDITOR', title: 'Director Consumer Services', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const amina = { id: demoId('person-amina'), orgIds: [orgConsumer.id], accessibleOrgIds: [orgConsumer.id], name: 'Amina Sow', email: 'amina.sow@northlink.com', role: 'CONTRIBUTOR', title: 'Data Steward Consumer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const leon = { id: demoId('person-leon'), orgIds: [orgConsumer.id], accessibleOrgIds: [orgConsumer.id], name: 'Leon Baptiste', email: 'leon.baptiste@northlink.com', role: 'CONTRIBUTOR', title: 'Consumer Analytics Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rina = { id: demoId('person-rina'), orgIds: [orgEnterprise.id], accessibleOrgIds: [orgEnterprise.id], name: 'Rina Delacroix', email: 'rina.delacroix@northlink.com', role: 'EDITOR', title: 'Manager Business & Enterprise', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const oscar = { id: demoId('person-oscar'), orgIds: [orgEnterprise.id], accessibleOrgIds: [orgEnterprise.id], name: 'Oscar Mbeki', email: 'oscar.mbeki@northlink.com', role: 'CONTRIBUTOR', title: 'Data Steward Enterprise', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const felipe = { id: demoId('person-felipe'), orgIds: [orgTelcoIT.id], accessibleOrgIds: [orgTelcoIT.id], name: 'Felipe Duarte', email: 'felipe.duarte@northlink.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const wendy = { id: demoId('person-wendy'), orgIds: [orgTelcoIT.id], accessibleOrgIds: [orgTelcoIT.id], name: 'Wendy Salas', email: 'wendy.salas@northlink.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const boris = { id: demoId('person-boris'), orgIds: [orgTelcoIT.id], accessibleOrgIds: [orgTelcoIT.id], name: 'Boris Petrov', email: 'boris.petrov@northlink.com', role: 'EDITOR', title: 'Manager Information Security', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const noor = { id: demoId('person-noor'), orgIds: [orgTelcoReg.id], accessibleOrgIds: [orgTelcoReg.id], name: 'Noor Rahman', email: 'noor.rahman@northlink.com', role: 'EDITOR', title: 'Director Regulatory & Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const hugo = { id: demoId('person-hugo'), orgIds: [orgTelcoReg.id], accessibleOrgIds: [orgTelcoReg.id], name: 'Hugo Marchetti', email: 'hugo.marchetti@northlink.com', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const camille = { id: demoId('person-camille'), orgIds: [orgTelcoReg.id], accessibleOrgIds: [orgTelcoReg.id], name: 'Camille Roy', email: 'camille.roy@northlink.com', role: 'CONTRIBUTOR', title: 'CPNI & Privacy Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const serena = { id: demoId('person-serena'), orgIds: [orgTelcoReg.id], accessibleOrgIds: [orgTelcoReg.id], name: 'Serena Vitale', email: 'serena.vitale@northlink.com', role: 'EDITOR', title: 'Manager Regulatory Reporting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const malcolm = { id: demoId('person-malcolm'), orgIds: [orgTelcoReg.id], accessibleOrgIds: [orgTelcoReg.id], name: 'Malcolm Reid', email: 'malcolm.reid@northlink.com', role: 'EDITOR', title: 'Manager Compliance & Audit', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  await createAll(repos.people, [tomas, marlene, colin, aditya, bella, quentin, sable, duncan, yara, nabil, delia, preston, amina, leon, rina, oscar, felipe, wendy, boris, noor, hugo, camille, serena, malcolm]);
+
+  // ── Systems (8) — OSS / BSS / inventory / CRM / billing / ticketing / warehouse + mediation ──
+  const sysOSS = { id: demoId('sys-oss'), orgId: orgNetOps.id, name: 'OSS', description: 'Operational Support System — service provisioning, activation, and orchestration.', systemType: 'IT', vendorName: 'Amdocs OSS', ownerPersonId: aditya.id, stewardIds: [quentin.id], createdAt: ts, updatedAt: ts };
+  const sysBSS = { id: demoId('sys-bss'), orgId: orgNorthlink.id, name: 'BSS', description: 'Business Support System — orders, products, and customer management.', systemType: 'IT', vendorName: 'Amdocs BSS', ownerPersonId: preston.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysInventory = { id: demoId('sys-netinventory'), orgId: orgNetOps.id, name: 'Network Inventory', description: 'Physical and logical network inventory and element management.', systemType: 'OT', vendorName: 'Nokia NetAct', ownerPersonId: sable.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysCRM = { id: demoId('sys-telcocrm'), orgId: orgNorthlink.id, name: 'CRM', description: 'Customer relationship management — the subscriber master and interactions.', systemType: 'IT', vendorName: 'Salesforce Communications Cloud', ownerPersonId: amina.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysBilling = { id: demoId('sys-telcobilling'), orgId: orgNorthlink.id, name: 'Billing & Rating', description: 'Usage rating, billing, invoicing, and collections.', systemType: 'IT', vendorName: 'Ericsson BSCS', ownerPersonId: serena.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysTicketing = { id: demoId('sys-ticketing'), orgId: orgNetOps.id, name: 'Service Assurance', description: 'Trouble ticketing, fault management, and service assurance.', systemType: 'IT', vendorName: 'ServiceNow', ownerPersonId: duncan.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgNorthlink.id, name: 'Data Warehouse', description: 'Enterprise analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: felipe.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysMediation = { id: demoId('sys-mediation'), orgId: orgNetOps.id, name: 'Usage Mediation', description: 'Usage and call-detail-record mediation feeding rating and billing.', systemType: 'IT', vendorName: 'DigitalRoute', ownerPersonId: hugo.id, stewardIds: [camille.id], createdAt: ts, updatedAt: ts };
+  await createAll(repos.systems, [sysOSS, sysBSS, sysInventory, sysCRM, sysBilling, sysTicketing, sysWarehouse, sysMediation]);
+
+  // ── Agents (5 — one of each type) ──
+  await createAll(repos.agents, [
+    { id: demoId('agent-churn-model'), orgIds: [orgConsumerBiz.id], name: 'Churn Prediction Model', agentType: 'AI', description: 'Predicts subscriber churn risk from usage, billing, and care data.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: leon.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-mediation-pipeline'), orgIds: [orgNorthlink.id], name: 'Usage Mediation Pipeline', agentType: 'PIPELINE', description: 'Streams and mediates CDR/usage records into rating and the warehouse.', provider: 'Apache Kafka', status: 'ACTIVE', ownerPersonId: felipe.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-alarm-bot'), orgIds: [orgNetOps.id], name: 'Network Alarm Bot', agentType: 'BOT', description: 'Alerts NOC engineers when a network element faults or degrades.', provider: 'Microsoft Teams', status: 'ACTIVE', ownerPersonId: duncan.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-oss-service'), orgIds: [orgTelcoIT.id], name: 'OSS Extract Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract OSS inventory.', provider: 'Amdocs', status: 'ACTIVE', ownerPersonId: felipe.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-cpni-gen'), orgIds: [orgNorthlink.id], name: 'CPNI Report Generator', agentType: 'OTHER', description: 'Scheduled generator assembling CPNI and regulatory compliance filing packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: serena.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // ── Data Domains (3 top-level + 3 sub-domains under Subscriber & Account Data) ──
+  const domSubscriber = { id: demoId('domain-subscriber'), code: 'SUB', orgId: orgNorthlink.id, name: 'Subscriber & Account Data', description: 'Subscriber master and the consumer and business accounts they hold.', ownerId: tomas.id, stewardIds: [amina.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domNetwork = { id: demoId('domain-network'), code: 'NET', orgId: orgNorthlink.id, name: 'Network & Infrastructure Data', description: 'Network inventory, element data, and service-assurance tickets.', ownerId: colin.id, stewardIds: [quentin.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domCompliance = { id: demoId('domain-telcocompliance'), code: 'CMP', orgId: orgNorthlink.id, name: 'Regulatory & Compliance Data', description: 'Usage/CDR records (CPNI), rating and billing, and regulatory evidence.', ownerId: noor.id, stewardIds: [hugo.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  // Sub-domains under Subscriber & Account Data — the account segments. Parent created first.
+  const domSubConsumer = { id: demoId('domain-sub-consumer'), code: 'SUB-01', orgId: orgNorthlink.id, name: 'Consumer Subscribers', description: 'Consumer subscriptions, plans, and devices.', ownerId: preston.id, stewardIds: [amina.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domSubscriber.id, createdAt: ts, updatedAt: ts };
+  const domSubBusiness = { id: demoId('domain-sub-business'), code: 'SUB-02', orgId: orgNorthlink.id, name: 'Business Accounts', description: 'Business and enterprise accounts, contracts, and sites.', ownerId: rina.id, stewardIds: [oscar.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domSubscriber.id, createdAt: ts, updatedAt: ts };
+  const domSubBilling = { id: demoId('domain-sub-billing'), code: 'SUB-03', orgId: orgNorthlink.id, name: 'Billing & Usage', description: 'Usage mediation, rating, and billing records.', ownerId: serena.id, stewardIds: [camille.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domSubscriber.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domSubscriber, domNetwork, domCompliance, domSubConsumer, domSubBusiness, domSubBilling]);
+
+  // ── Data Assets (9) ──
+  const assetSubscriberMaster = { id: demoId('asset-subscriber-master'), orgId: orgNorthlink.id, name: 'Subscriber Master', description: 'The golden subscriber record — identity, contacts, and the services they hold.', systemId: sysCRM.id, owner: '', ownerPersonId: amina.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 91, createdAt: ts, updatedAt: ts };
+  const assetConsumerSubs = { id: demoId('asset-consumer-subs'), orgId: orgNorthlink.id, name: 'Consumer Subscriptions', description: 'Consumer plans, subscriptions, devices, and features.', systemId: sysBSS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 85, createdAt: ts, updatedAt: ts };
+  const assetBusinessAccounts = { id: demoId('asset-business-accounts'), orgId: orgNorthlink.id, name: 'Business Accounts', description: 'Business and enterprise accounts, contracts, and service sites.', systemId: sysBSS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 83, createdAt: ts, updatedAt: ts };
+  const assetNetworkInventory = { id: demoId('asset-network-inventory'), orgId: orgNorthlink.id, name: 'Network Inventory', description: 'Physical and logical network inventory, elements, and topology.', systemId: sysInventory.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetUsageCDR = { id: demoId('asset-usage-cdr'), orgId: orgNorthlink.id, name: 'Usage & CDR Records', description: 'Call-detail and usage records (CPNI) feeding rating and billing.', systemId: sysMediation.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 56, createdAt: ts, updatedAt: ts };
+  const assetTickets = { id: demoId('asset-tickets'), orgId: orgNorthlink.id, name: 'Trouble Tickets', description: 'Service-assurance trouble tickets, faults, and resolutions.', systemId: sysTicketing.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 82, createdAt: ts, updatedAt: ts };
+  const assetRatingBilling = { id: demoId('asset-rating-billing'), orgId: orgNorthlink.id, name: 'Rating & Billing', description: 'Rated usage, invoices, and billing and collections records.', systemId: sysBilling.id, owner: '', ownerPersonId: serena.id, stewardIds: [camille.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
+  // Planted orphans — obviously-named so Ask AI's orphan-detection returns a quotable answer.
+  const orphanLegacyProvisioning = { id: demoId('asset-legacy-provisioning'), orgId: orgNorthlink.id, name: 'Legacy Provisioning Extract', description: 'Nightly dump from the retired provisioning system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanChurnCsv = { id: demoId('asset-churn-csv'), orgId: orgNorthlink.id, name: 'Churn CSV Dump', description: 'Ad-hoc CSV extract of churn events for an old reporting deck. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataAssets, [assetSubscriberMaster, assetConsumerSubs, assetBusinessAccounts, assetNetworkInventory, assetUsageCDR, assetTickets, assetRatingBilling, orphanLegacyProvisioning, orphanChurnCsv]);
+
+  // Domain → asset backrefs so the Domains page shows counts.
+  await repos.dataDomains.update(domSubscriber.id, { dataAssetIds: [assetSubscriberMaster.id, assetConsumerSubs.id, assetBusinessAccounts.id] });
+  await repos.dataDomains.update(domNetwork.id, { dataAssetIds: [assetNetworkInventory.id, assetTickets.id] });
+  await repos.dataDomains.update(domCompliance.id, { dataAssetIds: [assetUsageCDR.id, assetRatingBilling.id] });
+
+  // ── Process hierarchy — VS1 Service Fulfillment (Consumer & Business) ──
+  const vsFulfillment = { id: demoId('node-vs-fulfillment'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Service Fulfillment', description: 'End-to-end fulfillment — capture the order, validate availability, provision the network, and activate service.', activityId: 'VS-DEMO-T1', status: 'ACTIVE', orderIndex: 0, orgId: orgConsumerBiz.id, orgIds: [orgConsumerBiz.id], ownerId: delia.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procOrder = { id: demoId('node-proc-order'), parentId: vsFulfillment.id, level: 'PROCESS' as const, name: 'Order Capture', description: 'Capture the order and validate service availability.', activityId: 'PRO-DEMO-T1', status: 'ACTIVE', orderIndex: 0, orgId: orgConsumerBiz.id, orgIds: [orgConsumerBiz.id], ownerId: preston.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procProvision = { id: demoId('node-proc-provision'), parentId: vsFulfillment.id, level: 'PROCESS' as const, name: 'Provisioning & Activation', description: 'Provision the network and activate the service.', activityId: 'PRO-DEMO-T2', status: 'ACTIVE', orderIndex: 1, orgId: orgNetOps.id, orgIds: [orgNetOps.id], ownerId: aditya.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spOrderEntry = { id: demoId('node-sp-orderentry'), parentId: procOrder.id, level: 'SUBPROCESS' as const, name: 'Order Entry', description: 'Capture the order and validate availability.', activityId: 'SP-DEMO-T1', status: 'ACTIVE', orderIndex: 0, orgId: orgConsumerBiz.id, orgIds: [orgConsumerBiz.id], ownerId: amina.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actCaptureOrder = { id: demoId('node-act-captureorder'), parentId: spOrderEntry.id, level: 'ACTIVITY' as const, name: 'Capture order', description: 'Take the service order and match the customer to the subscriber master.', activityId: 'ACT-DEMO-T1', status: 'ACTIVE', orderIndex: 0, orgId: orgConsumerBiz.id, orgIds: [orgConsumerBiz.id], ownerId: amina.id, responsibleRole: 'Data Steward Consumer', responsiblePersonId: amina.id, systemIds: [sysBSS.id, sysCRM.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actValidate = { id: demoId('node-act-validate'), parentId: spOrderEntry.id, level: 'ACTIVITY' as const, name: 'Validate service availability', description: 'Check network inventory and confirm the service can be delivered to the address.', activityId: 'ACT-DEMO-T2', status: 'ACTIVE', orderIndex: 1, orgId: orgConsumerBiz.id, orgIds: [orgConsumerBiz.id], ownerId: preston.id, responsibleRole: 'Transport Engineer', responsiblePersonId: sable.id, systemIds: [sysOSS.id, sysInventory.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actProvision = { id: demoId('node-act-provision'), parentId: procProvision.id, level: 'ACTIVITY' as const, name: 'Provision network', description: 'Provision the network elements and configure the service.', activityId: 'ACT-DEMO-T3', status: 'ACTIVE', orderIndex: 0, orgId: orgNetOps.id, orgIds: [orgNetOps.id], ownerId: aditya.id, responsibleRole: 'Data Steward Network', responsiblePersonId: quentin.id, systemIds: [sysOSS.id, sysInventory.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actActivate = { id: demoId('node-act-activate'), parentId: procProvision.id, level: 'ACTIVITY' as const, name: 'Activate service', description: 'Activate the service, test it, and confirm it to the customer.', activityId: 'ACT-DEMO-T4', status: 'ACTIVE', orderIndex: 1, orgId: orgNetOps.id, orgIds: [orgNetOps.id], ownerId: aditya.id, responsibleRole: 'Data Steward Enterprise', responsiblePersonId: oscar.id, systemIds: [sysOSS.id, sysBSS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Service activated within the published fulfillment SLA', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsFulfillment, procOrder, procProvision, spOrderEntry, actCaptureOrder, actValidate, actProvision, actActivate]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-t1'), fromNodeId: actCaptureOrder.id, toNodeId: actValidate.id, type: 'SEQUENCE' as const, label: 'order captured', createdAt: ts },
+    { id: demoId('flow-t2'), fromNodeId: actValidate.id, toNodeId: actProvision.id, type: 'SEQUENCE' as const, label: 'availability confirmed', createdAt: ts },
+    { id: demoId('flow-t3'), fromNodeId: actProvision.id, toNodeId: actActivate.id, type: 'SEQUENCE' as const, label: 'network provisioned', createdAt: ts },
+  ]);
+
+  // ── Process hierarchy — VS2 Assurance & Billing (Network Operations) ──
+  const vsAssurance = { id: demoId('node-vs-assurance'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Assurance & Billing', description: 'Assure the service — detect and resolve incidents — and rate and bill usage.', activityId: 'VS-DEMO-T2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgNetOps.id, orgIds: [orgNetOps.id], ownerId: colin.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procAssure = { id: demoId('node-proc-assure'), parentId: vsAssurance.id, level: 'PROCESS' as const, name: 'Service Assurance', description: 'Detect, triage, and resolve service incidents.', activityId: 'PRO-DEMO-T3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgNetOps.id, orgIds: [orgNetOps.id], ownerId: duncan.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procBilling = { id: demoId('node-proc-billing'), parentId: vsAssurance.id, level: 'PROCESS' as const, name: 'Usage & Billing', description: 'Rate usage and bill the customer.', activityId: 'PRO-DEMO-T4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgNorthlink.id, orgIds: [orgNorthlink.id], ownerId: serena.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spTriage = { id: demoId('node-sp-triage'), parentId: procAssure.id, level: 'SUBPROCESS' as const, name: 'Incident Triage', description: 'Detect and triage service incidents.', activityId: 'SP-DEMO-T2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgNetOps.id, orgIds: [orgNetOps.id], ownerId: quentin.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actDetect = { id: demoId('node-act-detect'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Detect & raise ticket', description: 'Detect the fault from network alarms and raise a trouble ticket.', activityId: 'ACT-DEMO-T5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgNetOps.id, orgIds: [orgNetOps.id], ownerId: duncan.id, responsibleRole: 'Field Technician Lead', responsiblePersonId: nabil.id, systemIds: [sysTicketing.id, sysInventory.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actResolve = { id: demoId('node-act-resolve'), parentId: procAssure.id, level: 'ACTIVITY' as const, name: 'Resolve incident', description: 'Diagnose and resolve the incident and close the ticket.', activityId: 'ACT-DEMO-T6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgNetOps.id, orgIds: [orgNetOps.id], ownerId: duncan.id, responsibleRole: 'Data Steward Field Ops', responsiblePersonId: yara.id, systemIds: [sysTicketing.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Incidents resolved within the SLA', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actRateBill = { id: demoId('node-act-ratebill'), parentId: procBilling.id, level: 'ACTIVITY' as const, name: 'Rate & bill usage', description: 'Rate the mediated usage records and generate the invoice.', activityId: 'ACT-DEMO-T7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgNorthlink.id, orgIds: [orgNorthlink.id], ownerId: serena.id, responsibleRole: 'CPNI & Privacy Analyst', responsiblePersonId: camille.id, systemIds: [sysMediation.id, sysBilling.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, successMeasure: 'Usage rated completely and billed on the cycle', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsAssurance, procAssure, procBilling, spTriage, actDetect, actResolve, actRateBill]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-t4'), fromNodeId: actDetect.id, toNodeId: actResolve.id, type: 'SEQUENCE' as const, label: 'ticket raised', createdAt: ts },
+  ]);
+
+  // ── Mappings (7) ──
+  await createAll(repos.mappings, [
+    { id: demoId('map-t1'), orgId: orgConsumerBiz.id, processStepId: actCaptureOrder.id, dataAssetId: assetSubscriberMaster.id, linkType: 'INPUT', notes: 'Matches the customer to the subscriber master', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-t2'), orgId: orgConsumerBiz.id, processStepId: actValidate.id, dataAssetId: assetNetworkInventory.id, linkType: 'INPUT', notes: 'Checks network inventory for availability', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-t3'), orgId: orgNetOps.id, processStepId: actProvision.id, dataAssetId: assetConsumerSubs.id, linkType: 'OUTPUT', notes: 'Creates the provisioned subscription', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-t4'), orgId: orgNetOps.id, processStepId: actActivate.id, dataAssetId: assetBusinessAccounts.id, linkType: 'OUTPUT', notes: 'Activates the business service', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-t5'), orgId: orgNetOps.id, processStepId: actDetect.id, dataAssetId: assetTickets.id, linkType: 'OUTPUT', notes: 'Raises the trouble ticket', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-t6'), orgId: orgNetOps.id, processStepId: actResolve.id, dataAssetId: assetTickets.id, linkType: 'INPUT', notes: 'Updates and closes the ticket', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-t7'), orgId: orgNorthlink.id, processStepId: actRateBill.id, dataAssetId: assetUsageCDR.id, linkType: 'INPUT', notes: 'Rates the mediated usage/CDR records', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+  ]);
+
+  // ── Governance tasks assigned to Tomás (populates My Dashboard) ──
+  await createAll(repos.governanceTasks, [
+    { id: demoId('task-t1'), orgId: orgNorthlink.id, title: 'Approve Usage & CDR Records classification review', description: 'Review the AI-suggested sensitivity tags on Usage & CDR Records and Rating & Billing and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: tomas.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetUsageCDR.id, automationMode: 'HUMAN' as any, createdBy: marlene.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-t2'), orgId: orgNorthlink.id, title: 'Sign off on Regulatory & Compliance domain scope', description: 'Noor has proposed expanding the Regulatory & Compliance domain to cover new CPNI evidence fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: tomas.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domCompliance.id, automationMode: 'HUMAN' as any, createdBy: noor.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-t3'), orgId: orgNorthlink.id, title: 'Retire Legacy Provisioning Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: tomas.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyProvisioning.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+  ]);
+
+  // ── One open governance issue assigned to Tomás ──
+  await repos.governanceIssues.create({
+    id: demoId('issue-t1'),
+    orgId: orgNorthlink.id,
+    title: 'Usage & CDR Records tier below Silver — critical process, ungoverned',
+    description: 'Usage & CDR Records is BRONZE tier but the Billing process rates it as the source of record for revenue, and it carries CPNI. Recommend promoting to Silver with an SLA target.',
+    issueType: 'OWNERSHIP' as any,
+    severity: 'HIGH' as any,
+    status: 'OPEN' as any,
+    domainId: domCompliance.id,
+    dataAssetId: assetUsageCDR.id,
+    systemId: sysMediation.id,
+    reportedBy: marlene.id,
+    assignedTo: tomas.id,
+    resolutionSummary: null,
+    createdAt: ts,
+    updatedAt: ts,
+    closedAt: null,
+  } as any);
+
+  // ── Data Quality rules (2 — one passing, one failing) ──
+  await createAll(repos.dataQualityRules, [
+    {
+      id: demoId('dq-rule-passing'), orgId: orgNorthlink.id, dataAssetId: assetConsumerSubs.id,
+      dimension: 'COMPLETENESS' as const, name: 'Consumer Subscriptions · plan completeness',
+      description: 'At least 95% of subscriptions must carry a complete plan, device, and status.',
+      threshold: 95, currentScore: 98, weight: 1, status: 'PASSING' as const,
+      lastMeasured: ts, scheduleFrequency: 'DAILY' as const, nextRunAt: daysFromNow(1), createdAt: ts, updatedAt: ts,
+    },
+    {
+      id: demoId('dq-rule-failing'), orgId: orgNorthlink.id, dataAssetId: assetUsageCDR.id,
+      dimension: 'TIMELINESS' as const, name: 'Usage & CDR Records · mediation latency',
+      description: 'Usage/CDR records should be mediated into rating within the billing SLA. Rolling 24h.',
+      threshold: 95, currentScore: 56, weight: 1, status: 'FAILING' as const,
+      lastMeasured: ts, scheduleFrequency: 'HOURLY' as const, nextRunAt: daysFromNow(0), createdAt: ts, updatedAt: ts,
+    },
+  ]);
+
+  // ── Edge connector (ONLINE) ──
+  const connectorHeartbeatAt = new Date(Date.now() - 45 * 1000).toISOString();
+  const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const conn = {
+    id: demoId('conn-northlink'), orgId: orgNorthlink.id, name: 'Northlink Network Data Connector',
+    tokenHash: '6b1d3f8a2c5e7094b8d1a3f6c9e2b5d8a0f3c6e9b2d5a8f1c4e7b0d3a6f9c2e5',
+    pairingCode: null, pairingCodeExpiresAt: null,
+    systemIds: [sysOSS.id, sysWarehouse.id],
+    lastHeartbeatAt: connectorHeartbeatAt, agentVersion: '1.2.0', status: 'ONLINE' as const,
+    createdAt: connectorCreatedAt, updatedAt: connectorHeartbeatAt,
+  };
+  await repos.connectors.create(conn);
+
+  await repos.dataAssets.update(assetConsumerSubs.id, {
+    lastSyncedByConnectorId: conn.id,
+    lastSyncedAt: connectorSyncAt,
+  } as any);
+
+  await createAll(repos.connectorEvents, [
+    { id: demoId('ce-t-paired'), connectorId: conn.id, orgId: orgNorthlink.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-t-scan-start'), connectorId: conn.id, orgId: orgNorthlink.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysOSS.id, sysWarehouse.id] } },
+    { id: demoId('ce-t-scan-done'), connectorId: conn.id, orgId: orgNorthlink.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 40_410, assetsDiscovered: 1 } },
+    { id: demoId('ce-t-assets'), connectorId: conn.id, orgId: orgNorthlink.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
+    { id: demoId('ce-t-hb'), connectorId: conn.id, orgId: orgNorthlink.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
+  ]);
+
+  // ── Second connector — PAIRING state ──
+  const pairingConn = {
+    id: demoId('conn-t-pairing'), orgId: orgNorthlink.id, name: 'Central Office Connector',
+    tokenHash: null, pairingCode: '80425397',
+    pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    systemIds: [] as string[], lastHeartbeatAt: null, agentVersion: null, status: 'PAIRED' as const,
+    createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(), updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+  };
+  await repos.connectors.create(pairingConn as any);
+
+  // ── Governance calendar event ──
+  const dayNow = new Date();
+  const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
+  const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
+  await repos.calendarEvents.create({
+    id: demoId('cal-t-dgc'),
+    orgId: orgNorthlink.id,
+    name: 'Data Governance Council weekly',
+    description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
+    eventType: 'COMMITTEE_MEETING' as const,
+    cadence: 'WEEKLY' as const,
+    dayOfMonth: null,
+    dayOfWeek: 5,
+    timeOfDay: '09:00',
+    durationMinutes: 60,
+    attendees: [tomas.id, marlene.id, colin.id, noor.id],
+    agendaTemplate: '1. Open governance issues (from bell)\n2. Domain scope changes\n3. Control effectiveness review\n4. Upcoming policy publications',
+    nextOccurrence: nextFriday.toISOString(),
+    lastOccurrence: null,
+    autoCreateTasks: false,
+    status: 'ACTIVE' as const,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+
+  // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
+  await createAll(repos.statsSnapshots, [
+    ...weeklySnapshots(orgNorthlink.id, { coverage: 63, avgHealth: 72, gaps: 8, dataAssets: 9, mappings: 7 }),
+    ...weeklySnapshots(orgNetOps.id, { coverage: 70, avgHealth: 73, gaps: 4, dataAssets: 3, mappings: 4 }),
+    ...weeklySnapshots(orgConsumerBiz.id, { coverage: 66, avgHealth: 75, gaps: 3, dataAssets: 3, mappings: 3 }),
+    ...weeklySnapshots(orgTelcoShared.id, { coverage: 53, avgHealth: 71, gaps: 3, dataAssets: 1, mappings: 0 }),
+  ]);
+
+  // ── AI template cache — pre-warm the wand for Northlink ──
+  aiTemplateCache.push(
+    {
+      industry: 'telecom|service fulfillment',
+      industryLabel: 'Telecommunications — Service Fulfillment',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Service Fulfillment',
+            description: 'Capture the order, validate availability, provision the network, and activate service.',
+            purpose: 'Turn an order into a working, activated service on time.',
+            businessOutcome: 'Services activated within the fulfillment SLA against verified inventory.',
+            processes: [
+              { name: 'Order Capture', description: 'Capture the order and validate service availability.', purpose: 'Get a complete, serviceable order on file.', activities: [
+                { name: 'Capture order', description: 'Take the service order and match to the subscriber master.' },
+                { name: 'Validate service availability', description: 'Check network inventory and confirm the service can be delivered.' },
+              ] },
+              { name: 'Provisioning & Activation', description: 'Provision the network and activate the service.', purpose: 'Deliver and turn up the service.', activities: [
+                { name: 'Provision network', description: 'Provision the network elements and configure the service.' },
+                { name: 'Activate service', description: 'Activate the service, test it, and confirm it to the customer.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      industry: 'telecom|assurance & billing',
+      industryLabel: 'Telecommunications — Assurance & Billing',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Assurance & Billing',
+            description: 'Assure the service and rate and bill usage.',
+            purpose: 'Keep the service healthy and bill usage completely and accurately.',
+            businessOutcome: 'Incidents resolved on SLA and usage rated and billed on the cycle.',
+            processes: [
+              { name: 'Service Assurance', description: 'Detect, triage, and resolve service incidents.', purpose: 'Keep services healthy.', activities: [
+                { name: 'Detect & raise ticket', description: 'Detect the fault from network alarms and raise a trouble ticket.' },
+                { name: 'Resolve incident', description: 'Diagnose and resolve the incident and close the ticket.' },
+              ] },
+              { name: 'Usage & Billing', description: 'Rate usage and bill the customer.', purpose: 'Bill revenue completely and accurately.', activities: [
+                { name: 'Rate & bill usage', description: 'Rate the mediated usage records and generate the invoice.' },
+                { name: 'Confirm invoice', description: 'Confirm the invoice and post it to the account.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  saveStore('aiTemplateCache', aiTemplateCache);
+
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgNorthlink.id,
+    cdoId: tomas.id,
+    govLeadId: marlene.id,
+    dataOwnerId: colin.id,
+    stewardIds: [quentin.id, hugo.id],
+    tenantName: 'Northlink Communications',
+  });
+
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgNorthlink.id,
+    domainIds: [domSubscriber.id, domNetwork.id, domCompliance.id],
+    cdoId: tomas.id,
+    govLeadId: marlene.id,
+    dataOwnerId: colin.id,
+    stewardId: quentin.id,
+    techStewardId: hugo.id,
+    engineerId: felipe.id,
+    architectId: wendy.id,
+    raciNodeId: actRateBill.id,
+    raciPersonId: camille.id,
+  });
+
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgNorthlink.id, ownerId: quentin.id, cdoId: tomas.id, domainId: domSubscriber.id });
+
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgNorthlink.id, orgNetOps.id, orgConsumerBiz.id],
+    links: [
+      { id: demoId('lin-1'), orgId: orgNorthlink.id, sourceSystemId: sysBSS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetConsumerSubs.id, description: 'Subscription data syncs nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-2'), orgId: orgNetOps.id, sourceSystemId: sysMediation.id, targetSystemId: sysWarehouse.id, dataAssetId: assetUsageCDR.id, description: 'Mediated usage/CDR records stream into the warehouse.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+      { id: demoId('lin-3'), orgId: orgNetOps.id, sourceSystemId: sysInventory.id, targetSystemId: sysWarehouse.id, dataAssetId: assetNetworkInventory.id, description: 'Network inventory feeds the warehouse hourly.', flowType: 'ETL', frequency: 'HOURLY' },
+    ],
+    edges: [
+      { id: demoId('edge-1'), orgId: orgNorthlink.id, sourceAssetId: assetSubscriberMaster.id, targetAssetId: assetConsumerSubs.id },
+      { id: demoId('edge-2'), orgId: orgNorthlink.id, sourceAssetId: assetUsageCDR.id, targetAssetId: assetRatingBilling.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgNorthlink.id, agentId: demoId('agent-cpni-gen'), agentName: 'CPNI Report Generator', activityId: actRateBill.id, activityName: 'Rate & bill usage', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: tomas.id, reviewerId: marlene.id });
+
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgNorthlink.id, assetId: assetSubscriberMaster.id, systemId: sysCRM.id, personId: quentin.id, personName: 'Quentin Hale' });
+
+  logger.info({ persona: tomas.name }, 'Demo data seeded (telecom)');
+
+  return {
+    organizations: 10,
+    people: 24,
+    systems: 8,
+    agents: 5,
+    dataDomains: 6,
+    dataAssets: 9,
+    processNodes: 15,
+    mappings: 7,
+    governanceTasks: 3,
+    governanceIssues: 1,
+    dataQualityRules: 2,
+    connectors: 2,
+    connectorEvents: 5,
+    calendarEvents: 1,
+    statsSnapshots: STATS_WEEKS * 4,
+    persona: { id: tomas.id, name: tomas.name },
   };
 }

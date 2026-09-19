@@ -26,7 +26,7 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
-type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance';
+type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance' | 'telecom';
 
 const INDUSTRIES: ReadonlyArray<{
   value: Industry;
@@ -90,6 +90,13 @@ const INDUSTRIES: ReadonlyArray<{
     tenant: 'Northwind Mutual',
     persona: 'Priya Anand',
     blurb: 'P&C mutual insurer — underwriting + claims + shared services.',
+  },
+  {
+    value: 'telecom',
+    label: 'Telecommunications',
+    tenant: 'Northlink Communications',
+    persona: 'Tomás Vega',
+    blurb: 'Telecom carrier — network operations + consumer & business + shared services.',
   },
 ];
 
