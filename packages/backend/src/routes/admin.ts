@@ -45,6 +45,7 @@ router.post('/demo-seed', async (req: AuthenticatedRequest, res: Response) => {
     financial: 'Harborstone Financial',
     government: 'Lakeside County',
     logistics: 'Cascade Logistics',
+    insurance: 'Northwind Mutual',
   };
   const validIndustries = Object.keys(TENANT_LABELS) as DemoIndustry[];
   const industry: DemoIndustry = requested == null ? 'utilities' : requested;

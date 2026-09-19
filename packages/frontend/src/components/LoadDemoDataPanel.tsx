@@ -26,7 +26,7 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
-type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics';
+type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance';
 
 const INDUSTRIES: ReadonlyArray<{
   value: Industry;
@@ -83,6 +83,13 @@ const INDUSTRIES: ReadonlyArray<{
     tenant: 'Cascade Logistics',
     persona: 'Omar Reyes',
     blurb: 'Freight carrier — line-haul freight + warehousing + shared services.',
+  },
+  {
+    value: 'insurance',
+    label: 'Insurance',
+    tenant: 'Northwind Mutual',
+    persona: 'Priya Anand',
+    blurb: 'P&C mutual insurer — underwriting + claims + shared services.',
   },
 ];
 
