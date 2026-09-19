@@ -124,7 +124,7 @@ function daysFromNow(n: number): string {
 
 // Industries with a hand-crafted demo fixture. Every profile is built to the
 // same feature coverage so a demo of any of them lights up every page.
-export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government';
+export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics';
 
 // aiTemplateCache is keyed by industry string, not `id`, so the sweep
 // can't find demo entries by prefix. These are every cache key any
@@ -144,6 +144,8 @@ const DEMO_AI_CACHE_KEYS = new Set<string>([
   'financial|financial crime & regulatory reporting',
   'government|permitting & licensing',
   'government|public health case management',
+  'logistics|line-haul freight',
+  'logistics|warehousing & fulfillment',
 ]);
 
 // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
@@ -744,6 +746,7 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
     manufacturing: seedManufacturing,
     financial: seedFinancial,
     government: seedGovernment,
+    logistics: seedLogistics,
   };
   const report = await (builders[industry] ?? seedUtilities)(repos, ts);
   // Refresh the org-scope cache so accessible-orgs and the synchronous
@@ -3242,5 +3245,385 @@ async function seedGovernment(repos: DemoRepos, ts: string): Promise<DemoSeedRep
     calendarEvents: 1,
     statsSnapshots: STATS_WEEKS * 4,
     persona: { id: evelyn.id, name: evelyn.name },
+  };
+}
+
+/**
+ * Transportation & Logistics profile — a Cascade Logistics freight carrier
+ * (Line-Haul Freight + Warehousing + Shared Services), persona Omar Reyes
+ * (CDO). Same fixed-count skeleton and story shape as the other profiles:
+ * two planted orphan assets on the warehouse, and a failing DQ rule
+ * co-located with the ownership issue on the Bronze/critical Customs
+ * Declarations asset — the cross-border/C-TPAT traceability story the
+ * industry page leads with.
+ */
+async function seedLogistics(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
+  // ── Organizations (company → 3 divisions → 6 departments) ──
+  const orgCascade = { id: demoId('org-cascade'), parentId: null, name: 'Cascade Logistics', type: 'company', industry: 'Transportation & Logistics', description: 'Freight carrier demo tenant — line-haul freight + warehousing + shared services.', headCount: 0, tenantSlug: 'cascade', brandDisplayName: 'Cascade Logistics', brandGlyph: '⛟', ssoButtonLabel: 'Sign in with Cascade SSO', brandPrimaryColor: '#c2410c', createdAt: ts, updatedAt: ts };
+  const orgLineHaul = { id: demoId('org-linehaul'), parentId: orgCascade.id, name: 'Line-Haul Freight', type: 'division', industry: 'Transportation & Logistics', description: 'Dispatch, fleet, and driver operations', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgWarehousing = { id: demoId('org-warehousing'), parentId: orgCascade.id, name: 'Warehousing', type: 'division', industry: 'Transportation & Logistics', description: 'Distribution centers and fulfillment', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgLogShared = { id: demoId('org-logshared'), parentId: orgCascade.id, name: 'Shared Services', type: 'division', industry: 'Transportation & Logistics', description: 'IT / Safety & Compliance', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgDispatch = { id: demoId('org-dispatch'), parentId: orgLineHaul.id, name: 'Dispatch & Fleet', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgDriverOps = { id: demoId('org-driverops'), parentId: orgLineHaul.id, name: 'Driver Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgDC = { id: demoId('org-dc'), parentId: orgWarehousing.id, name: 'Distribution Centers', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgFulfillment = { id: demoId('org-fulfillment'), parentId: orgWarehousing.id, name: 'Inbound & Outbound', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgLogIT = { id: demoId('org-logit'), parentId: orgLogShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgSafety = { id: demoId('org-safety'), parentId: orgLogShared.id, name: 'Safety & Compliance', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.organizations, [orgCascade, orgLineHaul, orgWarehousing, orgLogShared, orgDispatch, orgDriverOps, orgDC, orgFulfillment, orgLogIT, orgSafety]);
+
+  // ── People (24) — persona Omar Reyes (CDO) ──
+  const omar = { id: demoId('person-omar-reyes'), orgIds: [orgCascade.id], accessibleOrgIds: [orgCascade.id, orgLineHaul.id, orgWarehousing.id, orgLogShared.id, orgDispatch.id, orgDriverOps.id, orgDC.id, orgFulfillment.id, orgLogIT.id, orgSafety.id], name: 'Omar Reyes', email: 'omar.reyes@cascade-logistics.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const denise = { id: demoId('person-denise'), orgIds: [orgCascade.id], accessibleOrgIds: [orgCascade.id], name: 'Denise Hartley', email: 'denise.hartley@cascade-logistics.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const travis = { id: demoId('person-travis'), orgIds: [orgLineHaul.id], accessibleOrgIds: [orgLineHaul.id], name: 'Travis Boone', email: 'travis.boone@cascade-logistics.com', role: 'ORG_ADMIN', title: 'Data Owner Line-Haul Freight', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gina = { id: demoId('person-gina'), orgIds: [orgDispatch.id], accessibleOrgIds: [orgDispatch.id, orgLineHaul.id], name: 'Gina Alvarez', email: 'gina.alvarez@cascade-logistics.com', role: 'EDITOR', title: 'Director Dispatch & Fleet', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const curtis = { id: demoId('person-curtis'), orgIds: [orgDispatch.id], accessibleOrgIds: [orgDispatch.id], name: 'Curtis Reed', email: 'curtis.reed@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Dispatch Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const molly = { id: demoId('person-molly'), orgIds: [orgDispatch.id], accessibleOrgIds: [orgDispatch.id], name: 'Molly Tran', email: 'molly.tran@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Data Steward Dispatch', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const hank = { id: demoId('person-hank'), orgIds: [orgDispatch.id], accessibleOrgIds: [orgDispatch.id], name: 'Hank Boyd', email: 'hank.boyd@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Fleet Telematics Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const yvonne = { id: demoId('person-yvonne'), orgIds: [orgDriverOps.id], accessibleOrgIds: [orgDriverOps.id], name: 'Yvonne Clarke', email: 'yvonne.clarke@cascade-logistics.com', role: 'EDITOR', title: 'Manager Driver Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const derek = { id: demoId('person-derek'), orgIds: [orgDriverOps.id], accessibleOrgIds: [orgDriverOps.id], name: 'Derek Hollis', email: 'derek.hollis@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Data Steward Driver Ops', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const simone = { id: demoId('person-simone'), orgIds: [orgDriverOps.id], accessibleOrgIds: [orgDriverOps.id], name: 'Simone Weber', email: 'simone.weber@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Safety Data Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const bradley = { id: demoId('person-bradley'), orgIds: [orgWarehousing.id], accessibleOrgIds: [orgWarehousing.id], name: 'Bradley Cho', email: 'bradley.cho@cascade-logistics.com', role: 'ORG_ADMIN', title: 'Data Owner Warehousing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const helena = { id: demoId('person-helena'), orgIds: [orgDC.id], accessibleOrgIds: [orgDC.id, orgWarehousing.id], name: 'Helena Ford', email: 'helena.ford@cascade-logistics.com', role: 'EDITOR', title: 'Director Distribution Centers', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const ravi = { id: demoId('person-ravi'), orgIds: [orgDC.id], accessibleOrgIds: [orgDC.id], name: 'Ravi Menon', email: 'ravi.menon@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Data Steward Warehouse', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gerald = { id: demoId('person-gerald'), orgIds: [orgDC.id], accessibleOrgIds: [orgDC.id], name: 'Gerald Pace', email: 'gerald.pace@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Inventory Control Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const cindy = { id: demoId('person-cindy'), orgIds: [orgFulfillment.id], accessibleOrgIds: [orgFulfillment.id], name: 'Cindy Lau', email: 'cindy.lau@cascade-logistics.com', role: 'EDITOR', title: 'Manager Inbound & Outbound', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const malik = { id: demoId('person-malik'), orgIds: [orgFulfillment.id], accessibleOrgIds: [orgFulfillment.id], name: 'Malik Turner', email: 'malik.turner@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Data Steward Fulfillment', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const ethan = { id: demoId('person-ethan'), orgIds: [orgLogIT.id], accessibleOrgIds: [orgLogIT.id], name: 'Ethan Brooks', email: 'ethan.brooks@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const diana = { id: demoId('person-diana'), orgIds: [orgLogIT.id], accessibleOrgIds: [orgLogIT.id], name: 'Diana Frost', email: 'diana.frost@cascade-logistics.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const lorne = { id: demoId('person-lorne'), orgIds: [orgLogIT.id], accessibleOrgIds: [orgLogIT.id], name: 'Lorne Jacobs', email: 'lorne.jacobs@cascade-logistics.com', role: 'EDITOR', title: 'Manager Information Security', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const claudia = { id: demoId('person-claudia'), orgIds: [orgSafety.id], accessibleOrgIds: [orgSafety.id], name: 'Claudia Moss', email: 'claudia.moss@cascade-logistics.com', role: 'EDITOR', title: 'Director Safety & Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const priyanka = { id: demoId('person-priyanka'), orgIds: [orgSafety.id], accessibleOrgIds: [orgSafety.id], name: 'Priyanka Rao', email: 'priyanka.rao@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const desh = { id: demoId('person-desh'), orgIds: [orgSafety.id], accessibleOrgIds: [orgSafety.id], name: 'Desh Patel', email: 'desh.patel@cascade-logistics.com', role: 'CONTRIBUTOR', title: 'Customs & Trade Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const odette = { id: demoId('person-odette'), orgIds: [orgSafety.id], accessibleOrgIds: [orgSafety.id], name: 'Odette Klein', email: 'odette.klein@cascade-logistics.com', role: 'EDITOR', title: 'Manager Regulatory Reporting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const lionel = { id: demoId('person-lionel'), orgIds: [orgSafety.id], accessibleOrgIds: [orgSafety.id], name: 'Lionel Barnes', email: 'lionel.barnes@cascade-logistics.com', role: 'EDITOR', title: 'Manager Safety & Audit', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  await createAll(repos.people, [omar, denise, travis, gina, curtis, molly, hank, yvonne, derek, simone, bradley, helena, ravi, gerald, cindy, malik, ethan, diana, lorne, claudia, priyanka, desh, odette, lionel]);
+
+  // ── Systems (8) — TMS / telematics / WMS / yard / maintenance / CRM / warehouse + EDI ──
+  const sysTMS = { id: demoId('sys-tms'), orgId: orgLineHaul.id, name: 'TMS', description: 'Transportation Management System — loads, routing, tendering, and dispatch.', systemType: 'IT', vendorName: 'Oracle OTM', ownerPersonId: gina.id, stewardIds: [molly.id], createdAt: ts, updatedAt: ts };
+  const sysTelematics = { id: demoId('sys-telematics'), orgId: orgLineHaul.id, name: 'Telematics & ELD', description: 'Fleet telematics and electronic logging — GPS, hours-of-service, and vehicle data.', systemType: 'OT', vendorName: 'Samsara', ownerPersonId: hank.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysWMS = { id: demoId('sys-lwms'), orgId: orgWarehousing.id, name: 'WMS', description: 'Warehouse Management System — inventory, receiving, picking, and shipping.', systemType: 'IT', vendorName: 'Blue Yonder', ownerPersonId: ravi.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysYard = { id: demoId('sys-yard'), orgId: orgWarehousing.id, name: 'Yard Management System', description: 'Yard and dock scheduling — trailer moves, dock doors, and appointments.', systemType: 'IT', vendorName: 'PINC', ownerPersonId: cindy.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysMaint = { id: demoId('sys-lmaint'), orgId: orgLineHaul.id, name: 'Fleet Maintenance System', description: 'Tractor and trailer maintenance — work orders, DVIRs, and parts.', systemType: 'IT', vendorName: 'TMT Fleet Maintenance', ownerPersonId: gina.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysCRM = { id: demoId('sys-lcrm'), orgId: orgCascade.id, name: 'Customer Portal', description: 'Customer relationship and booking portal — accounts, rates, and shipment visibility.', systemType: 'IT', vendorName: 'Salesforce', ownerPersonId: helena.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgCascade.id, name: 'Data Warehouse', description: 'Enterprise analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: ethan.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysEDI = { id: demoId('sys-edi'), orgId: orgSafety.id, name: 'EDI & Customs Gateway', description: 'EDI and customs gateway — trading-partner documents and cross-border filings.', systemType: 'IT', vendorName: 'SPS Commerce', ownerPersonId: desh.id, stewardIds: [priyanka.id], createdAt: ts, updatedAt: ts };
+  await createAll(repos.systems, [sysTMS, sysTelematics, sysWMS, sysYard, sysMaint, sysCRM, sysWarehouse, sysEDI]);
+
+  // ── Agents (5 — one of each type) ──
+  await createAll(repos.agents, [
+    { id: demoId('agent-eta-model'), orgIds: [orgLineHaul.id], name: 'ETA Prediction Model', agentType: 'AI', description: 'Predicts delivery ETAs from telematics, traffic, and load data.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: hank.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-freight-pipeline'), orgIds: [orgCascade.id], name: 'Freight Data Pipeline', agentType: 'PIPELINE', description: 'Nightly ETL of load, telematics, and WMS data into the warehouse.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: ethan.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-exception-bot'), orgIds: [orgLineHaul.id], name: 'Delivery Exception Bot', agentType: 'BOT', description: 'Alerts dispatch when a load is late, off-route, or misses a delivery window.', provider: 'Microsoft Teams', status: 'ACTIVE', ownerPersonId: curtis.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-telematics-service'), orgIds: [orgLogIT.id], name: 'Telematics Extract Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract telematics feeds.', provider: 'Samsara', status: 'ACTIVE', ownerPersonId: ethan.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-customs-gen'), orgIds: [orgCascade.id], name: 'Customs Filing Generator', agentType: 'OTHER', description: 'Scheduled generator assembling customs and C-TPAT cross-border filing packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: odette.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // ── Data Domains (3 top-level + 3 sub-domains under Shipment & Freight Data) ──
+  const domShipment = { id: demoId('domain-shipment'), code: 'SHP', orgId: orgCascade.id, name: 'Shipment & Freight Data', description: 'Loads, shipments, warehouse inventory, and cross-border customs records.', ownerId: omar.id, stewardIds: [molly.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domFleet = { id: demoId('domain-fleet'), code: 'FLT', orgId: orgCascade.id, name: 'Fleet & Telematics Data', description: 'Vehicle telematics, hours-of-service logs, and maintenance records.', ownerId: travis.id, stewardIds: [hank.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domCustomer = { id: demoId('domain-lcustomer'), code: 'CUS', orgId: orgCascade.id, name: 'Customer & Compliance Data', description: 'Customer accounts, carrier rates, and compliance evidence.', ownerId: helena.id, stewardIds: [priyanka.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  // Sub-domains under Shipment & Freight Data — the movement areas. Parent created first.
+  const domShipLinehaul = { id: demoId('domain-ship-linehaul'), code: 'SHP-01', orgId: orgCascade.id, name: 'Line-Haul Loads', description: 'Load boards, tenders, dispatch, and delivery records.', ownerId: travis.id, stewardIds: [molly.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domShipment.id, createdAt: ts, updatedAt: ts };
+  const domShipWarehouse = { id: demoId('domain-ship-warehouse'), code: 'SHP-02', orgId: orgCascade.id, name: 'Warehouse Inventory', description: 'Distribution-center inventory, receipts, and shipments.', ownerId: bradley.id, stewardIds: [ravi.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domShipment.id, createdAt: ts, updatedAt: ts };
+  const domShipCustoms = { id: demoId('domain-ship-customs'), code: 'SHP-03', orgId: orgCascade.id, name: 'Customs & Trade', description: 'Cross-border customs declarations and trade documents.', ownerId: claudia.id, stewardIds: [desh.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domShipment.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domShipment, domFleet, domCustomer, domShipLinehaul, domShipWarehouse, domShipCustoms]);
+
+  // ── Data Assets (9) ──
+  const assetCustomerMaster = { id: demoId('asset-lcustomer-master'), orgId: orgCascade.id, name: 'Customer Master', description: 'The golden customer record — accounts, bill-to, and shipment relationships.', systemId: sysCRM.id, owner: '', ownerPersonId: helena.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 90, createdAt: ts, updatedAt: ts };
+  const assetShipmentRecords = { id: demoId('asset-shipment-records'), orgId: orgCascade.id, name: 'Shipment Records', description: 'Loads and shipments — tenders, routing, status, and proof of delivery.', systemId: sysTMS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 85, createdAt: ts, updatedAt: ts };
+  const assetTelematics = { id: demoId('asset-telematics'), orgId: orgCascade.id, name: 'Fleet Telematics', description: 'Vehicle GPS, engine, and event telemetry from the telematics platform.', systemId: sysTelematics.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 82, createdAt: ts, updatedAt: ts };
+  const assetCustoms = { id: demoId('asset-customs'), orgId: orgCascade.id, name: 'Customs Declarations', description: 'Cross-border customs declarations, entries, and C-TPAT documentation.', systemId: sysEDI.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 57, createdAt: ts, updatedAt: ts };
+  const assetInventory = { id: demoId('asset-linventory'), orgId: orgCascade.id, name: 'Warehouse Inventory', description: 'Distribution-center inventory, receipts, and consumption.', systemId: sysWMS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetHOS = { id: demoId('asset-hos'), orgId: orgCascade.id, name: 'Driver Hours-of-Service Logs', description: 'Electronic hours-of-service logs and duty status for DOT compliance.', systemId: sysTelematics.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 80, createdAt: ts, updatedAt: ts };
+  const assetRates = { id: demoId('asset-rates'), orgId: orgCascade.id, name: 'Carrier Rates', description: 'Customer and lane rate agreements, tariffs, and accessorials.', systemId: sysCRM.id, owner: '', ownerPersonId: odette.id, stewardIds: [priyanka.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
+  // Planted orphans — obviously-named so Ask AI's orphan-detection returns a quotable answer.
+  const orphanLegacyDispatch = { id: demoId('asset-legacy-dispatch'), orgId: orgCascade.id, name: 'Legacy Dispatch Extract', description: 'Nightly dump from the retired dispatch system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanClaimsCsv = { id: demoId('asset-lclaims-csv'), orgId: orgCascade.id, name: 'Claims CSV Dump', description: 'Ad-hoc CSV extract of freight-damage claims for an old reporting deck. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataAssets, [assetCustomerMaster, assetShipmentRecords, assetTelematics, assetCustoms, assetInventory, assetHOS, assetRates, orphanLegacyDispatch, orphanClaimsCsv]);
+
+  // Domain → asset backrefs so the Domains page shows counts.
+  await repos.dataDomains.update(domShipment.id, { dataAssetIds: [assetShipmentRecords.id, assetInventory.id, assetCustoms.id] });
+  await repos.dataDomains.update(domFleet.id, { dataAssetIds: [assetTelematics.id, assetHOS.id] });
+  await repos.dataDomains.update(domCustomer.id, { dataAssetIds: [assetCustomerMaster.id, assetRates.id] });
+
+  // ── Process hierarchy — VS1 Line-Haul Freight (Line-Haul Freight) ──
+  const vsLineHaul = { id: demoId('node-vs-linehaul'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Line-Haul Freight', description: 'End-to-end line-haul — plan and tender the load, clear customs, dispatch, and deliver.', activityId: 'VS-DEMO-L1', status: 'ACTIVE', orderIndex: 0, orgId: orgLineHaul.id, orgIds: [orgLineHaul.id], ownerId: travis.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procPlanning = { id: demoId('node-proc-planning'), parentId: vsLineHaul.id, level: 'PROCESS' as const, name: 'Load Planning & Tender', description: 'Plan and tender the load and clear it for cross-border movement.', activityId: 'PRO-DEMO-L1', status: 'ACTIVE', orderIndex: 0, orgId: orgLineHaul.id, orgIds: [orgLineHaul.id], ownerId: gina.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procDispatch = { id: demoId('node-proc-ldispatch'), parentId: vsLineHaul.id, level: 'PROCESS' as const, name: 'Dispatch & Delivery', description: 'Dispatch the load, track it in transit, and confirm delivery.', activityId: 'PRO-DEMO-L2', status: 'ACTIVE', orderIndex: 1, orgId: orgLineHaul.id, orgIds: [orgLineHaul.id], ownerId: gina.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spLoadBuild = { id: demoId('node-sp-loadbuild'), parentId: procPlanning.id, level: 'SUBPROCESS' as const, name: 'Load Build', description: 'Build and tender the load and clear customs.', activityId: 'SP-DEMO-L1', status: 'ACTIVE', orderIndex: 0, orgId: orgLineHaul.id, orgIds: [orgLineHaul.id], ownerId: molly.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actPlanTender = { id: demoId('node-act-plantender'), parentId: spLoadBuild.id, level: 'ACTIVITY' as const, name: 'Plan & tender load', description: 'Build the load against the customer order and tender it to a driver or carrier.', activityId: 'ACT-DEMO-L1', status: 'ACTIVE', orderIndex: 0, orgId: orgLineHaul.id, orgIds: [orgLineHaul.id], ownerId: molly.id, responsibleRole: 'Dispatch Lead', responsiblePersonId: curtis.id, systemIds: [sysTMS.id, sysCRM.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actClearCustoms = { id: demoId('node-act-clearcustoms'), parentId: spLoadBuild.id, level: 'ACTIVITY' as const, name: 'Clear customs', description: 'File the customs declaration and clear the cross-border shipment.', activityId: 'ACT-DEMO-L2', status: 'ACTIVE', orderIndex: 1, orgId: orgLineHaul.id, orgIds: [orgLineHaul.id], ownerId: claudia.id, responsibleRole: 'Customs & Trade Analyst', responsiblePersonId: desh.id, systemIds: [sysEDI.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Declarations filed and cleared before the shipment reaches the border', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actDispatchTrack = { id: demoId('node-act-dispatchtrack'), parentId: procDispatch.id, level: 'ACTIVITY' as const, name: 'Dispatch & track', description: 'Dispatch the load and track it in transit against telematics.', activityId: 'ACT-DEMO-L3', status: 'ACTIVE', orderIndex: 0, orgId: orgLineHaul.id, orgIds: [orgLineHaul.id], ownerId: gina.id, responsibleRole: 'Fleet Telematics Analyst', responsiblePersonId: hank.id, systemIds: [sysTMS.id, sysTelematics.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actConfirmDelivery = { id: demoId('node-act-confirmdelivery'), parentId: procDispatch.id, level: 'ACTIVITY' as const, name: 'Confirm delivery', description: 'Confirm delivery, capture proof of delivery, and close the load.', activityId: 'ACT-DEMO-L4', status: 'ACTIVE', orderIndex: 1, orgId: orgLineHaul.id, orgIds: [orgLineHaul.id], ownerId: gina.id, responsibleRole: 'Dispatch Lead', responsiblePersonId: curtis.id, systemIds: [sysTMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, successMeasure: 'On-time delivery rate ≥ 97%', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsLineHaul, procPlanning, procDispatch, spLoadBuild, actPlanTender, actClearCustoms, actDispatchTrack, actConfirmDelivery]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-l1'), fromNodeId: actPlanTender.id, toNodeId: actClearCustoms.id, type: 'SEQUENCE' as const, label: 'load tendered', createdAt: ts },
+    { id: demoId('flow-l2'), fromNodeId: actClearCustoms.id, toNodeId: actDispatchTrack.id, type: 'SEQUENCE' as const, label: 'customs cleared', createdAt: ts },
+    { id: demoId('flow-l3'), fromNodeId: actDispatchTrack.id, toNodeId: actConfirmDelivery.id, type: 'SEQUENCE' as const, label: 'in transit', createdAt: ts },
+  ]);
+
+  // ── Process hierarchy — VS2 Warehousing & Fulfillment (Warehousing) ──
+  const vsWarehousing = { id: demoId('node-vs-warehousing'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Warehousing & Fulfillment', description: 'Receive and put away inbound stock, then pick and ship outbound orders.', activityId: 'VS-DEMO-L2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWarehousing.id, orgIds: [orgWarehousing.id], ownerId: bradley.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procInbound = { id: demoId('node-proc-inbound'), parentId: vsWarehousing.id, level: 'PROCESS' as const, name: 'Inbound Receiving', description: 'Receive, inspect, and put away inbound stock.', activityId: 'PRO-DEMO-L3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWarehousing.id, orgIds: [orgWarehousing.id], ownerId: helena.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procOutbound = { id: demoId('node-proc-outbound'), parentId: vsWarehousing.id, level: 'PROCESS' as const, name: 'Outbound Fulfillment', description: 'Pick, pack, and ship outbound orders.', activityId: 'PRO-DEMO-L4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgWarehousing.id, orgIds: [orgWarehousing.id], ownerId: cindy.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spDock = { id: demoId('node-sp-dock'), parentId: procInbound.id, level: 'SUBPROCESS' as const, name: 'Dock & Putaway', description: 'Receive at the dock and put stock away.', activityId: 'SP-DEMO-L2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWarehousing.id, orgIds: [orgWarehousing.id], ownerId: ravi.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actReceiveInspect = { id: demoId('node-act-lreceive'), parentId: spDock.id, level: 'ACTIVITY' as const, name: 'Receive & inspect', description: 'Receive inbound freight at the dock, inspect it, and post the receipt.', activityId: 'ACT-DEMO-L5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWarehousing.id, orgIds: [orgWarehousing.id], ownerId: ravi.id, responsibleRole: 'Data Steward Warehouse', responsiblePersonId: ravi.id, systemIds: [sysWMS.id, sysYard.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actPutaway = { id: demoId('node-act-putaway'), parentId: procInbound.id, level: 'ACTIVITY' as const, name: 'Put away stock', description: 'Direct the stock to a bin and update inventory locations.', activityId: 'ACT-DEMO-L6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWarehousing.id, orgIds: [orgWarehousing.id], ownerId: helena.id, responsibleRole: 'Inventory Control Analyst', responsiblePersonId: gerald.id, systemIds: [sysWMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actPickShip = { id: demoId('node-act-pickship'), parentId: procOutbound.id, level: 'ACTIVITY' as const, name: 'Pick & ship order', description: 'Allocate inventory, pick and pack the order, and ship it.', activityId: 'ACT-DEMO-L7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWarehousing.id, orgIds: [orgWarehousing.id], ownerId: cindy.id, responsibleRole: 'Data Steward Fulfillment', responsiblePersonId: malik.id, systemIds: [sysWMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Order accuracy ≥ 99.5% and on-time ship ≥ 98%', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsWarehousing, procInbound, procOutbound, spDock, actReceiveInspect, actPutaway, actPickShip]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-l4'), fromNodeId: actReceiveInspect.id, toNodeId: actPutaway.id, type: 'SEQUENCE' as const, label: 'received', createdAt: ts },
+  ]);
+
+  // ── Mappings (7) ──
+  await createAll(repos.mappings, [
+    { id: demoId('map-l1'), orgId: orgLineHaul.id, processStepId: actPlanTender.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Builds the load against the customer order', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-l2'), orgId: orgLineHaul.id, processStepId: actClearCustoms.id, dataAssetId: assetCustoms.id, linkType: 'OUTPUT', notes: 'Files the customs declaration', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-l3'), orgId: orgLineHaul.id, processStepId: actDispatchTrack.id, dataAssetId: assetTelematics.id, linkType: 'INPUT', notes: 'Tracks the load against telematics', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-l4'), orgId: orgLineHaul.id, processStepId: actConfirmDelivery.id, dataAssetId: assetShipmentRecords.id, linkType: 'OUTPUT', notes: 'Writes proof of delivery to the shipment', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-l5'), orgId: orgWarehousing.id, processStepId: actReceiveInspect.id, dataAssetId: assetInventory.id, linkType: 'OUTPUT', notes: 'Posts the receipt to inventory', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-l6'), orgId: orgWarehousing.id, processStepId: actPutaway.id, dataAssetId: assetInventory.id, linkType: 'INPUT', notes: 'Updates inventory locations', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-l7'), orgId: orgWarehousing.id, processStepId: actPickShip.id, dataAssetId: assetShipmentRecords.id, linkType: 'INPUT', notes: 'Allocates inventory to the outbound shipment', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+  ]);
+
+  // ── Governance tasks assigned to Omar (populates My Dashboard) ──
+  await createAll(repos.governanceTasks, [
+    { id: demoId('task-l1'), orgId: orgCascade.id, title: 'Approve Customs Declarations classification review', description: 'Review the AI-suggested sensitivity tags on Customs Declarations and Carrier Rates and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: omar.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetCustoms.id, automationMode: 'HUMAN' as any, createdBy: denise.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-l2'), orgId: orgCascade.id, title: 'Sign off on Shipment & Freight domain scope', description: 'Bradley has proposed expanding the Shipment & Freight domain to cover new cross-border trade fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: omar.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domShipment.id, automationMode: 'HUMAN' as any, createdBy: bradley.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-l3'), orgId: orgCascade.id, title: 'Retire Legacy Dispatch Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: omar.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyDispatch.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+  ]);
+
+  // ── One open governance issue assigned to Omar ──
+  await repos.governanceIssues.create({
+    id: demoId('issue-l1'),
+    orgId: orgCascade.id,
+    title: 'Customs Declarations tier below Silver — critical process, ungoverned',
+    description: 'Customs Declarations is BRONZE tier but the Line-Haul process writes it as the primary cross-border compliance record. Recommend promoting to Silver with an SLA target.',
+    issueType: 'OWNERSHIP' as any,
+    severity: 'HIGH' as any,
+    status: 'OPEN' as any,
+    domainId: domShipment.id,
+    dataAssetId: assetCustoms.id,
+    systemId: sysEDI.id,
+    reportedBy: denise.id,
+    assignedTo: omar.id,
+    resolutionSummary: null,
+    createdAt: ts,
+    updatedAt: ts,
+    closedAt: null,
+  } as any);
+
+  // ── Data Quality rules (2 — one passing, one failing) ──
+  await createAll(repos.dataQualityRules, [
+    {
+      id: demoId('dq-rule-passing'), orgId: orgCascade.id, dataAssetId: assetShipmentRecords.id,
+      dimension: 'COMPLETENESS' as const, name: 'Shipment Records · load completeness',
+      description: 'At least 95% of loads must carry a complete origin, destination, and stops.',
+      threshold: 95, currentScore: 97, weight: 1, status: 'PASSING' as const,
+      lastMeasured: ts, scheduleFrequency: 'DAILY' as const, nextRunAt: daysFromNow(1), createdAt: ts, updatedAt: ts,
+    },
+    {
+      id: demoId('dq-rule-failing'), orgId: orgCascade.id, dataAssetId: assetCustoms.id,
+      dimension: 'TIMELINESS' as const, name: 'Customs Declarations · filing latency',
+      description: 'Customs declarations should be filed before the shipment reaches the border. Rolling 24h.',
+      threshold: 95, currentScore: 57, weight: 1, status: 'FAILING' as const,
+      lastMeasured: ts, scheduleFrequency: 'HOURLY' as const, nextRunAt: daysFromNow(0), createdAt: ts, updatedAt: ts,
+    },
+  ]);
+
+  // ── Edge connector (ONLINE) ──
+  const connectorHeartbeatAt = new Date(Date.now() - 45 * 1000).toISOString();
+  const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const conn = {
+    id: demoId('conn-cascade'), orgId: orgCascade.id, name: 'Cascade Fleet Data Connector',
+    tokenHash: '9d2e4b7a15c8f60e3b9a1d5c7e2f4a8b0c6d3e1f5a9b7c2d4e6f8a0b1c3d5e7f',
+    pairingCode: null, pairingCodeExpiresAt: null,
+    systemIds: [sysTMS.id, sysWarehouse.id],
+    lastHeartbeatAt: connectorHeartbeatAt, agentVersion: '1.2.0', status: 'ONLINE' as const,
+    createdAt: connectorCreatedAt, updatedAt: connectorHeartbeatAt,
+  };
+  await repos.connectors.create(conn);
+
+  await repos.dataAssets.update(assetShipmentRecords.id, {
+    lastSyncedByConnectorId: conn.id,
+    lastSyncedAt: connectorSyncAt,
+  } as any);
+
+  await createAll(repos.connectorEvents, [
+    { id: demoId('ce-l-paired'), connectorId: conn.id, orgId: orgCascade.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-l-scan-start'), connectorId: conn.id, orgId: orgCascade.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysTMS.id, sysWarehouse.id] } },
+    { id: demoId('ce-l-scan-done'), connectorId: conn.id, orgId: orgCascade.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 40_780, assetsDiscovered: 1 } },
+    { id: demoId('ce-l-assets'), connectorId: conn.id, orgId: orgCascade.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
+    { id: demoId('ce-l-hb'), connectorId: conn.id, orgId: orgCascade.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
+  ]);
+
+  // ── Second connector — PAIRING state ──
+  const pairingConn = {
+    id: demoId('conn-l-pairing'), orgId: orgCascade.id, name: 'Distribution Center Connector',
+    tokenHash: null, pairingCode: '61508342',
+    pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    systemIds: [] as string[], lastHeartbeatAt: null, agentVersion: null, status: 'PAIRED' as const,
+    createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(), updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+  };
+  await repos.connectors.create(pairingConn as any);
+
+  // ── Governance calendar event ──
+  const dayNow = new Date();
+  const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
+  const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
+  await repos.calendarEvents.create({
+    id: demoId('cal-l-dgc'),
+    orgId: orgCascade.id,
+    name: 'Data Governance Council weekly',
+    description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
+    eventType: 'COMMITTEE_MEETING' as const,
+    cadence: 'WEEKLY' as const,
+    dayOfMonth: null,
+    dayOfWeek: 5,
+    timeOfDay: '09:00',
+    durationMinutes: 60,
+    attendees: [omar.id, denise.id, travis.id, claudia.id],
+    agendaTemplate: '1. Open governance issues (from bell)\n2. Domain scope changes\n3. Control effectiveness review\n4. Upcoming policy publications',
+    nextOccurrence: nextFriday.toISOString(),
+    lastOccurrence: null,
+    autoCreateTasks: false,
+    status: 'ACTIVE' as const,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+
+  // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
+  await createAll(repos.statsSnapshots, [
+    ...weeklySnapshots(orgCascade.id, { coverage: 63, avgHealth: 71, gaps: 8, dataAssets: 9, mappings: 7 }),
+    ...weeklySnapshots(orgLineHaul.id, { coverage: 71, avgHealth: 73, gaps: 4, dataAssets: 4, mappings: 4 }),
+    ...weeklySnapshots(orgWarehousing.id, { coverage: 66, avgHealth: 75, gaps: 3, dataAssets: 2, mappings: 3 }),
+    ...weeklySnapshots(orgLogShared.id, { coverage: 50, avgHealth: 72, gaps: 3, dataAssets: 1, mappings: 0 }),
+  ]);
+
+  // ── AI template cache — pre-warm the wand for Cascade ──
+  aiTemplateCache.push(
+    {
+      industry: 'logistics|line-haul freight',
+      industryLabel: 'Transportation & Logistics — Line-Haul Freight',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Line-Haul Freight',
+            description: 'Plan and tender the load, clear customs, dispatch, and deliver.',
+            purpose: 'Move freight on time, in compliance, and with full traceability.',
+            businessOutcome: 'On-time deliveries with cleared customs and captured proof of delivery.',
+            processes: [
+              { name: 'Load Planning & Tender', description: 'Plan and tender the load and clear customs.', purpose: 'Get a compliant, tendered load ready to move.', activities: [
+                { name: 'Plan & tender load', description: 'Build the load against the order and tender it to a driver or carrier.' },
+                { name: 'Clear customs', description: 'File the customs declaration and clear the cross-border shipment.' },
+              ] },
+              { name: 'Dispatch & Delivery', description: 'Dispatch the load, track it, and confirm delivery.', purpose: 'Deliver on time and capture proof.', activities: [
+                { name: 'Dispatch & track', description: 'Dispatch the load and track it in transit against telematics.' },
+                { name: 'Confirm delivery', description: 'Confirm delivery, capture proof of delivery, and close the load.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      industry: 'logistics|warehousing & fulfillment',
+      industryLabel: 'Transportation & Logistics — Warehousing & Fulfillment',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Warehousing & Fulfillment',
+            description: 'Receive and put away inbound stock, then pick and ship outbound orders.',
+            purpose: 'Keep inventory accurate and ship complete orders on time.',
+            businessOutcome: 'Accurate inventory and on-time, accurate outbound shipments.',
+            processes: [
+              { name: 'Inbound Receiving', description: 'Receive, inspect, and put away inbound stock.', purpose: 'Get stock received and stored accurately.', activities: [
+                { name: 'Receive & inspect', description: 'Receive inbound freight at the dock, inspect it, and post the receipt.' },
+                { name: 'Put away stock', description: 'Direct the stock to a bin and update inventory locations.' },
+              ] },
+              { name: 'Outbound Fulfillment', description: 'Pick, pack, and ship outbound orders.', purpose: 'Deliver complete orders on time.', activities: [
+                { name: 'Pick & ship order', description: 'Allocate inventory, pick and pack the order, and ship it.' },
+                { name: 'Confirm shipment', description: 'Confirm the shipment and close the order.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  saveStore('aiTemplateCache', aiTemplateCache);
+
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgCascade.id,
+    cdoId: omar.id,
+    govLeadId: denise.id,
+    dataOwnerId: travis.id,
+    stewardIds: [molly.id, priyanka.id],
+    tenantName: 'Cascade Logistics',
+  });
+
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgCascade.id,
+    domainIds: [domShipment.id, domFleet.id, domCustomer.id],
+    cdoId: omar.id,
+    govLeadId: denise.id,
+    dataOwnerId: travis.id,
+    stewardId: molly.id,
+    techStewardId: priyanka.id,
+    engineerId: ethan.id,
+    architectId: diana.id,
+    raciNodeId: actClearCustoms.id,
+    raciPersonId: desh.id,
+  });
+
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgCascade.id, ownerId: molly.id, cdoId: omar.id, domainId: domShipment.id });
+
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgCascade.id, orgLineHaul.id, orgWarehousing.id],
+    links: [
+      { id: demoId('lin-1'), orgId: orgCascade.id, sourceSystemId: sysTMS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetShipmentRecords.id, description: 'Load and shipment data syncs nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-2'), orgId: orgLineHaul.id, sourceSystemId: sysTelematics.id, targetSystemId: sysWarehouse.id, dataAssetId: assetTelematics.id, description: 'Telematics feeds stream into the warehouse.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+      { id: demoId('lin-3'), orgId: orgWarehousing.id, sourceSystemId: sysWMS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetInventory.id, description: 'Warehouse inventory feeds the warehouse hourly.', flowType: 'ETL', frequency: 'HOURLY' },
+    ],
+    edges: [
+      { id: demoId('edge-1'), orgId: orgCascade.id, sourceAssetId: assetCustomerMaster.id, targetAssetId: assetShipmentRecords.id },
+      { id: demoId('edge-2'), orgId: orgLineHaul.id, sourceAssetId: assetShipmentRecords.id, targetAssetId: assetCustoms.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgCascade.id, agentId: demoId('agent-customs-gen'), agentName: 'Customs Filing Generator', activityId: actClearCustoms.id, activityName: 'Clear customs', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: omar.id, reviewerId: denise.id });
+
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgCascade.id, assetId: assetCustomerMaster.id, systemId: sysCRM.id, personId: molly.id, personName: 'Molly Tran' });
+
+  logger.info({ persona: omar.name }, 'Demo data seeded (logistics)');
+
+  return {
+    organizations: 10,
+    people: 24,
+    systems: 8,
+    agents: 5,
+    dataDomains: 6,
+    dataAssets: 9,
+    processNodes: 15,
+    mappings: 7,
+    governanceTasks: 3,
+    governanceIssues: 1,
+    dataQualityRules: 2,
+    connectors: 2,
+    connectorEvents: 5,
+    calendarEvents: 1,
+    statsSnapshots: STATS_WEEKS * 4,
+    persona: { id: omar.id, name: omar.name },
   };
 }
