@@ -124,7 +124,7 @@ function daysFromNow(n: number): string {
 
 // Industries with a hand-crafted demo fixture. Every profile is built to the
 // same feature coverage so a demo of any of them lights up every page.
-export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics';
+export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance';
 
 // aiTemplateCache is keyed by industry string, not `id`, so the sweep
 // can't find demo entries by prefix. These are every cache key any
@@ -146,6 +146,8 @@ const DEMO_AI_CACHE_KEYS = new Set<string>([
   'government|public health case management',
   'logistics|line-haul freight',
   'logistics|warehousing & fulfillment',
+  'insurance|policy underwriting',
+  'insurance|claims management',
 ]);
 
 // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
@@ -747,6 +749,7 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
     financial: seedFinancial,
     government: seedGovernment,
     logistics: seedLogistics,
+    insurance: seedInsurance,
   };
   const report = await (builders[industry] ?? seedUtilities)(repos, ts);
   // Refresh the org-scope cache so accessible-orgs and the synchronous
@@ -3625,5 +3628,385 @@ async function seedLogistics(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     calendarEvents: 1,
     statsSnapshots: STATS_WEEKS * 4,
     persona: { id: omar.id, name: omar.name },
+  };
+}
+
+/**
+ * Insurance profile — a Northwind Mutual P&C insurer (Underwriting +
+ * Claims + Shared Services), persona Priya Anand (CDO). Same fixed-count
+ * skeleton and story shape as the other profiles: two planted orphan
+ * assets on the warehouse, and a failing DQ rule co-located with the
+ * ownership issue on the Bronze/critical Claims Loss Records asset — the
+ * NAIC / model-risk / demonstrable-lineage story the industry page leads
+ * with.
+ */
+async function seedInsurance(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
+  // ── Organizations (company → 3 divisions → 6 departments) ──
+  const orgNorthwind = { id: demoId('org-northwind'), parentId: null, name: 'Northwind Mutual', type: 'company', industry: 'Insurance', description: 'P&C mutual insurer demo tenant — underwriting + claims + shared services.', headCount: 0, tenantSlug: 'northwind', brandDisplayName: 'Northwind Mutual', brandGlyph: '☂', ssoButtonLabel: 'Sign in with Northwind SSO', brandPrimaryColor: '#0e7490', createdAt: ts, updatedAt: ts };
+  const orgUnderwriting = { id: demoId('org-underwriting'), parentId: orgNorthwind.id, name: 'Underwriting', type: 'division', industry: 'Insurance', description: 'Personal and commercial lines underwriting', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgClaims = { id: demoId('org-claims'), parentId: orgNorthwind.id, name: 'Claims', type: 'division', industry: 'Insurance', description: 'Claims operations and special investigations', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgInsShared = { id: demoId('org-insshared'), parentId: orgNorthwind.id, name: 'Shared Services', type: 'division', industry: 'Insurance', description: 'IT / Actuarial & Compliance', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgPersonal = { id: demoId('org-personal'), parentId: orgUnderwriting.id, name: 'Personal Lines', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgCommercial = { id: demoId('org-commercial'), parentId: orgUnderwriting.id, name: 'Commercial Lines', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgClaimsOps = { id: demoId('org-claimsops'), parentId: orgClaims.id, name: 'Claims Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgSIU = { id: demoId('org-siu'), parentId: orgClaims.id, name: 'Special Investigations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgInsIT = { id: demoId('org-insit'), parentId: orgInsShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgActuarial = { id: demoId('org-actuarial'), parentId: orgInsShared.id, name: 'Actuarial & Compliance', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.organizations, [orgNorthwind, orgUnderwriting, orgClaims, orgInsShared, orgPersonal, orgCommercial, orgClaimsOps, orgSIU, orgInsIT, orgActuarial]);
+
+  // ── People (24) — persona Priya Anand (CDO) ──
+  const priya = { id: demoId('person-priya-anand'), orgIds: [orgNorthwind.id], accessibleOrgIds: [orgNorthwind.id, orgUnderwriting.id, orgClaims.id, orgInsShared.id, orgPersonal.id, orgCommercial.id, orgClaimsOps.id, orgSIU.id, orgInsIT.id, orgActuarial.id], name: 'Priya Anand', email: 'priya.anand@northwind-mutual.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gordon = { id: demoId('person-gordon'), orgIds: [orgNorthwind.id], accessibleOrgIds: [orgNorthwind.id], name: 'Gordon Steele', email: 'gordon.steele@northwind-mutual.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const fiona = { id: demoId('person-fiona'), orgIds: [orgUnderwriting.id], accessibleOrgIds: [orgUnderwriting.id], name: 'Fiona Walsh', email: 'fiona.walsh@northwind-mutual.com', role: 'ORG_ADMIN', title: 'Data Owner Underwriting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const trevor = { id: demoId('person-trevor'), orgIds: [orgPersonal.id], accessibleOrgIds: [orgPersonal.id, orgUnderwriting.id], name: 'Trevor Nash', email: 'trevor.nash@northwind-mutual.com', role: 'EDITOR', title: 'Director Personal Lines', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const cara = { id: demoId('person-cara'), orgIds: [orgPersonal.id], accessibleOrgIds: [orgPersonal.id], name: 'Cara Dunn', email: 'cara.dunn@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Underwriting Data Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const ito = { id: demoId('person-ito'), orgIds: [orgPersonal.id], accessibleOrgIds: [orgPersonal.id], name: 'Ito Watanabe', email: 'ito.watanabe@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Data Steward Personal Lines', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const beth = { id: demoId('person-beth'), orgIds: [orgPersonal.id], accessibleOrgIds: [orgPersonal.id], name: 'Beth Cardoso', email: 'beth.cardoso@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Underwriting Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rhonda = { id: demoId('person-rhonda'), orgIds: [orgCommercial.id], accessibleOrgIds: [orgCommercial.id], name: 'Rhonda Pike', email: 'rhonda.pike@northwind-mutual.com', role: 'EDITOR', title: 'Manager Commercial Lines', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sunil = { id: demoId('person-sunil'), orgIds: [orgCommercial.id], accessibleOrgIds: [orgCommercial.id], name: 'Sunil Verma', email: 'sunil.verma@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Data Steward Commercial Lines', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const adam = { id: demoId('person-adam'), orgIds: [orgCommercial.id], accessibleOrgIds: [orgCommercial.id], name: 'Adam Fletcher', email: 'adam.fletcher@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Commercial Underwriter', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gerard = { id: demoId('person-gerard'), orgIds: [orgClaims.id], accessibleOrgIds: [orgClaims.id], name: 'Gerard Toussaint', email: 'gerard.toussaint@northwind-mutual.com', role: 'ORG_ADMIN', title: 'Data Owner Claims', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const nora = { id: demoId('person-nora'), orgIds: [orgClaimsOps.id], accessibleOrgIds: [orgClaimsOps.id, orgClaims.id], name: 'Nora Bianchi', email: 'nora.bianchi@northwind-mutual.com', role: 'EDITOR', title: 'Director Claims Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const kofi = { id: demoId('person-kofi'), orgIds: [orgClaimsOps.id], accessibleOrgIds: [orgClaimsOps.id], name: 'Kofi Mensah', email: 'kofi.mensah@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Data Steward Claims', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const lucia = { id: demoId('person-lucia'), orgIds: [orgClaimsOps.id], accessibleOrgIds: [orgClaimsOps.id], name: 'Lucia Romano', email: 'lucia.romano@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Claims Data Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const dmitri = { id: demoId('person-dmitri'), orgIds: [orgSIU.id], accessibleOrgIds: [orgSIU.id], name: 'Dmitri Volkov', email: 'dmitri.volkov@northwind-mutual.com', role: 'EDITOR', title: 'Manager Special Investigations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const tanya = { id: demoId('person-tanya'), orgIds: [orgSIU.id], accessibleOrgIds: [orgSIU.id], name: 'Tanya Sokolov', email: 'tanya.sokolov@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'SIU Data Steward', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const manuel = { id: demoId('person-manuel'), orgIds: [orgInsIT.id], accessibleOrgIds: [orgInsIT.id], name: 'Manuel Ortega', email: 'manuel.ortega@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sophie = { id: demoId('person-sophie'), orgIds: [orgInsIT.id], accessibleOrgIds: [orgInsIT.id], name: 'Sophie Laurent', email: 'sophie.laurent@northwind-mutual.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const idris = { id: demoId('person-idris'), orgIds: [orgInsIT.id], accessibleOrgIds: [orgInsIT.id], name: 'Idris Bello', email: 'idris.bello@northwind-mutual.com', role: 'EDITOR', title: 'Manager Information Security', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const margaret = { id: demoId('person-margaret'), orgIds: [orgActuarial.id], accessibleOrgIds: [orgActuarial.id], name: 'Margaret Doyle', email: 'margaret.doyle@northwind-mutual.com', role: 'EDITOR', title: 'Chief Actuary / Director', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const wei = { id: demoId('person-wei'), orgIds: [orgActuarial.id], accessibleOrgIds: [orgActuarial.id], name: 'Wei Zhang', email: 'wei.zhang@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Data Steward Actuarial Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rupert = { id: demoId('person-rupert'), orgIds: [orgActuarial.id], accessibleOrgIds: [orgActuarial.id], name: 'Rupert Hastings', email: 'rupert.hastings@northwind-mutual.com', role: 'CONTRIBUTOR', title: 'Model Risk Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const vivienne = { id: demoId('person-vivienne'), orgIds: [orgActuarial.id], accessibleOrgIds: [orgActuarial.id], name: 'Vivienne Marsh', email: 'vivienne.marsh@northwind-mutual.com', role: 'EDITOR', title: 'Manager Regulatory Reporting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gregory = { id: demoId('person-gregory'), orgIds: [orgActuarial.id], accessibleOrgIds: [orgActuarial.id], name: 'Gregory Stone', email: 'gregory.stone@northwind-mutual.com', role: 'EDITOR', title: 'Manager Compliance & Audit', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  await createAll(repos.people, [priya, gordon, fiona, trevor, cara, ito, beth, rhonda, sunil, adam, gerard, nora, kofi, lucia, dmitri, tanya, manuel, sophie, idris, margaret, wei, rupert, vivienne, gregory]);
+
+  // ── Systems (8) — PAS / underwriting / claims / billing / CRM / actuarial / warehouse + fraud ──
+  const sysPAS = { id: demoId('sys-pas'), orgId: orgNorthwind.id, name: 'Policy Administration System', description: 'Policy lifecycle — quotes, policies, endorsements, and renewals.', systemType: 'IT', vendorName: 'Guidewire PolicyCenter', ownerPersonId: cara.id, stewardIds: [ito.id], createdAt: ts, updatedAt: ts };
+  const sysUW = { id: demoId('sys-uw'), orgId: orgUnderwriting.id, name: 'Underwriting Workbench', description: 'Rating engine and underwriting workbench — pricing factors and decisions.', systemType: 'IT', vendorName: 'Earnix', ownerPersonId: trevor.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysClaims = { id: demoId('sys-claimsys'), orgId: orgClaims.id, name: 'Claims Management System', description: 'Claim intake, adjudication, reserves, and settlement.', systemType: 'IT', vendorName: 'Guidewire ClaimCenter', ownerPersonId: kofi.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysBilling = { id: demoId('sys-insbilling'), orgId: orgNorthwind.id, name: 'Billing System', description: 'Premium billing, collections, and disbursements.', systemType: 'IT', vendorName: 'Guidewire BillingCenter', ownerPersonId: vivienne.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysCRM = { id: demoId('sys-inscrm'), orgId: orgNorthwind.id, name: 'Agency Portal', description: 'Agent and policyholder portal — accounts, quotes, and self-service.', systemType: 'IT', vendorName: 'Salesforce Financial Services Cloud', ownerPersonId: fiona.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysActuarial = { id: demoId('sys-actuarial'), orgId: orgActuarial.id, name: 'Actuarial Platform', description: 'Reserving, pricing models, and statutory reporting.', systemType: 'IT', vendorName: 'Moody’s AXIS', ownerPersonId: margaret.id, stewardIds: [wei.id], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgNorthwind.id, name: 'Data Warehouse', description: 'Enterprise analytics and reserving warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: manuel.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysFraud = { id: demoId('sys-fraud'), orgId: orgSIU.id, name: 'SIU Fraud Analytics', description: 'Special-investigations fraud scoring, case management, and referrals.', systemType: 'IT', vendorName: 'SAS Fraud', ownerPersonId: dmitri.id, stewardIds: [tanya.id], createdAt: ts, updatedAt: ts };
+  await createAll(repos.systems, [sysPAS, sysUW, sysClaims, sysBilling, sysCRM, sysActuarial, sysWarehouse, sysFraud]);
+
+  // ── Agents (5 — one of each type) ──
+  await createAll(repos.agents, [
+    { id: demoId('agent-fraud-model'), orgIds: [orgClaims.id], name: 'Claims Fraud Model', agentType: 'AI', description: 'Scores claims for fraud risk from claim, policy, and third-party data.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: dmitri.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-reserving-pipeline'), orgIds: [orgNorthwind.id], name: 'Reserving Data Pipeline', agentType: 'PIPELINE', description: 'Nightly ETL of policy and claims data into the reserving warehouse.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: manuel.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-referral-bot'), orgIds: [orgUnderwriting.id], name: 'Underwriting Referral Bot', agentType: 'BOT', description: 'Alerts underwriters when a submission breaches referral rules.', provider: 'Microsoft Teams', status: 'ACTIVE', ownerPersonId: cara.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-pas-service'), orgIds: [orgInsIT.id], name: 'PAS Extract Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract policy tables.', provider: 'Guidewire', status: 'ACTIVE', ownerPersonId: manuel.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-statutory-gen'), orgIds: [orgNorthwind.id], name: 'Statutory Filing Generator', agentType: 'OTHER', description: 'Scheduled generator assembling NAIC statutory and Model Audit Rule filing packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: vivienne.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // ── Data Domains (3 top-level + 3 sub-domains under Policy & Customer Data) ──
+  const domPolicy = { id: demoId('domain-policy'), code: 'POL', orgId: orgNorthwind.id, name: 'Policy & Customer Data', description: 'Policyholder master and the personal and commercial policies they hold.', ownerId: priya.id, stewardIds: [ito.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domClaimsData = { id: demoId('domain-claims'), code: 'CLM', orgId: orgNorthwind.id, name: 'Claims & Loss Data', description: 'Claim loss records, reserves, and settlement history.', ownerId: gerard.id, stewardIds: [kofi.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domActuarialData = { id: demoId('domain-actuarial'), code: 'ACT', orgId: orgNorthwind.id, name: 'Actuarial & Regulatory Data', description: 'Rating and pricing factors, premium and billing, and statutory reporting.', ownerId: margaret.id, stewardIds: [wei.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  // Sub-domains under Policy & Customer Data — the lines of business. Parent created first.
+  const domPolicyPersonal = { id: demoId('domain-policy-personal'), code: 'POL-01', orgId: orgNorthwind.id, name: 'Personal Lines Policies', description: 'Personal auto, home, and umbrella policies.', ownerId: trevor.id, stewardIds: [ito.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domPolicy.id, createdAt: ts, updatedAt: ts };
+  const domPolicyCommercial = { id: demoId('domain-policy-commercial'), code: 'POL-02', orgId: orgNorthwind.id, name: 'Commercial Lines Policies', description: 'Commercial property, liability, and workers’ comp policies.', ownerId: rhonda.id, stewardIds: [sunil.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domPolicy.id, createdAt: ts, updatedAt: ts };
+  const domPolicyBilling = { id: demoId('domain-policy-billing'), code: 'POL-03', orgId: orgNorthwind.id, name: 'Billing & Payments', description: 'Premium billing, collections, and disbursements.', ownerId: vivienne.id, stewardIds: [wei.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domPolicy.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domPolicy, domClaimsData, domActuarialData, domPolicyPersonal, domPolicyCommercial, domPolicyBilling]);
+
+  // ── Data Assets (9) ──
+  const assetPolicyholderMaster = { id: demoId('asset-policyholder-master'), orgId: orgNorthwind.id, name: 'Policyholder Master', description: 'The golden policyholder record — identity, contacts, and the policies they hold.', systemId: sysCRM.id, owner: '', ownerPersonId: ito.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 91, createdAt: ts, updatedAt: ts };
+  const assetPersonalPolicies = { id: demoId('asset-personal-policies'), orgId: orgNorthwind.id, name: 'Personal Lines Policies', description: 'Personal auto, home, and umbrella policies, endorsements, and renewals.', systemId: sysPAS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 85, createdAt: ts, updatedAt: ts };
+  const assetCommercialPolicies = { id: demoId('asset-commercial-policies'), orgId: orgNorthwind.id, name: 'Commercial Lines Policies', description: 'Commercial property, liability, and workers’ comp policies.', systemId: sysPAS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 83, createdAt: ts, updatedAt: ts };
+  const assetClaimsLoss = { id: demoId('asset-claims-loss'), orgId: orgNorthwind.id, name: 'Claims Loss Records', description: 'Claim files, adjudications, payments, and loss detail — the reserving source.', systemId: sysClaims.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 56, createdAt: ts, updatedAt: ts };
+  const assetPremiumBilling = { id: demoId('asset-premium-billing'), orgId: orgNorthwind.id, name: 'Premium & Billing', description: 'Premium billing, collections, and disbursement records.', systemId: sysBilling.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetReserves = { id: demoId('asset-reserves'), orgId: orgNorthwind.id, name: 'Loss Reserves Dataset', description: 'The reconciled reserving dataset behind statutory filings and pricing.', systemId: sysActuarial.id, owner: '', ownerPersonId: margaret.id, stewardIds: [wei.id] as string[], governanceTier: 'GOLD' as const, healthScore: 93, createdAt: ts, updatedAt: ts };
+  const assetRatingFactors = { id: demoId('asset-rating-factors'), orgId: orgNorthwind.id, name: 'Rating & Pricing Factors', description: 'Rating tables, rating factors, and pricing model inputs.', systemId: sysUW.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 82, createdAt: ts, updatedAt: ts };
+  // Planted orphans — obviously-named so Ask AI's orphan-detection returns a quotable answer.
+  const orphanLegacyPolicy = { id: demoId('asset-legacy-policy'), orgId: orgNorthwind.id, name: 'Legacy Policy Extract', description: 'Nightly dump from the retired policy system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanSiuCsv = { id: demoId('asset-siu-csv'), orgId: orgNorthwind.id, name: 'SIU CSV Dump', description: 'Ad-hoc CSV extract of fraud referrals for an old reporting deck. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataAssets, [assetPolicyholderMaster, assetPersonalPolicies, assetCommercialPolicies, assetClaimsLoss, assetPremiumBilling, assetReserves, assetRatingFactors, orphanLegacyPolicy, orphanSiuCsv]);
+
+  // Domain → asset backrefs so the Domains page shows counts.
+  await repos.dataDomains.update(domPolicy.id, { dataAssetIds: [assetPolicyholderMaster.id, assetPersonalPolicies.id, assetCommercialPolicies.id] });
+  await repos.dataDomains.update(domClaimsData.id, { dataAssetIds: [assetClaimsLoss.id, assetReserves.id] });
+  await repos.dataDomains.update(domActuarialData.id, { dataAssetIds: [assetRatingFactors.id, assetPremiumBilling.id] });
+
+  // ── Process hierarchy — VS1 Policy Underwriting (Underwriting) ──
+  const vsUnderwriting = { id: demoId('node-vs-underwriting'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Policy Underwriting', description: 'End-to-end underwriting — take the application, rate and quote it, underwrite it, and issue the policy.', activityId: 'VS-DEMO-I1', status: 'ACTIVE', orderIndex: 0, orgId: orgUnderwriting.id, orgIds: [orgUnderwriting.id], ownerId: fiona.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procQuote = { id: demoId('node-proc-quote'), parentId: vsUnderwriting.id, level: 'PROCESS' as const, name: 'Quote & Rate', description: 'Capture the application and rate and quote it.', activityId: 'PRO-DEMO-I1', status: 'ACTIVE', orderIndex: 0, orgId: orgUnderwriting.id, orgIds: [orgUnderwriting.id], ownerId: trevor.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procIssue = { id: demoId('node-proc-issue'), parentId: vsUnderwriting.id, level: 'PROCESS' as const, name: 'Underwrite & Issue', description: 'Underwrite the risk and bind and issue the policy.', activityId: 'PRO-DEMO-I2', status: 'ACTIVE', orderIndex: 1, orgId: orgUnderwriting.id, orgIds: [orgUnderwriting.id], ownerId: rhonda.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spIntake = { id: demoId('node-sp-intake'), parentId: procQuote.id, level: 'SUBPROCESS' as const, name: 'Application Intake', description: 'Take the application and rate and quote it.', activityId: 'SP-DEMO-I1', status: 'ACTIVE', orderIndex: 0, orgId: orgUnderwriting.id, orgIds: [orgUnderwriting.id], ownerId: cara.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actCaptureApp = { id: demoId('node-act-captureapp'), parentId: spIntake.id, level: 'ACTIVITY' as const, name: 'Capture application', description: 'Take the applicant submission and match to the policyholder master.', activityId: 'ACT-DEMO-I1', status: 'ACTIVE', orderIndex: 0, orgId: orgUnderwriting.id, orgIds: [orgUnderwriting.id], ownerId: cara.id, responsibleRole: 'Underwriting Data Lead', responsiblePersonId: cara.id, systemIds: [sysPAS.id, sysCRM.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actRateQuote = { id: demoId('node-act-ratequote'), parentId: spIntake.id, level: 'ACTIVITY' as const, name: 'Rate & quote', description: 'Rate the risk against the rating factors and generate the quote.', activityId: 'ACT-DEMO-I2', status: 'ACTIVE', orderIndex: 1, orgId: orgUnderwriting.id, orgIds: [orgUnderwriting.id], ownerId: cara.id, responsibleRole: 'Underwriting Analyst', responsiblePersonId: beth.id, systemIds: [sysUW.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Quotes rated against current, approved rating tables', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actUnderwrite = { id: demoId('node-act-iunderwrite'), parentId: procIssue.id, level: 'ACTIVITY' as const, name: 'Underwrite & decision', description: 'Assess the risk and approve, decline, or refer the submission.', activityId: 'ACT-DEMO-I3', status: 'ACTIVE', orderIndex: 0, orgId: orgUnderwriting.id, orgIds: [orgUnderwriting.id], ownerId: rhonda.id, responsibleRole: 'Commercial Underwriter', responsiblePersonId: adam.id, systemIds: [sysUW.id, sysPAS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actBindIssue = { id: demoId('node-act-bindissue'), parentId: procIssue.id, level: 'ACTIVITY' as const, name: 'Bind & issue policy', description: 'Bind the risk, issue the policy, and set up billing.', activityId: 'ACT-DEMO-I4', status: 'ACTIVE', orderIndex: 1, orgId: orgUnderwriting.id, orgIds: [orgUnderwriting.id], ownerId: trevor.id, responsibleRole: 'Data Steward Personal Lines', responsiblePersonId: ito.id, systemIds: [sysPAS.id, sysBilling.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Policies issued and billed accurately on bind', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsUnderwriting, procQuote, procIssue, spIntake, actCaptureApp, actRateQuote, actUnderwrite, actBindIssue]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-i1'), fromNodeId: actCaptureApp.id, toNodeId: actRateQuote.id, type: 'SEQUENCE' as const, label: 'application taken', createdAt: ts },
+    { id: demoId('flow-i2'), fromNodeId: actRateQuote.id, toNodeId: actUnderwrite.id, type: 'SEQUENCE' as const, label: 'quoted', createdAt: ts },
+    { id: demoId('flow-i3'), fromNodeId: actUnderwrite.id, toNodeId: actBindIssue.id, type: 'SEQUENCE' as const, label: 'approved', createdAt: ts },
+  ]);
+
+  // ── Process hierarchy — VS2 Claims Management (Claims) ──
+  const vsClaims = { id: demoId('node-vs-claims'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Claims Management', description: 'Take first notice of loss, adjudicate the claim, and settle and recover.', activityId: 'VS-DEMO-I2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgClaims.id, orgIds: [orgClaims.id], ownerId: gerard.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procAdjudicate = { id: demoId('node-proc-adjudicate'), parentId: vsClaims.id, level: 'PROCESS' as const, name: 'Claim Intake & Adjudication', description: 'Register the claim and adjudicate it.', activityId: 'PRO-DEMO-I3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgClaims.id, orgIds: [orgClaims.id], ownerId: nora.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procSettle = { id: demoId('node-proc-settle'), parentId: vsClaims.id, level: 'PROCESS' as const, name: 'Settlement & Recovery', description: 'Settle the claim, pay it, and pursue recovery.', activityId: 'PRO-DEMO-I4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgClaims.id, orgIds: [orgClaims.id], ownerId: nora.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spFNOL = { id: demoId('node-sp-fnol'), parentId: procAdjudicate.id, level: 'SUBPROCESS' as const, name: 'First Notice of Loss', description: 'Register the claim and open the file.', activityId: 'SP-DEMO-I2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgClaims.id, orgIds: [orgClaims.id], ownerId: kofi.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actRegisterClaim = { id: demoId('node-act-registerclaim'), parentId: spFNOL.id, level: 'ACTIVITY' as const, name: 'Register claim (FNOL)', description: 'Take first notice of loss and match it to the policyholder and policy.', activityId: 'ACT-DEMO-I5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgClaims.id, orgIds: [orgClaims.id], ownerId: kofi.id, responsibleRole: 'Data Steward Claims', responsiblePersonId: kofi.id, systemIds: [sysClaims.id, sysCRM.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actAdjudicate = { id: demoId('node-act-adjudicate'), parentId: procAdjudicate.id, level: 'ACTIVITY' as const, name: 'Adjudicate claim', description: 'Investigate and adjudicate the claim and record the loss and reserve.', activityId: 'ACT-DEMO-I6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgClaims.id, orgIds: [orgClaims.id], ownerId: nora.id, responsibleRole: 'Claims Data Analyst', responsiblePersonId: lucia.id, systemIds: [sysClaims.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Every claim adjudicated with a complete, timely loss record', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actSettle = { id: demoId('node-act-settle'), parentId: procSettle.id, level: 'ACTIVITY' as const, name: 'Settle & pay claim', description: 'Settle the claim, pay it, and update reserves.', activityId: 'ACT-DEMO-I7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgClaims.id, orgIds: [orgClaims.id], ownerId: nora.id, responsibleRole: 'Chief Actuary / Director', responsiblePersonId: margaret.id, systemIds: [sysClaims.id, sysActuarial.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, successMeasure: 'Settlements paid accurately and reserves reconciled', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsClaims, procAdjudicate, procSettle, spFNOL, actRegisterClaim, actAdjudicate, actSettle]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-i4'), fromNodeId: actRegisterClaim.id, toNodeId: actAdjudicate.id, type: 'SEQUENCE' as const, label: 'claim registered', createdAt: ts },
+  ]);
+
+  // ── Mappings (7) ──
+  await createAll(repos.mappings, [
+    { id: demoId('map-i1'), orgId: orgUnderwriting.id, processStepId: actCaptureApp.id, dataAssetId: assetPolicyholderMaster.id, linkType: 'INPUT', notes: 'Matches the applicant to the policyholder master', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-i2'), orgId: orgUnderwriting.id, processStepId: actRateQuote.id, dataAssetId: assetRatingFactors.id, linkType: 'INPUT', notes: 'Rates the risk against the rating factors', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-i3'), orgId: orgUnderwriting.id, processStepId: actUnderwrite.id, dataAssetId: assetPersonalPolicies.id, linkType: 'OUTPUT', notes: 'Writes the underwritten policy', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-i4'), orgId: orgUnderwriting.id, processStepId: actBindIssue.id, dataAssetId: assetPremiumBilling.id, linkType: 'OUTPUT', notes: 'Sets up billing on bind', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-i5'), orgId: orgClaims.id, processStepId: actRegisterClaim.id, dataAssetId: assetPolicyholderMaster.id, linkType: 'INPUT', notes: 'Matches the claim to the policyholder and policy', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-i6'), orgId: orgClaims.id, processStepId: actAdjudicate.id, dataAssetId: assetClaimsLoss.id, linkType: 'OUTPUT', notes: 'Writes the loss record + reserve', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-i7'), orgId: orgClaims.id, processStepId: actSettle.id, dataAssetId: assetReserves.id, linkType: 'OUTPUT', notes: 'Updates the reserves dataset on settlement', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+  ]);
+
+  // ── Governance tasks assigned to Priya (populates My Dashboard) ──
+  await createAll(repos.governanceTasks, [
+    { id: demoId('task-i1'), orgId: orgNorthwind.id, title: 'Approve Claims Loss Records classification review', description: 'Review the AI-suggested sensitivity tags on Claims Loss Records and the Loss Reserves Dataset and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: priya.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetClaimsLoss.id, automationMode: 'HUMAN' as any, createdBy: gordon.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-i2'), orgId: orgNorthwind.id, title: 'Sign off on Claims & Loss domain scope', description: 'Gerard has proposed expanding the Claims & Loss domain to cover new Model Audit Rule evidence fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: priya.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domClaimsData.id, automationMode: 'HUMAN' as any, createdBy: gerard.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-i3'), orgId: orgNorthwind.id, title: 'Retire Legacy Policy Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: priya.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyPolicy.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+  ]);
+
+  // ── One open governance issue assigned to Priya ──
+  await repos.governanceIssues.create({
+    id: demoId('issue-i1'),
+    orgId: orgNorthwind.id,
+    title: 'Claims Loss Records tier below Silver — critical process, ungoverned',
+    description: 'Claims Loss Records is BRONZE tier but the Claims process writes it as the reserving source of record. Recommend promoting to Silver with an SLA target.',
+    issueType: 'OWNERSHIP' as any,
+    severity: 'HIGH' as any,
+    status: 'OPEN' as any,
+    domainId: domClaimsData.id,
+    dataAssetId: assetClaimsLoss.id,
+    systemId: sysClaims.id,
+    reportedBy: gordon.id,
+    assignedTo: priya.id,
+    resolutionSummary: null,
+    createdAt: ts,
+    updatedAt: ts,
+    closedAt: null,
+  } as any);
+
+  // ── Data Quality rules (2 — one passing, one failing) ──
+  await createAll(repos.dataQualityRules, [
+    {
+      id: demoId('dq-rule-passing'), orgId: orgNorthwind.id, dataAssetId: assetPersonalPolicies.id,
+      dimension: 'COMPLETENESS' as const, name: 'Personal Lines · policy completeness',
+      description: 'At least 95% of policies must carry a complete insured, coverage, and term.',
+      threshold: 95, currentScore: 98, weight: 1, status: 'PASSING' as const,
+      lastMeasured: ts, scheduleFrequency: 'DAILY' as const, nextRunAt: daysFromNow(1), createdAt: ts, updatedAt: ts,
+    },
+    {
+      id: demoId('dq-rule-failing'), orgId: orgNorthwind.id, dataAssetId: assetClaimsLoss.id,
+      dimension: 'TIMELINESS' as const, name: 'Claims Loss Records · reserve posting latency',
+      description: 'Loss and reserve detail should be posted within the reserving SLA. Rolling 24h.',
+      threshold: 95, currentScore: 56, weight: 1, status: 'FAILING' as const,
+      lastMeasured: ts, scheduleFrequency: 'HOURLY' as const, nextRunAt: daysFromNow(0), createdAt: ts, updatedAt: ts,
+    },
+  ]);
+
+  // ── Edge connector (ONLINE) ──
+  const connectorHeartbeatAt = new Date(Date.now() - 45 * 1000).toISOString();
+  const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const conn = {
+    id: demoId('conn-northwind'), orgId: orgNorthwind.id, name: 'Northwind Policy Data Connector',
+    tokenHash: '2f8a4d1c7b3e9605a2d8c4f1e7b3a9d5c0f6e2b8a4d1c7f3e9b5a0d6c2f8e4b1',
+    pairingCode: null, pairingCodeExpiresAt: null,
+    systemIds: [sysPAS.id, sysWarehouse.id],
+    lastHeartbeatAt: connectorHeartbeatAt, agentVersion: '1.2.0', status: 'ONLINE' as const,
+    createdAt: connectorCreatedAt, updatedAt: connectorHeartbeatAt,
+  };
+  await repos.connectors.create(conn);
+
+  await repos.dataAssets.update(assetPersonalPolicies.id, {
+    lastSyncedByConnectorId: conn.id,
+    lastSyncedAt: connectorSyncAt,
+  } as any);
+
+  await createAll(repos.connectorEvents, [
+    { id: demoId('ce-i-paired'), connectorId: conn.id, orgId: orgNorthwind.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-i-scan-start'), connectorId: conn.id, orgId: orgNorthwind.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysPAS.id, sysWarehouse.id] } },
+    { id: demoId('ce-i-scan-done'), connectorId: conn.id, orgId: orgNorthwind.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 40_960, assetsDiscovered: 1 } },
+    { id: demoId('ce-i-assets'), connectorId: conn.id, orgId: orgNorthwind.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
+    { id: demoId('ce-i-hb'), connectorId: conn.id, orgId: orgNorthwind.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
+  ]);
+
+  // ── Second connector — PAIRING state ──
+  const pairingConn = {
+    id: demoId('conn-i-pairing'), orgId: orgNorthwind.id, name: 'Claims Office Connector',
+    tokenHash: null, pairingCode: '39174865',
+    pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    systemIds: [] as string[], lastHeartbeatAt: null, agentVersion: null, status: 'PAIRED' as const,
+    createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(), updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+  };
+  await repos.connectors.create(pairingConn as any);
+
+  // ── Governance calendar event ──
+  const dayNow = new Date();
+  const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
+  const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
+  await repos.calendarEvents.create({
+    id: demoId('cal-i-dgc'),
+    orgId: orgNorthwind.id,
+    name: 'Data Governance Council weekly',
+    description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
+    eventType: 'COMMITTEE_MEETING' as const,
+    cadence: 'WEEKLY' as const,
+    dayOfMonth: null,
+    dayOfWeek: 5,
+    timeOfDay: '09:00',
+    durationMinutes: 60,
+    attendees: [priya.id, gordon.id, fiona.id, margaret.id],
+    agendaTemplate: '1. Open governance issues (from bell)\n2. Domain scope changes\n3. Control effectiveness review\n4. Upcoming policy publications',
+    nextOccurrence: nextFriday.toISOString(),
+    lastOccurrence: null,
+    autoCreateTasks: false,
+    status: 'ACTIVE' as const,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+
+  // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
+  await createAll(repos.statsSnapshots, [
+    ...weeklySnapshots(orgNorthwind.id, { coverage: 64, avgHealth: 72, gaps: 8, dataAssets: 9, mappings: 7 }),
+    ...weeklySnapshots(orgUnderwriting.id, { coverage: 72, avgHealth: 74, gaps: 4, dataAssets: 4, mappings: 4 }),
+    ...weeklySnapshots(orgClaims.id, { coverage: 60, avgHealth: 70, gaps: 4, dataAssets: 2, mappings: 3 }),
+    ...weeklySnapshots(orgInsShared.id, { coverage: 55, avgHealth: 73, gaps: 3, dataAssets: 3, mappings: 0 }),
+  ]);
+
+  // ── AI template cache — pre-warm the wand for Northwind ──
+  aiTemplateCache.push(
+    {
+      industry: 'insurance|policy underwriting',
+      industryLabel: 'Insurance — Policy Underwriting',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Policy Underwriting',
+            description: 'Take the application, rate and quote it, underwrite it, and issue the policy.',
+            purpose: 'Write profitable, well-priced risk quickly and issue accurate policies.',
+            businessOutcome: 'On-SLA quotes rated against approved tables and accurately issued and billed policies.',
+            processes: [
+              { name: 'Quote & Rate', description: 'Capture the application and rate and quote it.', purpose: 'Turn a submission into an accurate quote.', activities: [
+                { name: 'Capture application', description: 'Take the submission and match to the policyholder master.' },
+                { name: 'Rate & quote', description: 'Rate the risk against the rating factors and generate the quote.' },
+              ] },
+              { name: 'Underwrite & Issue', description: 'Underwrite the risk and bind and issue the policy.', purpose: 'Decide the risk and issue the policy.', activities: [
+                { name: 'Underwrite & decision', description: 'Assess the risk and approve, decline, or refer the submission.' },
+                { name: 'Bind & issue policy', description: 'Bind the risk, issue the policy, and set up billing.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      industry: 'insurance|claims management',
+      industryLabel: 'Insurance — Claims Management',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Claims Management',
+            description: 'Take first notice of loss, adjudicate the claim, and settle and recover.',
+            purpose: 'Pay valid claims fairly and quickly with accurate loss and reserve data.',
+            businessOutcome: 'Claims adjudicated with complete loss records and settlements reconciled to reserves.',
+            processes: [
+              { name: 'Claim Intake & Adjudication', description: 'Register the claim and adjudicate it.', purpose: 'Open and decide the claim.', activities: [
+                { name: 'Register claim (FNOL)', description: 'Take first notice of loss and match it to the policy.' },
+                { name: 'Adjudicate claim', description: 'Investigate and adjudicate the claim and record the loss and reserve.' },
+              ] },
+              { name: 'Settlement & Recovery', description: 'Settle the claim, pay it, and pursue recovery.', purpose: 'Pay and close the claim and reconcile reserves.', activities: [
+                { name: 'Settle & pay claim', description: 'Settle the claim, pay it, and update reserves.' },
+                { name: 'Pursue recovery', description: 'Pursue subrogation and salvage recovery and close the file.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  saveStore('aiTemplateCache', aiTemplateCache);
+
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgNorthwind.id,
+    cdoId: priya.id,
+    govLeadId: gordon.id,
+    dataOwnerId: fiona.id,
+    stewardIds: [ito.id, wei.id],
+    tenantName: 'Northwind Mutual',
+  });
+
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgNorthwind.id,
+    domainIds: [domPolicy.id, domClaimsData.id, domActuarialData.id],
+    cdoId: priya.id,
+    govLeadId: gordon.id,
+    dataOwnerId: fiona.id,
+    stewardId: ito.id,
+    techStewardId: wei.id,
+    engineerId: manuel.id,
+    architectId: sophie.id,
+    raciNodeId: actAdjudicate.id,
+    raciPersonId: lucia.id,
+  });
+
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgNorthwind.id, ownerId: ito.id, cdoId: priya.id, domainId: domPolicy.id });
+
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgNorthwind.id, orgUnderwriting.id, orgClaims.id],
+    links: [
+      { id: demoId('lin-1'), orgId: orgNorthwind.id, sourceSystemId: sysPAS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetPersonalPolicies.id, description: 'Policy data syncs nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-2'), orgId: orgClaims.id, sourceSystemId: sysClaims.id, targetSystemId: sysWarehouse.id, dataAssetId: assetClaimsLoss.id, description: 'Claims loss data feeds the reserving warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: demoId('lin-3'), orgId: orgNorthwind.id, sourceSystemId: sysActuarial.id, targetSystemId: sysWarehouse.id, dataAssetId: assetReserves.id, description: 'Reserving outputs stream into the warehouse.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+    ],
+    edges: [
+      { id: demoId('edge-1'), orgId: orgNorthwind.id, sourceAssetId: assetPolicyholderMaster.id, targetAssetId: assetPersonalPolicies.id },
+      { id: demoId('edge-2'), orgId: orgClaims.id, sourceAssetId: assetClaimsLoss.id, targetAssetId: assetReserves.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgNorthwind.id, agentId: demoId('agent-statutory-gen'), agentName: 'Statutory Filing Generator', activityId: actSettle.id, activityName: 'Settle & pay claim', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: priya.id, reviewerId: gordon.id });
+
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgNorthwind.id, assetId: assetPolicyholderMaster.id, systemId: sysCRM.id, personId: ito.id, personName: 'Ito Watanabe' });
+
+  logger.info({ persona: priya.name }, 'Demo data seeded (insurance)');
+
+  return {
+    organizations: 10,
+    people: 24,
+    systems: 8,
+    agents: 5,
+    dataDomains: 6,
+    dataAssets: 9,
+    processNodes: 15,
+    mappings: 7,
+    governanceTasks: 3,
+    governanceIssues: 1,
+    dataQualityRules: 2,
+    connectors: 2,
+    connectorEvents: 5,
+    calendarEvents: 1,
+    statsSnapshots: STATS_WEEKS * 4,
+    persona: { id: priya.id, name: priya.name },
   };
 }
