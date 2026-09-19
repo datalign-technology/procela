@@ -26,7 +26,7 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
-type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government';
+type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics';
 
 const INDUSTRIES: ReadonlyArray<{
   value: Industry;
@@ -76,6 +76,13 @@ const INDUSTRIES: ReadonlyArray<{
     tenant: 'Lakeside County',
     persona: 'Evelyn Park',
     blurb: 'County government — public works + health & human services + shared services.',
+  },
+  {
+    value: 'logistics',
+    label: 'Transportation & Logistics',
+    tenant: 'Cascade Logistics',
+    persona: 'Omar Reyes',
+    blurb: 'Freight carrier — line-haul freight + warehousing + shared services.',
   },
 ];
 
