@@ -26,7 +26,7 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
-type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial';
+type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government';
 
 const INDUSTRIES: ReadonlyArray<{
   value: Industry;
@@ -69,6 +69,13 @@ const INDUSTRIES: ReadonlyArray<{
     tenant: 'Harborstone Financial',
     persona: 'Grace Lin',
     blurb: 'Bank holding company — retail banking + wealth & markets + shared services.',
+  },
+  {
+    value: 'government',
+    label: 'Government & Public Sector',
+    tenant: 'Lakeside County',
+    persona: 'Evelyn Park',
+    blurb: 'County government — public works + health & human services + shared services.',
   },
 ];
 
