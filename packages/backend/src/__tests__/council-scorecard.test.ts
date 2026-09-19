@@ -373,7 +373,7 @@ describe('Council Scorecard — value drivers', () => {
   it('monetizes the drivers with the tenant value model (ROI Phase 2)', async () => {
     // Set the org's own dollar assumptions. In JSON test mode getCachedOrgList
     // returns the live array, so mutating the row is immediately visible.
-    const row = organizations.find((o) => o.id === org)!;
+    const row = organizations.find((o: { id: string }) => o.id === org)!;
     (row as any).roiModel = { currency: 'USD', riskCostPerItem: 1000, resolutionValuePerIssue: 5000, ownershipValuePerEntity: 2000 };
     try {
       const d = (await req(port, 'GET', `/council-scorecard/derive?orgId=${org}`, undefined, admin)).body.data;
