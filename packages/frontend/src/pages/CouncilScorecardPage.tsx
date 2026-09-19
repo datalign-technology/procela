@@ -6,6 +6,7 @@ import Card from '../components/Card';
 import Button from '../components/Button';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Spinner from '../components/Spinner';
+import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 
@@ -27,10 +28,12 @@ interface ScopeInfo { lens: 'all' | 'governed'; applied: boolean; version: numbe
 interface ValueDriverRatio { covered: number; total: number; pct: number }
 interface ValueDrivers { ownership: ValueDriverRatio; openRisk: number; resolvedLast30: number; avgResolutionDays: number | null }
 interface RoiModel { currency: string; riskCostPerItem: number; resolutionValuePerIssue: number; ownershipValuePerEntity: number }
+interface ValueStreamRoi { valueStreamId: string; name: string; assets: number; ownershipValue: number; resolutionValueAnnualized: number; annualValue: number; valueAtRisk: number }
 interface RoiEstimate {
   configured: boolean; currency: string; model: RoiModel;
   valueAtRisk: number; resolutionValueMonthly: number; resolutionValueAnnualized: number;
   ownershipValue: number; annualValue: number;
+  byValueStream?: ValueStreamRoi[];
 }
 interface Derived {
   orgId: string; orgName: string; period: string;
@@ -493,6 +496,45 @@ export default function CouncilScorecardPage() {
                 </div>
               ))}
             </div>
+            {/* ROI Phase 3 — per-value-stream attribution. Which streams' data
+                is banking value vs. carrying risk. */}
+            {roi.byValueStream && roi.byValueStream.length > 0 && (() => {
+              const rows = roi.byValueStream!;
+              const shown = rows.slice(0, 8);
+              return (
+                <div style={{ marginTop: 16, borderTop: '1px solid var(--color-border)', paddingTop: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 4 }}>By value stream</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--color-text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
+                    Value attributed through each stream&rsquo;s process&#8594;data mappings. An asset supporting several streams counts in each, and org-level exceptions and unmapped data aren&rsquo;t attributed — so rows don&rsquo;t sum to the totals above.
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                      <thead>
+                        <tr style={{ textAlign: 'right', color: 'var(--color-text-muted)', fontSize: 11 }}>
+                          <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Value stream</th>
+                          <th style={{ padding: '4px 8px', fontWeight: 600 }}>Assets</th>
+                          <th style={{ padding: '4px 8px', fontWeight: 600 }}>Annual value</th>
+                          <th style={{ padding: '4px 8px', fontWeight: 600 }}>Value at risk</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shown.map((r) => (
+                          <tr key={r.valueStreamId} style={{ borderTop: '1px solid var(--color-border)' }}>
+                            <td style={{ textAlign: 'left', padding: '7px 8px', fontWeight: 500 }}><TruncatedText text={r.name} /></td>
+                            <td style={{ textAlign: 'right', padding: '7px 8px', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-muted)' }}>{r.assets}</td>
+                            <td style={{ textAlign: 'right', padding: '7px 8px', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: r.annualValue > 0 ? 'var(--color-success)' : 'var(--color-text)' }}>{fmtMoney(r.annualValue, cur)}</td>
+                            <td style={{ textAlign: 'right', padding: '7px 8px', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: r.valueAtRisk > 0 ? 'var(--color-warning)' : 'var(--color-text)' }}>{fmtMoney(r.valueAtRisk, cur)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {rows.length > shown.length && (
+                    <div style={{ fontSize: 10.5, color: 'var(--color-text-muted)', marginTop: 8 }}>+{rows.length - shown.length} more stream{rows.length - shown.length === 1 ? '' : 's'} with attributed value.</div>
+                  )}
+                </div>
+              );
+            })()}
           </Card>
         );
       })()}

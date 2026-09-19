@@ -29,6 +29,8 @@ import { processNodes } from './process-catalog';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { systems } from './systems';
 import { getSystemsRepository } from '../db/systems.repo';
+import { mappings } from './mappings';
+import { getMappingsRepository } from '../db/mappings.repo';
 import { getProgramScopeForOrg } from './governance-program';
 import { resolveProgramScope } from '../lib/governance-scope';
 
@@ -113,6 +115,25 @@ export interface RoiEstimate {
   resolutionValueAnnualized: number; // resolutionValueMonthly × 12
   ownershipValue: number;         // ownership.covered × ownershipValuePerEntity
   annualValue: number;            // ownershipValue + resolutionValueAnnualized
+  // ROI Phase 3 — the monetized value attributed to each value stream, so a
+  // leader sees which streams' supporting data is banking value vs. carrying
+  // risk. Empty until a value model is set. Attribution is by the process→data
+  // mapping (a stream's steps link data assets); a stream's value at risk
+  // counts only the risk items that carry an asset/domain link (org-level
+  // exceptions and unmapped data aren't attributed), and an asset supporting
+  // several streams counts in each — so these rows don't sum to the org total.
+  byValueStream: ValueStreamRoi[];
+}
+
+// One value stream's attributed governance value (ROI Phase 3).
+export interface ValueStreamRoi {
+  valueStreamId: string;
+  name: string;
+  assets: number;                    // in-scope assets mapped to this stream
+  ownershipValue: number;
+  resolutionValueAnnualized: number;
+  annualValue: number;               // ownershipValue + resolutionValueAnnualized
+  valueAtRisk: number;
 }
 
 export interface StoredCouncilScorecard {
@@ -139,6 +160,7 @@ const issuesRepo = getGovernanceIssuesRepository(governanceIssues);
 const exceptionsRepo = getGovernanceExceptionsRepository(governanceExceptions);
 const processNodesRepo = getProcessNodesRepository(processNodes);
 const systemsRepo = getSystemsRepository(systems);
+const mappingsRepo = getMappingsRepository(mappings);
 
 // The measure lens: "all" counts every entity in the org subtree (today's
 // behaviour); "governed" narrows to the entities the parent org's governance
@@ -234,7 +256,7 @@ function childDivisions(parentId: string): { id: string; name: string }[] {
 // ── Measure computation ──
 
 interface Sources {
-  domains: Array<{ id: string; orgId: string; ownerId: string | null; criticality?: string }>;
+  domains: Array<{ id: string; orgId: string; ownerId: string | null; criticality?: string; dataAssetIds?: string[] }>;
   assets: Array<{ id: string; orgId: string; ownerPersonId?: string | null; owner?: string | null; sensitivityTags?: unknown[] }>;
   issues: Array<{ orgId: string; status: string; createdAt?: string; closedAt?: string | null; domainId?: string | null; dataAssetId?: string | null }>;
   exceptions: typeof governanceExceptions;
@@ -339,7 +361,88 @@ function computeRoi(v: ValueDrivers, model: RoiModel): RoiEstimate {
     resolutionValueAnnualized,
     ownershipValue,
     annualValue: ownershipValue + resolutionValueAnnualized,
+    byValueStream: [],
   };
+}
+
+// Attribute the monetized value to each value stream (ROI Phase 3). A value
+// stream's supporting data is found through the process→data mappings: any
+// data asset linked to a step under the stream is attributed to it. `s` is
+// already lens-filtered, so only in-scope assets/domains/issues count; a stream
+// with no in-scope mapped assets is omitted. Rows don't sum to the org total —
+// an asset can support several streams (counted in each) and org-level
+// exceptions / unmapped data aren't attributed.
+function computeValueStreamRoi(
+  nodes: Array<{ id: string; parentId: string | null; level: string; name: string; orgId: string }>,
+  mappings: Array<{ processStepId: string; dataAssetId?: string | null }>,
+  s: Sources,
+  model: RoiModel,
+  parentScope: Set<string>,
+): ValueStreamRoi[] {
+  // Process-node children index, for walking a value stream's whole subtree.
+  const childrenOf = new Map<string, string[]>();
+  for (const n of nodes) {
+    if (!n.parentId) continue;
+    const arr = childrenOf.get(n.parentId);
+    if (arr) arr.push(n.id); else childrenOf.set(n.parentId, [n.id]);
+  }
+  // In-scope asset lookup (lens-filtered) and the data assets each step maps to.
+  const assetById = new Map(s.assets.map((a) => [a.id, a] as const));
+  const assetIdsForNode = new Map<string, string[]>();
+  for (const m of mappings) {
+    if (!m.dataAssetId) continue;
+    const arr = assetIdsForNode.get(m.processStepId);
+    if (arr) arr.push(m.dataAssetId); else assetIdsForNode.set(m.processStepId, [m.dataAssetId]);
+  }
+
+  const out: ValueStreamRoi[] = [];
+  for (const vs of nodes) {
+    if (vs.level !== 'VALUE_STREAM' || !parentScope.has(vs.orgId)) continue;
+    // The stream's whole node subtree (itself + all descendants).
+    const nodeIds = new Set<string>();
+    const stack = [vs.id];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (nodeIds.has(id)) continue;
+      nodeIds.add(id);
+      for (const c of childrenOf.get(id) || []) stack.push(c);
+    }
+    // In-scope assets mapped to any node in the subtree.
+    const attrAssetIds = new Set<string>();
+    for (const nid of nodeIds) for (const aid of assetIdsForNode.get(nid) || []) if (assetById.has(aid)) attrAssetIds.add(aid);
+    if (attrAssetIds.size === 0) continue; // no governed data flows through this stream
+
+    const attrAssets = [...attrAssetIds].map((id) => assetById.get(id)!);
+    const attrDomains = s.domains.filter((d) => (d.dataAssetIds || []).some((aid) => attrAssetIds.has(aid)));
+    const attrDomainIds = new Set(attrDomains.map((d) => d.id));
+
+    const ownedEntities =
+      attrDomains.filter((d) => !!d.ownerId).length +
+      attrAssets.filter((a) => !!(a.ownerPersonId || a.owner)).length;
+    // Open-risk items with an entity link (exceptions are org-level — excluded).
+    const tier1Unowned = attrDomains.filter((d) => d.criticality === 'TIER_1' && !d.ownerId).length;
+    const unclassified = attrAssets.filter((a) => !(Array.isArray(a.sensitivityTags) && a.sensitivityTags.length > 0)).length;
+    const openRiskItems = tier1Unowned + unclassified;
+    const resolvedLast30 = s.issues.filter((i) =>
+      TERMINAL_ISSUE_STATUSES.has(i.status) && !!i.closedAt && (s.now - Date.parse(i.closedAt) <= 30 * DAY_MS) &&
+      ((!!i.dataAssetId && attrAssetIds.has(i.dataAssetId)) || (!!i.domainId && attrDomainIds.has(i.domainId))),
+    ).length;
+
+    const ownershipValue = ownedEntities * model.ownershipValuePerEntity;
+    const resolutionValueAnnualized = resolvedLast30 * model.resolutionValuePerIssue * 12;
+    out.push({
+      valueStreamId: vs.id,
+      name: vs.name,
+      assets: attrAssetIds.size,
+      ownershipValue,
+      resolutionValueAnnualized,
+      annualValue: ownershipValue + resolutionValueAnnualized,
+      valueAtRisk: openRiskItems * model.riskCostPerItem,
+    });
+  }
+  // Biggest value first, then biggest exposure, then name for stability.
+  out.sort((a, b) => (b.annualValue - a.annualValue) || (b.valueAtRisk - a.valueAtRisk) || a.name.localeCompare(b.name));
+  return out;
 }
 
 // ── Narrative auto-derivation (data trends / activity) ──
@@ -383,9 +486,9 @@ function autoNarrative(parentScope: Set<string>, s: Sources, enterprise: Divisio
 // ── Derive the whole scorecard for a parent org ──
 
 async function deriveScorecard(parentOrgId: string, lens: ScorecardLens = 'all'): Promise<DerivedScorecard> {
-  const [domains, assets, issues, exceptions, nodes, orgSystems] = await Promise.all([
+  const [domains, assets, issues, exceptions, nodes, orgSystems, allMappings] = await Promise.all([
     domainsRepo.list(), assetsRepo.list(), issuesRepo.list(), exceptionsRepo.list(),
-    processNodesRepo.list(), systemsRepo.list(),
+    processNodesRepo.list(), systemsRepo.list(), mappingsRepo.list(),
   ]);
   const now = Date.now();
 
@@ -442,6 +545,17 @@ async function deriveScorecard(parentOrgId: string, lens: ScorecardLens = 'all')
 
   // Compute the drivers once, then monetize with the tenant's resolved model.
   const valueDrivers = computeValueDrivers(parentScope, s);
+  const roiModel = roiModelForOrg(parentOrgId);
+  const roi = computeRoi(valueDrivers, roiModel);
+  // Per-value-stream attribution only carries meaning once there's a model to
+  // multiply by; skip the work (and the empty rows) when unconfigured.
+  if (roi.configured) {
+    roi.byValueStream = computeValueStreamRoi(
+      nodes as Array<{ id: string; parentId: string | null; level: string; name: string; orgId: string }>,
+      allMappings as Array<{ processStepId: string; dataAssetId?: string | null }>,
+      s, roiModel, parentScope,
+    );
+  }
 
   return {
     orgId: parentOrgId,
@@ -458,7 +572,7 @@ async function deriveScorecard(parentOrgId: string, lens: ScorecardLens = 'all')
       changedAt: anchors?.changedAt ?? null,
     },
     valueDrivers,
-    roi: computeRoi(valueDrivers, roiModelForOrg(parentOrgId)),
+    roi,
   };
 }
 
