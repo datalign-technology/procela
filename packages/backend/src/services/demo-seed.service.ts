@@ -124,7 +124,7 @@ function daysFromNow(n: number): string {
 
 // Industries with a hand-crafted demo fixture. Every profile is built to the
 // same feature coverage so a demo of any of them lights up every page.
-export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing';
+export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial';
 
 // aiTemplateCache is keyed by industry string, not `id`, so the sweep
 // can't find demo entries by prefix. These are every cache key any
@@ -140,6 +140,8 @@ const DEMO_AI_CACHE_KEYS = new Set<string>([
   'healthcare|revenue cycle',
   'manufacturing|make-to-order production',
   'manufacturing|supply chain & fulfillment',
+  'financial|consumer lending',
+  'financial|financial crime & regulatory reporting',
 ]);
 
 // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
@@ -738,6 +740,7 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
     shipbuilding: seedShipbuilding,
     healthcare: seedHealthcare,
     manufacturing: seedManufacturing,
+    financial: seedFinancial,
   };
   const report = await (builders[industry] ?? seedUtilities)(repos, ts);
   // Refresh the org-scope cache so accessible-orgs and the synchronous
@@ -2474,5 +2477,386 @@ async function seedManufacturing(repos: DemoRepos, ts: string): Promise<DemoSeed
     calendarEvents: 1,
     statsSnapshots: STATS_WEEKS * 4,
     persona: { id: marcusf.id, name: marcusf.name },
+  };
+}
+
+/**
+ * Financial Services profile — a Harborstone Financial bank holding company
+ * (Retail Banking + Wealth & Markets + Shared Services), persona Grace Lin
+ * (CDO). Same fixed-count skeleton and story shape as the other profiles:
+ * two planted orphan assets on the warehouse, and a failing DQ rule
+ * co-located with the ownership issue on the Bronze/critical AML Alerts
+ * asset — the regulatory-reporting story the Financial Services industry
+ * page leads with (BCBS 239 lineage, financial-crime monitoring).
+ */
+async function seedFinancial(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
+  // ── Organizations (company → 3 divisions → 6 departments) ──
+  const orgHarborstone = { id: demoId('org-harborstone'), parentId: null, name: 'Harborstone Financial', type: 'company', industry: 'Financial Services', description: 'Bank holding company demo tenant — retail banking + wealth & markets + shared services.', headCount: 0, tenantSlug: 'harborstone', brandDisplayName: 'Harborstone Financial', brandGlyph: '＄', ssoButtonLabel: 'Sign in with Harborstone SSO', brandPrimaryColor: '#1e40af', createdAt: ts, updatedAt: ts };
+  const orgRetail = { id: demoId('org-retail'), parentId: orgHarborstone.id, name: 'Retail Banking', type: 'division', industry: 'Financial Services', description: 'Deposits, payments, and lending', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgWealth = { id: demoId('org-wealth'), parentId: orgHarborstone.id, name: 'Wealth & Markets', type: 'division', industry: 'Financial Services', description: 'Wealth management and capital markets', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgFinShared = { id: demoId('org-finshared'), parentId: orgHarborstone.id, name: 'Shared Services', type: 'division', industry: 'Financial Services', description: 'IT / Risk & Compliance', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgDeposits = { id: demoId('org-deposits'), parentId: orgRetail.id, name: 'Deposits & Payments', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgLending = { id: demoId('org-lending'), parentId: orgRetail.id, name: 'Lending', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgWealthMgmt = { id: demoId('org-wealthmgmt'), parentId: orgWealth.id, name: 'Wealth Management', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgMarkets = { id: demoId('org-markets'), parentId: orgWealth.id, name: 'Capital Markets', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgFinIT = { id: demoId('org-finit'), parentId: orgFinShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgRiskComp = { id: demoId('org-riskcomp'), parentId: orgFinShared.id, name: 'Risk & Compliance', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.organizations, [orgHarborstone, orgRetail, orgWealth, orgFinShared, orgDeposits, orgLending, orgWealthMgmt, orgMarkets, orgFinIT, orgRiskComp]);
+
+  // ── People (24) — persona Grace Lin (CDO) ──
+  const grace = { id: demoId('person-grace-lin'), orgIds: [orgHarborstone.id], accessibleOrgIds: [orgHarborstone.id, orgRetail.id, orgWealth.id, orgFinShared.id, orgDeposits.id, orgLending.id, orgWealthMgmt.id, orgMarkets.id, orgFinIT.id, orgRiskComp.id], name: 'Grace Lin', email: 'grace.lin@harborstone.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const daniel = { id: demoId('person-daniel-roth'), orgIds: [orgHarborstone.id], accessibleOrgIds: [orgHarborstone.id], name: 'Daniel Roth', email: 'daniel.roth@harborstone.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const nadia = { id: demoId('person-nadia'), orgIds: [orgRetail.id], accessibleOrgIds: [orgRetail.id], name: 'Nadia Haddad', email: 'nadia.haddad@harborstone.com', role: 'ORG_ADMIN', title: 'Data Owner Retail Banking', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const oliver = { id: demoId('person-oliver'), orgIds: [orgDeposits.id], accessibleOrgIds: [orgDeposits.id, orgRetail.id], name: 'Oliver Bennett', email: 'oliver.bennett@harborstone.com', role: 'EDITOR', title: 'Director Deposits & Payments', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const chloe = { id: demoId('person-chloe'), orgIds: [orgDeposits.id], accessibleOrgIds: [orgDeposits.id], name: 'Chloe Martin', email: 'chloe.martin@harborstone.com', role: 'CONTRIBUTOR', title: 'Payments Product Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const raj = { id: demoId('person-raj'), orgIds: [orgDeposits.id], accessibleOrgIds: [orgDeposits.id], name: 'Raj Malhotra', email: 'raj.malhotra@harborstone.com', role: 'CONTRIBUTOR', title: 'Data Steward Deposits', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sofia = { id: demoId('person-sofia'), orgIds: [orgDeposits.id], accessibleOrgIds: [orgDeposits.id], name: 'Sofia Reyes', email: 'sofia.reyes@harborstone.com', role: 'CONTRIBUTOR', title: 'Payments Operations Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const wesley = { id: demoId('person-wesley'), orgIds: [orgLending.id], accessibleOrgIds: [orgLending.id], name: 'Wesley Grant', email: 'wesley.grant@harborstone.com', role: 'EDITOR', title: 'Manager Lending', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const tara = { id: demoId('person-tara'), orgIds: [orgLending.id], accessibleOrgIds: [orgLending.id], name: 'Tara Nolan', email: 'tara.nolan@harborstone.com', role: 'CONTRIBUTOR', title: 'Data Steward Lending', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const felix = { id: demoId('person-felix'), orgIds: [orgLending.id], accessibleOrgIds: [orgLending.id], name: 'Felix Osei', email: 'felix.osei@harborstone.com', role: 'CONTRIBUTOR', title: 'Credit Risk Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const jerome = { id: demoId('person-jerome'), orgIds: [orgWealth.id], accessibleOrgIds: [orgWealth.id], name: 'Jerome Blake', email: 'jerome.blake@harborstone.com', role: 'ORG_ADMIN', title: 'Data Owner Wealth & Markets', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const amara = { id: demoId('person-amara'), orgIds: [orgWealthMgmt.id], accessibleOrgIds: [orgWealthMgmt.id, orgWealth.id], name: 'Amara Okoye', email: 'amara.okoye@harborstone.com', role: 'EDITOR', title: 'Director Wealth Management', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const henrik = { id: demoId('person-henrik'), orgIds: [orgWealthMgmt.id], accessibleOrgIds: [orgWealthMgmt.id], name: 'Henrik Sund', email: 'henrik.sund@harborstone.com', role: 'CONTRIBUTOR', title: 'Data Steward Wealth', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const bianca = { id: demoId('person-bianca'), orgIds: [orgWealthMgmt.id], accessibleOrgIds: [orgWealthMgmt.id], name: 'Bianca Ferraro', email: 'bianca.ferraro@harborstone.com', role: 'CONTRIBUTOR', title: 'Portfolio Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const victor = { id: demoId('person-victor'), orgIds: [orgMarkets.id], accessibleOrgIds: [orgMarkets.id, orgWealth.id], name: 'Victor Cheng', email: 'victor.cheng@harborstone.com', role: 'EDITOR', title: 'Manager Capital Markets', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const leilani = { id: demoId('person-leilani'), orgIds: [orgMarkets.id], accessibleOrgIds: [orgMarkets.id], name: 'Leilani Cruz', email: 'leilani.cruz@harborstone.com', role: 'CONTRIBUTOR', title: 'Data Steward Markets', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const neil = { id: demoId('person-neil'), orgIds: [orgFinIT.id], accessibleOrgIds: [orgFinIT.id], name: 'Neil Abbott', email: 'neil.abbott@harborstone.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const erica = { id: demoId('person-erica'), orgIds: [orgFinIT.id], accessibleOrgIds: [orgFinIT.id], name: 'Erica Vance', email: 'erica.vance@harborstone.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const karim = { id: demoId('person-karim'), orgIds: [orgFinIT.id], accessibleOrgIds: [orgFinIT.id], name: 'Karim Fadel', email: 'karim.fadel@harborstone.com', role: 'EDITOR', title: 'Manager Information Security', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sylvia = { id: demoId('person-sylvia'), orgIds: [orgRiskComp.id], accessibleOrgIds: [orgRiskComp.id], name: 'Sylvia Moreno', email: 'sylvia.moreno@harborstone.com', role: 'EDITOR', title: 'Director Risk & Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const anil = { id: demoId('person-anil'), orgIds: [orgRiskComp.id], accessibleOrgIds: [orgRiskComp.id], name: 'Anil Kapoor', email: 'anil.kapoor@harborstone.com', role: 'CONTRIBUTOR', title: 'Data Steward Risk Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rowan = { id: demoId('person-rowan'), orgIds: [orgRiskComp.id], accessibleOrgIds: [orgRiskComp.id], name: 'Rowan Fitzgerald', email: 'rowan.fitzgerald@harborstone.com', role: 'CONTRIBUTOR', title: 'BSA / AML Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const petra = { id: demoId('person-petra'), orgIds: [orgRiskComp.id], accessibleOrgIds: [orgRiskComp.id], name: 'Petra Novak', email: 'petra.novak@harborstone.com', role: 'EDITOR', title: 'Manager Regulatory Reporting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const beatrice = { id: demoId('person-beatrice'), orgIds: [orgRiskComp.id], accessibleOrgIds: [orgRiskComp.id], name: 'Beatrice Lund', email: 'beatrice.lund@harborstone.com', role: 'EDITOR', title: 'Manager Financial Crime', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  await createAll(repos.people, [grace, daniel, nadia, oliver, chloe, raj, sofia, wesley, tara, felix, jerome, amara, henrik, bianca, victor, leilani, neil, erica, karim, sylvia, anil, rowan, petra, beatrice]);
+
+  // ── Systems (8) — core banking / LOS / cards / wealth / markets / CRM / warehouse + AML ──
+  const sysCore = { id: demoId('sys-core'), orgId: orgHarborstone.id, name: 'Core Banking', description: 'Core banking platform — deposit accounts, general ledger, postings.', systemType: 'IT', vendorName: 'FIS Modern Banking', ownerPersonId: neil.id, stewardIds: [raj.id], createdAt: ts, updatedAt: ts };
+  const sysLOS = { id: demoId('sys-los'), orgId: orgRetail.id, name: 'Loan Origination System', description: 'Loan origination — applications, underwriting decisions, and booking.', systemType: 'IT', vendorName: 'nCino', ownerPersonId: tara.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysCards = { id: demoId('sys-cards'), orgId: orgRetail.id, name: 'Cards & Payments', description: 'Card authorization, settlement, and payment rails (ACH / wire).', systemType: 'IT', vendorName: 'TSYS', ownerPersonId: chloe.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysWealthPlatform = { id: demoId('sys-wealth'), orgId: orgWealth.id, name: 'Wealth Platform', description: 'Brokerage and portfolio management — holdings, positions, and advice.', systemType: 'IT', vendorName: 'Envestnet', ownerPersonId: henrik.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysMarketsPlatform = { id: demoId('sys-markets'), orgId: orgWealth.id, name: 'Trading Platform', description: 'Capital-markets order and execution management for traded instruments.', systemType: 'IT', vendorName: 'Charles River', ownerPersonId: leilani.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysCRM = { id: demoId('sys-fcrm'), orgId: orgHarborstone.id, name: 'CRM', description: 'Customer relationship management — the customer master and KYC profile.', systemType: 'IT', vendorName: 'Salesforce Financial Services Cloud', ownerPersonId: nadia.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgHarborstone.id, name: 'Data Warehouse', description: 'Enterprise analytics and regulatory-reporting warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: neil.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysAML = { id: demoId('sys-aml'), orgId: orgRiskComp.id, name: 'Financial Crime Platform', description: 'Transaction monitoring, sanctions screening, and case management (AML / fraud).', systemType: 'IT', vendorName: 'NICE Actimize', ownerPersonId: rowan.id, stewardIds: [anil.id], createdAt: ts, updatedAt: ts };
+  await createAll(repos.systems, [sysCore, sysLOS, sysCards, sysWealthPlatform, sysMarketsPlatform, sysCRM, sysWarehouse, sysAML]);
+
+  // ── Agents (5 — one of each type) ──
+  await createAll(repos.agents, [
+    { id: demoId('agent-credit-model'), orgIds: [orgRetail.id], name: 'Credit Decisioning Model', agentType: 'AI', description: 'Scores loan applications for credit risk from bureau and application data.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: felix.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-reg-pipeline'), orgIds: [orgHarborstone.id], name: 'Regulatory Data Pipeline', agentType: 'PIPELINE', description: 'Nightly ETL of core banking + cards data into the reporting warehouse.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: neil.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-fraud-bot'), orgIds: [orgRiskComp.id], name: 'Fraud Alert Bot', agentType: 'BOT', description: 'Notifies analysts when transaction monitoring raises a high-risk alert.', provider: 'Microsoft Teams', status: 'ACTIVE', ownerPersonId: rowan.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-core-service'), orgIds: [orgFinIT.id], name: 'Core Extract Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract core banking tables.', provider: 'FIS', status: 'ACTIVE', ownerPersonId: neil.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-reg-gen'), orgIds: [orgHarborstone.id], name: 'Regulatory Report Generator', agentType: 'OTHER', description: 'Scheduled generator assembling BCBS 239 risk-aggregation and regulatory submission packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: petra.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // ── Data Domains (3 top-level + 3 sub-domains under Transactions & Payments) ──
+  const domCustomer = { id: demoId('domain-customer'), code: 'CUST', orgId: orgHarborstone.id, name: 'Customer & Account Data', description: 'Customer master, KYC profiles, and the accounts and holdings they own.', ownerId: grace.id, stewardIds: [raj.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domTxn = { id: demoId('domain-txn'), code: 'TXN', orgId: orgHarborstone.id, name: 'Transactions & Payments', description: 'Deposit postings, card and payment transactions, and the loan portfolio.', ownerId: nadia.id, stewardIds: [raj.id, tara.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domRisk = { id: demoId('domain-risk'), code: 'RISK', orgId: orgHarborstone.id, name: 'Risk & Regulatory Data', description: 'Financial-crime alerts and the regulatory-reporting datasets (BCBS 239).', ownerId: sylvia.id, stewardIds: [anil.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  // Sub-domains under Transactions & Payments — the retail money-movement areas. Parent created first.
+  const domTxnDeposits = { id: demoId('domain-txn-deposits'), code: 'TXN-01', orgId: orgHarborstone.id, name: 'Deposits & Accounts', description: 'Deposit account balances, postings, and the general ledger.', ownerId: nadia.id, stewardIds: [raj.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domTxn.id, createdAt: ts, updatedAt: ts };
+  const domTxnCards = { id: demoId('domain-txn-cards'), code: 'TXN-02', orgId: orgHarborstone.id, name: 'Card Payments', description: 'Card authorizations, settlements, and payment-rail transactions.', ownerId: nadia.id, stewardIds: [chloe.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domTxn.id, createdAt: ts, updatedAt: ts };
+  const domTxnLending = { id: demoId('domain-txn-lending'), code: 'TXN-03', orgId: orgHarborstone.id, name: 'Lending', description: 'Loan applications, decisions, and the serviced loan portfolio.', ownerId: wesley.id, stewardIds: [tara.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domTxn.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domCustomer, domTxn, domRisk, domTxnDeposits, domTxnCards, domTxnLending]);
+
+  // ── Data Assets (9) ──
+  const assetCustomerMaster = { id: demoId('asset-customer-master'), orgId: orgHarborstone.id, name: 'Customer Master', description: 'The golden customer record — identity, KYC profile, and relationships.', systemId: sysCRM.id, owner: '', ownerPersonId: nadia.id, stewardIds: [raj.id] as string[], governanceTier: 'GOLD' as const, healthScore: 91, createdAt: ts, updatedAt: ts };
+  const assetAccountLedger = { id: demoId('asset-account-ledger'), orgId: orgHarborstone.id, name: 'Deposit Accounts Ledger', description: 'Deposit account balances and postings from the core banking general ledger.', systemId: sysCore.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 86, createdAt: ts, updatedAt: ts };
+  const assetCardTxns = { id: demoId('asset-card-txns'), orgId: orgHarborstone.id, name: 'Card Transactions', description: 'Authorized and settled card and payment-rail transactions.', systemId: sysCards.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 82, createdAt: ts, updatedAt: ts };
+  const assetLoanPortfolio = { id: demoId('asset-loan-portfolio'), orgId: orgHarborstone.id, name: 'Loan Portfolio', description: 'Booked and serviced loans — balances, terms, delinquency, and repayments.', systemId: sysLOS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetAmlAlerts = { id: demoId('asset-aml-alerts'), orgId: orgHarborstone.id, name: 'AML Alerts', description: 'Transaction-monitoring alerts, dispositions, and suspicious-activity cases.', systemId: sysAML.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 56, createdAt: ts, updatedAt: ts };
+  const assetRegReporting = { id: demoId('asset-reg-reporting'), orgId: orgHarborstone.id, name: 'Regulatory Reporting Dataset', description: 'The reconciled risk-aggregation dataset behind regulatory filings (BCBS 239).', systemId: sysWarehouse.id, owner: '', ownerPersonId: petra.id, stewardIds: [anil.id] as string[], governanceTier: 'GOLD' as const, healthScore: 93, createdAt: ts, updatedAt: ts };
+  const assetWealthHoldings = { id: demoId('asset-wealth-holdings'), orgId: orgHarborstone.id, name: 'Wealth Holdings', description: 'Client portfolio positions and holdings across managed accounts.', systemId: sysWealthPlatform.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 83, createdAt: ts, updatedAt: ts };
+  // Planted orphans — obviously-named so Ask AI's orphan-detection returns a quotable answer.
+  const orphanLegacyCore = { id: demoId('asset-legacy-core'), orgId: orgHarborstone.id, name: 'Legacy Core Extract', description: 'Nightly dump from the retired core banking system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanFraudCsv = { id: demoId('asset-fraud-csv'), orgId: orgHarborstone.id, name: 'Fraud CSV Dump', description: 'Ad-hoc CSV extract of fraud losses for an old reporting deck. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataAssets, [assetCustomerMaster, assetAccountLedger, assetCardTxns, assetLoanPortfolio, assetAmlAlerts, assetRegReporting, assetWealthHoldings, orphanLegacyCore, orphanFraudCsv]);
+
+  // Domain → asset backrefs so the Domains page shows counts.
+  await repos.dataDomains.update(domCustomer.id, { dataAssetIds: [assetCustomerMaster.id, assetWealthHoldings.id] });
+  await repos.dataDomains.update(domTxn.id, { dataAssetIds: [assetAccountLedger.id, assetCardTxns.id, assetLoanPortfolio.id] });
+  await repos.dataDomains.update(domRisk.id, { dataAssetIds: [assetAmlAlerts.id, assetRegReporting.id] });
+
+  // ── Process hierarchy — VS1 Consumer Lending (Retail Banking) ──
+  const vsLending = { id: demoId('node-vs-lending'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Consumer Lending', description: 'End-to-end lending — take the application, decision it, and service the loan.', activityId: 'VS-DEMO-F1', status: 'ACTIVE', orderIndex: 0, orgId: orgRetail.id, orgIds: [orgRetail.id], ownerId: nadia.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procOriginate = { id: demoId('node-proc-originate'), parentId: vsLending.id, level: 'PROCESS' as const, name: 'Loan Origination', description: 'Capture the application, underwrite it, and decision the loan.', activityId: 'PRO-DEMO-F1', status: 'ACTIVE', orderIndex: 0, orgId: orgRetail.id, orgIds: [orgRetail.id], ownerId: wesley.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procServicing = { id: demoId('node-proc-servicing'), parentId: vsLending.id, level: 'PROCESS' as const, name: 'Loan Servicing', description: 'Board the approved loan and service repayments over its life.', activityId: 'PRO-DEMO-F2', status: 'ACTIVE', orderIndex: 1, orgId: orgRetail.id, orgIds: [orgRetail.id], ownerId: oliver.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spApplication = { id: demoId('node-sp-application'), parentId: procOriginate.id, level: 'SUBPROCESS' as const, name: 'Application & Underwriting', description: 'Take the application and underwrite the credit decision.', activityId: 'SP-DEMO-F1', status: 'ACTIVE', orderIndex: 0, orgId: orgRetail.id, orgIds: [orgRetail.id], ownerId: felix.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actCapture = { id: demoId('node-act-capture'), parentId: spApplication.id, level: 'ACTIVITY' as const, name: 'Capture application', description: 'Take the borrower application and pull identity and KYC from the customer master.', activityId: 'ACT-DEMO-F1', status: 'ACTIVE', orderIndex: 0, orgId: orgRetail.id, orgIds: [orgRetail.id], ownerId: tara.id, responsibleRole: 'Data Steward Lending', responsiblePersonId: tara.id, systemIds: [sysLOS.id, sysCRM.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actUnderwrite = { id: demoId('node-act-underwrite'), parentId: spApplication.id, level: 'ACTIVITY' as const, name: 'Underwrite & decision', description: 'Score the application for credit risk and approve, decline, or refer it.', activityId: 'ACT-DEMO-F2', status: 'ACTIVE', orderIndex: 1, orgId: orgRetail.id, orgIds: [orgRetail.id], ownerId: felix.id, responsibleRole: 'Credit Risk Analyst', responsiblePersonId: felix.id, systemIds: [sysLOS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Decision SLA met on ≥ 95% of applications\n\nNo decision on stale bureau data', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actBoard = { id: demoId('node-act-board'), parentId: procServicing.id, level: 'ACTIVITY' as const, name: 'Board & service loan', description: 'Book the approved loan to the core ledger and open it for servicing.', activityId: 'ACT-DEMO-F3', status: 'ACTIVE', orderIndex: 0, orgId: orgRetail.id, orgIds: [orgRetail.id], ownerId: oliver.id, responsibleRole: 'Data Steward Lending', responsiblePersonId: tara.id, systemIds: [sysCore.id, sysLOS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actRepay = { id: demoId('node-act-repay'), parentId: procServicing.id, level: 'ACTIVITY' as const, name: 'Process repayments', description: 'Post scheduled repayments against the loan and reconcile to the ledger.', activityId: 'ACT-DEMO-F4', status: 'ACTIVE', orderIndex: 1, orgId: orgRetail.id, orgIds: [orgRetail.id], ownerId: oliver.id, responsibleRole: 'Data Steward Deposits', responsiblePersonId: raj.id, systemIds: [sysCore.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Repayments posted same day and reconciled', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsLending, procOriginate, procServicing, spApplication, actCapture, actUnderwrite, actBoard, actRepay]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-f1'), fromNodeId: actCapture.id, toNodeId: actUnderwrite.id, type: 'SEQUENCE' as const, label: 'application taken', createdAt: ts },
+    { id: demoId('flow-f2'), fromNodeId: actUnderwrite.id, toNodeId: actBoard.id, type: 'SEQUENCE' as const, label: 'loan approved', createdAt: ts },
+    { id: demoId('flow-f3'), fromNodeId: actBoard.id, toNodeId: actRepay.id, type: 'SEQUENCE' as const, label: 'loan booked', createdAt: ts },
+  ]);
+
+  // ── Process hierarchy — VS2 Financial Crime & Regulatory Reporting (Risk & Compliance) ──
+  const vsFincrime = { id: demoId('node-vs-fincrime'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Financial Crime & Regulatory Reporting', description: 'Monitor transactions for financial crime, investigate alerts, and file regulatory reports.', activityId: 'VS-DEMO-F2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgFinShared.id, orgIds: [orgFinShared.id], ownerId: sylvia.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procMonitoring = { id: demoId('node-proc-monitoring'), parentId: vsFincrime.id, level: 'PROCESS' as const, name: 'Transaction Monitoring', description: 'Screen transactions for financial crime and triage the alerts.', activityId: 'PRO-DEMO-F3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgFinShared.id, orgIds: [orgFinShared.id], ownerId: rowan.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procReporting = { id: demoId('node-proc-reporting'), parentId: vsFincrime.id, level: 'PROCESS' as const, name: 'Regulatory Reporting', description: 'Assemble and file the required regulatory reports.', activityId: 'PRO-DEMO-F4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgFinShared.id, orgIds: [orgFinShared.id], ownerId: petra.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spTriage = { id: demoId('node-sp-triage'), parentId: procMonitoring.id, level: 'SUBPROCESS' as const, name: 'Alert Triage', description: 'Screen transactions and triage the monitoring alerts.', activityId: 'SP-DEMO-F2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgFinShared.id, orgIds: [orgFinShared.id], ownerId: rowan.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actScreen = { id: demoId('node-act-screen'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Screen transactions', description: 'Run transaction monitoring and sanctions screening and raise alerts.', activityId: 'ACT-DEMO-F5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgFinShared.id, orgIds: [orgFinShared.id], ownerId: rowan.id, responsibleRole: 'BSA / AML Officer', responsiblePersonId: rowan.id, systemIds: [sysAML.id, sysCards.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actInvestigate = { id: demoId('node-act-investigate'), parentId: procMonitoring.id, level: 'ACTIVITY' as const, name: 'Investigate & disposition alert', description: 'Investigate the alert, decide it, and record the suspicious-activity case.', activityId: 'ACT-DEMO-F6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgFinShared.id, orgIds: [orgFinShared.id], ownerId: beatrice.id, responsibleRole: 'BSA / AML Officer', responsiblePersonId: rowan.id, systemIds: [sysAML.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Every alert dispositioned within the review SLA', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actFileReport = { id: demoId('node-act-filereport'), parentId: procReporting.id, level: 'ACTIVITY' as const, name: 'File regulatory report', description: 'Reconcile the risk-aggregation dataset and file the regulatory report.', activityId: 'ACT-DEMO-F7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgFinShared.id, orgIds: [orgFinShared.id], ownerId: petra.id, responsibleRole: 'Data Steward Risk Evidence', responsiblePersonId: anil.id, systemIds: [sysWarehouse.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, successMeasure: 'Filings complete, reconciled, and on time', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsFincrime, procMonitoring, procReporting, spTriage, actScreen, actInvestigate, actFileReport]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-f4'), fromNodeId: actScreen.id, toNodeId: actInvestigate.id, type: 'SEQUENCE' as const, label: 'alert raised', createdAt: ts },
+  ]);
+
+  // ── Mappings (7) ──
+  await createAll(repos.mappings, [
+    { id: demoId('map-f1'), orgId: orgRetail.id, processStepId: actCapture.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Pulls identity + KYC from the customer master', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-f2'), orgId: orgRetail.id, processStepId: actUnderwrite.id, dataAssetId: assetLoanPortfolio.id, linkType: 'OUTPUT', notes: 'Writes the decisioned loan to the portfolio', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-f3'), orgId: orgRetail.id, processStepId: actBoard.id, dataAssetId: assetAccountLedger.id, linkType: 'OUTPUT', notes: 'Books the loan to the core ledger', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-f4'), orgId: orgRetail.id, processStepId: actRepay.id, dataAssetId: assetAccountLedger.id, linkType: 'INPUT', notes: 'Posts repayments against the ledger', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-f5'), orgId: orgFinShared.id, processStepId: actScreen.id, dataAssetId: assetCardTxns.id, linkType: 'INPUT', notes: 'Screens card + payment transactions', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-f6'), orgId: orgFinShared.id, processStepId: actInvestigate.id, dataAssetId: assetAmlAlerts.id, linkType: 'OUTPUT', notes: 'Writes the alert disposition + case', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-f7'), orgId: orgFinShared.id, processStepId: actFileReport.id, dataAssetId: assetRegReporting.id, linkType: 'OUTPUT', notes: 'Produces the reconciled regulatory dataset', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+  ]);
+
+  // ── Governance tasks assigned to Grace (populates My Dashboard) ──
+  await createAll(repos.governanceTasks, [
+    { id: demoId('task-f1'), orgId: orgHarborstone.id, title: 'Approve AML Alerts classification review', description: 'Review the AI-suggested sensitivity tags on AML Alerts and the Regulatory Reporting Dataset and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: grace.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetAmlAlerts.id, automationMode: 'HUMAN' as any, createdBy: daniel.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-f2'), orgId: orgHarborstone.id, title: 'Sign off on Risk & Regulatory domain scope', description: 'Sylvia has proposed expanding the Risk & Regulatory domain to cover new BCBS 239 aggregation fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: grace.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domRisk.id, automationMode: 'HUMAN' as any, createdBy: sylvia.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-f3'), orgId: orgHarborstone.id, title: 'Retire Legacy Core Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: grace.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyCore.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+  ]);
+
+  // ── One open governance issue assigned to Grace ──
+  await repos.governanceIssues.create({
+    id: demoId('issue-f1'),
+    orgId: orgHarborstone.id,
+    title: 'AML Alerts tier below Silver — critical process, ungoverned',
+    description: 'AML Alerts is BRONZE tier but the Transaction Monitoring process writes it as the primary financial-crime evidence. Recommend promoting to Silver with an SLA target.',
+    issueType: 'OWNERSHIP' as any,
+    severity: 'HIGH' as any,
+    status: 'OPEN' as any,
+    domainId: domRisk.id,
+    dataAssetId: assetAmlAlerts.id,
+    systemId: sysAML.id,
+    reportedBy: daniel.id,
+    assignedTo: grace.id,
+    resolutionSummary: null,
+    createdAt: ts,
+    updatedAt: ts,
+    closedAt: null,
+  } as any);
+
+  // ── Data Quality rules (2 — one passing, one failing) ──
+  await createAll(repos.dataQualityRules, [
+    {
+      id: demoId('dq-rule-passing'), orgId: orgHarborstone.id, dataAssetId: assetAccountLedger.id,
+      dimension: 'COMPLETENESS' as const, name: 'Deposit Accounts · posting completeness',
+      description: 'At least 95% of ledger postings must carry a complete account + amount + date.',
+      threshold: 95, currentScore: 98, weight: 1, status: 'PASSING' as const,
+      lastMeasured: ts, scheduleFrequency: 'DAILY' as const, nextRunAt: daysFromNow(1), createdAt: ts, updatedAt: ts,
+    },
+    {
+      id: demoId('dq-rule-failing'), orgId: orgHarborstone.id, dataAssetId: assetAmlAlerts.id,
+      dimension: 'TIMELINESS' as const, name: 'AML Alerts · alert review latency',
+      description: 'Monitoring alerts should be dispositioned within the review SLA. Rolling 24h.',
+      threshold: 95, currentScore: 56, weight: 1, status: 'FAILING' as const,
+      lastMeasured: ts, scheduleFrequency: 'HOURLY' as const, nextRunAt: daysFromNow(0), createdAt: ts, updatedAt: ts,
+    },
+  ]);
+
+  // ── Edge connector (ONLINE) ──
+  const connectorHeartbeatAt = new Date(Date.now() - 45 * 1000).toISOString();
+  const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const conn = {
+    id: demoId('conn-harborstone'), orgId: orgHarborstone.id, name: 'Harborstone Core Data Connector',
+    tokenHash: '7a1b9c2d38e0f41b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b',
+    pairingCode: null, pairingCodeExpiresAt: null,
+    systemIds: [sysCore.id, sysWarehouse.id],
+    lastHeartbeatAt: connectorHeartbeatAt, agentVersion: '1.2.0', status: 'ONLINE' as const,
+    createdAt: connectorCreatedAt, updatedAt: connectorHeartbeatAt,
+  };
+  await repos.connectors.create(conn);
+
+  await repos.dataAssets.update(assetAccountLedger.id, {
+    lastSyncedByConnectorId: conn.id,
+    lastSyncedAt: connectorSyncAt,
+  } as any);
+
+  await createAll(repos.connectorEvents, [
+    { id: demoId('ce-f-paired'), connectorId: conn.id, orgId: orgHarborstone.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-f-scan-start'), connectorId: conn.id, orgId: orgHarborstone.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysCore.id, sysWarehouse.id] } },
+    { id: demoId('ce-f-scan-done'), connectorId: conn.id, orgId: orgHarborstone.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 41_030, assetsDiscovered: 1 } },
+    { id: demoId('ce-f-assets'), connectorId: conn.id, orgId: orgHarborstone.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
+    { id: demoId('ce-f-hb'), connectorId: conn.id, orgId: orgHarborstone.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
+  ]);
+
+  // ── Second connector — PAIRING state ──
+  const pairingConn = {
+    id: demoId('conn-f-pairing'), orgId: orgHarborstone.id, name: 'Branch Ledger Connector',
+    tokenHash: null, pairingCode: '73916024',
+    pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    systemIds: [] as string[], lastHeartbeatAt: null, agentVersion: null, status: 'PAIRED' as const,
+    createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(), updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+  };
+  await repos.connectors.create(pairingConn as any);
+
+  // ── Governance calendar event ──
+  const dayNow = new Date();
+  const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
+  const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
+  await repos.calendarEvents.create({
+    id: demoId('cal-f-dgc'),
+    orgId: orgHarborstone.id,
+    name: 'Data Governance Council weekly',
+    description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
+    eventType: 'COMMITTEE_MEETING' as const,
+    cadence: 'WEEKLY' as const,
+    dayOfMonth: null,
+    dayOfWeek: 5,
+    timeOfDay: '09:00',
+    durationMinutes: 60,
+    attendees: [grace.id, daniel.id, nadia.id, sylvia.id],
+    agendaTemplate: '1. Open governance issues (from bell)\n2. Domain scope changes\n3. Control effectiveness review\n4. Upcoming policy publications',
+    nextOccurrence: nextFriday.toISOString(),
+    lastOccurrence: null,
+    autoCreateTasks: false,
+    status: 'ACTIVE' as const,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+
+  // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
+  await createAll(repos.statsSnapshots, [
+    ...weeklySnapshots(orgHarborstone.id, { coverage: 64, avgHealth: 72, gaps: 8, dataAssets: 9, mappings: 7 }),
+    ...weeklySnapshots(orgRetail.id, { coverage: 72, avgHealth: 74, gaps: 4, dataAssets: 4, mappings: 4 }),
+    ...weeklySnapshots(orgWealth.id, { coverage: 61, avgHealth: 76, gaps: 3, dataAssets: 1, mappings: 0 }),
+    ...weeklySnapshots(orgFinShared.id, { coverage: 55, avgHealth: 70, gaps: 4, dataAssets: 2, mappings: 3 }),
+  ]);
+
+  // ── AI template cache — pre-warm the wand for Harborstone ──
+  aiTemplateCache.push(
+    {
+      industry: 'financial|consumer lending',
+      industryLabel: 'Financial Services — Consumer Lending',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Consumer Lending',
+            description: 'Take the application, underwrite it, and service the loan.',
+            purpose: 'Originate sound loans quickly and service them cleanly over their life.',
+            businessOutcome: 'On-SLA decisions, well-booked loans, and reconciled repayments.',
+            processes: [
+              { name: 'Loan Origination', description: 'Capture the application, underwrite it, and decision the loan.', purpose: 'Turn an application into a sound credit decision.', activities: [
+                { name: 'Capture application', description: 'Take the application and pull identity and KYC from the customer master.' },
+                { name: 'Underwrite & decision', description: 'Score the application for credit risk and approve, decline, or refer it.' },
+                { name: 'Verify & disburse', description: 'Verify conditions and disburse the approved funds.' },
+              ] },
+              { name: 'Loan Servicing', description: 'Board the loan and service repayments over its life.', purpose: 'Keep the loan accurate and repayments reconciled.', activities: [
+                { name: 'Board & service loan', description: 'Book the approved loan to the core ledger and open it for servicing.' },
+                { name: 'Process repayments', description: 'Post scheduled repayments and reconcile to the ledger.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      industry: 'financial|financial crime & regulatory reporting',
+      industryLabel: 'Financial Services — Financial Crime & Regulatory Reporting',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Financial Crime & Regulatory Reporting',
+            description: 'Monitor transactions, investigate alerts, and file regulatory reports.',
+            purpose: 'Catch financial crime and meet regulatory obligations with clean, traceable data.',
+            businessOutcome: 'Alerts dispositioned on SLA and filings complete, reconciled, and on time.',
+            processes: [
+              { name: 'Transaction Monitoring', description: 'Screen transactions for financial crime and triage the alerts.', purpose: 'Surface suspicious activity and disposition it.', activities: [
+                { name: 'Screen transactions', description: 'Run transaction monitoring and sanctions screening and raise alerts.' },
+                { name: 'Investigate & disposition alert', description: 'Investigate the alert, decide it, and record the case.' },
+              ] },
+              { name: 'Regulatory Reporting', description: 'Assemble and file the required regulatory reports.', purpose: 'Meet filing obligations with reconciled data.', activities: [
+                { name: 'File regulatory report', description: 'Reconcile the risk-aggregation dataset and file the report.' },
+                { name: 'Attest & archive', description: 'Attest to the filing and archive the evidence.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  saveStore('aiTemplateCache', aiTemplateCache);
+
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgHarborstone.id,
+    cdoId: grace.id,
+    govLeadId: daniel.id,
+    dataOwnerId: nadia.id,
+    stewardIds: [raj.id, anil.id],
+    tenantName: 'Harborstone Financial',
+  });
+
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgHarborstone.id,
+    domainIds: [domCustomer.id, domTxn.id, domRisk.id],
+    cdoId: grace.id,
+    govLeadId: daniel.id,
+    dataOwnerId: nadia.id,
+    stewardId: raj.id,
+    techStewardId: anil.id,
+    engineerId: neil.id,
+    architectId: erica.id,
+    raciNodeId: actUnderwrite.id,
+    raciPersonId: felix.id,
+  });
+
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgHarborstone.id, ownerId: raj.id, cdoId: grace.id, domainId: domCustomer.id });
+
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgHarborstone.id, orgRetail.id, orgFinShared.id],
+    links: [
+      { id: demoId('lin-1'), orgId: orgHarborstone.id, sourceSystemId: sysCore.id, targetSystemId: sysWarehouse.id, dataAssetId: assetAccountLedger.id, description: 'Core banking ledger syncs nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-2'), orgId: orgRetail.id, sourceSystemId: sysLOS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetLoanPortfolio.id, description: 'Loan portfolio status feeds the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: demoId('lin-3'), orgId: orgFinShared.id, sourceSystemId: sysAML.id, targetSystemId: sysWarehouse.id, dataAssetId: assetAmlAlerts.id, description: 'Financial-crime alerts stream into the warehouse for reporting.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+    ],
+    edges: [
+      { id: demoId('edge-1'), orgId: orgHarborstone.id, sourceAssetId: assetCustomerMaster.id, targetAssetId: assetAccountLedger.id },
+      { id: demoId('edge-2'), orgId: orgFinShared.id, sourceAssetId: assetCardTxns.id, targetAssetId: assetAmlAlerts.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgHarborstone.id, agentId: demoId('agent-reg-gen'), agentName: 'Regulatory Report Generator', activityId: actFileReport.id, activityName: 'File regulatory report', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: grace.id, reviewerId: daniel.id });
+
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgHarborstone.id, assetId: assetCustomerMaster.id, systemId: sysCRM.id, personId: raj.id, personName: 'Raj Malhotra' });
+
+  logger.info({ persona: grace.name }, 'Demo data seeded (financial)');
+
+  return {
+    organizations: 10,
+    people: 24,
+    systems: 8,
+    agents: 5,
+    dataDomains: 6,
+    dataAssets: 9,
+    processNodes: 15,
+    mappings: 7,
+    governanceTasks: 3,
+    governanceIssues: 1,
+    dataQualityRules: 2,
+    connectors: 2,
+    connectorEvents: 5,
+    calendarEvents: 1,
+    statsSnapshots: STATS_WEEKS * 4,
+    persona: { id: grace.id, name: grace.name },
   };
 }
