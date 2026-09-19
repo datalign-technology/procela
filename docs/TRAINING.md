@@ -181,7 +181,7 @@ hyperlink:
 - **Value Streams** / **Processes** → Process Catalog
 - **Data Assets** → Data Assets page
 - **Systems** → Systems page
-- **Coverage** → Data Mapping (where unmapped activities + unlinked
+- **Coverage** → Process ↔ Data Map (where unmapped activities + unlinked
   assets surface)
 - **Avg Health** → Data Assets sorted by health ascending (worst at
   top)
@@ -490,6 +490,23 @@ skills").
 
 We'll come back to this in Module 5 once we have assets to map.
 
+### 3.9 Visualize & compare value streams
+
+The Process Catalog toolbar has two read-only views worth knowing — the
+payoff of having generated both Electric and Water in 3.1–3.2:
+
+1. Click **Visualize**. The whole catalog renders as a full-page,
+   zoomable Value Stream → Process → Activity diagram, with the
+   dependency arrows you drew in 3.5 shown between activities. Use the
+   zoom controls to fit it, then **Print** — the app chrome drops away so
+   it exports as a clean PDF for a slide or a wall.
+2. Back on the catalog, click **Compare**. Pick two value streams — try
+   an **Electric** one against a **Water** one. Their hierarchies render
+   side by side, colour-coded: **green** for steps unique to the left
+   stream, **blue** for unique to the right, neutral for steps common to
+   both. It's the fastest way to see where two divisions' processes
+   genuinely diverge versus where they're just re-labelled copies.
+
 ---
 
 ## Module 4 — Register data + systems (10 min)
@@ -611,7 +628,7 @@ In this training you're typing the assets in by hand — fine for a demo. In pro
 
 2. **On-prem connector.** A small container the customer runs *inside their network*. It scans configured Postgres, SQL Server, or MySQL databases every 30 minutes and reports catalog metadata to Procela over an outbound HTTPS connection. Connection strings never leave the on-prem host. Use this when Procela cannot reach the source directly.
 
-Either way, discovered assets arrive as **Bronze** tier, unowned, unmapped — deliberately, so they show up in the Orphan Assets and Ungoverned dashboards as work items for stewards. This training doesn't spin up a real database, but the *behaviour* is worth knowing: a real deployment doesn't manually type in 400 tables, and it *shouldn't* auto-promote them either.
+Either way, discovered assets arrive as **Bronze** tier, unowned, unmapped — deliberately, so they show up in the Unmapped (Data Assets) and Ungoverned views as work items for stewards. This training doesn't spin up a real database, but the *behaviour* is worth knowing: a real deployment doesn't manually type in 400 tables, and it *shouldn't* auto-promote them either.
 
 Both discovery paths also watch for change over time. Each scanned asset carries a **schema fingerprint** and an approximate **row count**: when a later scan reports a changed column set, Procela lowers the asset's liveness health and raises an auto-resolving **SCHEMA_DRIFT** governance issue (a stable rescan closes it); a row-count **shrink** is graded by magnitude, so a silent truncation surfaces as a health drop rather than a quiet number. This runs on both the on-prem connector and the direct-connect discover/reconcile flow.
 
@@ -641,7 +658,9 @@ on the Mappings page.
 
 ### 5.2 Cross-process review
 
-1. Navigate to **Insights → Explore → Data Mapping**.
+1. Navigate to **Insights → Explore → Process ↔ Data Map** and stay on the
+   **Table** view (the default — the Visual toggle is 5.4). There's no separate
+   "Data Mapping" item any more; the old `/mappings` link redirects here.
 2. You'll see your mappings as a flat audit list. Three column highlights:
    - **Process Activity** — full breadcrumb (Value Stream → Process →
      Activity)
@@ -668,9 +687,10 @@ the link normally.
 
 ### 5.4 The Process ↔ Data map (visualization)
 
-Now that you have a few mappings, navigate to **Insights → Explore →
-Process ↔ Data Map** (it sits next to Data Mapping — same data,
-different read: Data Mapping is the table, this is the picture).
+Now that you have a few mappings, switch the **Process ↔ Data Map** page
+to its **Visual** view (the Table view from 5.2 and this picture are two
+toggles on one page — same data, different read: the table is the audit
+list, this is the picture).
 You'll see a bipartite SVG: activities on the left grouped
 by parent process, mapped data assets on the right grouped by system,
 and a coloured curve for every mapping — green for produces, blue for
@@ -695,6 +715,20 @@ all its mappings. The **Suggested data assets** panel (from Module
 high-confidence row — Procela adds the mapping, the suggestion
 disappears, and the Process ↔ Data Map (Module 5.4) gains a new
 edge. Refresh the map page if you want to see it.
+
+### 5.6 Enterprise View — the whole graph + impact analysis
+
+The Process ↔ Data Map (5.4) shows activities against assets. **Insights
+→ Explore → Enterprise View** zooms out to the full picture in one
+pane — value streams, processes, systems, data assets and the people who
+own them, all in a single diagram with a depth control to drill in or
+pull back.
+
+Its payoff is **impact analysis**: click a node — say the **SCADA**
+system — and Procela highlights everything connected to it, answering
+"if we deprecate SCADA, what processes and data does that hit?" without
+tracing the graph by hand. This is the single-pane view a CDO or an
+architect opens to reason about blast radius before a change.
 
 ---
 
@@ -789,7 +823,7 @@ Customer Data` (green) if you scoped them to a domain instead, or
 `SYSTEM` / `ASSET` for entity-attached roles like System Owner.
 Any holder row whose tag reads `UNKNOWN: unresolved` (amber) means
 the scoped entity has been deleted — the same dangling-reference
-signal you'll see on the Data Mapping page.
+signal you'll see on the Process ↔ Data Map page (Table view).
 
 ### 7.3 Domain coverage check
 
@@ -932,20 +966,23 @@ their **health reads 0%** (health is earned from measured quality) and
 they're flagged *Est* in the filter. Point a connector (or a CSV upload)
 at those next.
 
-### 9.2 Data Mapping orphans
+### 9.2 Orphan mappings
 
 If you regenerated the process hierarchy in Module 3 (or deleted
-activities), the Data Mapping page may show an orphan banner: *"N
-orphan mappings found"*. Click **Delete all orphans** to clean them.
+activities), the **Process ↔ Data Map** page (Table view) may show an
+orphan banner: *"N orphan mappings found"*. Click **Delete all orphans**
+to clean them.
 
-### 9.3 Orphan Assets (reverse view)
+### 9.3 Unmapped assets (reverse view)
 
-Different orphan, different page. **Data → Orphan Assets** lists data
-assets that exist in the catalog but no process step references them
-— "what data do we have that nobody's using?". Each row links to the
-asset detail so you can either retire it or map it to a step that
-should be using it. The Dashboard's Governance Gaps card surfaces the
-count too.
+Different orphan, same page as your assets. On **Data → Data Assets**,
+set the **Mapping** filter to **Unmapped** — this folded in the old
+*Orphan Assets* page (`/data-assets?mapping=unmapped`, and the old link
+redirects here). It lists data assets that exist in the catalog but no
+process step references them — "what data do we have that nobody's
+using?". Each row's Unmapped badge links nowhere new; edit the asset to
+retire it or map it to a step that should be using it. The Dashboard's
+Governance Gaps card surfaces the count too.
 
 This is the reverse of the forward Discover loop (Suggested data
 assets from Module 3.5): forward asks "what data supports this
@@ -958,7 +995,9 @@ activities have required-skill data and people have skills.
 
 ### 9.5 Data Quality auto-issues
 
-**Data → Data Quality** lists rules per asset/column. When you add a
+The **Quality** tab on **Data → Data Assets** (the old *Data Quality*
+page folded in here — `/data-assets?tab=quality`, and the old link
+redirects) lists rules per asset/column. When you add a
 rule, the *Column* picker (populated from the asset's columns) lets you
 target one specific column — the bound set — or the asset as a whole.
 Both the Quality and Rules tabs have a free-text search box, so you can
@@ -982,11 +1021,11 @@ Help Guide for the full mechanics.
 Test this end-to-end:
 
 1. From Dashboard, click the **Coverage** KPI tile.
-2. You land on Data Mapping with the unmapped-activity banner.
+2. You land on the Process ↔ Data Map with the unmapped-activity banner.
 3. Click an unmapped activity → drops you into Process Catalog on
    that node.
 4. Add a data-asset input from the panel.
-5. Return to Data Mapping → the count went down by one.
+5. Return to the Process ↔ Data Map → the count went down by one.
 
 The same data, different views — that's the Procela model.
 
@@ -1153,6 +1192,49 @@ past — it flags red on that page and increments the exceptions column
 on the scorecard. Close it and the count drops. This is the auditable
 way a control gets waived instead of quietly going unmet.
 
+### 10.5 Council Dashboard — the pre-meeting briefing
+
+The Scorecard (10.4) is the detailed grid you save month over month.
+**Insights → Review → Council Dashboard** is the one screen a council
+chair opens *before* a meeting — a live briefing stitched from the
+surfaces that own each part, storing nothing of its own:
+
+- **The council** — the roster: who sits on the council and in what seat
+  (Chair, Vice-chair, Secretary, Member), from the governance group you
+  built in 7.4.
+- **Next meeting** — the next scheduled council meeting, how many days
+  away, its cadence, and expected attendees, from the Calendar.
+- **Governance health now** — current coverage / classification / status
+  per division (the live Scorecard derive), so you walk in knowing where
+  things stand without opening the full grid.
+- **Maturity trend** — a sparkline of the overall maturity score plus the
+  latest per-dimension scores (from 10.3), so you can see the direction.
+- **For the council** — what needs a decision this period, each drilling
+  back to where it's fixed.
+
+Open it as **Susan Chen** after seeding the demo: the *Data Governance
+Committee* roster, the Weekly committee calendar event, and the Tidewater
+health numbers all populate it.
+
+### 10.6 Audit Log — who changed what, when
+
+Every mutation you've made in this course — creating orgs, assigning
+owners, saving a scorecard snapshot, waiving an exception — was recorded.
+Open **Insights → Review → Audit Log** to see the chronological trail:
+actor, action, entity, and before/after. Two things matter for a
+compliance buyer:
+
+1. **Verify integrity.** The log is a hash-chained ledger; the
+   **Verify integrity** button re-checks the chain and reports
+   *Verified · N entries* (or the entry it broke at) — proof no record
+   was altered or removed after the fact.
+2. **Export.** Download the log as CSV for an auditor or a retention
+   archive; the full server-side export includes the `entryHash` column
+   so a reviewer can re-verify the chain offline.
+
+This is the surface behind every "recorded in the audit log" note
+elsewhere in this guide.
+
 ---
 
 ## Module 11 — Ask AI for grounded answers (5 min)
@@ -1184,8 +1266,9 @@ cross-catalog staples. From the Dashboard you'll see the general set:
 - Which data assets do we have that no process uses?
 - Which systems run our customer-facing processes?
 
-Open the panel from **Gap Detection**, **Data Assets → Orphans**, or
-**Systems** and the top suggestions change to match that surface.
+Open the panel from **Gap Detection**, **Data Assets** (the Unmapped
+filter), or **Systems** and the top suggestions change to match that
+surface.
 
 ### 11.2 Try the orphan question
 
@@ -1202,9 +1285,10 @@ the rows you can act on.
 
 At the end of the same answer you should see a green pill-shaped
 chip — *Orphan Assets →*. That's the page-navigation chip: the
-assistant decided the right next step was opening the Orphan Assets
-page, and gave you a one-click handoff. Click it and you land on
-/data-assets/orphans.
+assistant decided the right next step was opening the unmapped-assets
+view, and gave you a one-click handoff. Click it and you land on the
+Data Assets list filtered to Unmapped (the `/data-assets/orphans` path
+redirects there).
 
 The chip is constrained to a fixed allowlist of Procela pages so a
 hallucinated route can't render as a broken button.
@@ -1273,7 +1357,7 @@ again.
 
 Open the bell in the top bar. New entries should land — for example:
 
-- *"3 new orphan data assets this week"* → links to **Data → Orphan Assets**
+- *"3 new orphan data assets this week"* → links to **Data → Data Assets** (Unmapped filter)
 - *"Mapping coverage dropped to 72%"* → links to **Insights → Explore → Process ↔ Data Map**
 - *"2 new ownerless processes"* → links to **Processes**
 
@@ -1339,12 +1423,15 @@ via the **RACI Matrix**.
 |---|---|
 | The business model | Processes (Process Catalog) |
 | Data registries | Data Assets, Systems, Data Domains |
-| Cross-process audit of links | Insights → Data Mapping |
+| Cross-process audit of links | Insights → Explore → Process ↔ Data Map (Table view) |
+| The whole business↔data graph (with impact analysis) | Insights → Explore → Enterprise View |
 | Who does what | Organizations → People, Governance → Roles |
 | Standing committees | Governance → Groups |
 | Policies + standards | Governance → Documents |
 | Reports + scorecards | Insights → Reports |
 | Council report card (division rollup) | Insights → Review → Council Scorecard |
+| Pre-meeting council briefing | Insights → Review → Council Dashboard |
+| Who changed what, when (audit trail) | Insights → Review → Audit Log |
 | Policy waivers / exceptions | Governance → Operate → Exceptions |
 | Pivot exploration | Insights → Analysis |
 | Where are the gaps? | Dashboard → Gaps section + Insights → Gap Detection |
@@ -1385,7 +1472,7 @@ via the **RACI Matrix**.
 | Can't see imported people on People page | Same as above — *Working in…* picker. People are scoped per org. |
 | AI process generation hangs > 30 s | First run for an (industry + org) is a live Claude call. Subsequent runs hit the cache. Check the *Cached* / *Fresh from AI* badge. |
 | Cross-division link warning won't dismiss | It's a soft warn, not block — confirm it to create the link, cancel to skip. |
-| Orphan mappings appear after wand re-run | Regenerating processes mints new UUIDs. Use **Delete all orphans** on Data Mapping. |
+| Orphan mappings appear after wand re-run | Regenerating processes mints new UUIDs. Use **Delete all orphans** on the Process ↔ Data Map (Table view). |
 | Sign-in hangs in dev mode | `REDIS_URL` set in `.env` without Redis running. Either unset it or start Redis. |
 | New typecheck / test failure on trunk | CI runs on push; check the GitHub Actions tab for the actual error. Locally: `npm run lint --workspaces && npm test`. |
 
