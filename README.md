@@ -12,6 +12,8 @@ Monorepo with three packages:
 - **`packages/frontend`** — React + TypeScript + Vite SPA. Consumes the REST API; no direct database access.
 - **`packages/connector`** — `@procela/connector`, the optional on-prem edge agent (Node 20). Pairs with the backend, scans customer databases (PostgreSQL, MySQL, SQL Server, Oracle, dbt manifest), and reports discovered tables and columns back as Bronze data assets — audit-only, no data values cross the wire. Containerised and shipped via a GHCR release workflow.
 
+**Phase 3 — Discover.** Beyond the on-prem agent (for firewalled sources), the backend does **direct-connect discovery** where Procela can reach a source itself: it catalogs relational databases, cloud warehouses (Snowflake / BigQuery / Databricks), MongoDB, and cloud object storage (S3 / Azure Blob / GCS / SFTP, incl. Parquet/Avro) — plus local-file uploads — runs measured data-quality checks live over the connection, and reconciles discovered assets into the governed catalog through a suggest-and-confirm flow. Sources are managed under **Systems → Connections**.
+
 ## Tech stack
 
 | Layer       | Technology                                                     |
@@ -20,7 +22,7 @@ Monorepo with three packages:
 | Frontend    | React, TypeScript, Vite, Zustand                               |
 | Storage     | PostgreSQL via Prisma (`DATABASE_URL`); JSON files as the zero-config local default |
 | Cache       | Redis (optional; falls back to in-memory rate limiter)         |
-| AI          | Anthropic Claude API (`claude-sonnet-5`)                       |
+| AI          | Pluggable via `AI_PROVIDER` — Anthropic (default, `claude-sonnet-5`), OpenAI / Azure OpenAI / self-hosted, Google Gemini, AWS Bedrock |
 | Auth        | Argon2id, JWT, OIDC (PKCE), SAML 2.0, SCIM 2.0                 |
 | MFA         | TOTP (`otplib`), WebAuthn / FIDO2 (`@simplewebauthn`)          |
 | Crypto      | AES-256-GCM (local) + AWS KMS / Azure Key Vault / GCP KMS      |
@@ -30,7 +32,7 @@ Monorepo with three packages:
 
 - Node.js 20+
 - npm 9+
-- Anthropic API key (optional — AI features degrade gracefully without)
+- An AI provider API key (optional — AI features degrade gracefully without). Anthropic by default; OpenAI / Azure OpenAI / Google Gemini / AWS Bedrock are selectable via `AI_PROVIDER`.
 
 ## Quick start
 
@@ -79,6 +81,8 @@ To enable AI-driven features (industry template generation, data suggestions, th
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+To use a different vendor, set `AI_PROVIDER` (`anthropic` | `openai` | `gemini` | `bedrock`) and that provider's key + model instead. Azure OpenAI and self-hosted OpenAI-compatible servers (Ollama, vLLM, LiteLLM, …) use `AI_PROVIDER=openai` with `OPENAI_BASE_URL` pointed at them; Bedrock uses the standard AWS credential chain. Only the selected provider's SDK loads. An org admin can also override the provider, model, and key per-tenant in **Settings → AI**.
 
 To turn the AI features **off** entirely — for an on-prem or FedRAMP deployment that must not call an external model — set `AI_FEATURES_ENABLED=false`. The backend then refuses the AI endpoints and the frontend hides every AI entry point (the assistant, "Suggest" actions, template wizard, AI settings, and the "Perform with agent" trigger); the rest of the platform works unchanged.
 
@@ -189,6 +193,9 @@ Procela/
 
   - **[`CLAUDE.md`](./CLAUDE.md)** — full architecture intent, deployment plans, AI behaviour guidelines.
   - **[`SECURITY.md`](./SECURITY.md)** — security model, controls, vulnerability reporting.
+  - **[`docs/TRAINING.md`](./docs/TRAINING.md)** — hands-on, module-based course that walks the whole product against the demo tenants.
+  - **[`docs/STATUS.md`](./docs/STATUS.md)** — capability status + roadmap tracks (rendered live in-app at `/roadmap`).
+  - **[`docs/POSTGRES.md`](./docs/POSTGRES.md)** — running against PostgreSQL: setup, migrations, and the JSON→Postgres cutover.
   - **In-app Help Guide** (`Settings → Help` or `/help`) — feature walkthrough for end users covering processes, data, governance, security, and the keyboard shortcuts.
 
 ## License
