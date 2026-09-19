@@ -108,7 +108,7 @@ Once business intent is defined, Procela uses that context to help find, validat
   - "Where are our data gaps?"
   - "What data supports our regulatory reporting process?"
   - "Which assets are below 80% health and linked to critical processes?"
-- Powered by Anthropic Claude API (claude-sonnet model)
+- Powered by the configured AI provider (Anthropic `claude-sonnet-5` by default; provider-pluggable via `AI_PROVIDER` — see Technical Architecture → AI Services)
 
 ### 8. Ownership & Accountability
 - Every process, sub-process, data asset, and system has an assigned owner
@@ -193,10 +193,10 @@ Viewer            — read-only access to the full catalog
 - **Deployment**: S3 + CloudFront (AWS) / Nginx container (on-premise)
 
 ### Backend
-- **Runtime**: Node.js (TypeScript) or Python (FastAPI) — choose based on team preference; document the choice here before starting
+- **Runtime**: **Node.js + Express + TypeScript** (the chosen stack; the earlier Python/FastAPI option was not taken).
 - **API style**: REST with OpenAPI spec
 - **Authentication middleware**: Validates JWT tokens from identity provider
-- **ORM**: Prisma (Node) or SQLAlchemy (Python)
+- **ORM**: **Prisma** (against PostgreSQL when `DATABASE_URL` is set; a JSON-file store is the zero-config local/dev fallback).
 - **Deployment**: AWS ECS (Fargate) or containerized via Docker
 
 ### Database
@@ -204,7 +204,7 @@ Viewer            — read-only access to the full catalog
   - AWS: Amazon RDS (PostgreSQL)
   - On-premise: Self-hosted PostgreSQL or customer-managed RDS-compatible
 - **Schema design**: Multi-tenant from the start. Every table includes `org_id`.
-- **Migrations**: Managed via Flyway or Alembic — version-controlled, repeatable
+- **Migrations**: Managed via **Prisma Migrate** — version-controlled, repeatable (see `packages/backend/prisma/migrations/`).
 
 ### AI Services
 - **Provider**: pluggable. Anthropic Claude is the default; OpenAI (incl. Azure
@@ -217,8 +217,10 @@ Viewer            — read-only access to the full catalog
   an org can set its own provider/model/key (encrypted at rest) via
   `/api/v1/ai/org-config` (admin-only), resolved per call through
   `getAiServiceForOrg(orgId)` with the deployment default as fallback. The
-  Settings → AI provider picker (frontend) that drives per-tenant config is the
-  remaining piece.
+  **Settings → AI** provider picker (frontend) that drives per-tenant config has
+  shipped (`components/AiSettingsPanel.tsx`): admins pick the provider/model,
+  set the key, and run a live "test connection" probe against the vendor the
+  org will actually use.
 - **Model**: the active provider's `<PROVIDER>_MODEL` (default
   `claude-sonnet-5` on Anthropic), overridable in-app via Settings → AI.
 - **Uses**:
