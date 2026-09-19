@@ -124,7 +124,7 @@ function daysFromNow(n: number): string {
 
 // Industries with a hand-crafted demo fixture. Every profile is built to the
 // same feature coverage so a demo of any of them lights up every page.
-export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare';
+export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing';
 
 // aiTemplateCache is keyed by industry string, not `id`, so the sweep
 // can't find demo entries by prefix. These are every cache key any
@@ -138,6 +138,8 @@ const DEMO_AI_CACHE_KEYS = new Set<string>([
   'defense & shipbuilding|fleet sustainment',
   'healthcare|patient care delivery',
   'healthcare|revenue cycle',
+  'manufacturing|make-to-order production',
+  'manufacturing|supply chain & fulfillment',
 ]);
 
 // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
@@ -735,6 +737,7 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
     utilities: seedUtilities,
     shipbuilding: seedShipbuilding,
     healthcare: seedHealthcare,
+    manufacturing: seedManufacturing,
   };
   const report = await (builders[industry] ?? seedUtilities)(repos, ts);
   // Refresh the org-scope cache so accessible-orgs and the synchronous
@@ -2094,5 +2097,382 @@ async function seedHealthcare(repos: DemoRepos, ts: string): Promise<DemoSeedRep
     calendarEvents: 1,
     statsSnapshots: STATS_WEEKS * 4,
     persona: { id: naomi.id, name: naomi.name },
+  };
+}
+
+/**
+ * Manufacturing profile — a Forgeline Manufacturing discrete manufacturer
+ * (plant operations + supply chain + shared services), persona Marcus Feldt (CDO).
+ * Same shape and counts as the other profiles.
+ */
+async function seedManufacturing(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
+  // ── Organizations (company → 3 divisions → 6 departments) ──
+  const orgForgeline = { id: demoId('org-forgeline'), parentId: null, name: 'Forgeline Manufacturing', type: 'company', industry: 'Manufacturing', description: 'Discrete manufacturer demo tenant — plant operations + supply chain + shared services.', headCount: 0, tenantSlug: 'forgeline', brandDisplayName: 'Forgeline Manufacturing', brandGlyph: '⚙', ssoButtonLabel: 'Sign in with Forgeline SSO', brandPrimaryColor: '#1e3a8a', createdAt: ts, updatedAt: ts };
+  const orgPlant = { id: demoId('org-plant'), parentId: orgForgeline.id, name: 'Plant Operations', type: 'division', industry: 'Manufacturing', description: 'Machining, assembly, and test', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgSupply = { id: demoId('org-supply'), parentId: orgForgeline.id, name: 'Supply Chain', type: 'division', industry: 'Manufacturing', description: 'Procurement, logistics, and fulfillment', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgFShared = { id: demoId('org-fshared'), parentId: orgForgeline.id, name: 'Shared Services', type: 'division', industry: 'Manufacturing', description: 'IT / Quality', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgMachining = { id: demoId('org-machining'), parentId: orgPlant.id, name: 'Machining', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgAssembly = { id: demoId('org-assembly'), parentId: orgPlant.id, name: 'Assembly & Test', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgProcurement = { id: demoId('org-procurement'), parentId: orgSupply.id, name: 'Procurement', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgLogistics = { id: demoId('org-logistics'), parentId: orgSupply.id, name: 'Logistics', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgFIT = { id: demoId('org-fit'), parentId: orgFShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgFQuality = { id: demoId('org-fquality'), parentId: orgFShared.id, name: 'Quality', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.organizations, [orgForgeline, orgPlant, orgSupply, orgFShared, orgMachining, orgAssembly, orgProcurement, orgLogistics, orgFIT, orgFQuality]);
+
+  // ── People (24) — persona Marcus Feldt (CDO) ──
+  const marcusf = { id: demoId('person-marcus-feldt'), orgIds: [orgForgeline.id], accessibleOrgIds: [orgForgeline.id, orgPlant.id, orgSupply.id, orgFShared.id, orgMachining.id, orgAssembly.id, orgProcurement.id, orgLogistics.id, orgFIT.id, orgFQuality.id], name: 'Marcus Feldt', email: 'marcus.feldt@forgeline-mfg.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const lenav = { id: demoId('person-lena-v'), orgIds: [orgForgeline.id], accessibleOrgIds: [orgForgeline.id], name: 'Lena Vogt', email: 'lena.vogt@forgeline-mfg.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const hector = { id: demoId('person-hector'), orgIds: [orgPlant.id], accessibleOrgIds: [orgPlant.id], name: 'Hector Ramos', email: 'hector.ramos@forgeline-mfg.com', role: 'ORG_ADMIN', title: 'Data Owner Plant Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const dana = { id: demoId('person-dana'), orgIds: [orgMachining.id], accessibleOrgIds: [orgMachining.id, orgPlant.id], name: 'Dana Cross', email: 'dana.cross@forgeline-mfg.com', role: 'EDITOR', title: 'Director Machining', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const owen = { id: demoId('person-owen'), orgIds: [orgMachining.id], accessibleOrgIds: [orgMachining.id], name: 'Owen Pratt', email: 'owen.pratt@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'CNC Programming Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const marta = { id: demoId('person-marta'), orgIds: [orgMachining.id], accessibleOrgIds: [orgMachining.id], name: 'Marta Silva', email: 'marta.silva@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Data Steward Machining', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const bruno = { id: demoId('person-bruno'), orgIds: [orgMachining.id], accessibleOrgIds: [orgMachining.id], name: 'Bruno Costa', email: 'bruno.costa@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Machining Superintendent', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const priscilla = { id: demoId('person-priscilla'), orgIds: [orgAssembly.id], accessibleOrgIds: [orgAssembly.id], name: 'Priscilla Adeyemi', email: 'priscilla.adeyemi@forgeline-mfg.com', role: 'EDITOR', title: 'Manager Assembly & Test', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const jaewon = { id: demoId('person-jaewon'), orgIds: [orgAssembly.id], accessibleOrgIds: [orgAssembly.id], name: 'Jae-won Park', email: 'jaewon.park@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Data Steward Assembly', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const toby = { id: demoId('person-toby'), orgIds: [orgAssembly.id], accessibleOrgIds: [orgAssembly.id], name: 'Toby Fields', email: 'toby.fields@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Assembly Line Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rafael = { id: demoId('person-rafael'), orgIds: [orgSupply.id], accessibleOrgIds: [orgSupply.id], name: 'Rafael Ortiz', email: 'rafael.ortiz@forgeline-mfg.com', role: 'ORG_ADMIN', title: 'Data Owner Supply Chain', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const ingrid = { id: demoId('person-ingrid'), orgIds: [orgProcurement.id], accessibleOrgIds: [orgProcurement.id, orgSupply.id], name: 'Ingrid Sorensen', email: 'ingrid.sorensen@forgeline-mfg.com', role: 'EDITOR', title: 'Director Procurement', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const samw = { id: demoId('person-sam-w'), orgIds: [orgProcurement.id], accessibleOrgIds: [orgProcurement.id], name: 'Sam Whitaker', email: 'sam.whitaker@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Buyer / Planner', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const aisha = { id: demoId('person-aisha'), orgIds: [orgProcurement.id], accessibleOrgIds: [orgProcurement.id], name: 'Aisha Bello', email: 'aisha.bello@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Data Steward Procurement', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const diego = { id: demoId('person-diego'), orgIds: [orgLogistics.id], accessibleOrgIds: [orgLogistics.id, orgSupply.id], name: 'Diego Santos', email: 'diego.santos@forgeline-mfg.com', role: 'EDITOR', title: 'Manager Logistics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const fenella = { id: demoId('person-fenella'), orgIds: [orgLogistics.id], accessibleOrgIds: [orgLogistics.id], name: 'Fenella Wright', email: 'fenella.wright@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Warehouse Data Steward', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const neel = { id: demoId('person-neel'), orgIds: [orgFIT.id], accessibleOrgIds: [orgFIT.id], name: 'Neel Kapoor', email: 'neel.kapoor@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const erin = { id: demoId('person-erin'), orgIds: [orgFIT.id], accessibleOrgIds: [orgFIT.id], name: 'Erin Walsh', email: 'erin.walsh@forgeline-mfg.com', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const karl = { id: demoId('person-karl'), orgIds: [orgFIT.id], accessibleOrgIds: [orgFIT.id], name: 'Karl Brenner', email: 'karl.brenner@forgeline-mfg.com', role: 'EDITOR', title: 'Manager OT / ICS Cybersecurity', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sophial = { id: demoId('person-sophia-l'), orgIds: [orgFQuality.id], accessibleOrgIds: [orgFQuality.id], name: 'Sophia Lang', email: 'sophia.lang@forgeline-mfg.com', role: 'EDITOR', title: 'Director Quality', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const vikram = { id: demoId('person-vikram'), orgIds: [orgFQuality.id], accessibleOrgIds: [orgFQuality.id], name: 'Vikram Desai', email: 'vikram.desai@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'Data Steward Quality Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const renata = { id: demoId('person-renata'), orgIds: [orgFQuality.id], accessibleOrgIds: [orgFQuality.id], name: 'Renata Cruz', email: 'renata.cruz@forgeline-mfg.com', role: 'CONTRIBUTOR', title: 'QA / Metrology Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const paul = { id: demoId('person-paul'), orgIds: [orgFQuality.id], accessibleOrgIds: [orgFQuality.id], name: 'Paul Nakamura', email: 'paul.nakamura@forgeline-mfg.com', role: 'EDITOR', title: 'Manager Supplier Quality', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const beatrix = { id: demoId('person-beatrix'), orgIds: [orgFQuality.id], accessibleOrgIds: [orgFQuality.id], name: 'Beatrix Hahn', email: 'beatrix.hahn@forgeline-mfg.com', role: 'EDITOR', title: 'Manager Regulatory & Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  await createAll(repos.people, [marcusf, lenav, hector, dana, owen, marta, bruno, priscilla, jaewon, toby, rafael, ingrid, samw, aisha, diego, fenella, neel, erin, karl, sophial, vikram, renata, paul, beatrix]);
+
+  // ── Systems (8) — ERP / MES / PLM / historian / QMS / WMS / warehouse + CMMS ──
+  const sysERP = { id: demoId('sys-merp'), orgId: orgForgeline.id, name: 'ERP', description: 'Enterprise Resource Planning — materials, procurement, work orders, finance.', systemType: 'IT', vendorName: 'SAP S/4HANA', ownerPersonId: neel.id, stewardIds: [aisha.id], createdAt: ts, updatedAt: ts };
+  const sysMES = { id: demoId('sys-mmes'), orgId: orgPlant.id, name: 'MES', description: 'Manufacturing Execution System — shop-floor work orders, routings, throughput.', systemType: 'OT', vendorName: 'Rockwell FactoryTalk', ownerPersonId: hector.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysPLM = { id: demoId('sys-mplm'), orgId: orgForgeline.id, name: 'PLM', description: 'Product Lifecycle Management — CAD, drawings, engineering BOM, change orders.', systemType: 'IT', vendorName: 'PTC Windchill', ownerPersonId: marta.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysHistorian = { id: demoId('sys-mhist'), orgId: orgPlant.id, name: 'Process Historian', description: 'Machine data historian — spindle load, feed, temperature, cycle time per machine.', systemType: 'OT', vendorName: 'AVEVA PI', ownerPersonId: karl.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysQMS = { id: demoId('sys-mqms'), orgId: orgFQuality.id, name: 'QMS', description: 'Quality Management System — inspections, nonconformances, supplier quality, PPAP.', systemType: 'IT', vendorName: 'ETQ Reliance', ownerPersonId: sophial.id, stewardIds: [vikram.id], createdAt: ts, updatedAt: ts };
+  const sysWMS = { id: demoId('sys-mwms'), orgId: orgSupply.id, name: 'WMS', description: 'Warehouse Management System — inventory, picking, packing, shipping.', systemType: 'IT', vendorName: 'Manhattan Associates', ownerPersonId: diego.id, stewardIds: [fenella.id], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgForgeline.id, name: 'Data Warehouse', description: 'Enterprise analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: neel.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysCMMS = { id: demoId('sys-mcmms'), orgId: orgPlant.id, name: 'CMMS', description: 'Computerized Maintenance Management — asset maintenance, work orders, downtime.', systemType: 'IT', vendorName: 'IBM Maximo', ownerPersonId: hector.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  await createAll(repos.systems, [sysERP, sysMES, sysPLM, sysHistorian, sysQMS, sysWMS, sysWarehouse, sysCMMS]);
+
+  // ── Agents (5 — one of each type) ──
+  await createAll(repos.agents, [
+    { id: demoId('agent-maint-model'), orgIds: [orgPlant.id], name: 'Predictive Maintenance Model', agentType: 'AI', description: 'Predicts machine failure risk from historian telemetry and maintenance logs.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: erin.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-prod-pipeline'), orgIds: [orgForgeline.id], name: 'Production Data Ingestion Pipeline', agentType: 'PIPELINE', description: 'Nightly ETL of MES work-order and machine data into the warehouse.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: neel.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-oee-bot'), orgIds: [orgPlant.id], name: 'OEE Alert Bot', agentType: 'BOT', description: 'Alerts supervisors when line OEE drops below target or a machine faults.', provider: 'Microsoft Teams', status: 'ACTIVE', ownerPersonId: hector.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-hist-service'), orgIds: [orgPlant.id], name: 'Historian Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract historian tags.', provider: 'AVEVA', status: 'ACTIVE', ownerPersonId: karl.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-ppap-gen'), orgIds: [orgForgeline.id], name: 'PPAP Package Generator', agentType: 'OTHER', description: 'Scheduled generator producing PPAP and first-article quality submission packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: beatrix.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // ── Data Domains (3 top-level + 3 sub-domains under Production Data) ──
+  const domEng = { id: demoId('domain-eng'), code: 'ENG', orgId: orgForgeline.id, name: 'Product & Engineering Data', description: 'CAD models, drawings, engineering BOMs, change orders, and maintenance records.', ownerId: marcusf.id, stewardIds: [marta.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domProd = { id: demoId('domain-mprod'), code: 'PROD', orgId: orgForgeline.id, name: 'Production Data', description: 'Work orders, machine telemetry, and material inventory — the shop-floor feeds.', ownerId: hector.id, stewardIds: [marta.id, jaewon.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domQuality = { id: demoId('domain-mquality'), code: 'QLT', orgId: orgForgeline.id, name: 'Quality & Compliance Data', description: 'Inspection records, nonconformances, and supplier quality evidence (ISO / IATF / PPAP).', ownerId: sophial.id, stewardIds: [vikram.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  // Sub-domains under Production Data — the shop-floor areas. Parent created first.
+  const domProdMachining = { id: demoId('domain-mprod-machining'), code: 'PROD-01', orgId: orgForgeline.id, name: 'Machining', description: 'CNC programs, machine telemetry, and part-level machining records.', ownerId: hector.id, stewardIds: [marta.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domProd.id, createdAt: ts, updatedAt: ts };
+  const domProdAssembly = { id: demoId('domain-mprod-assembly'), code: 'PROD-02', orgId: orgForgeline.id, name: 'Assembly', description: 'Assembly work orders, build sequences, and test results.', ownerId: hector.id, stewardIds: [jaewon.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domProd.id, createdAt: ts, updatedAt: ts };
+  const domProdMaterials = { id: demoId('domain-mprod-materials'), code: 'PROD-03', orgId: orgForgeline.id, name: 'Materials', description: 'Material inventory, receipts, and consumption against work orders.', ownerId: hector.id, stewardIds: [aisha.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domProd.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domEng, domProd, domQuality, domProdMachining, domProdAssembly, domProdMaterials]);
+
+  // ── Data Assets (9) ──
+  const assetProductMaster = { id: demoId('asset-product-master'), orgId: orgForgeline.id, name: 'Product Master', description: 'The master CAD product model, released drawings, and engineering BOM.', systemId: sysPLM.id, owner: '', ownerPersonId: marta.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 90, createdAt: ts, updatedAt: ts };
+  const assetWorkOrders = { id: demoId('asset-mwork-orders'), orgId: orgPlant.id, name: 'Work Orders', description: 'Shop-floor work order state — routings, operations, and completion by part.', systemId: sysMES.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetMachineTelemetry = { id: demoId('asset-machine-telemetry'), orgId: orgPlant.id, name: 'Machine Telemetry', description: 'Historian tags — spindle load, feed, temperature, and cycle time per machine.', systemId: sysHistorian.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 80, createdAt: ts, updatedAt: ts };
+  const assetInspection = { id: demoId('asset-inspection'), orgId: orgForgeline.id, name: 'Inspection Records', description: 'Per-part dimensional and functional inspection results and dispositions.', systemId: sysQMS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 58, createdAt: ts, updatedAt: ts };
+  const assetInventory = { id: demoId('asset-inventory'), orgId: orgForgeline.id, name: 'Material Inventory', description: 'On-hand inventory, receipts, and consumption — raw stock through finished goods.', systemId: sysERP.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 88, createdAt: ts, updatedAt: ts };
+  const assetSupplierQuality = { id: demoId('asset-supplier-quality'), orgId: orgForgeline.id, name: 'Supplier Quality Records', description: 'Supplier scorecards, PPAP submissions, and incoming inspection evidence.', systemId: sysQMS.id, owner: '', ownerPersonId: paul.id, stewardIds: [vikram.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
+  const assetMaintenance = { id: demoId('asset-maintenance'), orgId: orgPlant.id, name: 'Maintenance Logs', description: 'CMMS maintenance work orders, downtime events, and asset history.', systemId: sysCMMS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 82, createdAt: ts, updatedAt: ts };
+  // Planted orphans — obviously-named so Ask AI's orphan-detection returns a quotable answer.
+  const orphanLegacyMRP = { id: demoId('asset-legacy-mrp'), orgId: orgForgeline.id, name: 'Legacy MRP Extract', description: 'Nightly dump from the retired MRP system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanScrapCsv = { id: demoId('asset-scrap-csv'), orgId: orgForgeline.id, name: 'Scrap CSV Dump', description: 'Ad-hoc CSV extract of scrap and rework for an old cost-reporting tool. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataAssets, [assetProductMaster, assetWorkOrders, assetMachineTelemetry, assetInspection, assetInventory, assetSupplierQuality, assetMaintenance, orphanLegacyMRP, orphanScrapCsv]);
+
+  // Domain → asset backrefs so the Domains page shows counts.
+  await repos.dataDomains.update(domEng.id, { dataAssetIds: [assetProductMaster.id, assetMaintenance.id] });
+  await repos.dataDomains.update(domProd.id, { dataAssetIds: [assetWorkOrders.id, assetMachineTelemetry.id, assetInventory.id] });
+  await repos.dataDomains.update(domQuality.id, { dataAssetIds: [assetInspection.id, assetSupplierQuality.id] });
+
+  // ── Process hierarchy — VS1 Make-to-Order Production (Plant Operations) ──
+  const vsProd = { id: demoId('node-vs-prod'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Make-to-Order Production', description: 'End-to-end build — program and machine parts, assemble, test, and inspect.', activityId: 'VS-DEMO-M1', status: 'ACTIVE', orderIndex: 0, orgId: orgPlant.id, orgIds: [orgPlant.id], ownerId: hector.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procMachine = { id: demoId('node-proc-machine'), parentId: vsProd.id, level: 'PROCESS' as const, name: 'Machining & Fabrication', description: 'Program, set up, and machine parts to the engineering drawing.', activityId: 'PRO-DEMO-M1', status: 'ACTIVE', orderIndex: 0, orgId: orgPlant.id, orgIds: [orgPlant.id], ownerId: dana.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procAssemble = { id: demoId('node-proc-assemble'), parentId: vsProd.id, level: 'PROCESS' as const, name: 'Assembly & Test', description: 'Assemble machined parts into units and test and inspect them.', activityId: 'PRO-DEMO-M2', status: 'ACTIVE', orderIndex: 1, orgId: orgPlant.id, orgIds: [orgPlant.id], ownerId: priscilla.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spCNC = { id: demoId('node-sp-cnc'), parentId: procMachine.id, level: 'SUBPROCESS' as const, name: 'CNC Machining', description: 'Program the CNC, set up the machine, and cut the part.', activityId: 'SP-DEMO-M1', status: 'ACTIVE', orderIndex: 0, orgId: orgPlant.id, orgIds: [orgPlant.id], ownerId: owen.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actProgram = { id: demoId('node-act-program'), parentId: spCNC.id, level: 'ACTIVITY' as const, name: 'Program & set up machine', description: 'Generate the CNC program from the model and set up the machine and tooling.', activityId: 'ACT-DEMO-M1', status: 'ACTIVE', orderIndex: 0, orgId: orgPlant.id, orgIds: [orgPlant.id], ownerId: owen.id, responsibleRole: 'CNC Programming Lead', responsiblePersonId: owen.id, systemIds: [sysMES.id, sysPLM.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actMachine = { id: demoId('node-act-machine'), parentId: spCNC.id, level: 'ACTIVITY' as const, name: 'Machine part', description: 'Run the CNC cut, monitor machine telemetry, and produce the part to tolerance.', activityId: 'ACT-DEMO-M2', status: 'ACTIVE', orderIndex: 1, orgId: orgPlant.id, orgIds: [orgPlant.id], ownerId: bruno.id, responsibleRole: 'Machining Superintendent', responsiblePersonId: bruno.id, systemIds: [sysMES.id, sysHistorian.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'First-pass yield ≥ 98% on Tier 1 parts\n\nScrap rate under 1.5%', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actAssemble = { id: demoId('node-act-assemble'), parentId: procAssemble.id, level: 'ACTIVITY' as const, name: 'Assemble unit', description: 'Join machined parts and components into a finished unit per the work order.', activityId: 'ACT-DEMO-M3', status: 'ACTIVE', orderIndex: 0, orgId: orgPlant.id, orgIds: [orgPlant.id], ownerId: priscilla.id, responsibleRole: 'Assembly Line Lead', responsiblePersonId: toby.id, systemIds: [sysMES.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actInspect = { id: demoId('node-act-inspect'), parentId: procAssemble.id, level: 'ACTIVITY' as const, name: 'Final test & inspect', description: 'Test and dimensionally inspect the unit; pass it or raise a nonconformance.', activityId: 'ACT-DEMO-M4', status: 'ACTIVE', orderIndex: 1, orgId: orgPlant.id, orgIds: [orgPlant.id], ownerId: priscilla.id, responsibleRole: 'QA / Metrology Lead', responsiblePersonId: renata.id, systemIds: [sysQMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Every unit inspected and dispositioned before shipment', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsProd, procMachine, procAssemble, spCNC, actProgram, actMachine, actAssemble, actInspect]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-m1'), fromNodeId: actProgram.id, toNodeId: actMachine.id, type: 'SEQUENCE' as const, label: 'program ready', createdAt: ts },
+    { id: demoId('flow-m2'), fromNodeId: actMachine.id, toNodeId: actAssemble.id, type: 'SEQUENCE' as const, label: 'parts made', createdAt: ts },
+    { id: demoId('flow-m3'), fromNodeId: actAssemble.id, toNodeId: actInspect.id, type: 'SEQUENCE' as const, label: 'unit assembled', createdAt: ts },
+  ]);
+
+  // ── Process hierarchy — VS2 Supply Chain & Fulfillment (Supply Chain) ──
+  const vsSupply = { id: demoId('node-vs-supply'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Supply Chain & Fulfillment', description: 'Procure materials, receive and inspect them, and pick and ship finished orders.', activityId: 'VS-DEMO-M2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSupply.id, orgIds: [orgSupply.id], ownerId: rafael.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procProcure = { id: demoId('node-proc-procure'), parentId: vsSupply.id, level: 'PROCESS' as const, name: 'Procurement', description: 'Place purchase orders and receive and inspect incoming material.', activityId: 'PRO-DEMO-M3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSupply.id, orgIds: [orgSupply.id], ownerId: ingrid.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procFulfill = { id: demoId('node-proc-fulfill'), parentId: vsSupply.id, level: 'PROCESS' as const, name: 'Fulfillment', description: 'Pick, pack, and ship finished-goods orders.', activityId: 'PRO-DEMO-M4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgSupply.id, orgIds: [orgSupply.id], ownerId: diego.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spPurchasing = { id: demoId('node-sp-purchasing'), parentId: procProcure.id, level: 'SUBPROCESS' as const, name: 'Purchasing', description: 'Convert requirements into confirmed purchase orders.', activityId: 'SP-DEMO-M2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSupply.id, orgIds: [orgSupply.id], ownerId: samw.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actPO = { id: demoId('node-act-po'), parentId: spPurchasing.id, level: 'ACTIVITY' as const, name: 'Place & confirm PO', description: 'Raise the purchase order against the material requirement and confirm it.', activityId: 'ACT-DEMO-M5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSupply.id, orgIds: [orgSupply.id], ownerId: samw.id, responsibleRole: 'Buyer / Planner', responsiblePersonId: samw.id, systemIds: [sysERP.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actReceive = { id: demoId('node-act-receive'), parentId: procProcure.id, level: 'ACTIVITY' as const, name: 'Receive & inspect material', description: 'Receive inbound material, run incoming inspection, and post it to inventory.', activityId: 'ACT-DEMO-M6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSupply.id, orgIds: [orgSupply.id], ownerId: ingrid.id, responsibleRole: 'Data Steward Procurement', responsiblePersonId: aisha.id, systemIds: [sysWMS.id, sysQMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actShip = { id: demoId('node-act-ship'), parentId: procFulfill.id, level: 'ACTIVITY' as const, name: 'Pick & ship order', description: 'Allocate inventory, pick and pack the order, and ship it.', activityId: 'ACT-DEMO-M7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgSupply.id, orgIds: [orgSupply.id], ownerId: diego.id, responsibleRole: 'Manager Logistics', responsiblePersonId: diego.id, systemIds: [sysWMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'On-time ship rate ≥ 97%', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsSupply, procProcure, procFulfill, spPurchasing, actPO, actReceive, actShip]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-m4'), fromNodeId: actPO.id, toNodeId: actReceive.id, type: 'SEQUENCE' as const, label: 'PO placed', createdAt: ts },
+  ]);
+
+  // ── Mappings (7) ──
+  await createAll(repos.mappings, [
+    { id: demoId('map-m1'), orgId: orgPlant.id, processStepId: actProgram.id, dataAssetId: assetProductMaster.id, linkType: 'INPUT', notes: 'Programs from the engineering model + BOM', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-m2'), orgId: orgPlant.id, processStepId: actMachine.id, dataAssetId: assetMachineTelemetry.id, linkType: 'INPUT', notes: 'Reads machine parameters from the historian', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-m3'), orgId: orgPlant.id, processStepId: actInspect.id, dataAssetId: assetInspection.id, linkType: 'OUTPUT', notes: 'Writes the inspection record', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-m4'), orgId: orgPlant.id, processStepId: actAssemble.id, dataAssetId: assetWorkOrders.id, linkType: 'INPUT', notes: 'Checks build sequence via the work order', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-m5'), orgId: orgSupply.id, processStepId: actReceive.id, dataAssetId: assetInventory.id, linkType: 'OUTPUT', notes: 'Posts received material to inventory', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-m6'), orgId: orgSupply.id, processStepId: actReceive.id, dataAssetId: assetSupplierQuality.id, linkType: 'INPUT', notes: 'Checks supplier quality on receipt', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-m7'), orgId: orgSupply.id, processStepId: actShip.id, dataAssetId: assetInventory.id, linkType: 'INPUT', notes: 'Allocates inventory to the shipment', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+  ]);
+
+  // ── Governance tasks assigned to Marcus (populates My Dashboard) ──
+  await createAll(repos.governanceTasks, [
+    { id: demoId('task-m1'), orgId: orgForgeline.id, title: 'Approve Inspection Records classification review', description: 'Review the AI-suggested sensitivity tags on Inspection Records and Supplier Quality Records and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: marcusf.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetInspection.id, automationMode: 'HUMAN' as any, createdBy: lenav.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-m2'), orgId: orgForgeline.id, title: 'Sign off on Quality & Compliance domain scope', description: 'Sophia has proposed expanding the Quality & Compliance domain to cover new IATF audit evidence fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: marcusf.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domQuality.id, automationMode: 'HUMAN' as any, createdBy: sophial.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-m3'), orgId: orgForgeline.id, title: 'Retire Legacy MRP Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: marcusf.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyMRP.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+  ]);
+
+  // ── One open governance issue assigned to Marcus ──
+  await repos.governanceIssues.create({
+    id: demoId('issue-m1'),
+    orgId: orgForgeline.id,
+    title: 'Inspection Records tier below Silver — critical process, ungoverned',
+    description: 'Inspection Records is BRONZE tier but the Assembly & Test process writes it as the primary quality evidence. Recommend promoting to Silver with an SLA target.',
+    issueType: 'OWNERSHIP' as any,
+    severity: 'HIGH' as any,
+    status: 'OPEN' as any,
+    domainId: domQuality.id,
+    dataAssetId: assetInspection.id,
+    systemId: sysQMS.id,
+    reportedBy: lenav.id,
+    assignedTo: marcusf.id,
+    resolutionSummary: null,
+    createdAt: ts,
+    updatedAt: ts,
+    closedAt: null,
+  } as any);
+
+  // ── Data Quality rules (2 — one passing, one failing) ──
+  await createAll(repos.dataQualityRules, [
+    {
+      id: demoId('dq-rule-passing'), orgId: orgForgeline.id, dataAssetId: assetWorkOrders.id,
+      dimension: 'COMPLETENESS' as const, name: 'Work Orders · routing completeness',
+      description: 'At least 95% of work orders must carry a complete operation routing.',
+      threshold: 95, currentScore: 97, weight: 1, status: 'PASSING' as const,
+      lastMeasured: ts, scheduleFrequency: 'DAILY' as const, nextRunAt: daysFromNow(1), createdAt: ts, updatedAt: ts,
+    },
+    {
+      id: demoId('dq-rule-failing'), orgId: orgForgeline.id, dataAssetId: assetInspection.id,
+      dimension: 'TIMELINESS' as const, name: 'Inspection Records · result submission latency',
+      description: 'Inspection results should be logged within 4 hours of the operation. Rolling 24h.',
+      threshold: 95, currentScore: 58, weight: 1, status: 'FAILING' as const,
+      lastMeasured: ts, scheduleFrequency: 'HOURLY' as const, nextRunAt: daysFromNow(0), createdAt: ts, updatedAt: ts,
+    },
+  ]);
+
+  // ── Edge connector (ONLINE) ──
+  const connectorHeartbeatAt = new Date(Date.now() - 45 * 1000).toISOString();
+  const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const conn = {
+    id: demoId('conn-forgeline'), orgId: orgForgeline.id, name: 'Forgeline Plant Data Connector',
+    tokenHash: '5f6d3c4f26f9c50a9c1a5a2f70c3f7f4a0b3d3c8b3f7d9c3a1e2f5b6c9d0e1f2',
+    pairingCode: null, pairingCodeExpiresAt: null,
+    systemIds: [sysMES.id, sysWarehouse.id],
+    lastHeartbeatAt: connectorHeartbeatAt, agentVersion: '1.2.0', status: 'ONLINE' as const,
+    createdAt: connectorCreatedAt, updatedAt: connectorHeartbeatAt,
+  };
+  await repos.connectors.create(conn);
+
+  await repos.dataAssets.update(assetWorkOrders.id, {
+    lastSyncedByConnectorId: conn.id,
+    lastSyncedAt: connectorSyncAt,
+  } as any);
+
+  await createAll(repos.connectorEvents, [
+    { id: demoId('ce-m-paired'), connectorId: conn.id, orgId: orgForgeline.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-m-scan-start'), connectorId: conn.id, orgId: orgForgeline.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysMES.id, sysWarehouse.id] } },
+    { id: demoId('ce-m-scan-done'), connectorId: conn.id, orgId: orgForgeline.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 40_120, assetsDiscovered: 1 } },
+    { id: demoId('ce-m-assets'), connectorId: conn.id, orgId: orgForgeline.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
+    { id: demoId('ce-m-hb'), connectorId: conn.id, orgId: orgForgeline.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
+  ]);
+
+  // ── Second connector — PAIRING state ──
+  const pairingConn = {
+    id: demoId('conn-m-pairing'), orgId: orgForgeline.id, name: 'Metrology Lab Connector',
+    tokenHash: null, pairingCode: '52084196',
+    pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    systemIds: [] as string[], lastHeartbeatAt: null, agentVersion: null, status: 'PAIRED' as const,
+    createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(), updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+  };
+  await repos.connectors.create(pairingConn as any);
+
+  // ── Governance calendar event ──
+  const dayNow = new Date();
+  const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
+  const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
+  await repos.calendarEvents.create({
+    id: demoId('cal-m-dgc'),
+    orgId: orgForgeline.id,
+    name: 'Data Governance Council weekly',
+    description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
+    eventType: 'COMMITTEE_MEETING' as const,
+    cadence: 'WEEKLY' as const,
+    dayOfMonth: null,
+    dayOfWeek: 5,
+    timeOfDay: '09:00',
+    durationMinutes: 60,
+    attendees: [marcusf.id, lenav.id, hector.id, sophial.id],
+    agendaTemplate: '1. Open governance issues (from bell)\n2. Domain scope changes\n3. Control effectiveness review\n4. Upcoming policy publications',
+    nextOccurrence: nextFriday.toISOString(),
+    lastOccurrence: null,
+    autoCreateTasks: false,
+    status: 'ACTIVE' as const,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+
+  // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
+  await createAll(repos.statsSnapshots, [
+    ...weeklySnapshots(orgForgeline.id, { coverage: 63, avgHealth: 71, gaps: 8, dataAssets: 9, mappings: 7 }),
+    ...weeklySnapshots(orgPlant.id, { coverage: 71, avgHealth: 73, gaps: 4, dataAssets: 4, mappings: 5 }),
+    ...weeklySnapshots(orgSupply.id, { coverage: 66, avgHealth: 75, gaps: 3, dataAssets: 2, mappings: 2 }),
+    ...weeklySnapshots(orgFShared.id, { coverage: 46, avgHealth: 77, gaps: 3, dataAssets: 0, mappings: 0 }),
+  ]);
+
+  // ── AI template cache — pre-warm the wand for Forgeline ──
+  aiTemplateCache.push(
+    {
+      industry: 'manufacturing|make-to-order production',
+      industryLabel: 'Manufacturing — Make-to-Order Production',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Make-to-Order Production',
+            description: 'Program and machine parts, assemble them, and test and inspect the unit.',
+            purpose: 'Build to spec, on schedule, at the required quality and yield.',
+            businessOutcome: 'On-time build with high first-pass yield and a clean inspection record.',
+            processes: [
+              { name: 'Machining & Fabrication', description: 'Program, set up, and machine parts to the drawing.', purpose: 'Turn stock into finished parts.', activities: [
+                { name: 'Program & set up machine', description: 'Generate the CNC program and set up the machine and tooling.' },
+                { name: 'Machine part', description: 'Run the cut, monitor telemetry, and produce the part to tolerance.' },
+                { name: 'Deburr & clean', description: 'Deburr, clean, and stage the finished part for assembly.' },
+              ] },
+              { name: 'Assembly & Test', description: 'Assemble parts into units and test and inspect them.', purpose: 'Make a working, verified unit.', activities: [
+                { name: 'Assemble unit', description: 'Join parts and components into a finished unit per the work order.' },
+                { name: 'Final test & inspect', description: 'Test and inspect the unit; pass it or raise a nonconformance.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      industry: 'manufacturing|supply chain & fulfillment',
+      industryLabel: 'Manufacturing — Supply Chain & Fulfillment',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Supply Chain & Fulfillment',
+            description: 'Procure and receive material, and pick and ship finished orders.',
+            purpose: 'Keep the line fed and get finished goods to the customer on time.',
+            businessOutcome: 'Material available when needed and orders shipped on time and complete.',
+            processes: [
+              { name: 'Procurement', description: 'Place purchase orders and receive and inspect material.', purpose: 'Get the right material in on time and to spec.', activities: [
+                { name: 'Place & confirm PO', description: 'Raise the purchase order against the requirement and confirm it.' },
+                { name: 'Receive & inspect material', description: 'Receive, run incoming inspection, and post to inventory.' },
+              ] },
+              { name: 'Fulfillment', description: 'Pick, pack, and ship finished-goods orders.', purpose: 'Deliver complete orders on time.', activities: [
+                { name: 'Pick & ship order', description: 'Allocate inventory, pick and pack the order, and ship it.' },
+                { name: 'Confirm delivery', description: 'Confirm delivery and close the shipment.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  saveStore('aiTemplateCache', aiTemplateCache);
+
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgForgeline.id,
+    cdoId: marcusf.id,
+    govLeadId: lenav.id,
+    dataOwnerId: hector.id,
+    stewardIds: [marta.id, vikram.id],
+    tenantName: 'Forgeline Manufacturing',
+  });
+
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgForgeline.id,
+    domainIds: [domEng.id, domProd.id, domQuality.id],
+    cdoId: marcusf.id,
+    govLeadId: lenav.id,
+    dataOwnerId: hector.id,
+    stewardId: marta.id,
+    techStewardId: vikram.id,
+    engineerId: neel.id,
+    architectId: erin.id,
+    raciNodeId: actMachine.id,
+    raciPersonId: renata.id,
+  });
+
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgForgeline.id, ownerId: marta.id, cdoId: marcusf.id, domainId: domEng.id });
+
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgForgeline.id, orgPlant.id, orgSupply.id],
+    links: [
+      { id: demoId('lin-1'), orgId: orgForgeline.id, sourceSystemId: sysERP.id, targetSystemId: sysWarehouse.id, dataAssetId: assetInventory.id, description: 'ERP inventory + receipts sync nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-2'), orgId: orgPlant.id, sourceSystemId: sysMES.id, targetSystemId: sysWarehouse.id, dataAssetId: assetWorkOrders.id, description: 'Shop-floor work order status feeds the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: demoId('lin-3'), orgId: orgPlant.id, sourceSystemId: sysHistorian.id, targetSystemId: sysWarehouse.id, dataAssetId: assetMachineTelemetry.id, description: 'Machine historian tags stream into the warehouse.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+    ],
+    edges: [
+      { id: demoId('edge-1'), orgId: orgForgeline.id, sourceAssetId: assetProductMaster.id, targetAssetId: assetWorkOrders.id },
+      { id: demoId('edge-2'), orgId: orgPlant.id, sourceAssetId: assetMachineTelemetry.id, targetAssetId: assetInspection.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgForgeline.id, agentId: demoId('agent-ppap-gen'), agentName: 'PPAP Package Generator', activityId: actInspect.id, activityName: 'Final test & inspect', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: marcusf.id, reviewerId: lenav.id });
+
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgForgeline.id, assetId: assetProductMaster.id, systemId: sysPLM.id, personId: marta.id, personName: 'Marta Silva' });
+
+  logger.info({ persona: marcusf.name }, 'Demo data seeded (manufacturing)');
+
+  return {
+    organizations: 10,
+    people: 24,
+    systems: 8,
+    agents: 5,
+    dataDomains: 6,
+    dataAssets: 9,
+    processNodes: 15,
+    mappings: 7,
+    governanceTasks: 3,
+    governanceIssues: 1,
+    dataQualityRules: 2,
+    connectors: 2,
+    connectorEvents: 5,
+    calendarEvents: 1,
+    statsSnapshots: STATS_WEEKS * 4,
+    persona: { id: marcusf.id, name: marcusf.name },
   };
 }
