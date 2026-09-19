@@ -70,6 +70,12 @@ export interface StoredOrg {
    *  / open-issue age 30 days). Resolved by walking up to the first ancestor
    *  that sets it, so a company can set the bar for its divisions. */
   scorecardTargets?: { coverage: number; classification: number; openIssues: number; exceptions: number; openIssuesDays: number } | null;
+  /** Per-tenant ROI value model (Council Scorecard, ROI Phase 2). Undefined =
+   *  no model set, so the scorecard shows leading indicators only and prompts
+   *  the tenant to configure their own dollar assumptions (Procela invents no
+   *  figures). Resolved by walking up to the first ancestor that sets it, so a
+   *  company can set the value model for its divisions. */
+  roiModel?: { currency: string; riskCostPerItem: number; resolutionValuePerIssue: number; ownershipValuePerEntity: number } | null;
   // Data-sync tracking — set by the sync engine when this row was created or
   // updated from a SyncConnection source. Soft reference; absent when unsynced.
   syncConnectionId?: string | null;
@@ -505,6 +511,30 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       };
     } else {
       res.status(400).json({ success: false, error: 'scorecardTargets must be an object of threshold numbers, or null.' });
+      return;
+    }
+  }
+  // Per-tenant ROI value model (Council Scorecard, ROI Phase 2). Accepts a
+  // { currency, riskCostPerItem, resolutionValuePerIssue, ownershipValuePerEntity }
+  // object; null clears back to "no model set". Dollar multipliers clamp to
+  // >= 0; the currency is a 1–8 char code (uppercased). Procela ships no
+  // figures, so an unset model means the scorecard stays leading-indicators
+  // only rather than showing a fabricated value.
+  if (req.body?.roiModel !== undefined) {
+    const raw = req.body.roiModel;
+    if (raw === null) {
+      org.roiModel = null;
+    } else if (raw && typeof raw === 'object') {
+      const clampMoney = (v: unknown) => Number.isFinite(Number(v)) ? Math.max(0, Math.round(Number(v))) : 0;
+      const cur = typeof raw.currency === 'string' && raw.currency.trim() ? raw.currency.trim().toUpperCase().slice(0, 8) : 'USD';
+      org.roiModel = {
+        currency: cur,
+        riskCostPerItem: clampMoney(raw.riskCostPerItem),
+        resolutionValuePerIssue: clampMoney(raw.resolutionValuePerIssue),
+        ownershipValuePerEntity: clampMoney(raw.ownershipValuePerEntity),
+      };
+    } else {
+      res.status(400).json({ success: false, error: 'roiModel must be an object of value-model numbers, or null.' });
       return;
     }
   }

@@ -120,6 +120,12 @@ model Organization {
   // (80 / 70 / 0 / 0 / 30). Kept as a small JSON blob rather than five columns
   // since it's read/written as one policy object and never queried by field.
   scorecardTargets         Json?
+  // Per-tenant ROI value model (Council Scorecard, ROI Phase 2):
+  // { currency, riskCostPerItem, resolutionValuePerIssue, ownershipValuePerEntity }.
+  // Null = no model set, so the scorecard stays leading-indicators only and
+  // prompts the tenant to configure their own dollar assumptions. Same
+  // read-as-one-object rationale as scorecardTargets, so it's a JSON blob.
+  roiModel                 Json?
   createdAt                DateTime   @default(now())
   updatedAt                DateTime   @updatedAt
 

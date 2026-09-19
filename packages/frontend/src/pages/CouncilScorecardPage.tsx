@@ -26,12 +26,19 @@ interface Narrative { whatMoved?: string; forCouncil?: string; whatMovedAuto?: b
 interface ScopeInfo { lens: 'all' | 'governed'; applied: boolean; version: number | null; changedAt: string | null }
 interface ValueDriverRatio { covered: number; total: number; pct: number }
 interface ValueDrivers { ownership: ValueDriverRatio; openRisk: number; resolvedLast30: number; avgResolutionDays: number | null }
+interface RoiModel { currency: string; riskCostPerItem: number; resolutionValuePerIssue: number; ownershipValuePerEntity: number }
+interface RoiEstimate {
+  configured: boolean; currency: string; model: RoiModel;
+  valueAtRisk: number; resolutionValueMonthly: number; resolutionValueAnnualized: number;
+  ownershipValue: number; annualValue: number;
+}
 interface Derived {
   orgId: string; orgName: string; period: string;
   targets: { coverage: number; classification: number; openIssues: number; exceptions: number; openIssuesDays: number };
   divisions: Row[]; enterprise: Row; narrative: Narrative; canEdit?: boolean;
   scope?: ScopeInfo;
   valueDrivers?: ValueDrivers;
+  roi?: RoiEstimate;
 }
 interface VersionMeta { id: string; period: string; status: string; createdBy?: string; createdAt: string }
 interface SavedVersion { id: string; orgId: string; period: string; status: string; createdBy?: string; createdAt: string; derived: Derived; overrides: Record<string, unknown>; narrative: Narrative }
@@ -57,6 +64,16 @@ function measureSub(key: typeof MEASURES[number]['key'], t: Targets): string {
     case 'classification': return `target ${t.classification}%`;
     case 'openIssues':     return `>${t.openIssuesDays}d · target ${t.openIssues}`;
     case 'exceptions':     return `past expiry · target ${t.exceptions}`;
+  }
+}
+
+// Format a whole-dollar figure in the tenant's chosen currency. Falls back to
+// a plain grouped number if the currency code isn't one Intl recognises.
+function fmtMoney(n: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
+  } catch {
+    return `${currency} ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n)}`;
   }
 }
 
@@ -423,6 +440,55 @@ export default function CouncilScorecardPage() {
                 <div key={t.label} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 14px', background: 'var(--color-bg)' }}>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-muted)' }}>{t.label}</div>
                   <div style={{ fontSize: 26, fontWeight: 700, marginTop: 4, fontVariantNumeric: 'tabular-nums', color: t.tone === 'risk' && v.openRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>{t.sub}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
+
+      {/* Estimated governance value — ROI Phase 2: the drivers above monetized
+          with the tenant's OWN dollar model. When no model is set we show a
+          configure prompt, never a fabricated figure. */}
+      {derived.roi && (() => {
+        const roi = derived.roi;
+        if (!roi.configured) {
+          return (
+            <Card padding={18} marginBottom={16}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Estimated governance value</div>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '2px 7px', borderRadius: 999 }}>NOT CONFIGURED</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                Turn the drivers above into a dollar figure by setting your organization&rsquo;s value model — what an owned entity, a resolved issue, and an open-risk item are worth to you. Procela invents no figures.{' '}
+                <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Set your value model →</Link>
+              </div>
+            </Card>
+          );
+        }
+        const cur = roi.currency;
+        const tiles: Array<{ label: string; value: string; sub: string; tone?: 'good' | 'risk' }> = [
+          { label: 'Estimated annual value', value: fmtMoney(roi.annualValue, cur), sub: 'Ownership value + annualized resolution value', tone: 'good' },
+          { label: 'Ownership value', value: fmtMoney(roi.ownershipValue, cur), sub: 'Owned domains & assets × your value per owned entity' },
+          { label: 'Resolution value (annualized)', value: fmtMoney(roi.resolutionValueAnnualized, cur), sub: `${fmtMoney(roi.resolutionValueMonthly, cur)}/mo run-rate × 12` },
+          { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), sub: 'Open-risk items × your exposure per item — drive down', tone: 'risk' },
+        ];
+        return (
+          <Card padding={18} marginBottom={16}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Estimated governance value</div>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999 }}>YOUR ASSUMPTIONS</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+              The value drivers monetized with your model — {fmtMoney(roi.model.ownershipValuePerEntity, cur)}/owned entity, {fmtMoney(roi.model.resolutionValuePerIssue, cur)}/issue resolved, {fmtMoney(roi.model.riskCostPerItem, cur)}/open-risk item. An estimate, only as good as those assumptions. {derived.scope?.applied ? 'Scoped to the governed set.' : 'Across the whole org tree.'}{' '}
+              <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Edit model →</Link>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+              {tiles.map((t) => (
+                <div key={t.label} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 14px', background: 'var(--color-bg)' }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-muted)' }}>{t.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4, fontVariantNumeric: 'tabular-nums', color: t.tone === 'risk' && roi.valueAtRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
                   <div style={{ fontSize: 10.5, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>{t.sub}</div>
                 </div>
               ))}

@@ -362,5 +362,35 @@ describe('Council Scorecard — value drivers', () => {
     assert.strictEqual(vd.resolvedLast30, 1);
     // Created 7d ago, closed 2d ago ⇒ 5 days.
     assert.strictEqual(vd.avgResolutionDays, 5);
+
+    // ROI Phase 2 — with no value model set, the estimate is present but
+    // unconfigured and every figure is zero (Procela invents nothing).
+    assert.strictEqual(d.roi.configured, false);
+    assert.strictEqual(d.roi.annualValue, 0);
+    assert.strictEqual(d.roi.valueAtRisk, 0);
+  });
+
+  it('monetizes the drivers with the tenant value model (ROI Phase 2)', async () => {
+    // Set the org's own dollar assumptions. In JSON test mode getCachedOrgList
+    // returns the live array, so mutating the row is immediately visible.
+    const row = organizations.find((o) => o.id === org)!;
+    (row as any).roiModel = { currency: 'USD', riskCostPerItem: 1000, resolutionValuePerIssue: 5000, ownershipValuePerEntity: 2000 };
+    try {
+      const d = (await req(port, 'GET', `/council-scorecard/derive?orgId=${org}`, undefined, admin)).body.data;
+      const roi = d.roi;
+      assert.strictEqual(roi.configured, true);
+      assert.strictEqual(roi.currency, 'USD');
+      // 2 owned entities × $2,000 = $4,000 standing ownership value.
+      assert.strictEqual(roi.ownershipValue, 4000);
+      // 1 resolved last-30 × $5,000 = $5,000/mo ⇒ ×12 = $60,000 annualized.
+      assert.strictEqual(roi.resolutionValueMonthly, 5000);
+      assert.strictEqual(roi.resolutionValueAnnualized, 60000);
+      // Annual value = ownership + annualized resolution (risk is separate).
+      assert.strictEqual(roi.annualValue, 64000);
+      // 3 open-risk items × $1,000 = $3,000 exposure being worked down.
+      assert.strictEqual(roi.valueAtRisk, 3000);
+    } finally {
+      delete (row as any).roiModel;
+    }
   });
 });
