@@ -4,7 +4,7 @@
 consolidates what used to live across separate files — the post-cutover roadmap,
 the itemized backlog, the competitor coverage matrix, the discovery survey, the
 go-live checklist, the AWS hardening guide, and the GA tightening audit. The
-in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-18.***
+in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-19.***
 
 > **How to read this.** Priorities: **P0** = required for a credible production
 > v1 · **P1** = important, not blocking · **P2** = differentiator/nice-to-have ·
@@ -27,8 +27,8 @@ in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-18.*
 
 ## Snapshot
 
-- **Functionally near-complete.** Of ~81 tracked capabilities, **68 are Built**;
-  13 are not (4 Partial · 2 Designed · 7 Not Started). Phases 1 (Define) and 2
+- **Functionally near-complete.** Of ~83 tracked capabilities, **68 are Built**;
+  15 are not (4 Partial · 2 Designed · 9 Not Started). Phases 1 (Define) and 2
   (Connect) ship in full; Phase 3 (Discover) is built for direct-connect and
   needs a real-customer pilot. The Postgres cutover and the GA tightening audit
   (§A–G) are complete; the AWS deploy path is wired and verified.
@@ -72,13 +72,15 @@ covers firewalled sources.* **Only the pilot (A1) is open.**
 - **A1 — Real-customer connector pilot.** Run the shipped agent against a live
   customer database (go-live checklist #25). The first real-world scan; proves the
   whole Phase-3 thesis. *(A2 reconciliation + A3 source-fed health are built.)*
+  Structure it as the **paid design-partner engagement** in F2 — with explicit
+  acceptance criteria, not a free trial.
 
 ### Track B — production-scale hardening
 *The go-live tail that's bigger than config. Gated on a running deploy.*
 - **B1 — Managed / HA Postgres** (replace the bundled single-replica StatefulSet; #26).
 - **B2 — On-prem smoke deploy** (chart lints + templates in CI; never `helm install`-ed live; #26).
 - **B3 — Load-test baseline** (harness exists; capture numbers + tighten budgets; #21).
-- **B4 — External pen test** (SAST + dep-audit + in-house review done; third-party engagement outstanding; #22).
+- **B4 — External pen test** (SAST + dep-audit + in-house review done; third-party engagement outstanding; #22). Prioritise **multi-tenant isolation** — the first thing a buyer's security team probes.
 - **B5 — DR rehearsal** (runbook written; owe one restore against staging for real RTO/RPO; #23).
 
 ### Track C — commercial SaaS readiness
@@ -106,6 +108,24 @@ nested → dotted paths) all run real introspection (`simulated: false`). Only
 **API** and **spreadsheet** sources remain simulated.* The remaining work is
 live-account validation of the cloud/SDK adapters against real endpoints.
 
+### Track F — adoption & buyer motion
+*Surfaced by a CIO-demo review (2026-09-19): the platform is feature-strong, but
+a first enterprise buyer gates on adoption proof and a pilot they can say yes to
+— non-code work the roadmap hadn't tracked. The demo verdict was "fund a
+time-boxed paid pilot, not an enterprise agreement."*
+- **F1 — Adoption / change-management playbook.** Governance programs don't fail
+  on features; they fail when process owners stop maintaining their value
+  streams. Package the enablement motion: role-based onboarding paths, a
+  stewardship cadence, a "who maintains what" RACI, and the adoption metrics the
+  platform already measures (active owners, catalog freshness, coverage trend).
+  Not Started.
+- **F2 — Design-partner pilot kit.** Turn A1 into a buyer-ready, time-boxed
+  **paid pilot** with explicit acceptance criteria — live discovery against the
+  customer's real database, an auto-generated Council Scorecard for one
+  division, and process-owner retention at 30 days — bundled with the security
+  questionnaire + DPA pack a CIO's procurement demands (leans on B4's
+  tenant-isolation proof and C3's legal content). Not Started.
+
 ---
 
 ## Open & partial by priority
@@ -115,11 +135,13 @@ live-account validation of the cloud/SDK adapters against real endpoints.
 |---|---|---|---|
 | Multi-tenant SaaS hosting | Designed | C | Stand up a production environment (#20/#26). Architecture done; nothing deployed. |
 | Real-customer connector pilot (A1) | Pending | A | Run the shipped edge agent against a live customer DB (#25). |
+| Design-partner pilot kit | Not Started | F2 | Package A1 as a paid, time-boxed pilot with acceptance criteria + a security-questionnaire/DPA pack. Gates the first real customer conversation. |
 | Auto-extracted lineage — SQL/query-log half | Built | Lineage | Ships end-to-end for Snowflake query history. Parsers: table-to-table (node-sql-parser, AST + MERGE heuristic) and column-to-column (astify projection walk). `POST /data-lineage/extract-sql` fetches `ACCOUNT_USAGE.QUERY_HISTORY`, then reconciles both grains into `source:'sql'` AssetLineageEdge + ColumnLineageEdge rows (idempotent upsert/prune, link-only to governed assets/columns). Surfaced on the Lineage page (asset + column tables, `sql` colour/legend/marker, an "Extract from query history" action) and in the asset Impact blast radius. Only an operational pilot against a real warehouse remains. |
 
 ### P1 — important, not blocking
 | Item | State | Track | Next step / gap |
 |---|---|---|---|
+| Adoption / change-management playbook | Not Started | F1 | Enablement motion + adoption metrics (active owners, catalog freshness) so a program survives past go-live. The demo's "real risk". |
 | Multi-vendor AI providers | Built | AI | **Shipped end-to-end.** Vendor-neutral `ChatProvider` seam + adapters for **Anthropic / OpenAI (incl. Azure + self-hosted OpenAI-compatible) / Gemini / Bedrock**, selectable **deployment-level** via `AI_PROVIDER` *and* **per-tenant**: each org sets its own provider/model/base-URL + key (encrypted at rest, admin-gated, resolved per AI call with deployment fallback) via the Settings → AI picker (`/api/v1/ai/org-config`). |
 | On-prem deployment validation | Designed | B2 | Chart lints/templates in CI; never `helm install`-ed live. |
 | Managed / HA Postgres | Pending | B1 | Replace the bundled single-replica StatefulSet (#26). |
