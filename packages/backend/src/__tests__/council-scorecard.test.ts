@@ -27,6 +27,10 @@ const { damaRoles } = require('../routes/dama-roles');
 const { governancePrograms } = require('../routes/governance-program');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { governanceIssues } = require('../routes/governance-issues');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { processNodes } = require('../routes/process-catalog');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { mappings } = require('../routes/mappings');
 
 const P = 'csc-';
 function req(port: number, method: string, path: string, body?: unknown, user?: unknown): Promise<{ status: number; body: any }> {
@@ -322,10 +326,20 @@ describe('Council Scorecard — value drivers', () => {
     port = (server.address() as AddressInfo).port;
 
     organizations.push({ id: org, parentId: null, name: 'VD Co', type: 'company', industry: '', description: '', headCount: 0 });
-    // 2 tier-1 domains: one owned, one not.
+    // 2 tier-1 domains: one owned (holds the classified asset), one not.
     dataDomains.push(
-      { id: V + 'dO', orgId: org, name: 'Owned', description: '', ownerId: 'p1', stewardIds: [], dataAssetIds: [], criticality: 'TIER_1', status: 'ACTIVE', createdAt: iso(now), updatedAt: iso(now) },
+      { id: V + 'dO', orgId: org, name: 'Owned', description: '', ownerId: 'p1', stewardIds: [], dataAssetIds: [V + 'aC'], criticality: 'TIER_1', status: 'ACTIVE', createdAt: iso(now), updatedAt: iso(now) },
       { id: V + 'dU', orgId: org, name: 'Unowned', description: '', ownerId: null, stewardIds: [], dataAssetIds: [], criticality: 'TIER_1', status: 'ACTIVE', createdAt: iso(now), updatedAt: iso(now) },
+    );
+    // A value stream (ROI Phase 3): Billing → one activity, which maps to both
+    // the classified+owned asset (aC) and the unclassified one (aU).
+    processNodes.push(
+      { id: V + 'vs', orgId: org, orgIds: [org], parentId: null, level: 'VALUE_STREAM', name: 'Billing', description: '', activityId: 'VS-9001', status: 'ACTIVE', orderIndex: 0, ownerId: null, version: 1 },
+      { id: V + 'act', orgId: org, orgIds: [org], parentId: V + 'vs', level: 'ACTIVITY', name: 'Meter read', description: '', activityId: 'AC-9001', status: 'ACTIVE', orderIndex: 0, ownerId: null, version: 1 },
+    );
+    mappings.push(
+      { id: V + 'm1', orgId: org, processStepId: V + 'act', dataAssetId: V + 'aC', linkType: 'USES', notes: '', aiSuggested: false, userOverridden: false, createdBy: 'u', createdAt: iso(now), updatedAt: iso(now) },
+      { id: V + 'm2', orgId: org, processStepId: V + 'act', dataAssetId: V + 'aU', linkType: 'USES', notes: '', aiSuggested: false, userOverridden: false, createdBy: 'u', createdAt: iso(now), updatedAt: iso(now) },
     );
     // 2 assets: one classified + owned, one neither.
     dataAssets.push(
@@ -342,7 +356,7 @@ describe('Council Scorecard — value drivers', () => {
   });
 
   after(async () => {
-    for (const store of [organizations, dataDomains, dataAssets, governanceExceptions, governanceIssues, councilScorecards]) {
+    for (const store of [organizations, dataDomains, dataAssets, governanceExceptions, governanceIssues, councilScorecards, processNodes, mappings]) {
       for (let i = store.length - 1; i >= 0; i--) {
         const row = store[i];
         if ((row.id && String(row.id).startsWith(V)) || row.orgId === org) store.splice(i, 1);
@@ -389,8 +403,28 @@ describe('Council Scorecard — value drivers', () => {
       assert.strictEqual(roi.annualValue, 64000);
       // 3 open-risk items × $1,000 = $3,000 exposure being worked down.
       assert.strictEqual(roi.valueAtRisk, 3000);
+
+      // ROI Phase 3 — attribution to the Billing value stream. Its activity
+      // maps aC (owned+classified) and aU (unowned+unclassified); domain dO
+      // holds aC, so dO attributes too.
+      assert.strictEqual(roi.byValueStream.length, 1);
+      const vs = roi.byValueStream[0];
+      assert.strictEqual(vs.name, 'Billing');
+      assert.strictEqual(vs.assets, 2);
+      // Owned entities: domain dO + asset aC = 2 × $2,000 = $4,000.
+      assert.strictEqual(vs.ownershipValue, 4000);
+      assert.strictEqual(vs.annualValue, 4000);
+      // Attributable open risk: 1 unclassified asset (aU) × $1,000 = $1,000
+      // (dO is owned, so no tier-1-unowned; exceptions aren't attributed).
+      assert.strictEqual(vs.valueAtRisk, 1000);
     } finally {
       delete (row as any).roiModel;
     }
+  });
+
+  it('leaves the value-stream breakdown empty when no model is set', async () => {
+    const d = (await req(port, 'GET', `/council-scorecard/derive?orgId=${org}`, undefined, admin)).body.data;
+    assert.strictEqual(d.roi.configured, false);
+    assert.deepStrictEqual(d.roi.byValueStream, []);
   });
 });
