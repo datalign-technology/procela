@@ -61,6 +61,26 @@ export interface DerivedScorecard {
   // the program's scope version so a saved snapshot records its basis and two
   // snapshots can be compared apples-to-apples (see governance-program.ts).
   scope: { lens: ScorecardLens; applied: boolean; version: number | null; changedAt: string | null };
+  // Governance-value drivers (ROI Phase 1): leading indicators, NOT dollars —
+  // the un-fakeable signals that a governance program is paying off, computed
+  // from data Procela already owns and respecting the current lens. A CFO's $
+  // model multiplies these; on their own they're an honest value story.
+  valueDrivers: ValueDrivers;
+}
+
+interface ValueDriverRatio { covered: number; total: number; pct: number }
+export interface ValueDrivers {
+  // Efficiency: share of in-scope domains + assets that have a named owner —
+  // fewer "who owns this?" escalations, faster time-to-trust.
+  ownership: ValueDriverRatio;
+  // Risk reduced: a "value at risk" proxy governance should drive DOWN —
+  // exceptions past expiry + Tier-1 domains without an owner + unclassified
+  // assets. A falling number is the value.
+  openRisk: number;
+  // Velocity: issues resolved in the last 30 days, and mean days-to-resolve
+  // over all resolved issues (remediation throughput + cycle time).
+  resolvedLast30: number;
+  avgResolutionDays: number | null;
 }
 
 export interface StoredCouncilScorecard {
@@ -160,8 +180,8 @@ function childDivisions(parentId: string): { id: string; name: string }[] {
 
 interface Sources {
   domains: Array<{ id: string; orgId: string; ownerId: string | null; criticality?: string }>;
-  assets: Array<{ id: string; orgId: string; sensitivityTags?: unknown[] }>;
-  issues: Array<{ orgId: string; status: string; createdAt?: string; domainId?: string | null; dataAssetId?: string | null }>;
+  assets: Array<{ id: string; orgId: string; ownerPersonId?: string | null; owner?: string | null; sensitivityTags?: unknown[] }>;
+  issues: Array<{ orgId: string; status: string; createdAt?: string; closedAt?: string | null; domainId?: string | null; dataAssetId?: string | null }>;
   exceptions: typeof governanceExceptions;
   now: number;
 }
@@ -214,6 +234,33 @@ function deriveStatus(m: Omit<DivisionRow, 'orgId' | 'name' | 'status'>, targets
 function rowFor(orgId: string, name: string, scope: Set<string>, s: Sources, targets: ScorecardTargets): DivisionRow {
   const m = computeMeasures(scope, s, targets);
   return { orgId, name, ...m, status: deriveStatus(m, targets) };
+}
+
+// Governance-value drivers over the enterprise scope. Leading indicators only
+// — no invented dollars. `s` is already lens-filtered upstream, so these
+// respect All vs Governed automatically.
+function computeValueDrivers(scope: Set<string>, s: Sources): ValueDrivers {
+  const domains = s.domains.filter((d) => scope.has(d.orgId));
+  const assets = s.assets.filter((a) => scope.has(a.orgId));
+
+  const owned = domains.filter((d) => !!d.ownerId).length + assets.filter((a) => !!(a.ownerPersonId || a.owner)).length;
+  const ownTotal = domains.length + assets.length;
+  const ownership: ValueDriverRatio = { covered: owned, total: ownTotal, pct: ownTotal ? Math.round((100 * owned) / ownTotal) : 0 };
+
+  const exceptions = s.exceptions.filter((e) => scope.has(e.orgId) && isPastExpiry(e, s.now)).length;
+  const tier1Unowned = domains.filter((d) => d.criticality === 'TIER_1' && !d.ownerId).length;
+  const unclassified = assets.filter((a) => !(Array.isArray(a.sensitivityTags) && a.sensitivityTags.length > 0)).length;
+  const openRisk = exceptions + tier1Unowned + unclassified;
+
+  const resolved = s.issues.filter((i) => scope.has(i.orgId) && TERMINAL_ISSUE_STATUSES.has(i.status) && !!i.closedAt);
+  const resolvedLast30 = resolved.filter((i) => s.now - Date.parse(i.closedAt!) <= 30 * DAY_MS).length;
+  const durations = resolved
+    .filter((i) => !!i.createdAt)
+    .map((i) => (Date.parse(i.closedAt!) - Date.parse(i.createdAt!)) / DAY_MS)
+    .filter((n) => Number.isFinite(n) && n >= 0);
+  const avgResolutionDays = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null;
+
+  return { ownership, openRisk, resolvedLast30, avgResolutionDays };
 }
 
 // ── Narrative auto-derivation (data trends / activity) ──
@@ -328,6 +375,7 @@ async function deriveScorecard(parentOrgId: string, lens: ScorecardLens = 'all')
       version: anchors?.version ?? null,
       changedAt: anchors?.changedAt ?? null,
     },
+    valueDrivers: computeValueDrivers(parentScope, s),
   };
 }
 

@@ -300,3 +300,67 @@ describe('Council Scorecard — governed lens', () => {
     assert.strictEqual(saved.body.data.derived.enterprise.coverage, 100);
   });
 });
+
+// Value drivers (ROI Phase 1): leading indicators derived from the catalog —
+// ownership coverage, an "open risk" proxy that trends down, and remediation
+// velocity (issues resolved in 30d + mean days-to-resolve).
+describe('Council Scorecard — value drivers', () => {
+  let server: http.Server; let port: number;
+  const V = 'vd-';
+  const org = V + 'org';
+  const admin = { id: 'u', role: 'ORG_ADMIN', email: 'a@x.com' };
+  const now = Date.now();
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  before(async () => {
+    const app = express();
+    app.use(express.json());
+    app.use((r: any, _res, next) => { const h = r.headers['x-test-user']; if (h) r.user = JSON.parse(h); next(); });
+    app.use('/council-scorecard', councilRouter);
+    server = http.createServer(app);
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    port = (server.address() as AddressInfo).port;
+
+    organizations.push({ id: org, parentId: null, name: 'VD Co', type: 'company', industry: '', description: '', headCount: 0 });
+    // 2 tier-1 domains: one owned, one not.
+    dataDomains.push(
+      { id: V + 'dO', orgId: org, name: 'Owned', description: '', ownerId: 'p1', stewardIds: [], dataAssetIds: [], criticality: 'TIER_1', status: 'ACTIVE', createdAt: iso(now), updatedAt: iso(now) },
+      { id: V + 'dU', orgId: org, name: 'Unowned', description: '', ownerId: null, stewardIds: [], dataAssetIds: [], criticality: 'TIER_1', status: 'ACTIVE', createdAt: iso(now), updatedAt: iso(now) },
+    );
+    // 2 assets: one classified + owned, one neither.
+    dataAssets.push(
+      { id: V + 'aC', orgId: org, name: 'AC', description: '', governanceTier: 'GOLD', healthScore: 0, ownerPersonId: 'p1', sensitivityTags: ['PII'], createdAt: iso(now), updatedAt: iso(now) },
+      { id: V + 'aU', orgId: org, name: 'AU', description: '', governanceTier: 'BRONZE', healthScore: 0, createdAt: iso(now), updatedAt: iso(now) },
+    );
+    // One past-expiry exception.
+    governanceExceptions.push({ id: V + 'e1', orgId: org, title: 'W', status: 'ACTIVE', grantedAt: iso(now - 45 * 864e5), expiresAt: iso(now - 10 * 864e5), createdAt: iso(now - 45 * 864e5), updatedAt: iso(now) });
+    // One resolved issue (created 7d ago, closed 2d ago ⇒ 5-day cycle) + one open.
+    governanceIssues.push(
+      { id: V + 'iR', orgId: org, status: 'RESOLVED', createdAt: iso(now - 7 * 864e5), closedAt: iso(now - 2 * 864e5) } as any,
+      { id: V + 'iO', orgId: org, status: 'OPEN', createdAt: iso(now - 3 * 864e5), closedAt: null } as any,
+    );
+  });
+
+  after(async () => {
+    for (const store of [organizations, dataDomains, dataAssets, governanceExceptions, governanceIssues, councilScorecards]) {
+      for (let i = store.length - 1; i >= 0; i--) {
+        const row = store[i];
+        if ((row.id && String(row.id).startsWith(V)) || row.orgId === org) store.splice(i, 1);
+      }
+    }
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('reports ownership coverage, an open-risk proxy, and remediation velocity', async () => {
+    const d = (await req(port, 'GET', `/council-scorecard/derive?orgId=${org}`, undefined, admin)).body.data;
+    const vd = d.valueDrivers;
+    // 1 of 2 domains + 1 of 2 assets owned ⇒ 2/4 = 50%.
+    assert.deepStrictEqual(vd.ownership, { covered: 2, total: 4, pct: 50 });
+    // 1 past-expiry exception + 1 unowned tier-1 domain + 1 unclassified asset.
+    assert.strictEqual(vd.openRisk, 3);
+    // The resolved issue closed 2 days ago; the open one does not count.
+    assert.strictEqual(vd.resolvedLast30, 1);
+    // Created 7d ago, closed 2d ago ⇒ 5 days.
+    assert.strictEqual(vd.avgResolutionDays, 5);
+  });
+});
