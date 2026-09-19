@@ -622,6 +622,9 @@ Click any role chip anywhere in the app to open the Role Detail drawer for a ful
 - Technical: Technical Data Steward, Data Architect, Data Engineer, Database Administrator
 - Specialty: Data Quality Analyst, Data Custodian (Operator)
 
+- **Required vs. optional.** Roles a governance program should always fill — CDO, Data Governance Lead, Data Owner, and the like — carry a **Required** badge next to the name (every org should have a holder). Roles without it are optional. The badge shows on the roles table, the role-preview pane, and next to the role in the assign form.
+- **Single vs. multiple holders.** Each role also shows a **Single** or **Multiple** cardinality chip so you know whether it takes exactly one holder or several. For entity-attached roles the count is *per entity* — a **Single** role like Data Domain Owner still allows one holder **per data domain** (so the aggregate list can show several), while a **Multiple** role like Data Steward takes any number. The chip's tooltip spells this out, and single-holder roles hide the *+ Assign* action once their one seat is filled.
+
 ### Automation Modes
 
 - Human — Task performed entirely by a person.
