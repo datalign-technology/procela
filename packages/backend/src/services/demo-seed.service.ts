@@ -124,7 +124,7 @@ function daysFromNow(n: number): string {
 
 // Industries with a hand-crafted demo fixture. Every profile is built to the
 // same feature coverage so a demo of any of them lights up every page.
-export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial';
+export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government';
 
 // aiTemplateCache is keyed by industry string, not `id`, so the sweep
 // can't find demo entries by prefix. These are every cache key any
@@ -142,6 +142,8 @@ const DEMO_AI_CACHE_KEYS = new Set<string>([
   'manufacturing|supply chain & fulfillment',
   'financial|consumer lending',
   'financial|financial crime & regulatory reporting',
+  'government|permitting & licensing',
+  'government|public health case management',
 ]);
 
 // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
@@ -741,6 +743,7 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
     healthcare: seedHealthcare,
     manufacturing: seedManufacturing,
     financial: seedFinancial,
+    government: seedGovernment,
   };
   const report = await (builders[industry] ?? seedUtilities)(repos, ts);
   // Refresh the org-scope cache so accessible-orgs and the synchronous
@@ -2858,5 +2861,386 @@ async function seedFinancial(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     calendarEvents: 1,
     statsSnapshots: STATS_WEEKS * 4,
     persona: { id: grace.id, name: grace.name },
+  };
+}
+
+/**
+ * Government & Public Sector profile — a Lakeside County government
+ * (Public Works + Health & Human Services + Shared Services), persona
+ * Evelyn Park (CDO). Same fixed-count skeleton and story shape as the
+ * other profiles: two planted orphan assets on the warehouse, and a
+ * failing DQ rule co-located with the ownership issue on the
+ * Bronze/critical Public Health Cases asset — the citizen/mission-data
+ * accountability story (FISMA, data sovereignty) the industry page leads
+ * with.
+ */
+async function seedGovernment(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
+  // ── Organizations (county → 3 divisions → 6 departments) ──
+  const orgLakeside = { id: demoId('org-lakeside'), parentId: null, name: 'Lakeside County', type: 'company', industry: 'Government & Public Sector', description: 'County government demo tenant — public works + health & human services + shared services.', headCount: 0, tenantSlug: 'lakeside', brandDisplayName: 'Lakeside County', brandGlyph: '⚖', ssoButtonLabel: 'Sign in with Lakeside County SSO', brandPrimaryColor: '#334155', createdAt: ts, updatedAt: ts };
+  const orgPublicWorks = { id: demoId('org-publicworks'), parentId: orgLakeside.id, name: 'Public Works', type: 'division', industry: 'Government & Public Sector', description: 'Roads, transportation, water, and sewer', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgHHS = { id: demoId('org-hhs'), parentId: orgLakeside.id, name: 'Health & Human Services', type: 'division', industry: 'Government & Public Sector', description: 'Public health and social services', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgGovShared = { id: demoId('org-govshared'), parentId: orgLakeside.id, name: 'Shared Services', type: 'division', industry: 'Government & Public Sector', description: 'IT / Finance & Records', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgRoads = { id: demoId('org-roads'), parentId: orgPublicWorks.id, name: 'Roads & Transportation', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgWater = { id: demoId('org-water'), parentId: orgPublicWorks.id, name: 'Water & Sewer', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgPublicHealth = { id: demoId('org-publichealth'), parentId: orgHHS.id, name: 'Public Health', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgSocial = { id: demoId('org-social'), parentId: orgHHS.id, name: 'Social Services', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgGovIT = { id: demoId('org-govit'), parentId: orgGovShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgFinRecords = { id: demoId('org-finrecords'), parentId: orgGovShared.id, name: 'Finance & Records', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.organizations, [orgLakeside, orgPublicWorks, orgHHS, orgGovShared, orgRoads, orgWater, orgPublicHealth, orgSocial, orgGovIT, orgFinRecords]);
+
+  // ── People (24) — persona Evelyn Park (CDO) ──
+  const evelyn = { id: demoId('person-evelyn-park'), orgIds: [orgLakeside.id], accessibleOrgIds: [orgLakeside.id, orgPublicWorks.id, orgHHS.id, orgGovShared.id, orgRoads.id, orgWater.id, orgPublicHealth.id, orgSocial.id, orgGovIT.id, orgFinRecords.id], name: 'Evelyn Park', email: 'evelyn.park@lakeside.gov', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const harold = { id: demoId('person-harold'), orgIds: [orgLakeside.id], accessibleOrgIds: [orgLakeside.id], name: 'Harold Diaz', email: 'harold.diaz@lakeside.gov', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gloria = { id: demoId('person-gloria'), orgIds: [orgPublicWorks.id], accessibleOrgIds: [orgPublicWorks.id], name: 'Gloria Mendez', email: 'gloria.mendez@lakeside.gov', role: 'ORG_ADMIN', title: 'Data Owner Public Works', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const dean = { id: demoId('person-dean'), orgIds: [orgRoads.id], accessibleOrgIds: [orgRoads.id, orgPublicWorks.id], name: 'Dean Foster', email: 'dean.foster@lakeside.gov', role: 'EDITOR', title: 'Director Roads & Transportation', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const nina = { id: demoId('person-nina'), orgIds: [orgRoads.id], accessibleOrgIds: [orgRoads.id], name: 'Nina Kowalski', email: 'nina.kowalski@lakeside.gov', role: 'CONTRIBUTOR', title: 'GIS Program Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const carlos = { id: demoId('person-carlos'), orgIds: [orgRoads.id], accessibleOrgIds: [orgRoads.id], name: 'Carlos Vega', email: 'carlos.vega@lakeside.gov', role: 'CONTRIBUTOR', title: 'Data Steward Roads', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const bruce = { id: demoId('person-bruce'), orgIds: [orgRoads.id], accessibleOrgIds: [orgRoads.id], name: 'Bruce Whitman', email: 'bruce.whitman@lakeside.gov', role: 'CONTRIBUTOR', title: 'Infrastructure Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const lorena = { id: demoId('person-lorena'), orgIds: [orgWater.id], accessibleOrgIds: [orgWater.id], name: 'Lorena Cruz', email: 'lorena.cruz@lakeside.gov', role: 'EDITOR', title: 'Manager Water & Sewer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sanjay = { id: demoId('person-sanjay'), orgIds: [orgWater.id], accessibleOrgIds: [orgWater.id], name: 'Sanjay Rao', email: 'sanjay.rao@lakeside.gov', role: 'CONTRIBUTOR', title: 'Data Steward Water', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const tabitha = { id: demoId('person-tabitha'), orgIds: [orgWater.id], accessibleOrgIds: [orgWater.id], name: 'Tabitha Owens', email: 'tabitha.owens@lakeside.gov', role: 'CONTRIBUTOR', title: 'Utility Operations Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const desmond = { id: demoId('person-desmond'), orgIds: [orgHHS.id], accessibleOrgIds: [orgHHS.id], name: 'Desmond Clarke', email: 'desmond.clarke@lakeside.gov', role: 'ORG_ADMIN', title: 'Data Owner Health & Human Services', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const olivia = { id: demoId('person-olivia'), orgIds: [orgPublicHealth.id], accessibleOrgIds: [orgPublicHealth.id, orgHHS.id], name: 'Olivia Brandt', email: 'olivia.brandt@lakeside.gov', role: 'EDITOR', title: 'Director Public Health', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const amir = { id: demoId('person-amir'), orgIds: [orgPublicHealth.id], accessibleOrgIds: [orgPublicHealth.id], name: 'Amir Haddad', email: 'amir.haddad@lakeside.gov', role: 'CONTRIBUTOR', title: 'Data Steward Public Health', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const jade = { id: demoId('person-jade'), orgIds: [orgPublicHealth.id], accessibleOrgIds: [orgPublicHealth.id], name: 'Jade Lin', email: 'jade.lin@lakeside.gov', role: 'CONTRIBUTOR', title: 'Epidemiology Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rosa = { id: demoId('person-rosa'), orgIds: [orgSocial.id], accessibleOrgIds: [orgSocial.id], name: 'Rosa Iglesias', email: 'rosa.iglesias@lakeside.gov', role: 'EDITOR', title: 'Manager Social Services', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const kevin = { id: demoId('person-kevin'), orgIds: [orgSocial.id], accessibleOrgIds: [orgSocial.id], name: 'Kevin Ahn', email: 'kevin.ahn@lakeside.gov', role: 'CONTRIBUTOR', title: 'Data Steward Social Services', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const neal = { id: demoId('person-neal'), orgIds: [orgGovIT.id], accessibleOrgIds: [orgGovIT.id], name: 'Neal Whitfield', email: 'neal.whitfield@lakeside.gov', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const erika = { id: demoId('person-erika'), orgIds: [orgGovIT.id], accessibleOrgIds: [orgGovIT.id], name: 'Erika Voss', email: 'erika.voss@lakeside.gov', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const kwame = { id: demoId('person-kwame'), orgIds: [orgGovIT.id], accessibleOrgIds: [orgGovIT.id], name: 'Kwame Boateng', email: 'kwame.boateng@lakeside.gov', role: 'EDITOR', title: 'Manager Information Security', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sylvie = { id: demoId('person-sylvie'), orgIds: [orgFinRecords.id], accessibleOrgIds: [orgFinRecords.id], name: 'Sylvie Marchand', email: 'sylvie.marchand@lakeside.gov', role: 'EDITOR', title: 'Director Finance & Records', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const anita = { id: demoId('person-anita'), orgIds: [orgFinRecords.id], accessibleOrgIds: [orgFinRecords.id], name: 'Anita Deshpande', email: 'anita.deshpande@lakeside.gov', role: 'CONTRIBUTOR', title: 'Data Steward Finance Records', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const roland = { id: demoId('person-roland'), orgIds: [orgFinRecords.id], accessibleOrgIds: [orgFinRecords.id], name: 'Roland Pierce', email: 'roland.pierce@lakeside.gov', role: 'CONTRIBUTOR', title: 'County Clerk / Records Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const paulette = { id: demoId('person-paulette'), orgIds: [orgFinRecords.id], accessibleOrgIds: [orgFinRecords.id], name: 'Paulette Simmons', email: 'paulette.simmons@lakeside.gov', role: 'EDITOR', title: 'Manager Regulatory Reporting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const bernard = { id: demoId('person-bernard'), orgIds: [orgFinRecords.id], accessibleOrgIds: [orgFinRecords.id], name: 'Bernard Osei', email: 'bernard.osei@lakeside.gov', role: 'EDITOR', title: 'Manager Compliance & Audit', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  await createAll(repos.people, [evelyn, harold, gloria, dean, nina, carlos, bruce, lorena, sanjay, tabitha, desmond, olivia, amir, jade, rosa, kevin, neal, erika, kwame, sylvie, anita, roland, paulette, bernard]);
+
+  // ── Systems (8) — permitting / GIS / tax / public-health / benefits / financial / warehouse + 311 ──
+  const sysPermitting = { id: demoId('sys-permitting'), orgId: orgPublicWorks.id, name: 'Permitting & Licensing System', description: 'Permit and license applications, reviews, inspections, and issuance.', systemType: 'IT', vendorName: 'Accela Civic Platform', ownerPersonId: dean.id, stewardIds: [carlos.id], createdAt: ts, updatedAt: ts };
+  const sysGIS = { id: demoId('sys-gis'), orgId: orgPublicWorks.id, name: 'GIS', description: 'Geographic information system — parcels, roads, and infrastructure assets.', systemType: 'IT', vendorName: 'Esri ArcGIS', ownerPersonId: nina.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysTax = { id: demoId('sys-tax'), orgId: orgLakeside.id, name: 'Property & Tax System', description: 'Property assessment, tax roll, billing, and collections.', systemType: 'IT', vendorName: 'Tyler Technologies', ownerPersonId: sylvie.id, stewardIds: [anita.id], createdAt: ts, updatedAt: ts };
+  const sysPublicHealth = { id: demoId('sys-publichealth'), orgId: orgHHS.id, name: 'Public Health Case System', description: 'Communicable-disease case management, investigations, and reporting.', systemType: 'IT', vendorName: 'NEDSS', ownerPersonId: olivia.id, stewardIds: [amir.id], createdAt: ts, updatedAt: ts };
+  const sysBenefits = { id: demoId('sys-benefits'), orgId: orgHHS.id, name: 'Benefits Eligibility System', description: 'Social-services eligibility, enrollment, and case management.', systemType: 'IT', vendorName: 'Deloitte Health & Human Services', ownerPersonId: rosa.id, stewardIds: [kevin.id], createdAt: ts, updatedAt: ts };
+  const sysFinancial = { id: demoId('sys-govfinancial'), orgId: orgLakeside.id, name: 'Financial System', description: 'County ERP — general ledger, budget, procurement, and payroll.', systemType: 'IT', vendorName: 'Workday', ownerPersonId: sylvie.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgLakeside.id, name: 'Data Warehouse', description: 'Enterprise analytics and open-data warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: neal.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sys311 = { id: demoId('sys-311'), orgId: orgGovShared.id, name: '311 Citizen Services', description: 'Citizen service requests, complaints, and case routing.', systemType: 'IT', vendorName: 'Salesforce Public Sector', ownerPersonId: roland.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  await createAll(repos.systems, [sysPermitting, sysGIS, sysTax, sysPublicHealth, sysBenefits, sysFinancial, sysWarehouse, sys311]);
+
+  // ── Agents (5 — one of each type) ──
+  await createAll(repos.agents, [
+    { id: demoId('agent-forecast-model'), orgIds: [orgHHS.id], name: 'Outbreak Forecast Model', agentType: 'AI', description: 'Forecasts case trends from public-health case data to guide response.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: jade.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-openpipeline'), orgIds: [orgLakeside.id], name: 'Open Data Pipeline', agentType: 'PIPELINE', description: 'Nightly ETL of permitting, tax, and 311 data into the open-data warehouse.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: neal.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-311-bot'), orgIds: [orgGovShared.id], name: '311 Request Router Bot', agentType: 'BOT', description: 'Routes incoming citizen service requests to the responsible department.', provider: 'Microsoft Teams', status: 'ACTIVE', ownerPersonId: roland.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-gis-service'), orgIds: [orgGovIT.id], name: 'GIS Extract Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract GIS layers.', provider: 'Esri', status: 'ACTIVE', ownerPersonId: neal.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-report-gen'), orgIds: [orgLakeside.id], name: 'State Report Generator', agentType: 'OTHER', description: 'Scheduled generator assembling mandated state and federal reporting packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: paulette.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // ── Data Domains (3 top-level + 3 sub-domains under Citizen & Case Data) ──
+  const domCitizen = { id: demoId('domain-citizen'), code: 'CIT', orgId: orgLakeside.id, name: 'Citizen & Case Data', description: 'Resident registry, public-health cases, and social-services case records.', ownerId: evelyn.id, stewardIds: [amir.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domInfra = { id: demoId('domain-infra'), code: 'INF', orgId: orgLakeside.id, name: 'Infrastructure & Assets Data', description: 'Road and utility assets, GIS layers, and permits and licenses.', ownerId: gloria.id, stewardIds: [carlos.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domFinance = { id: demoId('domain-govfinance'), code: 'FIN', orgId: orgLakeside.id, name: 'Finance & Regulatory Data', description: 'Property and tax records and the county financial ledger.', ownerId: sylvie.id, stewardIds: [anita.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  // Sub-domains under Citizen & Case Data — the case-carrying program areas. Parent created first.
+  const domCitizenHealth = { id: demoId('domain-citizen-health'), code: 'CIT-01', orgId: orgLakeside.id, name: 'Public Health Cases', description: 'Communicable-disease cases, investigations, and dispositions.', ownerId: olivia.id, stewardIds: [amir.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domCitizen.id, createdAt: ts, updatedAt: ts };
+  const domCitizenSocial = { id: demoId('domain-citizen-social'), code: 'CIT-02', orgId: orgLakeside.id, name: 'Social Services Cases', description: 'Benefits eligibility, enrollment, and case management records.', ownerId: rosa.id, stewardIds: [kevin.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domCitizen.id, createdAt: ts, updatedAt: ts };
+  const domCitizenPermits = { id: demoId('domain-citizen-permits'), code: 'CIT-03', orgId: orgLakeside.id, name: 'Permits & Licenses', description: 'Permit and license applications, reviews, and issuance.', ownerId: gloria.id, stewardIds: [carlos.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domCitizen.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domCitizen, domInfra, domFinance, domCitizenHealth, domCitizenSocial, domCitizenPermits]);
+
+  // ── Data Assets (9) ──
+  const assetResidentRegistry = { id: demoId('asset-resident-registry'), orgId: orgLakeside.id, name: 'Resident Registry', description: 'The golden resident record — identity and the cases and accounts a resident holds.', systemId: sys311.id, owner: '', ownerPersonId: roland.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 90, createdAt: ts, updatedAt: ts };
+  const assetPropertyTax = { id: demoId('asset-property-tax'), orgId: orgLakeside.id, name: 'Property & Tax Records', description: 'Parcel assessments, the tax roll, billing, and collections.', systemId: sysTax.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 87, createdAt: ts, updatedAt: ts };
+  const assetPermits = { id: demoId('asset-permits'), orgId: orgLakeside.id, name: 'Permits & Licenses', description: 'Permit and license applications, reviews, inspections, and issued records.', systemId: sysPermitting.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 83, createdAt: ts, updatedAt: ts };
+  const assetPublicHealthCases = { id: demoId('asset-ph-cases'), orgId: orgLakeside.id, name: 'Public Health Cases', description: 'Communicable-disease case records, investigations, and dispositions.', systemId: sysPublicHealth.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 57, createdAt: ts, updatedAt: ts };
+  const assetBenefitsCases = { id: demoId('asset-benefits-cases'), orgId: orgLakeside.id, name: 'Benefits Case Records', description: 'Social-services eligibility, enrollment, and case-management records.', systemId: sysBenefits.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 82, createdAt: ts, updatedAt: ts };
+  const assetRoadAssets = { id: demoId('asset-road-assets'), orgId: orgLakeside.id, name: 'Road Asset Inventory', description: 'Road, bridge, and utility asset inventory and condition from the GIS.', systemId: sysGIS.id, owner: '', ownerPersonId: nina.id, stewardIds: [carlos.id] as string[], governanceTier: 'GOLD' as const, healthScore: 91, createdAt: ts, updatedAt: ts };
+  const assetFinancialLedger = { id: demoId('asset-financial-ledger'), orgId: orgLakeside.id, name: 'Financial Ledger', description: 'County general ledger, budget actuals, and procurement postings.', systemId: sysFinancial.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 85, createdAt: ts, updatedAt: ts };
+  // Planted orphans — obviously-named so Ask AI's orphan-detection returns a quotable answer.
+  const orphanLegacyTax = { id: demoId('asset-legacy-tax'), orgId: orgLakeside.id, name: 'Legacy Tax Extract', description: 'Nightly dump from the retired tax mainframe. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanIncidentCsv = { id: demoId('asset-incident-csv'), orgId: orgLakeside.id, name: 'Incident CSV Dump', description: 'Ad-hoc CSV extract of code-enforcement incidents for an old reporting deck. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataAssets, [assetResidentRegistry, assetPropertyTax, assetPermits, assetPublicHealthCases, assetBenefitsCases, assetRoadAssets, assetFinancialLedger, orphanLegacyTax, orphanIncidentCsv]);
+
+  // Domain → asset backrefs so the Domains page shows counts.
+  await repos.dataDomains.update(domCitizen.id, { dataAssetIds: [assetResidentRegistry.id, assetPublicHealthCases.id, assetBenefitsCases.id] });
+  await repos.dataDomains.update(domInfra.id, { dataAssetIds: [assetRoadAssets.id, assetPermits.id] });
+  await repos.dataDomains.update(domFinance.id, { dataAssetIds: [assetPropertyTax.id, assetFinancialLedger.id] });
+
+  // ── Process hierarchy — VS1 Permitting & Licensing (Public Works) ──
+  const vsPermitting = { id: demoId('node-vs-permitting'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Permitting & Licensing', description: 'End-to-end permitting — take the application, review and inspect it, and issue the permit.', activityId: 'VS-DEMO-G1', status: 'ACTIVE', orderIndex: 0, orgId: orgPublicWorks.id, orgIds: [orgPublicWorks.id], ownerId: gloria.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procIntake = { id: demoId('node-proc-intake'), parentId: vsPermitting.id, level: 'PROCESS' as const, name: 'Permit Intake', description: 'Take the application and verify the property, fees, and eligibility.', activityId: 'PRO-DEMO-G1', status: 'ACTIVE', orderIndex: 0, orgId: orgPublicWorks.id, orgIds: [orgPublicWorks.id], ownerId: dean.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procReview = { id: demoId('node-proc-review'), parentId: vsPermitting.id, level: 'PROCESS' as const, name: 'Permit Review & Issuance', description: 'Review and inspect the application and issue or deny the permit.', activityId: 'PRO-DEMO-G2', status: 'ACTIVE', orderIndex: 1, orgId: orgPublicWorks.id, orgIds: [orgPublicWorks.id], ownerId: dean.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spCapture = { id: demoId('node-sp-capture'), parentId: procIntake.id, level: 'SUBPROCESS' as const, name: 'Application Capture', description: 'Take the application and verify the property and fees.', activityId: 'SP-DEMO-G1', status: 'ACTIVE', orderIndex: 0, orgId: orgPublicWorks.id, orgIds: [orgPublicWorks.id], ownerId: carlos.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actReceiveApp = { id: demoId('node-act-receiveapp'), parentId: spCapture.id, level: 'ACTIVITY' as const, name: 'Receive application', description: 'Take the permit application and match the applicant to the resident registry.', activityId: 'ACT-DEMO-G1', status: 'ACTIVE', orderIndex: 0, orgId: orgPublicWorks.id, orgIds: [orgPublicWorks.id], ownerId: carlos.id, responsibleRole: 'Data Steward Roads', responsiblePersonId: carlos.id, systemIds: [sysPermitting.id, sys311.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actVerify = { id: demoId('node-act-verify'), parentId: spCapture.id, level: 'ACTIVITY' as const, name: 'Verify property & fees', description: 'Verify the parcel against the tax roll and confirm fees are paid.', activityId: 'ACT-DEMO-G2', status: 'ACTIVE', orderIndex: 1, orgId: orgPublicWorks.id, orgIds: [orgPublicWorks.id], ownerId: dean.id, responsibleRole: 'Infrastructure Analyst', responsiblePersonId: bruce.id, systemIds: [sysTax.id, sysPermitting.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actReviewInspect = { id: demoId('node-act-reviewinspect'), parentId: procReview.id, level: 'ACTIVITY' as const, name: 'Review & inspect', description: 'Review the application against code and schedule and record the inspection.', activityId: 'ACT-DEMO-G3', status: 'ACTIVE', orderIndex: 0, orgId: orgPublicWorks.id, orgIds: [orgPublicWorks.id], ownerId: dean.id, responsibleRole: 'GIS Program Lead', responsiblePersonId: nina.id, systemIds: [sysPermitting.id, sysGIS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actIssue = { id: demoId('node-act-issue'), parentId: procReview.id, level: 'ACTIVITY' as const, name: 'Issue permit', description: 'Approve and issue the permit or license and record it.', activityId: 'ACT-DEMO-G4', status: 'ACTIVE', orderIndex: 1, orgId: orgPublicWorks.id, orgIds: [orgPublicWorks.id], ownerId: dean.id, responsibleRole: 'Director Roads & Transportation', responsiblePersonId: dean.id, systemIds: [sysPermitting.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Permits issued within the published SLA', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsPermitting, procIntake, procReview, spCapture, actReceiveApp, actVerify, actReviewInspect, actIssue]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-g1'), fromNodeId: actReceiveApp.id, toNodeId: actVerify.id, type: 'SEQUENCE' as const, label: 'application taken', createdAt: ts },
+    { id: demoId('flow-g2'), fromNodeId: actVerify.id, toNodeId: actReviewInspect.id, type: 'SEQUENCE' as const, label: 'property verified', createdAt: ts },
+    { id: demoId('flow-g3'), fromNodeId: actReviewInspect.id, toNodeId: actIssue.id, type: 'SEQUENCE' as const, label: 'review passed', createdAt: ts },
+  ]);
+
+  // ── Process hierarchy — VS2 Public Health Case Management (Health & Human Services) ──
+  const vsHealth = { id: demoId('node-vs-health'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Public Health Case Management', description: 'Register a public-health case, investigate it, and report it to the state and close it.', activityId: 'VS-DEMO-G2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgHHS.id, orgIds: [orgHHS.id], ownerId: desmond.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procCaseIntake = { id: demoId('node-proc-caseintake'), parentId: vsHealth.id, level: 'PROCESS' as const, name: 'Case Intake & Investigation', description: 'Register the case, triage it, and investigate it.', activityId: 'PRO-DEMO-G3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgHHS.id, orgIds: [orgHHS.id], ownerId: olivia.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procReporting = { id: demoId('node-proc-greporting'), parentId: vsHealth.id, level: 'PROCESS' as const, name: 'Reporting & Closure', description: 'Report the case to the state and close it.', activityId: 'PRO-DEMO-G4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgHHS.id, orgIds: [orgHHS.id], ownerId: olivia.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spTriage = { id: demoId('node-sp-triage'), parentId: procCaseIntake.id, level: 'SUBPROCESS' as const, name: 'Case Triage', description: 'Register the case and triage its priority.', activityId: 'SP-DEMO-G2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgHHS.id, orgIds: [orgHHS.id], ownerId: amir.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actRegisterCase = { id: demoId('node-act-registercase'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Register case', description: 'Open the case and match the subject to the resident registry and benefits records.', activityId: 'ACT-DEMO-G5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgHHS.id, orgIds: [orgHHS.id], ownerId: amir.id, responsibleRole: 'Data Steward Public Health', responsiblePersonId: amir.id, systemIds: [sysPublicHealth.id, sysBenefits.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actInvestigate = { id: demoId('node-act-investigate'), parentId: procCaseIntake.id, level: 'ACTIVITY' as const, name: 'Investigate case', description: 'Investigate the case, record contacts and dispositions, and update the case record.', activityId: 'ACT-DEMO-G6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgHHS.id, orgIds: [orgHHS.id], ownerId: olivia.id, responsibleRole: 'Data Steward Public Health', responsiblePersonId: amir.id, systemIds: [sysPublicHealth.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Every case investigated and dispositioned within the reporting SLA', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actReport = { id: demoId('node-act-report'), parentId: procReporting.id, level: 'ACTIVITY' as const, name: 'Report to state & close', description: 'Reconcile the case record and file the mandated state report, then close the case.', activityId: 'ACT-DEMO-G7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgHHS.id, orgIds: [orgHHS.id], ownerId: olivia.id, responsibleRole: 'Manager Regulatory Reporting', responsiblePersonId: paulette.id, systemIds: [sysPublicHealth.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, successMeasure: 'Reportable cases filed to the state on time', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsHealth, procCaseIntake, procReporting, spTriage, actRegisterCase, actInvestigate, actReport]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-g4'), fromNodeId: actRegisterCase.id, toNodeId: actInvestigate.id, type: 'SEQUENCE' as const, label: 'case registered', createdAt: ts },
+  ]);
+
+  // ── Mappings (7) ──
+  await createAll(repos.mappings, [
+    { id: demoId('map-g1'), orgId: orgPublicWorks.id, processStepId: actReceiveApp.id, dataAssetId: assetResidentRegistry.id, linkType: 'INPUT', notes: 'Matches the applicant to the resident registry', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-g2'), orgId: orgPublicWorks.id, processStepId: actVerify.id, dataAssetId: assetPropertyTax.id, linkType: 'INPUT', notes: 'Verifies the parcel against the tax roll', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-g3'), orgId: orgPublicWorks.id, processStepId: actReviewInspect.id, dataAssetId: assetRoadAssets.id, linkType: 'INPUT', notes: 'Checks the parcel and infrastructure against the GIS', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-g4'), orgId: orgPublicWorks.id, processStepId: actIssue.id, dataAssetId: assetPermits.id, linkType: 'OUTPUT', notes: 'Writes the issued permit record', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-g5'), orgId: orgHHS.id, processStepId: actRegisterCase.id, dataAssetId: assetBenefitsCases.id, linkType: 'INPUT', notes: 'Links the case to benefits and eligibility records', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-g6'), orgId: orgHHS.id, processStepId: actInvestigate.id, dataAssetId: assetPublicHealthCases.id, linkType: 'OUTPUT', notes: 'Writes the investigation + disposition', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-g7'), orgId: orgHHS.id, processStepId: actReport.id, dataAssetId: assetPublicHealthCases.id, linkType: 'INPUT', notes: 'Reads the case to file the state report', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+  ]);
+
+  // ── Governance tasks assigned to Evelyn (populates My Dashboard) ──
+  await createAll(repos.governanceTasks, [
+    { id: demoId('task-g1'), orgId: orgLakeside.id, title: 'Approve Public Health Cases classification review', description: 'Review the AI-suggested sensitivity tags on Public Health Cases and Benefits Case Records and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: evelyn.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetPublicHealthCases.id, automationMode: 'HUMAN' as any, createdBy: harold.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-g2'), orgId: orgLakeside.id, title: 'Sign off on Citizen & Case domain scope', description: 'Desmond has proposed expanding the Citizen & Case domain to cover new state reporting fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: evelyn.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domCitizen.id, automationMode: 'HUMAN' as any, createdBy: desmond.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-g3'), orgId: orgLakeside.id, title: 'Retire Legacy Tax Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: evelyn.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyTax.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+  ]);
+
+  // ── One open governance issue assigned to Evelyn ──
+  await repos.governanceIssues.create({
+    id: demoId('issue-g1'),
+    orgId: orgLakeside.id,
+    title: 'Public Health Cases tier below Silver — critical process, ungoverned',
+    description: 'Public Health Cases is BRONZE tier but the Case Management process writes it as the primary public-health case-of-record. Recommend promoting to Silver with an SLA target.',
+    issueType: 'OWNERSHIP' as any,
+    severity: 'HIGH' as any,
+    status: 'OPEN' as any,
+    domainId: domCitizen.id,
+    dataAssetId: assetPublicHealthCases.id,
+    systemId: sysPublicHealth.id,
+    reportedBy: harold.id,
+    assignedTo: evelyn.id,
+    resolutionSummary: null,
+    createdAt: ts,
+    updatedAt: ts,
+    closedAt: null,
+  } as any);
+
+  // ── Data Quality rules (2 — one passing, one failing) ──
+  await createAll(repos.dataQualityRules, [
+    {
+      id: demoId('dq-rule-passing'), orgId: orgLakeside.id, dataAssetId: assetPropertyTax.id,
+      dimension: 'COMPLETENESS' as const, name: 'Property & Tax · parcel completeness',
+      description: 'At least 95% of parcels must carry a complete assessment + owner + situs.',
+      threshold: 95, currentScore: 97, weight: 1, status: 'PASSING' as const,
+      lastMeasured: ts, scheduleFrequency: 'DAILY' as const, nextRunAt: daysFromNow(1), createdAt: ts, updatedAt: ts,
+    },
+    {
+      id: demoId('dq-rule-failing'), orgId: orgLakeside.id, dataAssetId: assetPublicHealthCases.id,
+      dimension: 'TIMELINESS' as const, name: 'Public Health Cases · reporting latency',
+      description: 'Reportable cases should be filed to the state within the mandated window. Rolling 24h.',
+      threshold: 95, currentScore: 57, weight: 1, status: 'FAILING' as const,
+      lastMeasured: ts, scheduleFrequency: 'HOURLY' as const, nextRunAt: daysFromNow(0), createdAt: ts, updatedAt: ts,
+    },
+  ]);
+
+  // ── Edge connector (ONLINE) ──
+  const connectorHeartbeatAt = new Date(Date.now() - 45 * 1000).toISOString();
+  const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const conn = {
+    id: demoId('conn-lakeside'), orgId: orgLakeside.id, name: 'Lakeside County Data Connector',
+    tokenHash: '3c9e1a7f52b4d80c6e1f3a9d7b5c2e0f4a6d8b1c3e5f7092a4c6e8b0d2f4a6c8',
+    pairingCode: null, pairingCodeExpiresAt: null,
+    systemIds: [sysPermitting.id, sysWarehouse.id],
+    lastHeartbeatAt: connectorHeartbeatAt, agentVersion: '1.2.0', status: 'ONLINE' as const,
+    createdAt: connectorCreatedAt, updatedAt: connectorHeartbeatAt,
+  };
+  await repos.connectors.create(conn);
+
+  await repos.dataAssets.update(assetPermits.id, {
+    lastSyncedByConnectorId: conn.id,
+    lastSyncedAt: connectorSyncAt,
+  } as any);
+
+  await createAll(repos.connectorEvents, [
+    { id: demoId('ce-g-paired'), connectorId: conn.id, orgId: orgLakeside.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-g-scan-start'), connectorId: conn.id, orgId: orgLakeside.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysPermitting.id, sysWarehouse.id] } },
+    { id: demoId('ce-g-scan-done'), connectorId: conn.id, orgId: orgLakeside.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 39_540, assetsDiscovered: 1 } },
+    { id: demoId('ce-g-assets'), connectorId: conn.id, orgId: orgLakeside.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
+    { id: demoId('ce-g-hb'), connectorId: conn.id, orgId: orgLakeside.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
+  ]);
+
+  // ── Second connector — PAIRING state ──
+  const pairingConn = {
+    id: demoId('conn-g-pairing'), orgId: orgLakeside.id, name: 'Health Department Connector',
+    tokenHash: null, pairingCode: '48213975',
+    pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    systemIds: [] as string[], lastHeartbeatAt: null, agentVersion: null, status: 'PAIRED' as const,
+    createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(), updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+  };
+  await repos.connectors.create(pairingConn as any);
+
+  // ── Governance calendar event ──
+  const dayNow = new Date();
+  const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
+  const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
+  await repos.calendarEvents.create({
+    id: demoId('cal-g-dgc'),
+    orgId: orgLakeside.id,
+    name: 'Data Governance Council weekly',
+    description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
+    eventType: 'COMMITTEE_MEETING' as const,
+    cadence: 'WEEKLY' as const,
+    dayOfMonth: null,
+    dayOfWeek: 5,
+    timeOfDay: '09:00',
+    durationMinutes: 60,
+    attendees: [evelyn.id, harold.id, gloria.id, desmond.id],
+    agendaTemplate: '1. Open governance issues (from bell)\n2. Domain scope changes\n3. Control effectiveness review\n4. Upcoming policy publications',
+    nextOccurrence: nextFriday.toISOString(),
+    lastOccurrence: null,
+    autoCreateTasks: false,
+    status: 'ACTIVE' as const,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+
+  // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
+  await createAll(repos.statsSnapshots, [
+    ...weeklySnapshots(orgLakeside.id, { coverage: 62, avgHealth: 71, gaps: 8, dataAssets: 9, mappings: 7 }),
+    ...weeklySnapshots(orgPublicWorks.id, { coverage: 70, avgHealth: 74, gaps: 4, dataAssets: 3, mappings: 4 }),
+    ...weeklySnapshots(orgHHS.id, { coverage: 58, avgHealth: 69, gaps: 4, dataAssets: 3, mappings: 3 }),
+    ...weeklySnapshots(orgGovShared.id, { coverage: 52, avgHealth: 73, gaps: 3, dataAssets: 3, mappings: 0 }),
+  ]);
+
+  // ── AI template cache — pre-warm the wand for Lakeside County ──
+  aiTemplateCache.push(
+    {
+      industry: 'government|permitting & licensing',
+      industryLabel: 'Government & Public Sector — Permitting & Licensing',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Permitting & Licensing',
+            description: 'Take the application, review and inspect it, and issue the permit.',
+            purpose: 'Issue permits and licenses accurately and within the published SLA.',
+            businessOutcome: 'On-SLA permits with verified property, fees, and inspection records.',
+            processes: [
+              { name: 'Permit Intake', description: 'Take the application and verify the property and fees.', purpose: 'Get a complete, verified application on file.', activities: [
+                { name: 'Receive application', description: 'Take the application and match the applicant to the resident registry.' },
+                { name: 'Verify property & fees', description: 'Verify the parcel against the tax roll and confirm fees are paid.' },
+              ] },
+              { name: 'Permit Review & Issuance', description: 'Review and inspect the application and issue the permit.', purpose: 'Approve compliant applications and issue the permit.', activities: [
+                { name: 'Review & inspect', description: 'Review against code, schedule, and record the inspection.' },
+                { name: 'Issue permit', description: 'Approve and issue the permit or license and record it.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      industry: 'government|public health case management',
+      industryLabel: 'Government & Public Sector — Public Health Case Management',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Public Health Case Management',
+            description: 'Register a case, investigate it, and report it to the state and close it.',
+            purpose: 'Manage public-health cases and meet mandated state reporting on time.',
+            businessOutcome: 'Cases investigated on SLA and reportable cases filed to the state on time.',
+            processes: [
+              { name: 'Case Intake & Investigation', description: 'Register the case, triage it, and investigate it.', purpose: 'Open and work the case to a disposition.', activities: [
+                { name: 'Register case', description: 'Open the case and match the subject to the resident registry.' },
+                { name: 'Investigate case', description: 'Investigate the case, record contacts, and update the record.' },
+              ] },
+              { name: 'Reporting & Closure', description: 'Report the case to the state and close it.', purpose: 'Meet mandated reporting and close the case.', activities: [
+                { name: 'Report to state & close', description: 'Reconcile the case record, file the state report, and close the case.' },
+                { name: 'Archive case evidence', description: 'Archive the case evidence per the retention schedule.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  saveStore('aiTemplateCache', aiTemplateCache);
+
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgLakeside.id,
+    cdoId: evelyn.id,
+    govLeadId: harold.id,
+    dataOwnerId: gloria.id,
+    stewardIds: [carlos.id, amir.id],
+    tenantName: 'Lakeside County',
+  });
+
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgLakeside.id,
+    domainIds: [domCitizen.id, domInfra.id, domFinance.id],
+    cdoId: evelyn.id,
+    govLeadId: harold.id,
+    dataOwnerId: gloria.id,
+    stewardId: carlos.id,
+    techStewardId: anita.id,
+    engineerId: neal.id,
+    architectId: erika.id,
+    raciNodeId: actInvestigate.id,
+    raciPersonId: amir.id,
+  });
+
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgLakeside.id, ownerId: carlos.id, cdoId: evelyn.id, domainId: domCitizen.id });
+
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgLakeside.id, orgPublicWorks.id, orgHHS.id],
+    links: [
+      { id: demoId('lin-1'), orgId: orgLakeside.id, sourceSystemId: sysTax.id, targetSystemId: sysWarehouse.id, dataAssetId: assetPropertyTax.id, description: 'Property & tax records sync nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-2'), orgId: orgPublicWorks.id, sourceSystemId: sysPermitting.id, targetSystemId: sysWarehouse.id, dataAssetId: assetPermits.id, description: 'Permit records feed the open-data warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: demoId('lin-3'), orgId: orgHHS.id, sourceSystemId: sysPublicHealth.id, targetSystemId: sysWarehouse.id, dataAssetId: assetPublicHealthCases.id, description: 'Public-health case data streams into the warehouse for reporting.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+    ],
+    edges: [
+      { id: demoId('edge-1'), orgId: orgLakeside.id, sourceAssetId: assetResidentRegistry.id, targetAssetId: assetPermits.id },
+      { id: demoId('edge-2'), orgId: orgHHS.id, sourceAssetId: assetResidentRegistry.id, targetAssetId: assetPublicHealthCases.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgLakeside.id, agentId: demoId('agent-report-gen'), agentName: 'State Report Generator', activityId: actReport.id, activityName: 'Report to state & close', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: evelyn.id, reviewerId: harold.id });
+
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgLakeside.id, assetId: assetResidentRegistry.id, systemId: sys311.id, personId: carlos.id, personName: 'Carlos Vega' });
+
+  logger.info({ persona: evelyn.name }, 'Demo data seeded (government)');
+
+  return {
+    organizations: 10,
+    people: 24,
+    systems: 8,
+    agents: 5,
+    dataDomains: 6,
+    dataAssets: 9,
+    processNodes: 15,
+    mappings: 7,
+    governanceTasks: 3,
+    governanceIssues: 1,
+    dataQualityRules: 2,
+    connectors: 2,
+    connectorEvents: 5,
+    calendarEvents: 1,
+    statsSnapshots: STATS_WEEKS * 4,
+    persona: { id: evelyn.id, name: evelyn.name },
   };
 }
