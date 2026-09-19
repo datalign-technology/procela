@@ -24,11 +24,14 @@ interface Row {
 }
 interface Narrative { whatMoved?: string; forCouncil?: string; whatMovedAuto?: boolean; forCouncilAuto?: boolean }
 interface ScopeInfo { lens: 'all' | 'governed'; applied: boolean; version: number | null; changedAt: string | null }
+interface ValueDriverRatio { covered: number; total: number; pct: number }
+interface ValueDrivers { ownership: ValueDriverRatio; openRisk: number; resolvedLast30: number; avgResolutionDays: number | null }
 interface Derived {
   orgId: string; orgName: string; period: string;
   targets: { coverage: number; classification: number; openIssues: number; exceptions: number; openIssuesDays: number };
   divisions: Row[]; enterprise: Row; narrative: Narrative; canEdit?: boolean;
   scope?: ScopeInfo;
+  valueDrivers?: ValueDrivers;
 }
 interface VersionMeta { id: string; period: string; status: string; createdBy?: string; createdAt: string }
 interface SavedVersion { id: string; orgId: string; period: string; status: string; createdBy?: string; createdAt: string; derived: Derived; overrides: Record<string, unknown>; narrative: Narrative }
@@ -395,6 +398,38 @@ export default function CouncilScorecardPage() {
           </table>
         </div>
       </Card>
+
+      {/* Governance value drivers — ROI Phase 1: leading indicators, not
+          dollars. Respects the active lens; a CFO's $ model multiplies these. */}
+      {derived.valueDrivers && (() => {
+        const v = derived.valueDrivers;
+        const tiles: Array<{ label: string; value: string; sub: string; tone?: 'good' | 'risk' }> = [
+          { label: 'Ownership coverage', value: `${v.ownership.pct}%`, sub: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good' },
+          { label: 'Value at risk', value: `${v.openRisk}`, sub: 'Past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk' },
+          { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, sub: 'Governance issues moved to a terminal status', tone: 'good' },
+          { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, sub: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues' },
+        ];
+        return (
+          <Card padding={18} marginBottom={16}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Governance value drivers</div>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999 }}>LEADING INDICATORS</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+              The un-fakeable signals that governance is paying off — measured from your catalog, no assumed dollar figures. {derived.scope?.applied ? 'Scoped to the governed set.' : 'Across the whole org tree.'}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+              {tiles.map((t) => (
+                <div key={t.label} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 14px', background: 'var(--color-bg)' }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-muted)' }}>{t.label}</div>
+                  <div style={{ fontSize: 26, fontWeight: 700, marginTop: 4, fontVariantNumeric: 'tabular-nums', color: t.tone === 'risk' && v.openRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>{t.sub}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Narrative */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 16 }}>
