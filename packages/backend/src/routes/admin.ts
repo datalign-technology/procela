@@ -36,7 +36,13 @@ router.post('/demo-seed', async (req: AuthenticatedRequest, res: Response) => {
   // Industry selector: 'utilities' (default) or 'shipbuilding'. Anything
   // else is rejected so a typo doesn't silently seed the default.
   const requested = req.body?.industry;
-  const validIndustries: DemoIndustry[] = ['utilities', 'shipbuilding'];
+  // industry key → the demo tenant name it seeds (also the set of valid keys).
+  const TENANT_LABELS: Record<DemoIndustry, string> = {
+    utilities: 'Tidewater Utilities',
+    shipbuilding: 'Meridian Shipbuilding',
+    healthcare: 'Cedarline Health',
+  };
+  const validIndustries = Object.keys(TENANT_LABELS) as DemoIndustry[];
   const industry: DemoIndustry = requested == null ? 'utilities' : requested;
   if (!validIndustries.includes(industry)) {
     res.status(400).json({ success: false, error: `Unknown industry "${requested}". Expected one of: ${validIndustries.join(', ')}.` });
@@ -49,7 +55,7 @@ router.post('/demo-seed', async (req: AuthenticatedRequest, res: Response) => {
     res.json({
       success: true,
       data: report,
-      message: `Loaded ${industry === 'shipbuilding' ? 'Meridian Shipbuilding' : 'Tidewater Utilities'} demo — ${report.organizations} orgs, ${report.people} people, ${report.dataAssets} data assets, ${report.processNodes} process nodes, ${report.mappings} mappings. Sign in as ${report.persona.name} to see the demo persona.`,
+      message: `Loaded ${TENANT_LABELS[industry]} demo — ${report.organizations} orgs, ${report.people} people, ${report.dataAssets} data assets, ${report.processNodes} process nodes, ${report.mappings} mappings. Sign in as ${report.persona.name} to see the demo persona.`,
     });
   } catch (err) {
     logger.error({ err }, 'Demo seed failed');

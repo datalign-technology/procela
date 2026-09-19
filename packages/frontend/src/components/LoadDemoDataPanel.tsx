@@ -26,7 +26,7 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
-type Industry = 'utilities' | 'shipbuilding';
+type Industry = 'utilities' | 'shipbuilding' | 'healthcare';
 
 const INDUSTRIES: ReadonlyArray<{
   value: Industry;
@@ -48,6 +48,13 @@ const INDUSTRIES: ReadonlyArray<{
     tenant: 'Meridian Shipbuilding',
     persona: 'Elena Ruiz',
     blurb: 'Naval + commercial shipyard — new construction + fleet sustainment.',
+  },
+  {
+    value: 'healthcare',
+    label: 'Healthcare',
+    tenant: 'Cedarline Health',
+    persona: 'Dr. Naomi Okafor',
+    blurb: 'Integrated delivery network — acute care + ambulatory + shared services.',
   },
 ];
 
