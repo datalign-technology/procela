@@ -95,6 +95,10 @@ Once business intent is defined, Procela uses that context to help find, validat
 - Health score per data asset (initially manually set; Phase 3 will pull from source systems)
 - Governance tier badge (Bronze / Silver / Gold)
 - Portfolio-level health dashboard
+- **Governance ROI on the Council Scorecard** — the value the program returns, built in three layers so the story is always honest:
+  - *Value drivers (leading indicators)* — un-fakeable signals measured from the catalog with no assumed dollars: ownership coverage, a "value at risk" count, and remediation velocity (resolved-in-30-days + avg days to resolve). Respect the All / Governed lens.
+  - *Tenant value model* — each org sets its own dollar assumptions (value per owned entity, per resolved issue, exposure per open-risk item; own currency) on **Governance → Foundation → Value model**; the scorecard monetizes the drivers into an estimated annual value + value at risk, stamped "your assumptions". Procela invents no figures — unset ⇒ a configure prompt, not a fabricated number. Stored per-tenant on the org (`roiModel`), resolved up the org tree like `scorecardTargets`.
+  - *Per-value-stream attribution* — the monetized value broken down by value stream via the process→data mappings, so leaders see which streams bank value vs. carry risk. Rows deliberately don't sum to the org total (shared assets count in each; org-level exceptions and unmapped data aren't attributed).
 
 ### 7. AI Assistant
 - Natural language interface available throughout the application

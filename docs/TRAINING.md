@@ -1121,6 +1121,32 @@ shows the basis, and a snapshot saved under the Governed lens stores its
 governed numbers stamped with the scope version, so comparing two months is
 apples-to-apples even if the scope moved between them.
 
+**Governance ROI — the value the program returns.** Scroll below the
+measure table and you'll find the value story, built so it stays honest:
+
+1. **Governance value drivers** — leading indicators measured straight
+   from your catalog with *no assumed dollar figures*: **Ownership
+   coverage**, a **Value at risk** count to drive down (past-expiry
+   exceptions + unowned Tier-1 domains + unclassified assets), **Resolved
+   (30 days)**, and **Avg days to resolve**. These are the un-fakeable
+   signals a program is paying off, and they respect the All / Governed lens.
+2. **Estimated governance value** — put dollars on those drivers with your
+   *own* assumptions. Open **Governance → Foundation → Value model** and set
+   what an owned entity, a resolved issue, and an open-risk item are worth to
+   you (in your currency). The scorecard then shows an **Estimated annual
+   value**, **Ownership value**, **Resolution value (annualized)**, and
+   **Value at risk**, each stamped *your assumptions*. Before you set a
+   model the card shows a configure prompt, not a made-up number — Procela
+   never invents a figure. (Annual value = owned entities × your value-per-
+   entity + issues resolved in the last 30 days × your value-per-issue × 12;
+   value at risk = open-risk items × your exposure-per-item.)
+3. **By value stream** — with a model set, the same card breaks the value
+   down per value stream, attributed through each stream's process→data
+   mappings, so you can see which streams' data is banking value and which
+   are carrying risk. Because a shared asset counts in every stream it
+   supports and org-level exceptions / unmapped data aren't attributed, the
+   rows deliberately don't sum to the totals above (the panel says so).
+
 To feed the *Exceptions past expiry* measure, visit **Governance →
 Operate → Exceptions** and grant a waiver with an expiry date in the
 past — it flags red on that page and increments the exceptions column
