@@ -475,9 +475,47 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(issue.dataAssetId, demoId('asset-lab-results'), 'issue + failing DQ target one asset');
   });
 
+  it('seeds the manufacturing profile at the same counts as utilities', async () => {
+    const res = await request(port, 'POST', '/admin/demo-seed', { industry: 'manufacturing' }, 'SUPER_ADMIN');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.persona.name, 'Marcus Feldt');
+
+    const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL)).length;
+    assert.strictEqual(demoCount(organizations), 10, 'orgs');
+    assert.strictEqual(demoCount(people), 24, 'people');
+    assert.strictEqual(demoCount(systems), 8, 'systems');
+    assert.strictEqual(demoCount(agents), 5, 'agents');
+    assert.strictEqual(demoCount(dataDomains), 6, 'domains');
+    assert.strictEqual(demoCount(dataAssets), 9, 'assets');
+    assert.strictEqual(demoCount(processNodes), 15, 'process nodes');
+    assert.strictEqual(demoCount(mappings), 7, 'mappings');
+    assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
+    assert.strictEqual(demoCount(governanceIssues), 1, 'issues');
+    assert.strictEqual(demoCount(dataQualityRules), 2, 'DQ rules');
+    assert.strictEqual(demoCount(connectors), 2, 'connectors');
+    assert.strictEqual(demoCount(connectorEvents), 5, 'connector events');
+    assert.strictEqual(demoCount(calendarEvents), 1, 'calendar events');
+  });
+
+  it('manufacturing plants orphan assets and a failing DQ rule on the same asset as its issue', async () => {
+    await request(port, 'POST', '/admin/demo-seed', { industry: 'manufacturing' }, 'SUPER_ADMIN');
+    const mappedAssetIds = new Set(mappings.filter((m: any) => m.dataAssetId).map((m: any) => m.dataAssetId));
+    assert.ok(dataAssets.find((a: any) => a.id === demoId('asset-legacy-mrp')));
+    assert.ok(dataAssets.find((a: any) => a.id === demoId('asset-scrap-csv')));
+    assert.strictEqual(mappedAssetIds.has(demoId('asset-legacy-mrp')), false, 'Legacy MRP Extract orphaned');
+    assert.strictEqual(mappedAssetIds.has(demoId('asset-scrap-csv')), false, 'Scrap CSV Dump orphaned');
+
+    const failing = dataQualityRules.find((r: any) => r.id?.startsWith(DEMO_ID_SENTINEL) && r.status === 'FAILING');
+    const issue = governanceIssues.find((i: any) => i.id?.startsWith(DEMO_ID_SENTINEL));
+    assert.ok(failing && issue);
+    assert.strictEqual(failing.dataAssetId, demoId('asset-inspection'));
+    assert.strictEqual(issue.dataAssetId, demoId('asset-inspection'), 'issue + failing DQ target one asset');
+  });
+
   // ── Governance depth — seeded for every industry at parity ──
 
-  for (const industry of ['utilities', 'shipbuilding', 'healthcare'] as const) {
+  for (const industry of ['utilities', 'shipbuilding', 'healthcare', 'manufacturing'] as const) {
     it(`seeds governance depth (policies/controls/groups/program/decision rights) for ${industry}`, async () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
       const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));

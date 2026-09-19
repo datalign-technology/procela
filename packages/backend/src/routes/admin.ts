@@ -41,6 +41,7 @@ router.post('/demo-seed', async (req: AuthenticatedRequest, res: Response) => {
     utilities: 'Tidewater Utilities',
     shipbuilding: 'Meridian Shipbuilding',
     healthcare: 'Cedarline Health',
+    manufacturing: 'Forgeline Manufacturing',
   };
   const validIndustries = Object.keys(TENANT_LABELS) as DemoIndustry[];
   const industry: DemoIndustry = requested == null ? 'utilities' : requested;

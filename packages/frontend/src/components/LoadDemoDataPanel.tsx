@@ -26,7 +26,7 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
-type Industry = 'utilities' | 'shipbuilding' | 'healthcare';
+type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing';
 
 const INDUSTRIES: ReadonlyArray<{
   value: Industry;
@@ -55,6 +55,13 @@ const INDUSTRIES: ReadonlyArray<{
     tenant: 'Cedarline Health',
     persona: 'Dr. Naomi Okafor',
     blurb: 'Integrated delivery network — acute care + ambulatory + shared services.',
+  },
+  {
+    value: 'manufacturing',
+    label: 'Manufacturing',
+    tenant: 'Forgeline Manufacturing',
+    persona: 'Marcus Feldt',
+    blurb: 'Discrete manufacturer — plant operations + supply chain + shared services.',
   },
 ];
 
