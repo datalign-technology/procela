@@ -3,11 +3,13 @@
 This document describes the security model of Procela, the controls
 shipped with it, and how to report a vulnerability.
 
-> Procela is currently in prototype phase. The architecture described
-> below is in place; the operational hardening (real PostgreSQL,
-> Docker Compose, production CI/CD, audited cloud KMS, real OIDC /
-> SAML integration tests) is on the path but not all of it ships in
-> the current build. See `README.md` for the prototype-state caveats.
+> The controls described below are implemented and shipping.
+> Persistence runs on **PostgreSQL** (via Prisma) when `DATABASE_URL` is
+> set, with JSON files as the zero-config local/dev default; Docker
+> Compose, CI, and OIDC / SAML / MFA integration tests are all in place.
+> A smaller set of operational hardening items is still in progress —
+> see [Operational concerns](#operational-concerns-in-progress) at the
+> end of this document and `README.md` for the backlog.
 
 ## Reporting a vulnerability
 
@@ -127,11 +129,29 @@ Three layered controls sit in front of the credential verifier:
     encrypted in `.env` using the same envelope. Operators encrypt
     once via `POST /api/v1/auth/encrypt-secret` (admin-only) and
     paste the `enc:v1:…` envelope into their env file.
+  - **Per-tenant AI provider keys** — when an org sets its own AI
+    provider (Settings → AI), the API key is encrypted before
+    persistence with the same crypto service and envelope. It never
+    rides along on org read paths — only an `apiKeyConfigured` boolean
+    is returned.
   - **Password hashes** use Argon2id and are never returned to the
     client (a `publicPerson()` projection strips them on every
     read path).
   - **Backup codes** are Argon2id hashes, single-use, removed on
     consumption.
+
+## AI data-egress control
+
+Server-side AI calls send org context (catalog summaries, process and
+data metadata) to the configured model provider. `AI_FEATURES_ENABLED`
+(default on) is a single deployment kill-switch: set it to `false` and
+the backend refuses every AI endpoint and the frontend hides every AI
+entry point, so no catalog data leaves for an external model — the
+control an on-prem / FedRAMP deployment flips to guarantee model
+isolation. When AI is on, which vendor receives the data is set by
+`AI_PROVIDER` (Anthropic by default) or per-tenant config, and provider
+credentials are held server-side only (see At-rest encryption). AI calls
+are never made from the browser.
 
 ## Audit log
 
@@ -175,21 +195,19 @@ refreshed automatically via the persistence reload registry.
 
 ## Operational concerns (in progress)
 
-Items below are architected for but not all wired in the current
-prototype build. See `README.md` for the production-readiness
+The controls above ship today (PostgreSQL persistence with `org_id`
+enforcement, Docker Compose, and OIDC / SAML / MFA integration tests are
+all in place). The items below are architected for but not yet wired.
+See `README.md` and `docs/STATUS.md` for the production-readiness
 backlog.
 
-  - PostgreSQL with multi-tenant `org_id` enforcement at the query
-    layer (currently flat JSON files behind a write-through cache).
-  - Real Docker Compose for a one-command local dev environment.
   - JWT secret rotation with an overlap window.
   - MFA encryption key rotation by re-encrypting every record under
     the new key.
-  - Multi-IdP SAML.
+  - Multi-IdP SAML (OIDC already supports multiple IdPs per install).
   - CSP report-uri endpoint.
   - Subresource Integrity hash on the dynamically loaded hCaptcha
     script.
-  - Integration test coverage for OIDC, SAML, and MFA flows.
 
 ## Cryptographic primitives
 
