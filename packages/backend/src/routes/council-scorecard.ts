@@ -66,6 +66,11 @@ export interface DerivedScorecard {
   // from data Procela already owns and respecting the current lens. A CFO's $
   // model multiplies these; on their own they're an honest value story.
   valueDrivers: ValueDrivers;
+  // Monetized ROI estimate (ROI Phase 2): the value drivers above multiplied
+  // by the tenant's OWN dollar assumptions (roiModelForOrg). Procela invents no
+  // figures — `configured` is false until a tenant sets a model, and the UI
+  // shows a "configure your value model" prompt rather than a fabricated $0.
+  roi: RoiEstimate;
 }
 
 interface ValueDriverRatio { covered: number; total: number; pct: number }
@@ -81,6 +86,33 @@ export interface ValueDrivers {
   // over all resolved issues (remediation throughput + cycle time).
   resolvedLast30: number;
   avgResolutionDays: number | null;
+}
+
+// ROI Phase 2 — a tenant's OWN dollar assumptions. Procela ships no default
+// figures (every multiplier defaults to 0), so a value estimate only appears
+// once a tenant has told us what a unit is worth to them. Resolved by walking
+// up the org tree exactly like scorecardTargets, so a company can set the
+// model once for all its divisions. Stored on the org row (roiModel).
+export interface RoiModel {
+  currency: string;               // ISO-ish display code (e.g. USD, EUR, GBP)
+  riskCostPerItem: number;        // $ exposure the tenant assigns to each open-risk item
+  resolutionValuePerIssue: number;// $ cost the tenant avoids per governance issue resolved
+  ownershipValuePerEntity: number;// $ annual value of a domain/asset having a named owner
+}
+
+// The computed monetization. Ownership value is a standing annual figure;
+// resolution value is a run-rate (last-30-days count annualized ×12). Value at
+// risk is EXPOSURE governance drives down, so it's reported separately and
+// never folded into annualValue (which is realized/run-rate value only).
+export interface RoiEstimate {
+  configured: boolean;            // false ⇒ no multiplier set; UI shows a CTA
+  currency: string;
+  model: RoiModel;                // echoed assumptions so the readout is auditable
+  valueAtRisk: number;            // openRisk × riskCostPerItem
+  resolutionValueMonthly: number; // resolvedLast30 × resolutionValuePerIssue
+  resolutionValueAnnualized: number; // resolutionValueMonthly × 12
+  ownershipValue: number;         // ownership.covered × ownershipValuePerEntity
+  annualValue: number;            // ownershipValue + resolutionValueAnnualized
 }
 
 export interface StoredCouncilScorecard {
@@ -151,6 +183,29 @@ function targetsForOrg(orgId: string | undefined): ScorecardTargets {
   }
   return { ...DEFAULT_TARGETS };
 }
+
+// The shipped ROI model — deliberately all zeros. Procela never invents a
+// dollar value; a tenant must supply its own for a monetized estimate to show.
+const DEFAULT_ROI_MODEL: RoiModel = { currency: 'USD', riskCostPerItem: 0, resolutionValuePerIssue: 0, ownershipValuePerEntity: 0 };
+
+// Resolve the ROI model for a scorecard scoped to `orgId`: walk up to the first
+// ancestor that has set `roiModel` (so a company can set the value model for
+// its divisions), merging over the defaults so a partial stored object still
+// yields a complete set; fall back to the zero model when none is set.
+function roiModelForOrg(orgId: string | undefined): RoiModel {
+  if (!orgId) return { ...DEFAULT_ROI_MODEL };
+  const orgs = getCachedOrgList();
+  let cur = orgs.find((o) => o.id === orgId);
+  const seen = new Set<string>();
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    const m = (cur as { roiModel?: Partial<RoiModel> | null }).roiModel;
+    if (m && typeof m === 'object') return { ...DEFAULT_ROI_MODEL, ...m };
+    cur = cur.parentId ? orgs.find((o) => o.id === cur!.parentId) : undefined;
+  }
+  return { ...DEFAULT_ROI_MODEL };
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ── Org tree helpers ──
@@ -263,6 +318,30 @@ function computeValueDrivers(scope: Set<string>, s: Sources): ValueDrivers {
   return { ownership, openRisk, resolvedLast30, avgResolutionDays };
 }
 
+// Monetize the value drivers with the tenant's own model (ROI Phase 2). No
+// figures are invented: with the zero model every product is 0 and
+// `configured` is false, which the UI reads as "prompt the tenant to set a
+// model" rather than "the program is worth nothing". `covered` (owned
+// entities), not `total`, drives ownership value — you only bank the value of
+// what's actually governed.
+function computeRoi(v: ValueDrivers, model: RoiModel): RoiEstimate {
+  const configured = model.riskCostPerItem > 0 || model.resolutionValuePerIssue > 0 || model.ownershipValuePerEntity > 0;
+  const valueAtRisk = v.openRisk * model.riskCostPerItem;
+  const resolutionValueMonthly = v.resolvedLast30 * model.resolutionValuePerIssue;
+  const resolutionValueAnnualized = resolutionValueMonthly * 12;
+  const ownershipValue = v.ownership.covered * model.ownershipValuePerEntity;
+  return {
+    configured,
+    currency: model.currency,
+    model,
+    valueAtRisk,
+    resolutionValueMonthly,
+    resolutionValueAnnualized,
+    ownershipValue,
+    annualValue: ownershipValue + resolutionValueAnnualized,
+  };
+}
+
 // ── Narrative auto-derivation (data trends / activity) ──
 
 function pluralS(n: number): string { return n === 1 ? '' : 's'; }
@@ -361,6 +440,9 @@ async function deriveScorecard(parentOrgId: string, lens: ScorecardLens = 'all')
   const d = new Date(now);
   const period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 
+  // Compute the drivers once, then monetize with the tenant's resolved model.
+  const valueDrivers = computeValueDrivers(parentScope, s);
+
   return {
     orgId: parentOrgId,
     orgName,
@@ -375,7 +457,8 @@ async function deriveScorecard(parentOrgId: string, lens: ScorecardLens = 'all')
       version: anchors?.version ?? null,
       changedAt: anchors?.changedAt ?? null,
     },
-    valueDrivers: computeValueDrivers(parentScope, s),
+    valueDrivers,
+    roi: computeRoi(valueDrivers, roiModelForOrg(parentOrgId)),
   };
 }
 

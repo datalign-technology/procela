@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
@@ -8,6 +8,7 @@ import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ScorecardTargetsPanel from '../components/ScorecardTargetsPanel';
+import RoiModelPanel from '../components/RoiModelPanel';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -170,7 +171,11 @@ export default function GovernanceFoundationPage() {
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'scope' | 'principles' | 'targets'>('scope');
+  // Deep-linkable tab (?tab=value opens the value model straight from the
+  // scorecard's "set your value model" prompt).
+  const [searchParams] = useSearchParams();
+  const initialTab = (['scope', 'principles', 'targets', 'value'] as const).find((t) => t === searchParams.get('tab')) ?? 'scope';
+  const [activeTab, setActiveTab] = useState<'scope' | 'principles' | 'targets' | 'value'>(initialTab);
   // Launch flow (mirrors the governed transition on Get Started, scoped to
   // launching from PLANNING — later lifecycle changes live on Get Started).
   const [launching, setLaunching] = useState(false);
@@ -398,15 +403,15 @@ export default function GovernanceFoundationPage() {
       {!loading && program && (
         <Card padding={24}>
           <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
-            {(['scope', 'principles', 'targets'] as const).map((t) => (
+            {([['scope', 'Scope'], ['principles', 'Principles'], ['targets', 'Targets'], ['value', 'Value model']] as const).map(([t, label]) => (
               <button key={t} onClick={() => setActiveTab(t)} style={{
                 padding: '8px 16px', fontSize: 13,
                 fontWeight: activeTab === t ? 600 : 500,
                 background: 'transparent', border: 'none',
                 borderBottom: activeTab === t ? '2px solid var(--color-primary)' : '2px solid transparent',
                 color: activeTab === t ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                marginBottom: -1, cursor: 'pointer', textTransform: 'capitalize',
-              }}>{t}</button>
+                marginBottom: -1, cursor: 'pointer',
+              }}>{label}</button>
             ))}
           </div>
 
@@ -598,7 +603,14 @@ export default function GovernanceFoundationPage() {
             <ScorecardTargetsPanel />
           )}
 
-          {activeTab !== 'targets' && (
+          {activeTab === 'value' && (
+            // ROI value model — the tenant's dollar assumptions the scorecard
+            // monetizes. Own Save/Clear inside the panel (own endpoint), so the
+            // shared footer is hidden here like the Targets tab.
+            <RoiModelPanel />
+          )}
+
+          {activeTab !== 'targets' && activeTab !== 'value' && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
               <Button variant="secondary" onClick={() => navigate('/setup')}>Back to Setup</Button>
               <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
