@@ -53,6 +53,17 @@ in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-19.*
   badges across Data Assets / Systems / Data Domains / Process Catalog, and in
   the **AI assistant's** answers. One resolver, one version stamp, every
   surface.
+- **Governance ROI now ships on the Council Scorecard, in three honest layers.**
+  *Value drivers* — leading indicators measured from the catalog with no assumed
+  dollars (ownership coverage, a value-at-risk count, remediation velocity).
+  *Tenant value model* — each org sets its own dollar assumptions on **Governance
+  → Foundation → Value model** (stored per-tenant as `roiModel`, resolved up the
+  org tree like `scorecardTargets`); the scorecard monetizes the drivers into an
+  estimated annual value + value at risk, stamped "your assumptions", with a
+  configure-first prompt so no figure is ever fabricated. *Per-value-stream
+  attribution* — the value broken down by value stream through the process→data
+  mappings, so leaders see which streams bank value vs. carry risk (rows don't
+  sum to the org total by design). All three respect the All / Governed lens.
 - Everything else is a deliberate P2/P3 defer, a go-to-market-gated bet, or
   polish-level backlog. Sequencing Tracks A / B / C is a go-to-market call, not a
   technical one, and is intentionally left open.
