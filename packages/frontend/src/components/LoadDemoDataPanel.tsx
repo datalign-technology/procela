@@ -26,7 +26,7 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
-type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing';
+type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial';
 
 const INDUSTRIES: ReadonlyArray<{
   value: Industry;
@@ -62,6 +62,13 @@ const INDUSTRIES: ReadonlyArray<{
     tenant: 'Forgeline Manufacturing',
     persona: 'Marcus Feldt',
     blurb: 'Discrete manufacturer — plant operations + supply chain + shared services.',
+  },
+  {
+    value: 'financial',
+    label: 'Financial Services',
+    tenant: 'Harborstone Financial',
+    persona: 'Grace Lin',
+    blurb: 'Bank holding company — retail banking + wealth & markets + shared services.',
   },
 ];
 
