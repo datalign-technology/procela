@@ -124,7 +124,7 @@ function daysFromNow(n: number): string {
 
 // Industries with a hand-crafted demo fixture. Every profile is built to the
 // same feature coverage so a demo of any of them lights up every page.
-export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance' | 'telecom';
+export type DemoIndustry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance' | 'telecom' | 'education';
 
 // aiTemplateCache is keyed by industry string, not `id`, so the sweep
 // can't find demo entries by prefix. These are every cache key any
@@ -150,6 +150,8 @@ const DEMO_AI_CACHE_KEYS = new Set<string>([
   'insurance|claims management',
   'telecom|service fulfillment',
   'telecom|assurance & billing',
+  'education|student lifecycle',
+  'education|sponsored research',
 ]);
 
 // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
@@ -753,6 +755,7 @@ export async function seedDemoData(industry: DemoIndustry = 'utilities'): Promis
     logistics: seedLogistics,
     insurance: seedInsurance,
     telecom: seedTelecom,
+    education: seedEducation,
   };
   const report = await (builders[industry] ?? seedUtilities)(repos, ts);
   // Refresh the org-scope cache so accessible-orgs and the synchronous
@@ -4391,5 +4394,385 @@ async function seedTelecom(repos: DemoRepos, ts: string): Promise<DemoSeedReport
     calendarEvents: 1,
     statsSnapshots: STATS_WEEKS * 4,
     persona: { id: tomas.id, name: tomas.name },
+  };
+}
+
+/**
+ * Higher Education & Research profile — a Blue Ridge University research
+ * university (Academic Affairs + Research + Shared Services), persona
+ * Dr. Helen Voss (CDO). Same fixed-count skeleton and story shape as the
+ * other profiles: two planted orphan assets on the warehouse, and a
+ * failing DQ rule co-located with the ownership issue on the
+ * Bronze/critical Controlled Research Data asset — the FERPA /
+ * export-control / CUI story the industry page leads with.
+ */
+async function seedEducation(repos: DemoRepos, ts: string): Promise<DemoSeedReport> {
+  // ── Organizations (university → 3 divisions → 6 departments) ──
+  const orgBlueRidge = { id: demoId('org-blueridge'), parentId: null, name: 'Blue Ridge University', type: 'company', industry: 'Higher Education & Research', description: 'Research university demo tenant — academic affairs + research + shared services.', headCount: 0, tenantSlug: 'blueridge', brandDisplayName: 'Blue Ridge University', brandGlyph: '⚗', ssoButtonLabel: 'Sign in with Blue Ridge SSO', brandPrimaryColor: '#b45309', createdAt: ts, updatedAt: ts };
+  const orgAcademic = { id: demoId('org-academic'), parentId: orgBlueRidge.id, name: 'Academic Affairs', type: 'division', industry: 'Higher Education & Research', description: 'Registrar, admissions, and student services', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgResearch = { id: demoId('org-research'), parentId: orgBlueRidge.id, name: 'Research', type: 'division', industry: 'Higher Education & Research', description: 'Sponsored programs and research computing', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgEduShared = { id: demoId('org-edushared'), parentId: orgBlueRidge.id, name: 'Shared Services', type: 'division', industry: 'Higher Education & Research', description: 'IT / Compliance & Privacy', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgRegistrar = { id: demoId('org-registrar'), parentId: orgAcademic.id, name: 'Registrar & Admissions', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgStudentSvc = { id: demoId('org-studentsvc'), parentId: orgAcademic.id, name: 'Student Services', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgSponsored = { id: demoId('org-sponsored'), parentId: orgResearch.id, name: 'Sponsored Programs', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgResearchComp = { id: demoId('org-researchcomp'), parentId: orgResearch.id, name: 'Research Computing', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgEduIT = { id: demoId('org-eduit'), parentId: orgEduShared.id, name: 'Information Technology', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgEduCompliance = { id: demoId('org-educompliance'), parentId: orgEduShared.id, name: 'Compliance & Privacy', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.organizations, [orgBlueRidge, orgAcademic, orgResearch, orgEduShared, orgRegistrar, orgStudentSvc, orgSponsored, orgResearchComp, orgEduIT, orgEduCompliance]);
+
+  // ── People (24) — persona Dr. Helen Voss (CDO) ──
+  const helen = { id: demoId('person-helen-voss'), orgIds: [orgBlueRidge.id], accessibleOrgIds: [orgBlueRidge.id, orgAcademic.id, orgResearch.id, orgEduShared.id, orgRegistrar.id, orgStudentSvc.id, orgSponsored.id, orgResearchComp.id, orgEduIT.id, orgEduCompliance.id], name: 'Dr. Helen Voss', email: 'helen.voss@blueridge.edu', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const vernon = { id: demoId('person-vernon'), orgIds: [orgBlueRidge.id], accessibleOrgIds: [orgBlueRidge.id], name: 'Vernon Todd', email: 'vernon.todd@blueridge.edu', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const miriam = { id: demoId('person-miriam'), orgIds: [orgAcademic.id], accessibleOrgIds: [orgAcademic.id], name: 'Miriam Klein', email: 'miriam.klein@blueridge.edu', role: 'ORG_ADMIN', title: 'Data Owner Academic Affairs', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const douglas = { id: demoId('person-douglas'), orgIds: [orgRegistrar.id], accessibleOrgIds: [orgRegistrar.id, orgAcademic.id], name: 'Douglas Penn', email: 'douglas.penn@blueridge.edu', role: 'EDITOR', title: 'University Registrar / Director', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const aiko = { id: demoId('person-aiko'), orgIds: [orgRegistrar.id], accessibleOrgIds: [orgRegistrar.id], name: 'Aiko Tanaka', email: 'aiko.tanaka@blueridge.edu', role: 'CONTRIBUTOR', title: 'Admissions Data Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const terrence = { id: demoId('person-terrence'), orgIds: [orgRegistrar.id], accessibleOrgIds: [orgRegistrar.id], name: 'Terrence Oba', email: 'terrence.oba@blueridge.edu', role: 'CONTRIBUTOR', title: 'Data Steward Registrar', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const elise = { id: demoId('person-elise'), orgIds: [orgRegistrar.id], accessibleOrgIds: [orgRegistrar.id], name: 'Elise Beaumont', email: 'elise.beaumont@blueridge.edu', role: 'CONTRIBUTOR', title: 'Enrollment Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gwen = { id: demoId('person-gwen'), orgIds: [orgStudentSvc.id], accessibleOrgIds: [orgStudentSvc.id], name: 'Gwen Halloran', email: 'gwen.halloran@blueridge.edu', role: 'EDITOR', title: 'Director Student Services', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rashid = { id: demoId('person-rashid'), orgIds: [orgStudentSvc.id], accessibleOrgIds: [orgStudentSvc.id], name: 'Rashid Nazari', email: 'rashid.nazari@blueridge.edu', role: 'CONTRIBUTOR', title: 'Data Steward Student Services', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const bonnie = { id: demoId('person-bonnie'), orgIds: [orgStudentSvc.id], accessibleOrgIds: [orgStudentSvc.id], name: 'Bonnie Chu', email: 'bonnie.chu@blueridge.edu', role: 'CONTRIBUTOR', title: 'Financial Aid Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const arthur = { id: demoId('person-arthur'), orgIds: [orgResearch.id], accessibleOrgIds: [orgResearch.id], name: 'Dr. Arthur Bell', email: 'arthur.bell@blueridge.edu', role: 'ORG_ADMIN', title: 'Data Owner Research', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sofia = { id: demoId('person-edu-sofia'), orgIds: [orgSponsored.id], accessibleOrgIds: [orgSponsored.id, orgResearch.id], name: 'Dr. Sofia Marino', email: 'sofia.marino@blueridge.edu', role: 'EDITOR', title: 'Director Sponsored Programs', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const henri = { id: demoId('person-henri'), orgIds: [orgSponsored.id], accessibleOrgIds: [orgSponsored.id], name: 'Henri Dubois', email: 'henri.dubois@blueridge.edu', role: 'CONTRIBUTOR', title: 'Data Steward Grants', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const yuki = { id: demoId('person-yuki'), orgIds: [orgSponsored.id], accessibleOrgIds: [orgSponsored.id], name: 'Yuki Sato', email: 'yuki.sato@blueridge.edu', role: 'CONTRIBUTOR', title: 'Research Administration Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const ingmar = { id: demoId('person-ingmar'), orgIds: [orgResearchComp.id], accessibleOrgIds: [orgResearchComp.id], name: 'Dr. Ingmar Holt', email: 'ingmar.holt@blueridge.edu', role: 'EDITOR', title: 'Manager Research Computing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const wanda = { id: demoId('person-wanda'), orgIds: [orgResearchComp.id], accessibleOrgIds: [orgResearchComp.id], name: 'Wanda Kessler', email: 'wanda.kessler@blueridge.edu', role: 'CONTRIBUTOR', title: 'Research Data Steward', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const gareth = { id: demoId('person-gareth'), orgIds: [orgEduIT.id], accessibleOrgIds: [orgEduIT.id], name: 'Gareth Wynn', email: 'gareth.wynn@blueridge.edu', role: 'CONTRIBUTOR', title: 'Lead Data Engineer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const marisol = { id: demoId('person-marisol'), orgIds: [orgEduIT.id], accessibleOrgIds: [orgEduIT.id], name: 'Marisol Reeves', email: 'marisol.reeves@blueridge.edu', role: 'EDITOR', title: 'Manager Data & Analytics', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const terrell = { id: demoId('person-terrell'), orgIds: [orgEduIT.id], accessibleOrgIds: [orgEduIT.id], name: 'Terrell Banks', email: 'terrell.banks@blueridge.edu', role: 'EDITOR', title: 'Manager Information Security', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const deborah = { id: demoId('person-deborah'), orgIds: [orgEduCompliance.id], accessibleOrgIds: [orgEduCompliance.id], name: 'Deborah Sinclair', email: 'deborah.sinclair@blueridge.edu', role: 'EDITOR', title: 'Director Compliance & Privacy', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const farida = { id: demoId('person-farida'), orgIds: [orgEduCompliance.id], accessibleOrgIds: [orgEduCompliance.id], name: 'Farida Aziz', email: 'farida.aziz@blueridge.edu', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const nathan = { id: demoId('person-nathan'), orgIds: [orgEduCompliance.id], accessibleOrgIds: [orgEduCompliance.id], name: 'Nathan Prewitt', email: 'nathan.prewitt@blueridge.edu', role: 'CONTRIBUTOR', title: 'Export Control & CUI Analyst', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const lorraine = { id: demoId('person-lorraine'), orgIds: [orgEduCompliance.id], accessibleOrgIds: [orgEduCompliance.id], name: 'Lorraine Poole', email: 'lorraine.poole@blueridge.edu', role: 'EDITOR', title: 'Manager Regulatory Reporting', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const cyrus = { id: demoId('person-cyrus'), orgIds: [orgEduCompliance.id], accessibleOrgIds: [orgEduCompliance.id], name: 'Cyrus Webb', email: 'cyrus.webb@blueridge.edu', role: 'EDITOR', title: 'Manager Compliance & Audit', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  await createAll(repos.people, [helen, vernon, miriam, douglas, aiko, terrence, elise, gwen, rashid, bonnie, arthur, sofia, henri, yuki, ingmar, wanda, gareth, marisol, terrell, deborah, farida, nathan, lorraine, cyrus]);
+
+  // ── Systems (8) — SIS / LMS / grants / research repo / CRM / financial / warehouse + IRB ──
+  const sysSIS = { id: demoId('sys-sis'), orgId: orgAcademic.id, name: 'Student Information System', description: 'Admissions, enrollment, registration, grades, and transcripts.', systemType: 'IT', vendorName: 'Ellucian Banner', ownerPersonId: aiko.id, stewardIds: [terrence.id], createdAt: ts, updatedAt: ts };
+  const sysLMS = { id: demoId('sys-lms'), orgId: orgAcademic.id, name: 'Learning Management System', description: 'Courses, assignments, and learning activity.', systemType: 'IT', vendorName: 'Canvas', ownerPersonId: rashid.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysGrants = { id: demoId('sys-grants'), orgId: orgResearch.id, name: 'Grants Management', description: 'Sponsored-programs proposals, awards, and compliance.', systemType: 'IT', vendorName: 'Huron / Cayuse', ownerPersonId: henri.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysResearchData = { id: demoId('sys-researchdata'), orgId: orgResearch.id, name: 'Research Data Repository', description: 'Research datasets, HPC outputs, and controlled research data.', systemType: 'IT', vendorName: 'Globus / iRODS', ownerPersonId: ingmar.id, stewardIds: [wanda.id], createdAt: ts, updatedAt: ts };
+  const sysCRM = { id: demoId('sys-educrm'), orgId: orgBlueRidge.id, name: 'Admissions CRM', description: 'Prospect and applicant relationship management.', systemType: 'IT', vendorName: 'Slate', ownerPersonId: aiko.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysFinancial = { id: demoId('sys-edufinancial'), orgId: orgBlueRidge.id, name: 'Financial System', description: 'University ERP — finance, financial aid disbursement, and payroll.', systemType: 'IT', vendorName: 'Workday', ownerPersonId: bonnie.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysWarehouse = { id: demoId('sys-warehouse'), orgId: orgBlueRidge.id, name: 'Data Warehouse', description: 'Institutional research and analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: gareth.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysIRB = { id: demoId('sys-irb'), orgId: orgEduCompliance.id, name: 'Research Compliance System', description: 'IRB protocols, export-control reviews, and CUI compliance records.', systemType: 'IT', vendorName: 'IRBNet', ownerPersonId: deborah.id, stewardIds: [farida.id], createdAt: ts, updatedAt: ts };
+  await createAll(repos.systems, [sysSIS, sysLMS, sysGrants, sysResearchData, sysCRM, sysFinancial, sysWarehouse, sysIRB]);
+
+  // ── Agents (5 — one of each type) ──
+  await createAll(repos.agents, [
+    { id: demoId('agent-retention-model'), orgIds: [orgAcademic.id], name: 'Retention Risk Model', agentType: 'AI', description: 'Predicts student attrition risk from enrollment, aid, and engagement data.', provider: 'Internal ML Platform', status: 'ACTIVE', ownerPersonId: gwen.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-institutional-pipeline'), orgIds: [orgBlueRidge.id], name: 'Institutional Data Pipeline', agentType: 'PIPELINE', description: 'Nightly ETL of SIS and grants data into the institutional warehouse.', provider: 'Apache Airflow', status: 'ACTIVE', ownerPersonId: gareth.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-deadline-bot'), orgIds: [orgResearch.id], name: 'Grant Deadline Bot', agentType: 'BOT', description: 'Alerts PIs and research admins on proposal and progress-report deadlines.', provider: 'Microsoft Teams', status: 'ACTIVE', ownerPersonId: yuki.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-sis-service'), orgIds: [orgEduIT.id], name: 'SIS Extract Service Account', agentType: 'SERVICE_ACCOUNT', description: 'Read-only account used by analytics jobs to extract SIS records.', provider: 'Ellucian', status: 'ACTIVE', ownerPersonId: gareth.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+    { id: demoId('agent-cui-gen'), orgIds: [orgBlueRidge.id], name: 'CUI Compliance Report Generator', agentType: 'OTHER', description: 'Scheduled generator assembling export-control and CUI (FAR/DFARS) compliance packages.', provider: 'Internal', status: 'ACTIVE', ownerPersonId: lorraine.id, skillIds: [], instructions: '', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // ── Data Domains (3 top-level + 3 sub-domains under Student & Academic Data) ──
+  const domStudent = { id: demoId('domain-student'), code: 'STU', orgId: orgBlueRidge.id, name: 'Student & Academic Data', description: 'Student master, enrollment, academic records, and financial aid.', ownerId: helen.id, stewardIds: [terrence.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domResearchData = { id: demoId('domain-researchdata'), code: 'RES', orgId: orgBlueRidge.id, name: 'Research & Grants Data', description: 'Grant awards and research datasets, including controlled research data.', ownerId: arthur.id, stewardIds: [henri.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domCompliance = { id: demoId('domain-educompliance'), code: 'CMP', orgId: orgBlueRidge.id, name: 'Compliance & Regulatory Data', description: 'IRB protocols, export-control/CUI evidence, and regulatory reporting.', ownerId: deborah.id, stewardIds: [farida.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  // Sub-domains under Student & Academic Data — the student-lifecycle areas. Parent created first.
+  const domStudentAdmissions = { id: demoId('domain-student-admissions'), code: 'STU-01', orgId: orgBlueRidge.id, name: 'Admissions & Enrollment', description: 'Applications, admissions decisions, and enrollment.', ownerId: douglas.id, stewardIds: [terrence.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domStudent.id, createdAt: ts, updatedAt: ts };
+  const domStudentRecords = { id: demoId('domain-student-records'), code: 'STU-02', orgId: orgBlueRidge.id, name: 'Academic Records', description: 'Registration, grades, and transcripts (FERPA).', ownerId: douglas.id, stewardIds: [terrence.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domStudent.id, createdAt: ts, updatedAt: ts };
+  const domStudentAid = { id: demoId('domain-student-aid'), code: 'STU-03', orgId: orgBlueRidge.id, name: 'Financial Aid', description: 'Financial-aid packaging, awards, and Title IV compliance.', ownerId: gwen.id, stewardIds: [bonnie.id], dataAssetIds: [] as string[], status: 'ACTIVE', parentDomainId: domStudent.id, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataDomains, [domStudent, domResearchData, domCompliance, domStudentAdmissions, domStudentRecords, domStudentAid]);
+
+  // ── Data Assets (9) ──
+  const assetStudentMaster = { id: demoId('asset-student-master'), orgId: orgBlueRidge.id, name: 'Student Master', description: 'The golden student record — identity, program, and status.', systemId: sysSIS.id, owner: '', ownerPersonId: terrence.id, stewardIds: [] as string[], governanceTier: 'GOLD' as const, healthScore: 91, createdAt: ts, updatedAt: ts };
+  const assetEnrollment = { id: demoId('asset-enrollment'), orgId: orgBlueRidge.id, name: 'Enrollment Records', description: 'Applications, admissions decisions, and term enrollment.', systemId: sysSIS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 85, createdAt: ts, updatedAt: ts };
+  const assetTranscripts = { id: demoId('asset-transcripts'), orgId: orgBlueRidge.id, name: 'Academic Transcripts', description: 'Registration, grades, and official transcripts (FERPA-protected).', systemId: sysSIS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetControlledResearch = { id: demoId('asset-controlled-research'), orgId: orgBlueRidge.id, name: 'Controlled Research Data', description: 'Export-controlled and CUI research datasets under active grants.', systemId: sysResearchData.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 56, createdAt: ts, updatedAt: ts };
+  const assetGrantAwards = { id: demoId('asset-grant-awards'), orgId: orgBlueRidge.id, name: 'Grant Awards', description: 'Sponsored-program proposals, awards, budgets, and effort.', systemId: sysGrants.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 83, createdAt: ts, updatedAt: ts };
+  const assetFinancialAid = { id: demoId('asset-financial-aid'), orgId: orgBlueRidge.id, name: 'Financial Aid Records', description: 'Financial-aid packaging, awards, and disbursements (Title IV).', systemId: sysFinancial.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 82, createdAt: ts, updatedAt: ts };
+  const assetIRB = { id: demoId('asset-irb'), orgId: orgBlueRidge.id, name: 'IRB & Compliance Records', description: 'IRB protocols, export-control determinations, and CUI evidence.', systemId: sysIRB.id, owner: '', ownerPersonId: nathan.id, stewardIds: [farida.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
+  // Planted orphans — obviously-named so Ask AI's orphan-detection returns a quotable answer.
+  const orphanLegacyRegistrar = { id: demoId('asset-legacy-registrar'), orgId: orgBlueRidge.id, name: 'Legacy Registrar Extract', description: 'Nightly dump from the retired registrar system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  const orphanSurveyCsv = { id: demoId('asset-survey-csv'), orgId: orgBlueRidge.id, name: 'Survey CSV Dump', description: 'Ad-hoc CSV extract of student-survey results for an old reporting deck. Nobody remembers if it is still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataAssets, [assetStudentMaster, assetEnrollment, assetTranscripts, assetControlledResearch, assetGrantAwards, assetFinancialAid, assetIRB, orphanLegacyRegistrar, orphanSurveyCsv]);
+
+  // Domain → asset backrefs so the Domains page shows counts.
+  await repos.dataDomains.update(domStudent.id, { dataAssetIds: [assetStudentMaster.id, assetEnrollment.id, assetTranscripts.id] });
+  await repos.dataDomains.update(domResearchData.id, { dataAssetIds: [assetControlledResearch.id, assetGrantAwards.id] });
+  await repos.dataDomains.update(domCompliance.id, { dataAssetIds: [assetIRB.id, assetFinancialAid.id] });
+
+  // ── Process hierarchy — VS1 Student Lifecycle (Academic Affairs) ──
+  const vsStudent = { id: demoId('node-vs-student'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Student Lifecycle', description: 'End-to-end student lifecycle — receive the application, admit and enroll, register, and record grades.', activityId: 'VS-DEMO-E1', status: 'ACTIVE', orderIndex: 0, orgId: orgAcademic.id, orgIds: [orgAcademic.id], ownerId: miriam.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procAdmissions = { id: demoId('node-proc-admissions'), parentId: vsStudent.id, level: 'PROCESS' as const, name: 'Admissions & Enrollment', description: 'Review the application and admit and enroll the student.', activityId: 'PRO-DEMO-E1', status: 'ACTIVE', orderIndex: 0, orgId: orgAcademic.id, orgIds: [orgAcademic.id], ownerId: douglas.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procRecords = { id: demoId('node-proc-records'), parentId: vsStudent.id, level: 'PROCESS' as const, name: 'Academic Records', description: 'Register courses and record grades and transcripts.', activityId: 'PRO-DEMO-E2', status: 'ACTIVE', orderIndex: 1, orgId: orgAcademic.id, orgIds: [orgAcademic.id], ownerId: douglas.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spAppReview = { id: demoId('node-sp-appreview'), parentId: procAdmissions.id, level: 'SUBPROCESS' as const, name: 'Application Review', description: 'Receive the application and admit and enroll the student.', activityId: 'SP-DEMO-E1', status: 'ACTIVE', orderIndex: 0, orgId: orgAcademic.id, orgIds: [orgAcademic.id], ownerId: aiko.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actReceiveApp = { id: demoId('node-act-ereceiveapp'), parentId: spAppReview.id, level: 'ACTIVITY' as const, name: 'Receive application', description: 'Take the applicant submission and match to the student master.', activityId: 'ACT-DEMO-E1', status: 'ACTIVE', orderIndex: 0, orgId: orgAcademic.id, orgIds: [orgAcademic.id], ownerId: aiko.id, responsibleRole: 'Admissions Data Lead', responsiblePersonId: aiko.id, systemIds: [sysCRM.id, sysSIS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actAdmitEnroll = { id: demoId('node-act-admitenroll'), parentId: spAppReview.id, level: 'ACTIVITY' as const, name: 'Admit & enroll', description: 'Make the admission decision and enroll the student for the term.', activityId: 'ACT-DEMO-E2', status: 'ACTIVE', orderIndex: 1, orgId: orgAcademic.id, orgIds: [orgAcademic.id], ownerId: douglas.id, responsibleRole: 'Enrollment Analyst', responsiblePersonId: elise.id, systemIds: [sysSIS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actRegister = { id: demoId('node-act-register'), parentId: procRecords.id, level: 'ACTIVITY' as const, name: 'Register courses', description: 'Register the student for courses and confirm financial-aid eligibility.', activityId: 'ACT-DEMO-E3', status: 'ACTIVE', orderIndex: 0, orgId: orgAcademic.id, orgIds: [orgAcademic.id], ownerId: douglas.id, responsibleRole: 'Financial Aid Analyst', responsiblePersonId: bonnie.id, systemIds: [sysSIS.id, sysFinancial.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actRecordGrades = { id: demoId('node-act-recordgrades'), parentId: procRecords.id, level: 'ACTIVITY' as const, name: 'Record grades & transcript', description: 'Record grades and post the official transcript.', activityId: 'ACT-DEMO-E4', status: 'ACTIVE', orderIndex: 1, orgId: orgAcademic.id, orgIds: [orgAcademic.id], ownerId: douglas.id, responsibleRole: 'Data Steward Registrar', responsiblePersonId: terrence.id, systemIds: [sysSIS.id, sysLMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Grades posted and transcripts accurate every term', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsStudent, procAdmissions, procRecords, spAppReview, actReceiveApp, actAdmitEnroll, actRegister, actRecordGrades]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-e1'), fromNodeId: actReceiveApp.id, toNodeId: actAdmitEnroll.id, type: 'SEQUENCE' as const, label: 'application received', createdAt: ts },
+    { id: demoId('flow-e2'), fromNodeId: actAdmitEnroll.id, toNodeId: actRegister.id, type: 'SEQUENCE' as const, label: 'enrolled', createdAt: ts },
+    { id: demoId('flow-e3'), fromNodeId: actRegister.id, toNodeId: actRecordGrades.id, type: 'SEQUENCE' as const, label: 'registered', createdAt: ts },
+  ]);
+
+  // ── Process hierarchy — VS2 Sponsored Research (Research) ──
+  const vsResearch = { id: demoId('node-vs-research'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Sponsored Research', description: 'End-to-end sponsored research — submit the proposal, set up the award, and conduct and steward the research data.', activityId: 'VS-DEMO-E2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgResearch.id, orgIds: [orgResearch.id], ownerId: arthur.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procProposal = { id: demoId('node-proc-proposal'), parentId: vsResearch.id, level: 'PROCESS' as const, name: 'Proposal & Award', description: 'Submit the proposal and set up the funded award.', activityId: 'PRO-DEMO-E3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgResearch.id, orgIds: [orgResearch.id], ownerId: sofia.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procConduct = { id: demoId('node-proc-conduct'), parentId: vsResearch.id, level: 'PROCESS' as const, name: 'Research Conduct & Reporting', description: 'Conduct the research, steward the data, and report to the sponsor.', activityId: 'PRO-DEMO-E4', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgResearch.id, orgIds: [orgResearch.id], ownerId: ingmar.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spSubmission = { id: demoId('node-sp-submission'), parentId: procProposal.id, level: 'SUBPROCESS' as const, name: 'Proposal Submission', description: 'Prepare and submit the proposal.', activityId: 'SP-DEMO-E2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgResearch.id, orgIds: [orgResearch.id], ownerId: henri.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actSubmitProposal = { id: demoId('node-act-submitproposal'), parentId: spSubmission.id, level: 'ACTIVITY' as const, name: 'Submit proposal', description: 'Prepare and submit the proposal and confirm IRB and compliance review.', activityId: 'ACT-DEMO-E5', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgResearch.id, orgIds: [orgResearch.id], ownerId: henri.id, responsibleRole: 'Research Administration Analyst', responsiblePersonId: yuki.id, systemIds: [sysGrants.id, sysIRB.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_2' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actSetupAward = { id: demoId('node-act-setupaward'), parentId: procProposal.id, level: 'ACTIVITY' as const, name: 'Set up award', description: 'Set up the funded award, budget, and effort in grants management.', activityId: 'ACT-DEMO-E6', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgResearch.id, orgIds: [orgResearch.id], ownerId: sofia.id, responsibleRole: 'Data Steward Grants', responsiblePersonId: henri.id, systemIds: [sysGrants.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 8, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actConductResearch = { id: demoId('node-act-conductresearch'), parentId: procConduct.id, level: 'ACTIVITY' as const, name: 'Conduct & steward research data', description: 'Conduct the research and steward the controlled research data under the award.', activityId: 'ACT-DEMO-E7', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgResearch.id, orgIds: [orgResearch.id], ownerId: ingmar.id, responsibleRole: 'Research Data Steward', responsiblePersonId: wanda.id, systemIds: [sysResearchData.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Controlled research data stored and access-controlled per the export-control plan', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.processNodes, [vsResearch, procProposal, procConduct, spSubmission, actSubmitProposal, actSetupAward, actConductResearch]);
+
+  await createAll(repos.flowRelationships, [
+    { id: demoId('flow-e4'), fromNodeId: actSubmitProposal.id, toNodeId: actSetupAward.id, type: 'SEQUENCE' as const, label: 'proposal submitted', createdAt: ts },
+  ]);
+
+  // ── Mappings (7) ──
+  await createAll(repos.mappings, [
+    { id: demoId('map-e1'), orgId: orgAcademic.id, processStepId: actReceiveApp.id, dataAssetId: assetStudentMaster.id, linkType: 'INPUT', notes: 'Matches the applicant to the student master', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-e2'), orgId: orgAcademic.id, processStepId: actAdmitEnroll.id, dataAssetId: assetEnrollment.id, linkType: 'OUTPUT', notes: 'Writes the admission decision + enrollment', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-e3'), orgId: orgAcademic.id, processStepId: actRegister.id, dataAssetId: assetFinancialAid.id, linkType: 'INPUT', notes: 'Confirms financial-aid eligibility at registration', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-e4'), orgId: orgAcademic.id, processStepId: actRecordGrades.id, dataAssetId: assetTranscripts.id, linkType: 'OUTPUT', notes: 'Posts grades to the transcript', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-e5'), orgId: orgResearch.id, processStepId: actSubmitProposal.id, dataAssetId: assetIRB.id, linkType: 'INPUT', notes: 'References IRB + export-control review', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-e6'), orgId: orgResearch.id, processStepId: actSetupAward.id, dataAssetId: assetGrantAwards.id, linkType: 'OUTPUT', notes: 'Sets up the funded award', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-e7'), orgId: orgResearch.id, processStepId: actConductResearch.id, dataAssetId: assetControlledResearch.id, linkType: 'OUTPUT', notes: 'Writes and stewards the controlled research data', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+  ]);
+
+  // ── Governance tasks assigned to Helen (populates My Dashboard) ──
+  await createAll(repos.governanceTasks, [
+    { id: demoId('task-e1'), orgId: orgBlueRidge.id, title: 'Approve Controlled Research Data classification review', description: 'Review the AI-suggested sensitivity tags on Controlled Research Data and IRB & Compliance Records and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: helen.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetControlledResearch.id, automationMode: 'HUMAN' as any, createdBy: vernon.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-e2'), orgId: orgBlueRidge.id, title: 'Sign off on Research & Grants domain scope', description: 'Arthur has proposed expanding the Research & Grants domain to cover new export-control (CUI) evidence fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: helen.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domResearchData.id, automationMode: 'HUMAN' as any, createdBy: arthur.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: demoId('task-e3'), orgId: orgBlueRidge.id, title: 'Retire Legacy Registrar Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: helen.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyRegistrar.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+  ]);
+
+  // ── One open governance issue assigned to Helen ──
+  await repos.governanceIssues.create({
+    id: demoId('issue-e1'),
+    orgId: orgBlueRidge.id,
+    title: 'Controlled Research Data tier below Silver — critical process, ungoverned',
+    description: 'Controlled Research Data is BRONZE tier but the Sponsored Research process stewards it as export-controlled/CUI material. Recommend promoting to Silver with an access-control SLA.',
+    issueType: 'OWNERSHIP' as any,
+    severity: 'HIGH' as any,
+    status: 'OPEN' as any,
+    domainId: domResearchData.id,
+    dataAssetId: assetControlledResearch.id,
+    systemId: sysResearchData.id,
+    reportedBy: vernon.id,
+    assignedTo: helen.id,
+    resolutionSummary: null,
+    createdAt: ts,
+    updatedAt: ts,
+    closedAt: null,
+  } as any);
+
+  // ── Data Quality rules (2 — one passing, one failing) ──
+  await createAll(repos.dataQualityRules, [
+    {
+      id: demoId('dq-rule-passing'), orgId: orgBlueRidge.id, dataAssetId: assetEnrollment.id,
+      dimension: 'COMPLETENESS' as const, name: 'Enrollment Records · enrollment completeness',
+      description: 'At least 95% of enrollments must carry a complete program, term, and status.',
+      threshold: 95, currentScore: 98, weight: 1, status: 'PASSING' as const,
+      lastMeasured: ts, scheduleFrequency: 'DAILY' as const, nextRunAt: daysFromNow(1), createdAt: ts, updatedAt: ts,
+    },
+    {
+      id: demoId('dq-rule-failing'), orgId: orgBlueRidge.id, dataAssetId: assetControlledResearch.id,
+      dimension: 'TIMELINESS' as const, name: 'Controlled Research Data · access-review latency',
+      description: 'Controlled datasets should have access reviewed within the export-control SLA. Rolling 24h.',
+      threshold: 95, currentScore: 56, weight: 1, status: 'FAILING' as const,
+      lastMeasured: ts, scheduleFrequency: 'HOURLY' as const, nextRunAt: daysFromNow(0), createdAt: ts, updatedAt: ts,
+    },
+  ]);
+
+  // ── Edge connector (ONLINE) ──
+  const connectorHeartbeatAt = new Date(Date.now() - 45 * 1000).toISOString();
+  const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const conn = {
+    id: demoId('conn-blueridge'), orgId: orgBlueRidge.id, name: 'Blue Ridge Institutional Data Connector',
+    tokenHash: '4a7c2e9b1f5d8306c9b2e5a8f1d4c7b0e3a6f9c2d5b8e1a4f7c0d3b6e9a2f5c8',
+    pairingCode: null, pairingCodeExpiresAt: null,
+    systemIds: [sysSIS.id, sysWarehouse.id],
+    lastHeartbeatAt: connectorHeartbeatAt, agentVersion: '1.2.0', status: 'ONLINE' as const,
+    createdAt: connectorCreatedAt, updatedAt: connectorHeartbeatAt,
+  };
+  await repos.connectors.create(conn);
+
+  await repos.dataAssets.update(assetEnrollment.id, {
+    lastSyncedByConnectorId: conn.id,
+    lastSyncedAt: connectorSyncAt,
+  } as any);
+
+  await createAll(repos.connectorEvents, [
+    { id: demoId('ce-e-paired'), connectorId: conn.id, orgId: orgBlueRidge.id, type: 'PAIRED', ts: connectorCreatedAt, data: { agentVersion: '1.2.0' } },
+    { id: demoId('ce-e-scan-start'), connectorId: conn.id, orgId: orgBlueRidge.id, type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), data: { targetSystemIds: [sysSIS.id, sysWarehouse.id] } },
+    { id: demoId('ce-e-scan-done'), connectorId: conn.id, orgId: orgBlueRidge.id, type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(), data: { durationMs: 39_870, assetsDiscovered: 1 } },
+    { id: demoId('ce-e-assets'), connectorId: conn.id, orgId: orgBlueRidge.id, type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(), data: { incoming: 1, created: 0, updated: 1 } },
+    { id: demoId('ce-e-hb'), connectorId: conn.id, orgId: orgBlueRidge.id, type: 'HEARTBEAT', ts: connectorHeartbeatAt, data: { agentVersion: '1.2.0' } },
+  ]);
+
+  // ── Second connector — PAIRING state ──
+  const pairingConn = {
+    id: demoId('conn-e-pairing'), orgId: orgBlueRidge.id, name: 'Research Lab Connector',
+    tokenHash: null, pairingCode: '27069418',
+    pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    systemIds: [] as string[], lastHeartbeatAt: null, agentVersion: null, status: 'PAIRED' as const,
+    createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(), updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+  };
+  await repos.connectors.create(pairingConn as any);
+
+  // ── Governance calendar event ──
+  const dayNow = new Date();
+  const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
+  const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
+  await repos.calendarEvents.create({
+    id: demoId('cal-e-dgc'),
+    orgId: orgBlueRidge.id,
+    name: 'Data Governance Council weekly',
+    description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
+    eventType: 'COMMITTEE_MEETING' as const,
+    cadence: 'WEEKLY' as const,
+    dayOfMonth: null,
+    dayOfWeek: 5,
+    timeOfDay: '09:00',
+    durationMinutes: 60,
+    attendees: [helen.id, vernon.id, miriam.id, arthur.id],
+    agendaTemplate: '1. Open governance issues (from bell)\n2. Domain scope changes\n3. Control effectiveness review\n4. Upcoming policy publications',
+    nextOccurrence: nextFriday.toISOString(),
+    lastOccurrence: null,
+    autoCreateTasks: false,
+    status: 'ACTIVE' as const,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+
+  // ── Dashboard stats snapshots — ~10 weekly rows per demo org ──
+  await createAll(repos.statsSnapshots, [
+    ...weeklySnapshots(orgBlueRidge.id, { coverage: 63, avgHealth: 72, gaps: 8, dataAssets: 9, mappings: 7 }),
+    ...weeklySnapshots(orgAcademic.id, { coverage: 72, avgHealth: 74, gaps: 4, dataAssets: 3, mappings: 4 }),
+    ...weeklySnapshots(orgResearch.id, { coverage: 60, avgHealth: 70, gaps: 4, dataAssets: 2, mappings: 3 }),
+    ...weeklySnapshots(orgEduShared.id, { coverage: 55, avgHealth: 73, gaps: 3, dataAssets: 2, mappings: 0 }),
+  ]);
+
+  // ── AI template cache — pre-warm the wand for Blue Ridge ──
+  aiTemplateCache.push(
+    {
+      industry: 'education|student lifecycle',
+      industryLabel: 'Higher Education & Research — Student Lifecycle',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Student Lifecycle',
+            description: 'Receive the application, admit and enroll, register, and record grades.',
+            purpose: 'Move students from application to graduation with accurate records.',
+            businessOutcome: 'Enrolled students with complete, FERPA-compliant academic records.',
+            processes: [
+              { name: 'Admissions & Enrollment', description: 'Review the application and admit and enroll the student.', purpose: 'Admit and enroll the right students.', activities: [
+                { name: 'Receive application', description: 'Take the applicant submission and match to the student master.' },
+                { name: 'Admit & enroll', description: 'Make the admission decision and enroll the student for the term.' },
+              ] },
+              { name: 'Academic Records', description: 'Register courses and record grades and transcripts.', purpose: 'Keep academic records accurate.', activities: [
+                { name: 'Register courses', description: 'Register the student for courses and confirm aid eligibility.' },
+                { name: 'Record grades & transcript', description: 'Record grades and post the official transcript.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      industry: 'education|sponsored research',
+      industryLabel: 'Higher Education & Research — Sponsored Research',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Sponsored Research',
+            description: 'Submit the proposal, set up the award, and conduct and steward the research data.',
+            purpose: 'Win and conduct sponsored research with compliant data stewardship.',
+            businessOutcome: 'Funded awards and controlled research data stewarded to the export-control plan.',
+            processes: [
+              { name: 'Proposal & Award', description: 'Submit the proposal and set up the funded award.', purpose: 'Turn a proposal into a funded award.', activities: [
+                { name: 'Submit proposal', description: 'Prepare and submit the proposal and confirm IRB and compliance review.' },
+                { name: 'Set up award', description: 'Set up the funded award, budget, and effort.' },
+              ] },
+              { name: 'Research Conduct & Reporting', description: 'Conduct the research, steward the data, and report.', purpose: 'Conduct compliant research.', activities: [
+                { name: 'Conduct & steward research data', description: 'Conduct the research and steward the controlled research data.' },
+                { name: 'Report to sponsor', description: 'Report progress and outcomes to the sponsor and close out.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  saveStore('aiTemplateCache', aiTemplateCache);
+
+  // Governance depth — policies, controls, groups, program, decision rights.
+  await seedGovernanceDepth(repos, ts, {
+    orgId: orgBlueRidge.id,
+    cdoId: helen.id,
+    govLeadId: vernon.id,
+    dataOwnerId: miriam.id,
+    stewardIds: [terrence.id, farida.id],
+    tenantName: 'Blue Ridge University',
+  });
+
+  // People depth — skills catalog, skill assignments, DAMA roles, RACI.
+  await seedPeopleDepth(repos, ts, {
+    orgId: orgBlueRidge.id,
+    domainIds: [domStudent.id, domResearchData.id, domCompliance.id],
+    cdoId: helen.id,
+    govLeadId: vernon.id,
+    dataOwnerId: miriam.id,
+    stewardId: terrence.id,
+    techStewardId: farida.id,
+    engineerId: gareth.id,
+    architectId: marisol.id,
+    raciNodeId: actConductResearch.id,
+    raciPersonId: wanda.id,
+  });
+
+  // Docs depth — SOPs, glossary terms, operations manuals.
+  await seedDocsDepth(repos, ts, { orgId: orgBlueRidge.id, ownerId: terrence.id, cdoId: helen.id, domainId: domStudent.id });
+
+  // Lineage + trend history.
+  await seedLineageAndTrends(repos, ts, {
+    orgIds: [orgBlueRidge.id, orgAcademic.id, orgResearch.id],
+    links: [
+      { id: demoId('lin-1'), orgId: orgBlueRidge.id, sourceSystemId: sysSIS.id, targetSystemId: sysWarehouse.id, dataAssetId: assetEnrollment.id, description: 'Student and enrollment data syncs nightly to the warehouse.', flowType: 'ETL', frequency: 'DAILY' },
+      { id: demoId('lin-2'), orgId: orgResearch.id, sourceSystemId: sysGrants.id, targetSystemId: sysWarehouse.id, dataAssetId: assetGrantAwards.id, description: 'Grant award data feeds the warehouse.', flowType: 'ETL', frequency: 'HOURLY' },
+      { id: demoId('lin-3'), orgId: orgResearch.id, sourceSystemId: sysResearchData.id, targetSystemId: sysWarehouse.id, dataAssetId: assetControlledResearch.id, description: 'De-identified research outputs stream into the warehouse.', flowType: 'STREAMING', frequency: 'REAL_TIME' },
+    ],
+    edges: [
+      { id: demoId('edge-1'), orgId: orgBlueRidge.id, sourceAssetId: assetStudentMaster.id, targetAssetId: assetEnrollment.id },
+      { id: demoId('edge-2'), orgId: orgResearch.id, sourceAssetId: assetGrantAwards.id, targetAssetId: assetControlledResearch.id },
+    ],
+  });
+
+  // Agent operations — schedules + executions for a seeded agent.
+  await seedAgentOps(repos, ts, { orgId: orgBlueRidge.id, agentId: demoId('agent-cui-gen'), agentName: 'CUI Compliance Report Generator', activityId: actConductResearch.id, activityName: 'Conduct & steward research data', roleType: 'TECHNICAL_DATA_STEWARD', createdBy: helen.id, reviewerId: vernon.id });
+
+  // Collaboration + reporting + connections.
+  await seedCollabAndReporting(repos, ts, { orgId: orgBlueRidge.id, assetId: assetStudentMaster.id, systemId: sysSIS.id, personId: terrence.id, personName: 'Terrence Oba' });
+
+  logger.info({ persona: helen.name }, 'Demo data seeded (education)');
+
+  return {
+    organizations: 10,
+    people: 24,
+    systems: 8,
+    agents: 5,
+    dataDomains: 6,
+    dataAssets: 9,
+    processNodes: 15,
+    mappings: 7,
+    governanceTasks: 3,
+    governanceIssues: 1,
+    dataQualityRules: 2,
+    connectors: 2,
+    connectorEvents: 5,
+    calendarEvents: 1,
+    statsSnapshots: STATS_WEEKS * 4,
+    persona: { id: helen.id, name: helen.name },
   };
 }

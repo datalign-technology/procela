@@ -47,6 +47,7 @@ router.post('/demo-seed', async (req: AuthenticatedRequest, res: Response) => {
     logistics: 'Cascade Logistics',
     insurance: 'Northwind Mutual',
     telecom: 'Northlink Communications',
+    education: 'Blue Ridge University',
   };
   const validIndustries = Object.keys(TENANT_LABELS) as DemoIndustry[];
   const industry: DemoIndustry = requested == null ? 'utilities' : requested;
