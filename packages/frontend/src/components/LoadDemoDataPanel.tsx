@@ -26,7 +26,7 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
-type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance' | 'telecom';
+type Industry = 'utilities' | 'shipbuilding' | 'healthcare' | 'manufacturing' | 'financial' | 'government' | 'logistics' | 'insurance' | 'telecom' | 'education';
 
 const INDUSTRIES: ReadonlyArray<{
   value: Industry;
@@ -97,6 +97,13 @@ const INDUSTRIES: ReadonlyArray<{
     tenant: 'Northlink Communications',
     persona: 'Tomás Vega',
     blurb: 'Telecom carrier — network operations + consumer & business + shared services.',
+  },
+  {
+    value: 'education',
+    label: 'Higher Education & Research',
+    tenant: 'Blue Ridge University',
+    persona: 'Dr. Helen Voss',
+    blurb: 'Research university — academic affairs + research + shared services.',
   },
 ];
 
