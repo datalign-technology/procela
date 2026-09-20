@@ -119,7 +119,9 @@ All of these target `http://127.0.0.1:3001/api/v1` by default; pass a different
 base as an argument (`node scripts/seed-tidewater.js <baseUrl>`,
 `node scripts/seed-demo.js <industry> <baseUrl>`) for other setups. Every path
 persists through the active store, so they work in **either JSON or Postgres**
-mode. Broader CSV fixtures and their import order live in
+mode. See [`docs/demo-seeding.md`](./docs/demo-seeding.md) for the full
+reference (all industries, what each fixture contains, and behaviour). Broader
+CSV fixtures and their import order live in
 [`test-data/utility/`](./test-data/utility/README.md) and
 [`test-data/shipbuilder/`](./test-data/shipbuilder/README.md).
 

@@ -8,6 +8,7 @@ Standalone documents that don't belong in the app or the code.
 |---|---|
 | [`TRAINING.md`](./TRAINING.md) | Hands-on 90-minute walkthrough of Procela. Written against the Tidewater Utilities demo fixture; the shape (Modules 1–12) applies to any customer once their own data is loaded. Served in-app at **Help → Training**. |
 | [`demo-playbook.html`](./demo-playbook.html) | Presenter's runbook for the 45-minute Procela demo against the Tidewater Utilities fixture. Open in a browser or Cmd/Ctrl-P to print. |
+| [`demo-seeding.md`](./demo-seeding.md) | How to load a fully-populated demo tenant for any industry (Tidewater Utilities, Cedarline Health, Harborstone Financial, …) — three ways (Settings → Load demo data, `npm run db:seed:demo -- <industry>`, or the `demo-seed` Docker service), what each fixture contains, and how it differs from the legacy `db:seed` scripts. |
 | [`edge-connector-demo.md`](./edge-connector-demo.md) | One-command Docker demo (`docker compose --profile demo up --build`) that runs real on-prem edge connectors against a seeded source database — split by industry (a Tidewater Utilities connector scans `utility`, a Momentum Industries connector scans `shipbuilder`) to show discovery and connector-measured data quality. |
 
 ### Go-live & operations
