@@ -9,10 +9,11 @@ import Card from './Card';
 // only. Idempotent: a second call wipes the prior `demo-*` rows and
 // reseeds, so the button always converges on a known state.
 //
-// The industry picker chooses which fixture to seed — Tidewater
-// Utilities or Meridian Shipbuilding. Both are built to the same
-// feature coverage, so a demo of either lights up every page. Only
-// one demo tenant exists at a time; seeding one clears the other.
+// The industry picker chooses which fixture to seed — one demo tenant
+// per supported industry (Tidewater Utilities, Meridian Shipbuilding,
+// and the rest). All are built to the same feature coverage, so a demo
+// of any of them lights up every page. Only one demo tenant exists at a
+// time; seeding one clears the others.
 //
 // Sits above ResetAllDataPanel so the demo workflow reads top-to-
 // bottom: **Load demo → run the demo → Reset everything**. Reset
@@ -150,7 +151,7 @@ export default function LoadDemoDataPanel() {
     <Card marginBottom="1.5rem" padding="1.5rem" borderColor="#0f4f46">
       <h3 style={sectionTitleStyle}>Load demo data</h3>
       <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-        One-click seed of a demo fixture — org tree, people, systems, agents, data domains, data assets, a process hierarchy with mappings, and a CDO persona pre-populated with tasks and issues so <strong>My Dashboard</strong> tells a story. Pick an industry below; both are built to the same feature coverage. Every row is stamped <code>demo-*</code>; a second click wipes the prior seed and reseeds. Safe to run repeatedly.
+        One-click seed of a demo fixture — org tree, people, systems, agents, data domains, data assets, a process hierarchy with mappings, and a CDO persona pre-populated with tasks and issues so <strong>My Dashboard</strong> tells a story. Pick an industry below; all are built to the same feature coverage. Every row is stamped <code>demo-*</code>; a second click wipes the prior seed and reseeds. Safe to run repeatedly.
       </p>
 
       {/* Industry picker — segmented control. */}
