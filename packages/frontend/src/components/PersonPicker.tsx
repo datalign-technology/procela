@@ -69,12 +69,15 @@ function loadPickerData(orgId: string | undefined, withGroups: boolean): Promise
   const hit = dataCache.get(key);
   if (hit) return hit;
   const q = orgId ? `?orgId=${encodeURIComponent(orgId)}` : '';
+  // People are scoped to the org's SUBTREE (org + descendants), so a picker
+  // scoped to a company still lists people in its divisions/departments — and
+  // an already-selected owner/steward who lives in a sub-org resolves to their
+  // name rather than showing a raw id. Still bounded to the subtree, so a
+  // super-admin can't reach a sibling tenant.
+  const peopleQ = orgId ? `${q}&subtree=1` : '';
   const p = (async () => {
     const [peopleRes, orgRes, groupRes] = await Promise.all([
-      // Scope people to the same org as the orgs/groups — without `q` the
-      // picker returned every person the caller could see (all tenants for a
-      // super-admin), letting you assign someone from a sibling company.
-      apiClient.get<{ success: boolean; data: PickerPerson[] }>(`/people${q}`),
+      apiClient.get<{ success: boolean; data: PickerPerson[] }>(`/people${peopleQ}`),
       apiClient.get<{ success: boolean; data: PickerOrg[] }>(`/organizations${q}`),
       withGroups
         ? apiClient.get<{ success: boolean; data: PickerGroup[] }>(`/governance-groups${q}`)
