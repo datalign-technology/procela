@@ -5,7 +5,7 @@ industry. Every path drives the **same** server-side seeder, so the data
 is identical no matter how you trigger it.
 
 There are two unrelated seeding systems in the repo — this doc covers the
-modern **in-app demo fixtures**. The legacy `db:seed` / `db:seed:momentum`
+modern **in-app demo fixtures**. The legacy `db:seed:tidewater` / `db:seed:momentum`
 scripts are a separate, older thing (see [Relationship to the legacy
 seeders](#relationship-to-the-legacy-seeders)).
 
@@ -120,14 +120,20 @@ content differs — so a demo of any tenant lights up every page:
 
 ## Relationship to the legacy seeders
 
-`npm run db:seed` (Tidewater Utilities) and `npm run db:seed:momentum`
-(Momentum Industries) are **separate, older** CLI scripts
+`npm run db:seed:tidewater` (Tidewater Utilities) and `npm run
+db:seed:momentum` (Momentum Industries) are **separate, older** CLI scripts
 (`scripts/seed-tidewater.js`, `scripts/seed-momentum-governance.js`) that
 build a different test-data tenant by POSTing to the ordinary catalog
 endpoints. They are **not** `demo-*`-prefixed and are **not** seedable
 from the UI picker. Docker-compose wires them into the connector demo
 (`--profile demo`, see [`edge-connector-demo.md`](./edge-connector-demo.md)).
 They are untouched by the demo-fixture system above.
+
+Like the demo fixtures, they now **clean first** — each cascade-deletes its
+own existing tenant (`Tidewater Utilities` / `Momentum Industries`) before
+reseeding, so re-running converges on a fresh tenant instead of stacking
+duplicates. The cleanup is scoped to that one tenant; other orgs (including
+a demo tenant) are left alone.
 
 ## Troubleshooting
 
