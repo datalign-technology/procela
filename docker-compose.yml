@@ -109,6 +109,32 @@ services:
     depends_on:
       - backend
 
+  # ── On-demand demo tenant seeding (profile: seed) ─────────────────────────
+  # Load any in-app demo industry fixture from the CLI, for npm/docker parity
+  # with the Settings → "Load demo data" button. One-shot; pick the industry
+  # with DEMO_INDUSTRY (default: utilities), e.g.:
+  #   DEMO_INDUSTRY=healthcare docker compose --profile seed run --rm demo-seed
+  # Idempotent — re-running wipes the prior demo tenant and reloads. Only starts
+  # under the `seed` profile, so a plain `docker compose up` is unchanged.
+  demo-seed:
+    image: node:20-slim
+    profiles: ["seed"]
+    working_dir: /repo
+    volumes:
+      - ./:/repo:ro
+    environment:
+      DEMO_INDUSTRY: ${DEMO_INDUSTRY:-utilities}
+    depends_on:
+      backend:
+        condition: service_started
+    # node:20-slim ships neither wget nor curl, so poll health with Node's
+    # built-in fetch (same pattern as the *-seed services below), then seed
+    # the chosen industry via /admin/demo-seed.
+    command: >
+      sh -c "until node -e 'fetch(\"http://backend:3001/api/v1/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'; do echo 'waiting for backend'; sleep 2; done;
+             node packages/backend/scripts/seed-demo.js $$DEMO_INDUSTRY http://backend:3001/api/v1"
+    restart: "no"
+
   # ── Edge-connector demo (profile: demo) ───────────────────────────────────
   # `docker compose --profile demo up --build` brings up the normal stack PLUS
   # a real on-prem edge connector reading a real source database seeded with the
