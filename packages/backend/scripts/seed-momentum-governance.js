@@ -6,6 +6,11 @@
  *
  * Run: node packages/backend/scripts/seed-momentum-governance.js [BASE_URL]
  * Default BASE_URL: http://localhost:3000/api/v1
+ *
+ * Clean-first: before seeding, any existing "Momentum Industries" tenant is
+ * cascade-deleted (org subtree + all tied people, DAMA roles, etc.) so
+ * re-running converges on a fresh tenant instead of stacking duplicates.
+ * Only this tenant is touched; other orgs are left alone.
  */
 
 const BASE = process.argv[2] || 'http://localhost:3000/api/v1';
@@ -28,6 +33,32 @@ async function get(path) {
     headers: { Authorization: `Bearer ${TOKEN}` },
   });
   return (await r.json());
+}
+
+async function del(path) {
+  // Empty body => the org DELETE route's default cascade: drop the whole
+  // subtree and every entity tied to it.
+  const r = await fetch(`${BASE}${path}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+    body: JSON.stringify({}),
+  });
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`DELETE ${path}: ${r.status} ${JSON.stringify(json)}`);
+  return json;
+}
+
+// Remove any existing Momentum Industries tenant so the seed always starts
+// from a clean slate (idempotent re-runs, no duplicate records).
+async function clean() {
+  const allOrgs = (await get('/organizations')).data || [];
+  const company = allOrgs.find(o => o.name === 'Momentum Industries' && o.type === 'company');
+  if (company) {
+    await del(`/organizations/${company.id}`);
+    console.log('Cleaned existing Momentum Industries tenant (cascade delete)');
+  } else {
+    console.log('No existing Momentum Industries tenant — nothing to clean');
+  }
 }
 
 async function login() {
@@ -114,6 +145,7 @@ const MT_PEOPLE = [
 
 async function main() {
   await login();
+  await clean();
 
   // ── 1. Organization Hierarchy ──
   console.log('\n=== Organizations ===');

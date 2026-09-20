@@ -101,10 +101,14 @@ running** (`npm run dev` in another terminal) — and they work in either
 JSON or Postgres mode:
 
 ```bash
-npm run db:seed          -w packages/backend                # Tidewater Utilities
-npm run db:seed:momentum -w packages/backend                # Momentum Industries
-npm run db:seed:demo     -w packages/backend -- <industry>  # any in-app demo tenant
+npm run db:seed:tidewater -w packages/backend                # Tidewater Utilities
+npm run db:seed:momentum  -w packages/backend                # Momentum Industries
+npm run db:seed:demo      -w packages/backend -- <industry>  # any in-app demo tenant
 ```
+
+`db:seed:tidewater` and `db:seed:momentum` **clean first**: each cascade-deletes
+its own existing tenant before reseeding, so re-running converges on a fresh
+tenant instead of stacking duplicates (only that tenant is touched).
 
 `db:seed:demo` loads the same one-click demo fixtures as the Settings →
 **Load demo data** button (`POST /api/v1/admin/demo-seed`; requires a

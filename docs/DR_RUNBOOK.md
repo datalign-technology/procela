@@ -199,7 +199,7 @@ sessions if the key was auth-related (3b).
    `ignore_changes = [secret_string]`, so Terraform won't clobber real
    values — set them with `put-secret-value` (§3).
 3. Apply schema: `DATABASE_URL=… npx prisma migrate deploy` from `packages/backend/`.
-4. Restore data (§1) or seed (`npm run db:seed`) / import CSVs.
+4. Restore data (§1) or seed (`npm run db:seed:tidewater`) / import CSVs.
 5. Point DNS at the new ALB/CloudFront and run §5.
 
 ---

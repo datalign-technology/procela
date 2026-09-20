@@ -11,7 +11,7 @@
     "lint": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:seed": "node scripts/seed-tidewater.js http://127.0.0.1:3001/api/v1",
+    "db:seed:tidewater": "node scripts/seed-tidewater.js http://127.0.0.1:3001/api/v1",
     "db:seed:momentum": "node scripts/seed-momentum-governance.js http://127.0.0.1:3001/api/v1",
     "db:seed:demo": "node scripts/seed-demo.js",
     "db:migrate-json": "tsx scripts/migrate-json-to-postgres.ts",
