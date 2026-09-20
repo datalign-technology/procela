@@ -253,6 +253,26 @@ app.use('/api/v1', (req, res, next) => {
   apiLimiter(req, res, next);
 });
 
+// ── Boot readiness gate (Postgres mode) ────────────────────────────────────
+// At startup the org-scope and people caches hydrate asynchronously from the
+// database (see the server-start block below). Until BOTH are warm, a scoped
+// (non-super-admin) user's accessible-org set computes empty, so the org-scope
+// middleware wrongly denies them even their own org ("Not authorized for orgId
+// ..."). This is a real boot race: the people cache can warm before the
+// org-scope cache, and any request in that window is rejected. Hold API
+// requests until hydration completes so the first scoped request is served
+// against warm caches. No-op in JSON mode (the caches ARE the live in-memory
+// arrays, always ready); health and auth are exempt so liveness probes and
+// sign-in still answer during boot.
+let markBootReady: () => void = () => {};
+const bootReady = new Promise<void>((resolve) => { markBootReady = resolve; });
+let bootGateOpen = !hasDatabase();
+bootReady.then(() => { bootGateOpen = true; });
+app.use('/api/v1', (req, res, next) => {
+  if (bootGateOpen || req.path.startsWith('/health') || req.path.startsWith('/auth')) { next(); return; }
+  bootReady.then(() => next(), () => next());
+});
+
 //
 // Authorization layer 1: `requireResource('<bucket>')` gates each
 // router by role. It derives the required permission from the HTTP
@@ -534,15 +554,16 @@ const server = app.listen(PORT, () => {
   // bootstrapped rows in Postgres mode.
   runBootstrap()
     .catch((err) => logger.error({ err }, 'runBootstrap failed'))
-    .finally(() => {
-      // Hydrate the org-scope cache from the repo so visibility filtering is
-      // correct in Postgres mode (PR 4). No-op in JSON mode.
-      initOrgScope().catch((err) => logger.error({ err }, 'initOrgScope failed'));
-      // Hydrate the people cache so the sync access-control helpers
-      // (getVisibleOrgIds / canAccessOrg) see PG people in Postgres mode
-      // (PR 9b.11). No-op in JSON mode.
-      initPeopleCache().catch((err) => logger.error({ err }, 'initPeopleCache failed'));
-    });
+    .then(async () => {
+      // Hydrate the org-scope + people caches from the repo BEFORE opening the
+      // boot gate, so visibility filtering is correct in Postgres mode (PR 4 /
+      // 9b.11) and the first scoped request is served against warm caches
+      // instead of being denied its own org. Awaited (not fire-and-forget) so
+      // the gate only opens once both are ready. No-op in JSON mode.
+      try { await initOrgScope(); } catch (err) { logger.error({ err }, 'initOrgScope failed'); }
+      try { await initPeopleCache(); } catch (err) { logger.error({ err }, 'initPeopleCache failed'); }
+    })
+    .finally(() => { markBootReady(); });
   // Hydrate the process-catalog node cache + ID counters so the synchronous
   // tree helpers (findNode / getChildren / getDescendants) see PG nodes in
   // Postgres mode (PR 9b.19). No-op in JSON mode.
