@@ -461,10 +461,25 @@ router.delete('/all', async (_req: Request, res: Response) => {
  *                      Defaults to false so the standard People page
  *                      stays clean. Admin views explicitly opt in. */
 router.get('/', async (req: Request, res: Response) => {
-  const { orgId, includeInactive } = req.query;
+  const { orgId, includeInactive, subtree } = req.query;
   const includeDeactivated = String(includeInactive) === 'true';
   const allPeople = await peopleRepo.list();
-  let filtered = orgId ? allPeople.filter((p) => p.orgIds.includes(orgId as string)) : allPeople;
+  // `subtree=1` widens an org filter to that org AND its descendants, so a
+  // picker scoped to a company still lists people assigned to its divisions /
+  // departments (and their owner/steward ids resolve to names instead of raw
+  // uuids). Still bounded to the org's own subtree, so it never crosses into a
+  // sibling tenant. Without it, the filter is exact-org membership (the People
+  // page's behaviour, unchanged).
+  const wantSubtree = String(subtree) === 'true' || String(subtree) === '1';
+  let filtered: typeof allPeople;
+  if (orgId) {
+    const scopeIds = wantSubtree
+      ? new Set<string>([orgId as string, ...getDescendantOrgIds(orgId as string)])
+      : new Set<string>([orgId as string]);
+    filtered = allPeople.filter((p) => p.orgIds.some((o) => scopeIds.has(o)));
+  } else {
+    filtered = allPeople;
+  }
   if (!includeDeactivated) filtered = filtered.filter(isActive);
   // Resolve orgs from the repository (Postgres source of truth; the raw
   // `organizations` boot array is empty in DB mode) and index by id for

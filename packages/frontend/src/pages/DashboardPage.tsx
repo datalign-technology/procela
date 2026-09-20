@@ -243,12 +243,6 @@ function MyDashboard({ lens = 'all', orgId = null }: LensProps) {
       .filter((r) => r.daysAway >= 0 && r.daysAway <= 14),
   ].sort((a, b) => a.daysAway - b.daysAway);
 
-  const priorityColor = (p: string) => p === 'CRITICAL' ? '#dc2626' : p === 'HIGH' ? '#f59e0b' : p === 'MEDIUM' ? '#3b82f6' : '#64748b';
-  const priorityBadge = (p: string): React.CSSProperties => ({
-    display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
-    background: priorityColor(p) + '18', color: priorityColor(p),
-  });
-
   return (
     <div style={{ marginBottom: 16 }}>
       {/* Two-column: Attention (the act-now triage queue — given primacy)
@@ -340,49 +334,108 @@ function MyDashboard({ lens = 'all', orgId = null }: LensProps) {
         </Card>
       </div>
 
-      {/* My Domains moved out to its own customizable section (MyDomains) so
-          it can be reordered / hidden / resized from Customize like the other
-          sections — it used to be baked in here with no layout control. */}
+      {/* My Domains, My Tasks and My Issues each moved out to their own
+          customizable sections (MyDomains / MyTasks / MyIssues) so they can be
+          reordered / hidden / resized from Customize like the other sections.
+          What stays here is the personal Attention + Schedule pair. */}
+    </div>
+  );
+}
 
-      {/* My Tasks (top 5) */}
-      {(data.myTasks || []).length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <SectionLabel marginBottom={0}>Tasks</SectionLabel>
-            <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks?.length ?? 0}</Link>
-          </div>
-          <Card padding={0} style={{ overflow: 'hidden' }}>
-            {(data.myTasks || []).slice(0, 5).map((t, i) => (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
-                <span style={priorityBadge(t.priority)}>{t.priority}</span>
-                <span style={{ flex: 1 }}>{t.title}</span>
-                {t.dueDate && <span style={{ fontSize: 10, color: t.isOverdue ? 'var(--color-error)' : 'var(--color-text-muted)' }}>{t.isOverdue ? 'Overdue' : new Date(t.dueDate).toLocaleDateString()}</span>}
-                <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{t.status.replace(/_/g, ' ')}</span>
-              </div>
-            ))}
-          </Card>
-        </div>
-      )}
+// Priority/severity pill — shared by the Tasks and Issues sections. Fixed hex
+// (not semantic vars) so the four-step CRITICAL/HIGH/MEDIUM/LOW ramp stays a
+// stable, distinguishable scale rather than collapsing onto the theme's single
+// error/warning colours.
+function priorityColor(p: string): string {
+  return p === 'CRITICAL' ? '#dc2626' : p === 'HIGH' ? '#f59e0b' : p === 'MEDIUM' ? '#3b82f6' : '#64748b';
+}
+function priorityBadge(p: string): React.CSSProperties {
+  return {
+    display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+    background: priorityColor(p) + '18', color: priorityColor(p),
+  };
+}
 
-      {/* My Issues (top 5) */}
-      {(data.myIssues || []).length > 0 && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <SectionLabel marginBottom={0}>Issues</SectionLabel>
-            <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues?.length ?? 0}</Link>
+// My Tasks — the top 5 governance tasks assigned to me. Its own customizable
+// section (default half-width) so it pairs two-up with My Issues.
+function MyTasks({ lens = 'all', orgId = null }: LensProps) {
+  const { user } = useAuthStore();
+  const [data, setData] = useState<MyDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!user?.email) { setLoading(false); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
+        setData(res.data);
+      } catch { /* */ }
+      finally { setLoading(false); }
+    })();
+  }, [user?.email, lens, orgId]);
+
+  const tasks = data?.myTasks || [];
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <SectionLabel marginBottom={0}>Tasks</SectionLabel>
+        <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {tasks.length}</Link>
+      </div>
+      <Card padding={0} style={{ overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ padding: 14 }}><SkeletonRows rows={3} columnWidths={[70, null, 80]} /></div>
+        ) : tasks.length === 0 ? (
+          <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-text-muted)' }}>No tasks assigned to you.</div>
+        ) : tasks.slice(0, 5).map((t, i) => (
+          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
+            <span style={priorityBadge(t.priority)}>{t.priority}</span>
+            <span style={{ flex: 1 }}>{t.title}</span>
+            {t.dueDate && <span style={{ fontSize: 10, color: t.isOverdue ? 'var(--color-error)' : 'var(--color-text-muted)' }}>{t.isOverdue ? 'Overdue' : new Date(t.dueDate).toLocaleDateString()}</span>}
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{t.status.replace(/_/g, ' ')}</span>
           </div>
-          <Card padding={0} style={{ overflow: 'hidden' }}>
-            {(data.myIssues || []).slice(0, 5).map((issue, i) => (
-              <div key={issue.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
-                <span style={priorityBadge(issue.severity)}>{issue.severity}</span>
-                <span style={{ flex: 1 }}>{issue.title}</span>
-                {issue.domainName && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.domainName}</span>}
-                <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.status.replace(/_/g, ' ')}</span>
-              </div>
-            ))}
-          </Card>
-        </div>
-      )}
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+// My Issues — the top 5 governance issues assigned to me. Its own customizable
+// section (default half-width) so it pairs two-up with My Tasks.
+function MyIssues({ lens = 'all', orgId = null }: LensProps) {
+  const { user } = useAuthStore();
+  const [data, setData] = useState<MyDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!user?.email) { setLoading(false); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
+        setData(res.data);
+      } catch { /* */ }
+      finally { setLoading(false); }
+    })();
+  }, [user?.email, lens, orgId]);
+
+  const issues = data?.myIssues || [];
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <SectionLabel marginBottom={0}>Issues</SectionLabel>
+        <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {issues.length}</Link>
+      </div>
+      <Card padding={0} style={{ overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ padding: 14 }}><SkeletonRows rows={3} columnWidths={[70, null, 80]} /></div>
+        ) : issues.length === 0 ? (
+          <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-text-muted)' }}>No issues assigned to you.</div>
+        ) : issues.slice(0, 5).map((issue, i) => (
+          <div key={issue.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
+            <span style={priorityBadge(issue.severity)}>{issue.severity}</span>
+            <span style={{ flex: 1 }}>{issue.title}</span>
+            {issue.domainName && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.domainName}</span>}
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.status.replace(/_/g, ' ')}</span>
+          </div>
+        ))}
+      </Card>
     </div>
   );
 }
@@ -760,7 +813,7 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'myCoverage' | 'myDomains';
+type SectionKey = 'myDashboard' | 'myTasks' | 'myIssues' | 'myPortfolio' | 'myTrends' | 'myCoverage' | 'myDomains';
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard    — personal, act-now (your overdue tasks / critical issues)
@@ -776,7 +829,7 @@ type SectionKey = 'myDashboard' | 'myPortfolio' | 'myTrends' | 'myCoverage' | 'm
 // Posture / Trends / Catalog Coverage / Program Maturity / Governance Gaps
 // widgets are all replaced or dropped in favour of My Portfolio Health /
 // My Trends / My Coverage.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTrends', 'myPortfolio', 'myCoverage', 'myDomains'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTasks', 'myIssues', 'myTrends', 'myPortfolio', 'myCoverage', 'myDomains'];
 
 type SectionWidth = 'full' | 'half';
 
@@ -787,6 +840,8 @@ type SectionWidth = 'full' | 'half';
 // go full-bleed; the analytical widgets pair up as compact equal-height cards.
 const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
+  myTasks: 'half',
+  myIssues: 'half',
   myDomains: 'full',
   myTrends: 'full',
   myPortfolio: 'half',
@@ -795,6 +850,8 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'Dashboard',
+  myTasks: 'Tasks',
+  myIssues: 'Issues',
   myDomains: 'Domains',
   myPortfolio: 'Portfolio Health',
   myTrends: 'Trends',
@@ -1143,6 +1200,8 @@ export default function DashboardPage() {
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myDashboard: <MyDashboard lens={lens} orgId={activeOrgId} />,
+    myTasks: <MyTasks lens={lens} orgId={activeOrgId} />,
+    myIssues: <MyIssues lens={lens} orgId={activeOrgId} />,
     myDomains: <MyDomains lens={lens} orgId={activeOrgId} />,
     myPortfolio: <MyPortfolioHealth lens={lens} orgId={activeOrgId} />,
     myTrends: <MyTrends />,
