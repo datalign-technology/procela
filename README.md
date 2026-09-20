@@ -101,17 +101,25 @@ running** (`npm run dev` in another terminal) — and they work in either
 JSON or Postgres mode:
 
 ```bash
-npm run db:seed          -w packages/backend   # Tidewater Utilities
-npm run db:seed:momentum -w packages/backend   # Momentum Industries
+npm run db:seed          -w packages/backend                # Tidewater Utilities
+npm run db:seed:momentum -w packages/backend                # Momentum Industries
+npm run db:seed:demo     -w packages/backend -- <industry>  # any in-app demo tenant
 ```
 
-Both target `http://127.0.0.1:3001/api/v1` by default; pass a different base
-as an argument (`node scripts/seed-tidewater.js <baseUrl>`) for other setups.
+`db:seed:demo` loads the same one-click demo fixtures as the Settings →
+**Load demo data** button (`POST /api/v1/admin/demo-seed`; requires a
+`SUPER_ADMIN`), for any industry: `utilities`, `shipbuilding`, `healthcare`,
+`manufacturing`, `financial`, `government`, `logistics`, `insurance`,
+`telecom`, or `education` — e.g. `npm run db:seed:demo -w packages/backend --
+healthcare`. It's idempotent (a re-run wipes the prior demo tenant and
+reloads). Under Docker, the same fixtures load via a one-shot service:
+`DEMO_INDUSTRY=healthcare docker compose --profile seed run --rm demo-seed`.
 
-Alternatively, sign in and use the in-app **Get Started** button (calls
-`POST /api/v1/admin/demo-seed`; requires a `SUPER_ADMIN`) — note this path
-seeds through the JSON stores, so for a **Postgres** environment prefer the
-CLI seeders above. Broader CSV fixtures and their import order live in
+All of these target `http://127.0.0.1:3001/api/v1` by default; pass a different
+base as an argument (`node scripts/seed-tidewater.js <baseUrl>`,
+`node scripts/seed-demo.js <industry> <baseUrl>`) for other setups. Every path
+persists through the active store, so they work in **either JSON or Postgres**
+mode. Broader CSV fixtures and their import order live in
 [`test-data/utility/`](./test-data/utility/README.md) and
 [`test-data/shipbuilder/`](./test-data/shipbuilder/README.md).
 
