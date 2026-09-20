@@ -14,8 +14,10 @@
 //   - dataAssetIds is stored as an array on the JSON row but modeled
 //     as the reverse of DataAsset.dataDomainId in Postgres. The
 //     Prisma mapper computes it via `include: { dataAssets }` and
-//     collects the ids; on write we ignore any incoming value and
-//     let the DataAsset repository own the relationship on its side.
+//     collects the ids on read; on write, update()/create() rewrite the
+//     owning DataAsset.dataDomainId FK to match the incoming set, so the
+//     domain→asset membership actually round-trips (the read derives it
+//     from that FK).
 
 import type { StoredDataDomain } from '../routes/data-domains';
 import { saveStore } from '../lib/persistence';
@@ -86,8 +88,9 @@ function fromPrisma(r: PrismaDomainRow): StoredDataDomain {
 
 // Scalar-only Prisma data payload — stewards and dataAssets are
 // managed via their own tables and skipped here. Writing to those
-// relations is a separate concern (setStewards() below covers
-// stewardIds; DataAsset owns the dataDomainId FK).
+// relations is a separate concern, handled in update(): stewardIds via
+// the DataDomainSteward join table, dataAssetIds via the owning
+// DataAsset.dataDomainId FK.
 function toPrismaData(row: Partial<StoredDataDomain>): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   if (row.id !== undefined) data.id = row.id;
@@ -144,6 +147,11 @@ export function prismaDataDomainsRepository(
       if (row.stewardIds && row.stewardIds.length > 0) {
         await this.update(created.id, { stewardIds: row.stewardIds });
       }
+      // dataAssetIds is likewise written on its owning side (the
+      // DataAsset.dataDomainId FK) via the same follow-up patch.
+      if (row.dataAssetIds && row.dataAssetIds.length > 0) {
+        await this.update(created.id, { dataAssetIds: row.dataAssetIds });
+      }
       // Fetch back with relations so the returned row matches
       // list() / get() shape.
       const fresh = await this.get(created.id);
@@ -179,6 +187,29 @@ export function prismaDataDomainsRepository(
             await c.dataDomainSteward.createMany({
               data: patch.stewardIds.map((personId) => ({ dataDomainId: id, personId })),
             });
+          }
+        }
+        // dataAssetIds: rewrite the owning FK on the DataAsset side to
+        // match the patch. Unlike stewardIds this isn't a join table —
+        // DataAsset.dataDomainId is the single owning column, and the
+        // read path (fromPrisma) derives dataAssetIds from it. Clear the
+        // domain off any asset it no longer covers, then stamp it onto
+        // the selected set. Without this, a PUT that changes the asset
+        // membership returns 200 but the association never persists
+        // (the JSON path stores the array directly, so it only bit
+        // Postgres deployments).
+        if (patch.dataAssetIds !== undefined) {
+          // The FK owner is the DataAsset table; reach it off the client
+          // the same way the stewardIds block reaches the join table
+          // (tests stub only the surfaces they exercise).
+          const c = client as unknown as {
+            dataAsset: {
+              updateMany(arg: { where: Record<string, unknown>; data: { dataDomainId: string | null } }): Promise<{ count: number }>;
+            };
+          };
+          await c.dataAsset.updateMany({ where: { dataDomainId: id }, data: { dataDomainId: null } });
+          if (patch.dataAssetIds.length > 0) {
+            await c.dataAsset.updateMany({ where: { id: { in: patch.dataAssetIds } }, data: { dataDomainId: id } });
           }
         }
         const fresh = await this.get(id);

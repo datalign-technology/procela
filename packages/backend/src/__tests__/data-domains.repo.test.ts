@@ -188,6 +188,76 @@ describe('prismaDataDomainsRepository (stubbed Prisma)', () => {
     });
   });
 
+  it('update rewrites dataAssetIds via the owning DataAsset.dataDomainId FK', async () => {
+    let assetClearArgs: unknown = null;
+    let assetSetArgs: unknown = null;
+    const delegate = makeDelegate({
+      update: async (arg) => ({
+        id: 'd1', orgId: 'o1', name: arg.data.name as string ?? 'Ops', description: null,
+        ownerId: null, scopeDefinition: null, status: 'DRAFT',
+        createdAt: new Date(), updatedAt: new Date(),
+      }),
+      findUnique: async () => ({
+        id: 'd1', orgId: 'o1', name: 'Ops', description: null,
+        ownerId: null, scopeDefinition: null, status: 'DRAFT',
+        createdAt: new Date('2026-07-15T00:00:00.000Z'),
+        updatedAt: new Date('2026-07-15T00:00:00.000Z'),
+        stewards: [],
+        dataAssets: [{ id: 'a-1' }, { id: 'a-2' }],
+      }),
+    });
+    // The repo reaches `client.dataAsset.updateMany` to rewrite the FK.
+    const client = {
+      dataDomain: delegate,
+      dataAsset: {
+        updateMany: async (arg: unknown) => {
+          // First call clears the domain off its old assets; second
+          // stamps it onto the new set.
+          if (assetClearArgs === null) { assetClearArgs = arg; return { count: 3 }; }
+          assetSetArgs = arg;
+          return { count: 2 };
+        },
+      },
+    };
+    const repo = prismaDataDomainsRepository(() => client as unknown as { dataDomain: PrismaDomainDelegate });
+    const updated = await repo.update('d1', { dataAssetIds: ['a-1', 'a-2'] });
+    assert.ok(updated);
+    assert.deepStrictEqual(updated!.dataAssetIds, ['a-1', 'a-2']);
+    // Clear: every asset currently pointing at this domain is detached.
+    assert.deepStrictEqual(assetClearArgs, { where: { dataDomainId: 'd1' }, data: { dataDomainId: null } });
+    // Set: the selected assets are (re)attached to this domain.
+    assert.deepStrictEqual(assetSetArgs, { where: { id: { in: ['a-1', 'a-2'] } }, data: { dataDomainId: 'd1' } });
+  });
+
+  it('update with an empty dataAssetIds clears the membership without re-attaching', async () => {
+    const calls: unknown[] = [];
+    const delegate = makeDelegate({
+      update: async (arg) => ({
+        id: 'd1', orgId: 'o1', name: arg.data.name as string ?? 'Ops', description: null,
+        ownerId: null, scopeDefinition: null, status: 'DRAFT',
+        createdAt: new Date(), updatedAt: new Date(),
+      }),
+      findUnique: async () => ({
+        id: 'd1', orgId: 'o1', name: 'Ops', description: null,
+        ownerId: null, scopeDefinition: null, status: 'DRAFT',
+        createdAt: new Date('2026-07-15T00:00:00.000Z'),
+        updatedAt: new Date('2026-07-15T00:00:00.000Z'),
+        stewards: [], dataAssets: [],
+      }),
+    });
+    const client = {
+      dataDomain: delegate,
+      dataAsset: { updateMany: async (arg: unknown) => { calls.push(arg); return { count: 0 }; } },
+    };
+    const repo = prismaDataDomainsRepository(() => client as unknown as { dataDomain: PrismaDomainDelegate });
+    const updated = await repo.update('d1', { dataAssetIds: [] });
+    assert.ok(updated);
+    assert.deepStrictEqual(updated!.dataAssetIds, []);
+    // Only the clear runs; no re-attach for an empty set.
+    assert.strictEqual(calls.length, 1);
+    assert.deepStrictEqual(calls[0], { where: { dataDomainId: 'd1' }, data: { dataDomainId: null } });
+  });
+
   it('delete returns false on P2025', async () => {
     const delegate = makeDelegate({
       delete: async () => {
