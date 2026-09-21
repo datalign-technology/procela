@@ -88,7 +88,7 @@ interface MyEvent { name: string; daysAway: number; }
 // Unified time-ordered entry for My Schedule — a calendar event, a task due
 // date, or a policy review due date, all reduced to "what & when".
 interface ScheduleItem { id: string; kind: 'event' | 'task' | 'review'; name: string; daysAway: number; to: string; }
-interface MyDomain { id: string; name: string; relation: string; assetCount: number; totalAssets: number; healthyAssets: number; }
+interface MyDomain { id: string; name: string; relation: string; assetCount: number; directAssetCount?: number; totalAssets: number; healthyAssets: number; }
 // Aggregate over the assets in the domains I own or steward — powers the
 // personal "My Portfolio Health" widget (the tier mix + health of what I'm
 // accountable for), a you-scoped stand-in for the org-wide Governance Posture.
@@ -801,7 +801,13 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)' }}>{d.name}</span>
                 <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                {d.totalAssets} asset{d.totalAssets === 1 ? '' : 's'}
+                {typeof d.directAssetCount === 'number' && d.directAssetCount !== d.totalAssets && (
+                  <span title="Includes assets rolled up from sub-domains"> ({d.directAssetCount} direct)</span>
+                )}
+                {' '}&middot; {healthPct}% healthy
+              </div>
               <Meter value={healthPct} height={4} color={healthColorVar(healthPct)} />
             </Link>
           );

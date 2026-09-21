@@ -17,6 +17,7 @@ import { loadStore, registerStore } from '../lib/persistence';
 import { getRaciOverridesRepository } from '../db/raci-overrides.repo';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { OWNERSHIP_LEVELS, filterByOrgScope } from '../lib/org-scope';
+import { buildDomainRollup } from '../lib/domain-hierarchy';
 import { scopeListForRequest } from '../lib/tenant-scope';
 // Dashboard is a read aggregator: every handler tallies data across many
 // stores. Each store is read through its repository so the endpoints read
@@ -1030,16 +1031,22 @@ router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const measuredCounts = await (require('./data-quality') as typeof import('./data-quality')).measuredRuleCountsByAsset();
   const effHealth = (a: { id: string; healthScore: number }) => effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0);
+  // Per-domain figures roll up the sub-domain subtree so a parent I own reflects
+  // its children's assets in health/coverage; `directAssetCount` keeps the
+  // domain's own count visible ("N direct · M incl. sub-domains").
+  const domainRollup = buildDomainRollup(dataDomains as { id: string; parentDomainId?: string | null; dataAssetIds?: string[] }[]);
   const myDomains = dataDomains
     .filter((d) => (d.ownerId === person.id || (d.stewardIds || []).includes(person.id)) && inScopeDomain(d.id))
     .map((d) => {
-      const domainAssets = dataAssets.filter((a) => d.dataAssetIds.includes(a.id) && inScopeAsset(a.id));
+      const subtreeIds = domainRollup.subtreeAssetIds(d.id);
+      const domainAssets = dataAssets.filter((a) => subtreeIds.has(a.id) && inScopeAsset(a.id));
       const healthyAssets = domainAssets.filter((a) => effHealth(a) >= 80).length;
       return {
         id: d.id,
         name: d.name,
         relation: (d.ownerId === person.id ? 'owner' : 'steward') as 'owner' | 'steward',
         assetCount: d.dataAssetIds.length,
+        directAssetCount: d.dataAssetIds.length,
         healthyAssets,
         totalAssets: domainAssets.length,
       };

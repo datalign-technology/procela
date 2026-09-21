@@ -34,6 +34,10 @@ interface DataDomain {
   ownerId: string | null; ownerName: string | null;
   stewardIds: string[]; stewards: { id: string; name: string }[];
   dataAssetIds: string[]; assets: { id: string; name: string }[];
+  // Rolled-up view (own assets + sub-domains'), backend-derived. `assets` /
+  // `dataAssetIds` stay DIRECT (editable membership); these reflect the subtree.
+  directAssetCount?: number; subtreeAssetCount?: number;
+  subtreeAssetIds?: string[]; subtreeAssets?: { id: string; name: string }[];
   status: string; scopeDefinition?: string; criticality?: string; code?: string;
   // Sub-domain nesting + master/reference governance signals (backend-derived).
   parentDomainId?: string | null; parentDomainName?: string | null; subDomainCount?: number;
@@ -69,7 +73,9 @@ function statusDot(status: string): React.CSSProperties {
 function healthDots(domain: DataDomain) {
   const hasOwner = !!domain.ownerId;
   const hasStewards = domain.stewards.length > 0;
-  const hasAssets = domain.assets.length > 0;
+  // Reflect the subtree: a parent with no direct assets but assets under its
+  // sub-domains still counts as "assets linked".
+  const hasAssets = (domain.subtreeAssetCount ?? domain.assets.length) > 0;
   return (
     <span style={{ display: 'inline-flex', gap: 3 }}>
       <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasOwner ? '#22c55e' : '#d1d5db' }} title={hasOwner ? 'Owner assigned' : 'No owner'} />
@@ -1037,9 +1043,15 @@ export default function DataDomainsPage() {
                   />
                 </div>
 
-                {/* Data Assets */}
+                {/* Data Assets — the checkboxes assign DIRECT membership on this
+                    exact domain. Assets held by sub-domains roll up into this
+                    domain's coverage/health but are shown read-only below (assign
+                    them under their own sub-domain). */}
                 <div style={{ marginBottom: 20 }}>
-                  <div style={labelStyle}>Data Assets ({detailAssetIds.length})</div>
+                  <div style={labelStyle}>
+                    Data Assets ({detailAssetIds.length} direct{selectedDomain && (selectedDomain.subtreeAssetCount ?? 0) > (selectedDomain.dataAssetIds?.length ?? 0)
+                      ? ` · ${selectedDomain.subtreeAssetCount} incl. sub-domains` : ''})
+                  </div>
                   <input aria-label="Search assets" style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} placeholder="Search assets..." value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)} />
                   <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 6, background: 'var(--color-bg)' }}>
                     {allAssets.filter((a) => !assetSearch || a.name.toLowerCase().includes(assetSearch.toLowerCase())).map((a) => (
@@ -1049,6 +1061,17 @@ export default function DataDomainsPage() {
                       </label>
                     ))}
                   </div>
+                  {selectedDomain && (() => {
+                    const own = new Set(selectedDomain.dataAssetIds || []);
+                    const viaSub = (selectedDomain.subtreeAssets || []).filter((a) => !own.has(a.id));
+                    if (viaSub.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        <span style={{ fontWeight: 600 }}>Via sub-domains ({viaSub.length}):</span> {viaSub.map((a) => a.name).join(', ')}
+                        <div style={{ marginTop: 2, fontStyle: 'italic' }}>Rolled up into this domain&rsquo;s coverage &amp; health — assign each under its own sub-domain, not here.</div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Save */}

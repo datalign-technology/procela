@@ -4,6 +4,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { requireAiEnabled } from '../middleware/ai-enabled';
 import { enforceAiBudget } from '../middleware/ai-budget';
 import { getCachedOrgList } from '../lib/org-scope';
+import { buildDomainRollup, type DomainRollup } from '../lib/domain-hierarchy';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
@@ -94,6 +95,7 @@ function enrichDomain(
   allPeople: typeof people,
   allAssets: typeof dataAssets,
   allDomains: StoredDataDomain[] = [],
+  rollup?: DomainRollup,
 ) {
   const owner = domain.ownerId ? allPeople.find((p) => p.id === domain.ownerId) : null;
   const stewards = domain.stewardIds
@@ -103,7 +105,18 @@ function enrichDomain(
   const memberAssets = domain.dataAssetIds
     .map((aid) => allAssets.find((a) => a.id === aid))
     .filter(Boolean) as typeof allAssets;
+  // `assets` stays DIRECT (the editable membership on this exact domain).
   const assets = memberAssets.map((a) => ({ id: a.id, name: a.name }));
+
+  // Rolled-up view: this domain's own assets PLUS every descendant sub-domain's,
+  // so a parent taxonomy node reflects its whole subtree in coverage/health/gap
+  // reads. Direct membership is unchanged; this is additive (a `subtree*` view
+  // the UI shows alongside "direct N · incl. sub-domains M").
+  const roll = rollup ?? buildDomainRollup(allDomains);
+  const subtreeIds = roll.subtreeAssetIds(domain.id);
+  const subtreeAssets = allAssets
+    .filter((a) => subtreeIds.has(a.id))
+    .map((a) => ({ id: a.id, name: a.name }));
 
   // Master/reference governance signal. A domain that holds master data is,
   // per canonical-EDM practice, always council-critical (Tier 1) — MDM
@@ -125,6 +138,10 @@ function enrichDomain(
     ownerName: owner?.name || null,
     stewards,
     assets,
+    directAssetCount: domain.dataAssetIds.length,
+    subtreeAssetIds: [...subtreeIds],
+    subtreeAssetCount: subtreeIds.size,
+    subtreeAssets,
     containsMasterData,
     containsReferenceData,
     suggestedCriticality,
@@ -300,7 +317,10 @@ router.get('/', async (req: Request, res: Response) => {
     dataAssetsRepo().list(),
   ]);
   const filtered = scopeListForRequest(req, allDomains);
-  const enriched = filtered.map((d) => enrichDomain(d, allPeople, allAssets, allDomains));
+  // Build the subtree rollup once over ALL domains (not just the scoped page) so
+  // a parent still rolls up children even when the list is filtered.
+  const rollup = buildDomainRollup(allDomains);
+  const enriched = filtered.map((d) => enrichDomain(d, allPeople, allAssets, allDomains, rollup));
   res.json({ success: true, data: enriched });
 });
 
