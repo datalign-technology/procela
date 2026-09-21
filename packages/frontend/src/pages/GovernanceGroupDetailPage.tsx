@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -254,6 +255,9 @@ export default function GovernanceGroupDetailPage() {
   }, [id, activeOrgId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // End the breadcrumb trail on the group's name (Dashboard › Groups › Data Council).
+  useBreadcrumbLeaf(group?.name);
 
   // ── Derived: per-member role assignments ──
   // Person-keyed set used by derived person views (DAMA roles,
