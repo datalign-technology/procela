@@ -836,7 +836,12 @@ export default function DataDomainsPage() {
                   <div key={d.id} {...clickable(() => openDetail(d), { label: `Open domain ${d.name}` })} style={{
                     padding: '10px 12px', paddingLeft: isSub ? 30 : 12, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 8,
-                    background: isActive ? '#dbeafe' : isChecked ? '#f0f9ff' : 'transparent',
+                    // Selected tints use the teal brand token (matches DataTable
+                    // and every other selected row); active is the full primary-
+                    // light, bulk-checked a fainter wash so the two levels still
+                    // read. (Were off-brand blues #dbeafe/#f0f9ff, which clashed
+                    // with the teal left-border on the same row.)
+                    background: isActive ? 'var(--color-primary-light)' : isChecked ? 'color-mix(in srgb, var(--color-primary-light) 45%, transparent)' : 'transparent',
                     borderBottom: '1px solid var(--color-border)',
                     borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
                     transition: 'background 0.1s',
