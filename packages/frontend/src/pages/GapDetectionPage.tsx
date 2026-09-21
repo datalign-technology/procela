@@ -211,10 +211,15 @@ const GAP_SECTIONS: GapSection[] = [
   },
 ];
 
+// `badge` is the solid severity fill (count-pill background, left rail) and is
+// the same colour the SeverityBar/chips draw from the CSS tokens, so it points
+// at those tokens directly — one source of truth, no drift if a token is
+// retuned. The bg/border/color tints have no token and stay as hex (the
+// semantic-badge-palette convention).
 const SEVERITY_CONFIG = {
-  critical: { bg: '#fef2f2', border: '#fca5a5', badge: '#dc2626', color: '#991b1b', label: 'Critical' },
-  warning:  { bg: '#fffbeb', border: '#fcd34d', badge: '#d97706', color: '#92400e', label: 'Warning' },
-  info:     { bg: '#f0f9ff', border: '#93c5fd', badge: '#2563eb', color: '#1e40af', label: 'Info' },
+  critical: { bg: '#fef2f2', border: '#fca5a5', badge: 'var(--color-error)',   color: '#991b1b', label: 'Critical' },
+  warning:  { bg: '#fffbeb', border: '#fcd34d', badge: 'var(--color-warning)', color: '#92400e', label: 'Warning' },
+  info:     { bg: '#f0f9ff', border: '#93c5fd', badge: 'var(--color-info)',    color: '#1e40af', label: 'Info' },
 };
 
 // ── Component ──
