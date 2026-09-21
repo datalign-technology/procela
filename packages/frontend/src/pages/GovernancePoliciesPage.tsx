@@ -7,6 +7,8 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
 import Button from '../components/Button';
+import OwnerCell from '../components/OwnerCell';
+import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import { useOrgContext } from '../stores/orgContext';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import { usePermissions } from '../hooks/usePermissions';
@@ -128,7 +130,7 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
-type PolicyColId = 'code' | 'name' | 'category' | 'status' | 'owner' | 'controls';
+type PolicyColId = 'code' | 'name' | 'category' | 'status' | 'owner' | 'controls' | 'created';
 const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible: boolean }> = [
   { id: 'code',      label: 'Code',       defaultVisible: true  },
   { id: 'name',      label: 'Name',       defaultVisible: true  },
@@ -136,6 +138,7 @@ const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible
   { id: 'status',    label: 'Status',     defaultVisible: true  },
   { id: 'owner',     label: 'Owner',      defaultVisible: true  },
   { id: 'controls',  label: 'Controls',   defaultVisible: true  },
+  { id: 'created',   label: 'Created',    defaultVisible: false },
 ];
 
 // ── Component ──
@@ -345,6 +348,8 @@ export default function GovernancePoliciesPage() {
         return an.localeCompare(bn);
       },
       controls: (a, b) => controlsForPolicy(a.id).length - controlsForPolicy(b.id).length,
+      created: (a, b) => +new Date(a.createdAt) - +new Date(b.createdAt),
+      updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'code',
   );
@@ -390,11 +395,19 @@ export default function GovernancePoliciesPage() {
     },
     policyCols.isVisible('owner') && {
       key: 'owner', header: 'Owner', sortable: true,
-      render: (pol: Policy) => pol.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>,
+      render: (pol: Policy) => <OwnerCell name={pol.ownerName} emptyLabel="Unassigned" />,
     },
     policyCols.isVisible('controls') && {
       key: 'controls', header: 'Controls', sortable: true,
       render: (pol: Policy) => <span style={{ fontSize: 12, fontWeight: 600 }}>{controlsForPolicy(pol.id).length}</span>,
+    },
+    policyCols.isVisible('created') && {
+      key: 'created', header: 'Created', sortable: true, width: 110,
+      render: (pol: Policy) => <span title={absoluteTime(pol.createdAt)}>{relativeTime(pol.createdAt)}</span>,
+    },
+    {
+      key: 'updated', header: 'Updated', sortable: true, width: 110,
+      render: (pol: Policy) => <span title={absoluteTime(pol.updatedAt)}>{relativeTime(pol.updatedAt)}</span>,
     },
     {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100,

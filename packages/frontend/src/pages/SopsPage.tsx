@@ -4,6 +4,8 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import OwnerCell from '../components/OwnerCell';
+import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Card from '../components/Card';
@@ -113,7 +115,7 @@ const badge = (colors: { bg: string; color: string }): React.CSSProperties => ({
   background: colors.bg, color: colors.color,
 });
 
-type SopColId = 'code' | 'title' | 'category' | 'roles' | 'steps' | 'status' | 'owner';
+type SopColId = 'code' | 'title' | 'category' | 'roles' | 'steps' | 'status' | 'owner' | 'created';
 const SOP_COLUMN_DEFS: Array<{ id: SopColId; label: string; defaultVisible: boolean }> = [
   { id: 'code',     label: 'Code',     defaultVisible: true  },
   { id: 'title',    label: 'Title',    defaultVisible: true  },
@@ -122,6 +124,7 @@ const SOP_COLUMN_DEFS: Array<{ id: SopColId; label: string; defaultVisible: bool
   { id: 'steps',    label: 'Steps',    defaultVisible: true  },
   { id: 'status',   label: 'Status',   defaultVisible: true  },
   { id: 'owner',    label: 'Owner',    defaultVisible: true  },
+  { id: 'created',  label: 'Created',  defaultVisible: false },
 ];
 
 export default function SopsPage({
@@ -311,6 +314,8 @@ export default function SopsPage({
         if (!bn) return -1;
         return an.localeCompare(bn);
       },
+      created: (a, b) => +new Date(a.createdAt) - +new Date(b.createdAt),
+      updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'code',
   );
@@ -353,7 +358,15 @@ export default function SopsPage({
     },
     sopCols.isVisible('owner') && {
       key: 'owner', header: 'Owner', sortable: true, cellStyle: { fontSize: 12 },
-      render: (sop: Sop) => sop.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
+      render: (sop: Sop) => <OwnerCell name={sop.ownerName} />,
+    },
+    sopCols.isVisible('created') && {
+      key: 'created', header: 'Created', sortable: true, width: 110,
+      render: (sop: Sop) => <span title={absoluteTime(sop.createdAt)}>{relativeTime(sop.createdAt)}</span>,
+    },
+    {
+      key: 'updated', header: 'Updated', sortable: true, width: 110,
+      render: (sop: Sop) => <span title={absoluteTime(sop.updatedAt)}>{relativeTime(sop.updatedAt)}</span>,
     },
     {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100,

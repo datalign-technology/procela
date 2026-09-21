@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
+import { relativeTime } from '../lib/relativeTime';
 import ConfirmDialog from './ConfirmDialog';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -46,16 +47,10 @@ export function deviceLabel(ua?: string): string {
   return browser ? `${browser} on ${os}` : os;
 }
 
-export function relativeTime(iso?: string, now: number = Date.now()): string {
-  if (!iso) return '—';
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return '—';
-  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
-  if (diffSec < 60) return 'just now';
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} hr ago`;
-  return `${Math.floor(diffSec / 86400)} day${diffSec < 172800 ? '' : 's'} ago`;
-}
+// Re-exported from the shared lib so existing importers (and this file's
+// test) keep working; the implementation now lives in one place. Imported
+// too, since this component renders session times with it below.
+export { relativeTime };
 
 export default function ActiveSessionsPanel() {
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
