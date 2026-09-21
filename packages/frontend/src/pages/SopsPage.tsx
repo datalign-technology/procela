@@ -634,7 +634,7 @@ export default function SopsPage({
             rows={sorted}
             columns={sopColumns}
             rowKey={(s) => s.id}
-            selection={sel}
+            selection={canWrite ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             expansion={{
               expandedIds: expandedId ? new Set([expandedId]) : new Set(),

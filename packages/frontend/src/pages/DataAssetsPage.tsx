@@ -2269,7 +2269,7 @@ export default function DataAssetsPage({
             columns={assetColumns}
             rowKey={(a) => a.id}
             rowId={(a) => `row-${a.id}`}
-            selection={sel}
+            selection={canWrite ? sel : undefined}
             isRowDisabled={(a) => isInheritedAsset(a.orgId, activeOrgId)}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all assets"

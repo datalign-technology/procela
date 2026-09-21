@@ -569,7 +569,7 @@ export default function GovernanceTasksPage({
             rows={sorted}
             columns={taskColumns}
             rowKey={(t) => t.id}
-            selection={sel}
+            selection={isAdmin ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all tasks"
             emptyMessage="No tasks match the current filters."

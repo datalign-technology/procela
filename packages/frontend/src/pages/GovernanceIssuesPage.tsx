@@ -503,7 +503,7 @@ export default function GovernanceIssuesPage({
             rows={sorted}
             columns={issueColumns}
             rowKey={(i) => i.id}
-            selection={sel}
+            selection={isAdmin ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all issues"
             emptyMessage="No issues match the current filters."

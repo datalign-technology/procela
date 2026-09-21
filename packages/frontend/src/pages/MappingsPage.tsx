@@ -855,7 +855,9 @@ export default function MappingsPage({
             rows={sorted}
             columns={mappingColumns}
             rowKey={(m) => m.id}
-            selection={sel}
+            // Selection drives the bulk-delete bar (mapping:write), so only
+            // writers get checkboxes — non-writers get a read-only list.
+            selection={canWrite ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all mappings"
             emptyMessage="No mappings match the current filters."

@@ -723,7 +723,7 @@ export default function GovernancePoliciesPage() {
             rows={sorted}
             columns={policyColumns}
             rowKey={(p) => p.id}
-            selection={sel}
+            selection={isAdmin ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all documents"
             emptyMessage="No documents match the current filters."

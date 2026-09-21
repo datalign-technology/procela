@@ -869,7 +869,7 @@ export default function GovernanceCalendarPage() {
                 rows={filteredEvents}
                 columns={calendarColumns}
                 rowKey={(e) => e.id}
-                selection={sel}
+                selection={isAdmin ? sel : undefined}
                 selectAllLabel="Select all events"
                 emptyMessage="No events match the current filters."
               />
