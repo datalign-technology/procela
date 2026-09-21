@@ -351,9 +351,9 @@ function RowCountChip({ rowCount }: { rowCount?: number | null }) {
 // Toggleable columns. Name + Actions are always visible; everything
 // listed here is user-controllable from the Columns popover. Order
 // here is the render order in the table.
-// 'description' is no longer a toggleable column — it renders as a
-// single-line sub-label under the asset name (see the Asset cell), so
-// the row reads name-over-description like a directory entry.
+// 'description' is not a column here. It's kept off the list entirely to
+// keep rows single-line and dense; the full text lives in the 360 detail
+// modal and the edit form. (It's still searchable via the search box.)
 type ColumnId = 'system' | 'source' | 'tier' | 'health' | 'domain' | 'owner' | 'steward' | 'created';
 const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean }> = [
   { id: 'system',      label: 'System',      defaultVisible: true  },
@@ -363,13 +363,21 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
   // rule breakdown). Registry leads with catalog/governance attributes
   // (Tier, Domain, Owner); health stays one click away in the column picker.
   { id: 'health',      label: 'Health',      defaultVisible: false },
-  { id: 'domain',      label: 'Domain',      defaultVisible: true  },
+  // Off by default: the Data Domain left rail is now the domain navigator,
+  // so repeating the domain per row is redundant (and it was a chief cause
+  // of the list overflowing the rail-narrowed content area). Still one click
+  // away in the column picker for the "All domains" overview.
+  { id: 'domain',      label: 'Domain',      defaultVisible: false },
   { id: 'owner',       label: 'Owner',       defaultVisible: true  },
   { id: 'steward',     label: 'Steward',     defaultVisible: false },
   // Updated (last-modified) is an always-on column; Created is available here.
   { id: 'created',     label: 'Created',     defaultVisible: false },
 ];
-const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v1';
+// v2: the domain left rail replaced Domain-as-a-default-column, so the
+// stored default set changed — bump the suffix to re-seed defaults (per the
+// useColumnPicker versioning convention) instead of leaving old sessions on
+// the wider v1 layout.
+const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v2';
 
 export default function DataAssetsPage({
   embedded = false,
@@ -1206,12 +1214,9 @@ export default function DataAssetsPage({
             )}
             <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
           </div>
-          <div
-            style={{ fontSize: 12, fontWeight: 400, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}
-            title={asset.description || undefined}
-          >
-            {asset.description || '--'}
-          </div>
+          {/* Description is intentionally not shown inline — rows stay
+              single-line and dense. The full description lives in the 360
+              detail modal and the edit form. */}
         </div>
       ),
     },
@@ -1577,7 +1582,7 @@ export default function DataAssetsPage({
       {/* Content + a left-rail Data Domain tree (Domain → Sub-domain) that
           filters the list — the catalog navigator that replaces the old
           domain dropdown. Collapses to full width when there are no domains. */}
-      <div style={{ display: 'grid', gridTemplateColumns: domainTree.length > 0 ? '220px minmax(0, 1fr)' : '1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: domainTree.length > 0 ? '200px minmax(0, 1fr)' : '1fr', gap: 16, alignItems: 'start' }}>
         {domainTree.length > 0 && (
           <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
             <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>Data Domains</div>
@@ -1602,8 +1607,11 @@ export default function DataAssetsPage({
           </Card>
         )}
 
-        {/* Content area */}
-        <div>
+        {/* Content area. min-width:0 lets this grid item shrink below the
+            asset table's intrinsic width, so the table's own overflow:auto
+            box is what scrolls when columns exceed the (rail-narrowed) space
+            — the page itself never grows a horizontal scrollbar. */}
+        <div style={{ minWidth: 0 }}>
       {/* Data Classification & Origin are fixed taxonomies, so show every
           value including the ones you have none of (dimmed) — the whole set
           of possible types reads at a glance. Hidden only on a fully-empty
