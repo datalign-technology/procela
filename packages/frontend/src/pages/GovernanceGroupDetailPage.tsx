@@ -9,6 +9,7 @@ import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
+import { usePermissions } from '../hooks/usePermissions';
 import EmptyState from '../components/EmptyState';
 import Button from '../components/Button';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -161,6 +162,7 @@ export default function GovernanceGroupDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
+  const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
 
@@ -401,6 +403,20 @@ export default function GovernanceGroupDetailPage() {
     }
   };
 
+  // Inline rename from the title pencil. Throws on failure so the editor stays
+  // open for a retry (EditableTitle catches it; the toast reports the reason).
+  const handleRename = async (name: string) => {
+    if (!group) return;
+    try {
+      await apiClient.put(`/governance-groups/${group.id}`, { name });
+      setGroup((g) => (g ? { ...g, name } : g));
+      addToast('success', 'Group renamed');
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Rename failed');
+      throw e;
+    }
+  };
+
   // ── Render ──
   if (loading) return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
@@ -436,6 +452,8 @@ export default function GovernanceGroupDetailPage() {
           </>
         }
         title={group.name}
+        onRename={canWrite ? handleRename : undefined}
+        renameLabel="Rename group"
         copyId={group.id}
         copyLabel="Copy group ID"
         subtitle={group.description || undefined}
