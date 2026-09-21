@@ -6,6 +6,8 @@ import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import CreateScopeNotice from '../components/CreateScopeNotice';
 import TruncatedText from '../components/TruncatedText';
 import FacetChips from '../components/FacetChips';
+import OwnerCell from '../components/OwnerCell';
+import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
@@ -464,12 +466,14 @@ function ConnectPickerModal({
 // single-line sub-label under the system name (see the Name cell), so
 // the row reads name-over-description like a directory entry, matching
 // the Data Assets page.
-type SystemColId = 'type' | 'criticality' | 'owner' | 'connections';
+type SystemColId = 'type' | 'criticality' | 'owner' | 'connections' | 'created';
 const SYSTEM_COLUMN_DEFS: Array<{ id: SystemColId; label: string; defaultVisible: boolean }> = [
   { id: 'type',        label: 'Type',        defaultVisible: true  },
   { id: 'criticality', label: 'Criticality', defaultVisible: true  },
   { id: 'owner',       label: 'Owner',       defaultVisible: true  },
   { id: 'connections', label: 'Connections', defaultVisible: true  },
+  // Updated (last-modified) is an always-on column; Created is available here.
+  { id: 'created',     label: 'Created',     defaultVisible: false },
 ];
 
 export default function SystemsPage({
@@ -826,6 +830,7 @@ export default function SystemsPage({
         const cb = connections.filter((c) => connSystemIds(c).includes(b.id)).length;
         return ca - cb;
       },
+      created: (a, b) => +new Date(a.createdAt) - +new Date(b.createdAt),
       updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'name',
@@ -915,14 +920,7 @@ export default function SystemsPage({
     systemCols.isVisible('owner') && {
       key: 'owner', header: 'Owner', sortable: true,
       render: (sys: SystemEntity) => sys.ownerName ? (
-        <div>
-          <div>{sys.ownerName}</div>
-          {sys.deputyOwnerName && (
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }} title="Deputy owner — backup when the primary is unavailable">
-              Deputy: {sys.deputyOwnerName}
-            </div>
-          )}
-        </div>
+        <OwnerCell name={sys.ownerName} subLabel={sys.deputyOwnerName && `Deputy: ${sys.deputyOwnerName}`} />
       ) : (sys.connectivity || 'INTEGRATED') === 'INTEGRATED' ? (
         <span style={{ color: '#b45309', fontStyle: 'italic' }} title="No business owner assigned — surfaces in gap detection">
           Unassigned
@@ -938,6 +936,14 @@ export default function SystemsPage({
         const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
         return renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate, setConnectingSystem);
       },
+    },
+    systemCols.isVisible('created') && {
+      key: 'created', header: 'Created', sortable: true, width: 110,
+      render: (sys: SystemEntity) => <span title={absoluteTime(sys.createdAt)}>{relativeTime(sys.createdAt)}</span>,
+    },
+    {
+      key: 'updated', header: 'Updated', sortable: true, width: 110,
+      render: (sys: SystemEntity) => <span title={absoluteTime(sys.updatedAt)}>{relativeTime(sys.updatedAt)}</span>,
     },
     {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 80,

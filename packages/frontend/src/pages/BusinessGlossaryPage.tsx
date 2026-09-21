@@ -6,6 +6,8 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import FacetChips from '../components/FacetChips';
+import OwnerCell from '../components/OwnerCell';
+import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -180,13 +182,14 @@ function InlineCellEdit({
 // single-line sub-label under the term (see the Term cell), so the row
 // reads term-over-definition like a directory entry, matching the Data
 // Assets page.
-type GlossaryColId = 'term' | 'category' | 'status' | 'domain' | 'owner';
+type GlossaryColId = 'term' | 'category' | 'status' | 'domain' | 'owner' | 'created';
 const GLOSSARY_COLUMN_DEFS: Array<{ id: GlossaryColId; label: string; defaultVisible: boolean }> = [
   { id: 'term',       label: 'Term',           defaultVisible: true  },
   { id: 'category',   label: 'Category',       defaultVisible: true  },
   { id: 'status',     label: 'Status',         defaultVisible: true  },
   { id: 'domain',     label: 'Primary Domain', defaultVisible: true  },
   { id: 'owner',      label: 'Owner',          defaultVisible: true  },
+  { id: 'created',    label: 'Created',        defaultVisible: false },
 ];
 
 export default function BusinessGlossaryPage() {
@@ -303,6 +306,8 @@ export default function BusinessGlossaryPage() {
       status: (a, b) => a.status.localeCompare(b.status),
       domain: (a, b) => (a.domainName || '').localeCompare(b.domainName || ''),
       owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
+      created: (a, b) => +new Date(a.createdAt) - +new Date(b.createdAt),
+      updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'term',
   );
@@ -554,11 +559,15 @@ export default function BusinessGlossaryPage() {
     },
     glossaryCols.isVisible('owner') && {
       key: 'owner', header: 'Owner', sortable: true,
-      render: (t: GlossaryTerm) => (
-        <span style={{ color: t.ownerName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-          {t.ownerName || '—'}
-        </span>
-      ),
+      render: (t: GlossaryTerm) => <OwnerCell name={t.ownerName} />,
+    },
+    glossaryCols.isVisible('created') && {
+      key: 'created', header: 'Created', sortable: true, width: 110,
+      render: (t: GlossaryTerm) => <span title={absoluteTime(t.createdAt)}>{relativeTime(t.createdAt)}</span>,
+    },
+    {
+      key: 'updated', header: 'Updated', sortable: true, width: 110,
+      render: (t: GlossaryTerm) => <span title={absoluteTime(t.updatedAt)}>{relativeTime(t.updatedAt)}</span>,
     },
     {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 80,

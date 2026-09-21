@@ -4,6 +4,8 @@ import PageHeader from '../components/PageHeader';
 import CreateScopeNotice from '../components/CreateScopeNotice';
 import SectionLabel from '../components/SectionLabel';
 import FacetChips from '../components/FacetChips';
+import OwnerCell from '../components/OwnerCell';
+import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import Card from '../components/Card';
 import FieldStack from '../components/FieldStack';
 import Spinner from '../components/Spinner';
@@ -351,7 +353,7 @@ function RowCountChip({ rowCount }: { rowCount?: number | null }) {
 // 'description' is no longer a toggleable column — it renders as a
 // single-line sub-label under the asset name (see the Asset cell), so
 // the row reads name-over-description like a directory entry.
-type ColumnId = 'system' | 'source' | 'tier' | 'health' | 'domain' | 'owner' | 'steward';
+type ColumnId = 'system' | 'source' | 'tier' | 'health' | 'domain' | 'owner' | 'steward' | 'created';
 const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean }> = [
   { id: 'system',      label: 'System',      defaultVisible: true  },
   { id: 'source',      label: 'Source',      defaultVisible: false },
@@ -363,6 +365,8 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
   { id: 'domain',      label: 'Domain',      defaultVisible: true  },
   { id: 'owner',       label: 'Owner',       defaultVisible: true  },
   { id: 'steward',     label: 'Steward',     defaultVisible: false },
+  // Updated (last-modified) is an always-on column; Created is available here.
+  { id: 'created',     label: 'Created',     defaultVisible: false },
 ];
 const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v1';
 
@@ -703,6 +707,7 @@ export default function DataAssetsPage({
       domain: (a, b) => (a.domainName || '').localeCompare(b.domainName || ''),
       owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
       steward: (a, b) => (a.stewardName || '').localeCompare(b.stewardName || ''),
+      created: (a, b) => +new Date(a.createdAt) - +new Date(b.createdAt),
       updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'name',
@@ -1253,11 +1258,19 @@ export default function DataAssetsPage({
     },
     isVisible('owner') && {
       key: 'owner', header: 'Owner', sortable: true,
-      render: (asset: DataAssetEntity) => asset.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
+      render: (asset: DataAssetEntity) => <OwnerCell name={asset.ownerName} />,
     },
     isVisible('steward') && {
       key: 'steward', header: 'Steward', sortable: true,
-      render: (asset: DataAssetEntity) => asset.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>,
+      render: (asset: DataAssetEntity) => <OwnerCell name={asset.stewardName} />,
+    },
+    isVisible('created') && {
+      key: 'created', header: 'Created', sortable: true, width: 110,
+      render: (asset: DataAssetEntity) => <span title={absoluteTime(asset.createdAt)}>{relativeTime(asset.createdAt)}</span>,
+    },
+    {
+      key: 'updated', header: 'Updated', sortable: true, width: 110,
+      render: (asset: DataAssetEntity) => <span title={absoluteTime(asset.updatedAt)}>{relativeTime(asset.updatedAt)}</span>,
     },
     {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 180,
