@@ -517,7 +517,7 @@ export default function SkillsPage() {
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all skills"
             emptyMessage="No skills match the current filters."
-            pageSize={15}
+            pageSize={20}
             countNoun={['skill', 'skills']}
           />
         )}

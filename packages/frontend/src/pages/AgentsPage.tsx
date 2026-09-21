@@ -460,19 +460,21 @@ export default function AgentsPage() {
       render: (a: Agent) => {
         const roles = agentRoles.filter((r) => r.agentId === a.id);
         const execs = agentExecutions.filter((e) => e.agentId === a.id);
+        // Name + role/execution badges live on one line so the badges never
+        // push the row to a second line (keeps every row the same height).
+        // Description isn't shown inline — hover the name to read it.
         return (
-          <>
-            {/* Description isn't shown inline — hover the name to read it. */}
-            <span onClick={() => toggleAgentExpanded(a.id)} title={a.description || undefined} style={{ cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <span
+              onClick={() => toggleAgentExpanded(a.id)}
+              title={a.description || undefined}
+              style={{ cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+            >
               {a.name}
             </span>
-            {(roles.length > 0 || execs.length > 0) && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
-                {roles.length > 0 && <StatusBadge variant="agent">{roles.length} role{roles.length !== 1 ? 's' : ''}</StatusBadge>}
-                {execs.length > 0 && <StatusBadge variant="success">{execs.length} execution{execs.length !== 1 ? 's' : ''}</StatusBadge>}
-              </div>
-            )}
-          </>
+            {roles.length > 0 && <span style={{ flexShrink: 0 }}><StatusBadge variant="agent">{roles.length} role{roles.length !== 1 ? 's' : ''}</StatusBadge></span>}
+            {execs.length > 0 && <span style={{ flexShrink: 0 }}><StatusBadge variant="success">{execs.length} execution{execs.length !== 1 ? 's' : ''}</StatusBadge></span>}
+          </div>
         );
       },
     },
@@ -831,7 +833,7 @@ export default function AgentsPage() {
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all agents"
             emptyMessage="No agents match the current filters."
-            pageSize={15}
+            pageSize={20}
             countNoun={['agent', 'agents']}
             expansion={{
               expandedIds: expandedAgentIds,

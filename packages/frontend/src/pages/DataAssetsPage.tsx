@@ -2274,7 +2274,7 @@ export default function DataAssetsPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all assets"
             emptyMessage="No data assets match the current filters."
-            pageSize={15}
+            pageSize={20}
             countNoun={['data asset', 'data assets']}
             expansion={{
               expandedIds: expandedAssetId ? new Set([expandedAssetId]) : new Set(),
