@@ -1233,7 +1233,7 @@ export default function DashboardPage() {
                     ? 'Only the domains and assets your governance program governs'
                     : 'Everything you own or steward, governed or not'}
                   style={{
-                    padding: '5px 12px', fontSize: 11, fontWeight: lens === mode ? 600 : 500,
+                    padding: '5px 12px', fontSize: 12, fontWeight: lens === mode ? 600 : 500,
                     border: 'none', cursor: 'pointer',
                     background: lens === mode ? 'var(--color-primary)' : 'transparent',
                     color: lens === mode ? '#fff' : 'var(--color-text-secondary)',
