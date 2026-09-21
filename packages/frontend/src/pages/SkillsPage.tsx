@@ -498,7 +498,7 @@ export default function SkillsPage() {
           <EmptyState
             icon={renderNavIcon('/skills')}
             title={filterCategory ? 'No skills in this category yet' : 'No skills defined yet'}
-            description="Skills represent DAMA-aligned capabilities that your agents and people can possess. Seed the standard taxonomy or add skills manually."
+            description="DAMA-aligned capabilities your agents and people can have. Seed the standard taxonomy or add your own."
             action={{ label: '+ Add Skill', onClick: openAdd }}
             secondaryAction={skills.length === 0 ? { label: 'Seed Standard Skills', onClick: handleSeed } : undefined}
           />

@@ -1263,7 +1263,7 @@ export default function ConnectionsPage({
           <EmptyState
             icon={renderNavIcon('/connections')}
             title={filterSystem ? `No connections for ${filterSystem.name} yet` : 'No connections configured yet'}
-            description="Connections are the bridge between a system and its actual data — a database, a file, a warehouse. Add one, test it, and then discover and link assets from it."
+            description="The bridge between a system and its actual data — a database, a file, a warehouse."
             action={{ label: '+ Add Connection', onClick: openAdd }}
           />
         ) : (

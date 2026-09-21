@@ -730,7 +730,7 @@ export default function DecisionRightsPage() {
             <EmptyState
               icon={renderNavIcon('/decision-rights')}
               title="No decision rights defined yet"
-              description="Decision rights document who has authority to decide, recommend, approve, and be informed for governance decisions. Start by seeding the standard set or add your own."
+              description="Who has authority to decide, recommend, approve, and be informed. Seed the standard set or add your own."
               action={canWrite ? { label: 'Seed Standard Decisions', onClick: handleSeed } : undefined}
             />
           ) : filteredRows.length === 0 ? (

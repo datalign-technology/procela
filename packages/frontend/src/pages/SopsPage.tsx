@@ -624,7 +624,7 @@ export default function SopsPage({
         <EmptyState
           icon={renderNavIcon('/documentation', { size: 36 })}
           title="No SOPs yet"
-          description="Standard Operating Procedures document the step-by-step work your stewards do. Start with the 5 standard SOPs or create your own."
+          description="The step-by-step work your stewards do. Start with the 5 standard SOPs or create your own."
           action={{ label: seeding ? 'Seeding...' : 'Seed Standard SOPs', onClick: handleSeed }}
           secondaryAction={canWrite ? { label: '+ Create SOP', onClick: openAdd } : undefined}
         />

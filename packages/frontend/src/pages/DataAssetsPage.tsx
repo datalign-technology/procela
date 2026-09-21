@@ -2189,7 +2189,7 @@ export default function DataAssetsPage({
           <EmptyState
             icon={renderNavIcon('/data-assets')}
             title="No data assets yet"
-            description="Data assets are business-level concepts — Customer Accounts, Billing Records, Inventory Levels — not the underlying tables, files, or columns. Define them in plain business language, then link each one to its physical source via a Binding on the row."
+            description="Business-level concepts — Customer Accounts, Billing Records, Inventory Levels — not the underlying tables or columns."
             action={canOwnHere ? { label: '+ Add Data Asset', onClick: openAdd } : undefined}
           />
         ) : (

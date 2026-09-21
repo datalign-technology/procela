@@ -718,7 +718,7 @@ export default function OrganizationsPage() {
             <EmptyState
               icon={renderNavIcon('/organizations')}
               title="No organizations yet"
-              description="Define your company, its divisions, and sub-teams. Most of Procela is scoped to the org you select at the top of the page, so this is the first thing to set up."
+              description="Your company, its divisions, and sub-teams. Most of Procela is scoped to the org you pick at the top."
               action={{ label: '+ Add Organization', onClick: () => openAddOrg(null) }}
               secondaryAction={{ label: 'Import from CSV', onClick: () => setShowImport(true) }}
             />

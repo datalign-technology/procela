@@ -182,7 +182,7 @@ export default function OperationsManualPage({
 
       {manuals.length === 0 ? (
         <>
-          <EmptyState icon={renderNavIcon('/documentation')} title="No operations manuals yet" description="Generate the standard DAMA role manuals to get started, or create a custom manual."
+          <EmptyState icon={renderNavIcon('/documentation')} title="No operations manuals yet" description="Generate the standard DAMA role manuals, or create a custom one."
             action={{ label: seedLabel, onClick: handleSeed }}
             secondaryAction={canWrite ? { label: '+ Add Manual', onClick: () => setShowAddManual(true) } : undefined} />
           {showAddManual && renderAddManualDialog()}

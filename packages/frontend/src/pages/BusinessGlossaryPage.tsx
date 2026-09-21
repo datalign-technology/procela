@@ -918,7 +918,7 @@ export default function BusinessGlossaryPage() {
                 onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
             ) : terms.length === 0 && !showForm ? (
               <EmptyState icon={renderNavIcon('/business-glossary')} title="No glossary terms yet"
-                description="The business glossary is a shared dictionary of agreed-upon terms. Define terms so everyone speaks the same language."
+                description="A shared dictionary of agreed-upon terms, so everyone speaks the same language."
                 action={canWrite ? { label: '+ Add Term', onClick: openAdd } : undefined}
                 secondaryAction={canWrite ? { label: 'Generate Industry Terms', onClick: handleGenerate, variant: 'secondary' } : undefined} />
             ) : sorted.length === 0 ? (
