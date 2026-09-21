@@ -3,6 +3,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { SearchGlyph } from './UiGlyphs';
 
 // ──────────────────────────────────────────────────────────────────────────
 // CommandPalette — Procela's global Cmd-K front door.
@@ -251,7 +252,7 @@ export default function CommandPalette({ open, onClose }: Props) {
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '12px 14px', borderBottom: '1px solid var(--color-border)',
         }}>
-          <span style={{ fontSize: 16, color: 'var(--color-text-muted)' }}>{'🔍'}</span>
+          <span style={{ color: 'var(--color-text-muted)', display: 'inline-flex' }}><SearchGlyph size={16} /></span>
           <input
             ref={inputRef}
             type="text"

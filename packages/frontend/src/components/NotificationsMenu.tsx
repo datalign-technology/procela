@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/client';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '../stores/orgContext';
+import { WarningGlyph, ActionGlyph, InfoGlyph } from './UiGlyphs';
 
 // The four gap-signal categories the weekly digest can notify on. Labels are
 // user-facing; the keys match the backend (services/digest-preferences).
@@ -375,7 +376,11 @@ export default function NotificationsMenu() {
           )}
           {!notifLoading && notifList.map((n) => {
             const typeColor = n.type === 'WARNING' ? '#d97706' : n.type === 'ACTION' ? '#0f766e' : '#2563eb';
-            const typeIcon = n.type === 'WARNING' ? '⚠' : n.type === 'ACTION' ? '▶' : 'ℹ';
+            const typeIcon = n.type === 'WARNING'
+              ? <WarningGlyph size={14} />
+              : n.type === 'ACTION'
+                ? <ActionGlyph size={14} />
+                : <InfoGlyph size={14} />;
             const ago = (() => {
               const diff = Date.now() - new Date(n.createdAt).getTime();
               const mins = Math.floor(diff / 60000);
