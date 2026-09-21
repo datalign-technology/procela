@@ -11,6 +11,7 @@ import { systems } from './systems';
 import { getVisibleOrgScope } from '../lib/org-scope';
 import { scopeListForRequest } from '../lib/tenant-scope';
 import { effectiveHealthScore } from '../lib/asset-health';
+import { buildDomainRollup } from '../lib/domain-hierarchy';
 // Gap detection is a read aggregator across 7 stores; each is read through
 // its repository so gaps are computed from Postgres in DB mode and the
 // in-memory array in JSON mode (the factory wraps the same array these
@@ -162,17 +163,23 @@ router.get('/', async (req: Request, res: Response) => {
       status: n.status,
     }));
 
-  // 5. Unowned domains — domains without an owner
+  // 5. Unowned domains — domains without an owner. assetCount rolls up the
+  // sub-domain subtree so an ownerless parent shows how many assets its whole
+  // taxonomy branch leaves ungoverned; directAssetCount keeps its own count.
+  const gapRollup = buildDomainRollup(domains as { id: string; parentDomainId?: string | null; dataAssetIds?: string[] }[]);
   const unownedDomains = domains
     .filter((d) => !d.ownerId)
     .map((d) => ({
       id: d.id,
       name: d.name,
       status: d.status,
-      assetCount: d.dataAssetIds.length,
+      assetCount: gapRollup.subtreeAssetIds(d.id).size,
+      directAssetCount: d.dataAssetIds.length,
     }));
 
-  // 6. Orphaned assets — assets not in any domain
+  // 6. Orphaned assets — assets not in any domain. Flat union of every domain's
+  // DIRECT ids (each asset has one domain, so a sub-domain's assets are already
+  // covered here) — deliberately NOT the subtree rollup, which would double-count.
   const allDomainAssetIds = new Set(domains.flatMap((d) => d.dataAssetIds));
   const orphanedAssets = assets
     .filter((a) => !allDomainAssetIds.has(a.id))
