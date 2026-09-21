@@ -5,6 +5,7 @@ import { thStyle, tdStyle } from '../lib/tableStyles';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
+import FacetChips from '../components/FacetChips';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -1030,6 +1031,9 @@ export default function ConnectionsPage({
           {/* Connection Types chips — only rendered when the facet actually
               splits the list (≥2 populated types), to save vertical space. */}
           {(() => {
+            // Connection types are data-derived (the API returns the distinct
+            // types present), so there are no fixed-taxonomy zeros to show;
+            // keep hiding the strip when it can't actually split the list.
             const chips = [
               { key: '', label: 'All', count: connections.length },
               ...connectionTypes.map((t) => ({
@@ -1040,26 +1044,12 @@ export default function ConnectionsPage({
             ].filter((o) => o.key === '' || o.count > 0);
             if (chips.filter((o) => o.key !== '').length < 2) return null;
             return (
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                {chips.map((o) => {
-                  const active = filterConnType === o.key;
-                  return (
-                    <button
-                      key={o.key || 'all'}
-                      onClick={() => setFilterConnType(o.key)}
-                      style={{
-                        padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                        background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                        color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <FacetChips
+                ariaLabel="Filter by connection type"
+                activeKey={filterConnType}
+                onSelect={setFilterConnType}
+                facets={chips}
+              />
             );
           })()}
           {/* Filters (left-aligned, mirrors Data Assets) */}

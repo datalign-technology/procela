@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import PageHeader from '../components/PageHeader';
 import CreateScopeNotice from '../components/CreateScopeNotice';
 import SectionLabel from '../components/SectionLabel';
+import FacetChips from '../components/FacetChips';
 import Card from '../components/Card';
 import FieldStack from '../components/FieldStack';
 import Spinner from '../components/Spinner';
@@ -1523,81 +1524,43 @@ export default function DataAssetsPage({
 
         {/* Content area */}
         <div>
-      {/* Data Classification chips — only rendered when the facet actually
-          splits the list (≥2 populated values); a lone "All / Untyped" pair
-          filters nothing, so it's hidden to save vertical space. */}
-      {(() => {
-        const chips = ([
-          { key: '', label: 'All', count: assets.length, hint: 'Every classification' },
-          { key: 'MASTER', label: 'Master', count: assets.filter((a) => a.dataType === 'MASTER').length, hint: 'Master data' },
-          { key: 'REFERENCE', label: 'Reference', count: assets.filter((a) => a.dataType === 'REFERENCE').length, hint: 'Reference data' },
-          { key: 'TRANSACTIONAL', label: 'Transactional', count: assets.filter((a) => a.dataType === 'TRANSACTIONAL').length, hint: 'Transactional data' },
-          { key: 'ANALYTICAL', label: 'Analytical', count: assets.filter((a) => a.dataType === 'ANALYTICAL').length, hint: 'Analytical data' },
-          { key: 'METADATA', label: 'Metadata', count: assets.filter((a) => a.dataType === 'METADATA').length, hint: 'Metadata' },
-          { key: '__none__', label: 'Untyped', count: assets.filter((a) => !a.dataType).length, hint: 'No classification set' },
-        ] as const).filter((o) => o.key === '' || o.count > 0);
-        if (chips.filter((o) => o.key !== '').length < 2) return null;
-        return (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginRight: 2 }}>Classification</span>
-            {chips.map((o) => {
-              const active = filterCategory === o.key;
-              return (
-                <button
-                  key={o.key || 'all'}
-                  onClick={() => setFilterCategory(o.key)}
-                  title={o.hint}
-                  style={{
-                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-                </button>
-              );
-            })}
-          </div>
-        );
-      })()}
-      {/* Origin chips — only rendered when the facet actually splits the list. */}
-      {(() => {
-        const chips = ([
-          { key: '', label: 'All', count: assets.length, hint: 'Show every data asset' },
-          { key: 'MANUAL', label: 'Manual', count: assets.filter((a) => (a.origin || 'MANUAL') === 'MANUAL').length, hint: 'Typed by a user' },
-          { key: 'DISCOVERED', label: 'Discovered', count: assets.filter((a) => a.origin === 'DISCOVERED').length, hint: 'Created from a connection' },
-          { key: 'GOVERNANCE_TEMPLATE', label: 'Governance', count: assets.filter((a) => a.origin === 'GOVERNANCE_TEMPLATE').length, hint: 'Seeded by the Data Governance value stream' },
-          { key: 'IMPORTED', label: 'Imported', count: assets.filter((a) => a.origin === 'IMPORTED').length, hint: 'Created via bulk import' },
-          { key: 'SYNCED', label: 'Synced', count: assets.filter((a) => a.origin === 'SYNCED').length, hint: 'Created by a sync connection' },
-        ] as const).filter((o) => o.key === '' || o.count > 0);
-        if (chips.filter((o) => o.key !== '').length < 2) return null;
-        return (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginRight: 2 }}>Origin</span>
-            {chips.map((o) => {
-              const active = filterOrigin === o.key;
-              return (
-                <button
-                  key={o.key || 'all'}
-                  onClick={() => setFilterOrigin(o.key as typeof filterOrigin)}
-                  title={o.hint}
-                  style={{
-                    padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                    color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-                </button>
-              );
-            })}
-          </div>
-        );
-      })()}
+      {/* Data Classification & Origin are fixed taxonomies, so show every
+          value including the ones you have none of (dimmed) — the whole set
+          of possible types reads at a glance. Hidden only on a fully-empty
+          page, where the list's own empty state carries the message. */}
+      {assets.length > 0 && (
+        <FacetChips
+          label="Classification"
+          ariaLabel="Filter by data classification"
+          activeKey={filterCategory}
+          onSelect={setFilterCategory}
+          facets={[
+            { key: '', label: 'All', count: assets.length, hint: 'Every classification' },
+            { key: 'MASTER', label: 'Master', count: assets.filter((a) => a.dataType === 'MASTER').length, hint: 'Master data' },
+            { key: 'REFERENCE', label: 'Reference', count: assets.filter((a) => a.dataType === 'REFERENCE').length, hint: 'Reference data' },
+            { key: 'TRANSACTIONAL', label: 'Transactional', count: assets.filter((a) => a.dataType === 'TRANSACTIONAL').length, hint: 'Transactional data' },
+            { key: 'ANALYTICAL', label: 'Analytical', count: assets.filter((a) => a.dataType === 'ANALYTICAL').length, hint: 'Analytical data' },
+            { key: 'METADATA', label: 'Metadata', count: assets.filter((a) => a.dataType === 'METADATA').length, hint: 'Metadata' },
+            { key: '__none__', label: 'Untyped', count: assets.filter((a) => !a.dataType).length, hint: 'No classification set' },
+          ]}
+        />
+      )}
+      {assets.length > 0 && (
+        <FacetChips
+          label="Origin"
+          ariaLabel="Filter by origin"
+          activeKey={filterOrigin}
+          onSelect={(k) => setFilterOrigin(k as typeof filterOrigin)}
+          facets={[
+            { key: '', label: 'All', count: assets.length, hint: 'Show every data asset' },
+            { key: 'MANUAL', label: 'Manual', count: assets.filter((a) => (a.origin || 'MANUAL') === 'MANUAL').length, hint: 'Typed by a user' },
+            { key: 'DISCOVERED', label: 'Discovered', count: assets.filter((a) => a.origin === 'DISCOVERED').length, hint: 'Created from a connection' },
+            { key: 'GOVERNANCE_TEMPLATE', label: 'Governance', count: assets.filter((a) => a.origin === 'GOVERNANCE_TEMPLATE').length, hint: 'Seeded by the Data Governance value stream' },
+            { key: 'IMPORTED', label: 'Imported', count: assets.filter((a) => a.origin === 'IMPORTED').length, hint: 'Created via bulk import' },
+            { key: 'SYNCED', label: 'Synced', count: assets.filter((a) => a.origin === 'SYNCED').length, hint: 'Created by a sync connection' },
+          ]}
+        />
+      )}
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
