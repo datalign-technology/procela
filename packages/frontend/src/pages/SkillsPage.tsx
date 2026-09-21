@@ -8,6 +8,7 @@ import Button from '../components/Button';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext, VALUE_STREAM_LEVELS } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
@@ -86,6 +87,9 @@ function formatCategory(cat: string): string {
 
 export default function SkillsPage() {
   const { activeOrgId, activeOrgName, activeOrgType, orgs, setActiveOrg } = useOrgContext();
+  // /skills writes need skill:write (EDITOR+); gate write affordances so
+  // Viewers/Contributors get a read-only catalog instead of 403 buttons.
+  const { canWrite } = usePermissions();
   const orgNameById = new Map(orgs.map((o) => [o.id, o.name]));
   const { addToast } = useToastStore();
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -312,6 +316,7 @@ export default function SkillsPage() {
       render: (s) => {
         const inherited = isInherited(s);
         const ownerName = ownerNameFor(s);
+        if (!canWrite) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
         return (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
             <IconButton size="sm" icon="edit" label={inherited ? `Switch scope to ${ownerName} to edit` : 'Edit'} onClick={() => openEdit(s)} disabled={inherited} />
@@ -342,7 +347,7 @@ export default function SkillsPage() {
             {filtered.length > 0 && (
               <ExportMenu build={buildSkillsExport} />
             )}
-            <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} />
+            {canWrite && <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} />}
           </>
         }
       >
@@ -499,7 +504,7 @@ export default function SkillsPage() {
             icon={renderNavIcon('/skills')}
             title={filterCategory ? 'No skills in this category yet' : 'No skills defined yet'}
             description="DAMA-aligned capabilities your agents and people can have. Seed the standard taxonomy or add your own."
-            action={{ label: '+ Add Skill', onClick: openAdd }}
+            action={canWrite ? { label: '+ Add Skill', onClick: openAdd } : undefined}
             secondaryAction={skills.length === 0 ? { label: 'Seed Standard Skills', onClick: handleSeed } : undefined}
           />
         ) : (
@@ -507,7 +512,7 @@ export default function SkillsPage() {
             rows={sorted}
             columns={skillColumns}
             rowKey={(s) => s.id}
-            selection={sel}
+            selection={canWrite ? sel : undefined}
             isRowDisabled={(s) => isInherited(s)}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all skills"

@@ -11,6 +11,7 @@ import Button from '../components/Button';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { DAMA_ROLE_LABELS } from '../types';
@@ -129,6 +130,9 @@ const AGENT_COLUMN_DEFS: Array<{ id: AgentColId; label: string; defaultVisible: 
 
 export default function AgentsPage() {
   const { activeOrgId } = useOrgContext();
+  // /agents is agent:* (admin-only, like agent:read). Gate every write
+  // affordance on isAdmin so non-admins get a read-only agent list.
+  const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const agentCols = useColumnPicker<AgentColId>('procela.agents.visibleCols.v1', AGENT_COLUMN_DEFS);
@@ -509,6 +513,7 @@ export default function AgentsPage() {
     {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 120,
       render: (a: Agent) => (
+        !isAdmin ? <span style={{ color: 'var(--color-text-muted)' }}>—</span> :
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
           <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(a)} />
           <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(a.id)} />
@@ -543,10 +548,10 @@ export default function AgentsPage() {
                 ]),
               })} />
             )}
-            <IconButton icon="upload" label="Import agents"
-              onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />
+            {isAdmin && <IconButton icon="upload" label="Import agents"
+              onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />}
             <ColumnPicker state={agentCols} />
-            <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} />
+            {isAdmin && <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} />}
           </>
         }
       />
@@ -814,15 +819,15 @@ export default function AgentsPage() {
             icon={renderNavIcon('/agents')}
             title={selectedOrgId ? 'No agents in this organization yet' : 'No agents defined yet'}
             description="Agents are non-human actors — AI models, service accounts, pipelines, bots — that participate in your org alongside people."
-            action={{ label: '+ Add Agent', onClick: openAdd }}
-            secondaryAction={{ label: 'Import from CSV', onClick: () => { setImportOrgId(selectedOrgId); setShowImport(true); } }}
+            action={isAdmin ? { label: '+ Add Agent', onClick: openAdd } : undefined}
+            secondaryAction={isAdmin ? { label: 'Import from CSV', onClick: () => { setImportOrgId(selectedOrgId); setShowImport(true); } } : undefined}
           />
         ) : (
           <DataTable
             rows={sorted}
             columns={agentColumns}
             rowKey={(a) => a.id}
-            selection={sel}
+            selection={isAdmin ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all agents"
             emptyMessage="No agents match the current filters."

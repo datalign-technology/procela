@@ -10,6 +10,7 @@ import Button from '../components/Button';
 import FieldStack from '../components/FieldStack';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from '../components/EmptyState';
@@ -203,6 +204,10 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
 
 export default function PeoplePage() {
   const { orgs: accessibleOrgs, activeOrgId } = useOrgContext();
+  // /people writes are people:write = admin-only (they include changing a
+  // user's application RBAC role). Gate every write affordance on isAdmin so
+  // non-admins get a read-only directory instead of buttons that 403.
+  const { isAdmin } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -711,11 +716,11 @@ export default function PeoplePage() {
           ]),
         })} />
       )}
-      <IconButton icon="upload" label="Import people"
-        onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />
-      <IconButton icon="link" label="Connect to source" onClick={() => setShowPeopleSync(true)} />
-      <IconButton icon="plus" label="Add person" variant="primary"
-        onClick={openAddPerson} />
+      {isAdmin && <IconButton icon="upload" label="Import people"
+        onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />}
+      {isAdmin && <IconButton icon="link" label="Connect to source" onClick={() => setShowPeopleSync(true)} />}
+      {isAdmin && <IconButton icon="plus" label="Add person" variant="primary"
+        onClick={openAddPerson} />}
     </>
   );
 
@@ -1050,7 +1055,7 @@ export default function PeoplePage() {
                     icon={renderNavIcon('/people')}
                     title="No people in this organization yet"
                     description="Add the first person — their email, role, and any DAMA accountabilities. They'll be available across Procela as an owner, steward, or custodian."
-                    action={{ label: '+ Add Person', onClick: openAddPerson }}
+                    action={isAdmin ? { label: '+ Add Person', onClick: openAddPerson } : undefined}
                     secondaryAction={{ label: 'Import from CSV', onClick: () => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); } }}
                   />
                 ) : (
@@ -1058,10 +1063,10 @@ export default function PeoplePage() {
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
                         <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                          <input type="checkbox"
+                          {isAdmin && <input type="checkbox"
                             ref={(el) => { if (el) el.indeterminate = sel.someSelected; }}
                             checked={sel.allSelected}
-                            onChange={sel.toggleAll} />
+                            onChange={sel.toggleAll} />}
                         </th>
                         <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                         <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
@@ -1074,8 +1079,8 @@ export default function PeoplePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {/* Quick-add row — always visible at the top when an org is selected */}
-                      {selectedOrgId && (
+                      {/* Quick-add row — admins only (creating a person is people:write) */}
+                      {selectedOrgId && isAdmin && (
                         <tr style={{ background: '#f0f9ff' }}>
                           <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}></td>
                           <td style={tdStyle}>
@@ -1127,7 +1132,7 @@ export default function PeoplePage() {
                           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
                           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
                           <td style={{ ...personRowTd, textAlign: 'center', width: 32 }}>
-                            <input type="checkbox" checked={isSelected} onChange={() => sel.toggle(person.id)} />
+                            {isAdmin && <input type="checkbox" checked={isSelected} onChange={() => sel.toggle(person.id)} />}
                           </td>
                           <td style={{ ...personRowTd, fontWeight: 500 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1160,14 +1165,14 @@ export default function PeoplePage() {
                           <td style={{ ...personRowTd, textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                               <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => navigate(`/people/${person.id}`)} />
-                              <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />
-                              <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                              {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />}
+                              {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
                                 try {
                                   const res = await apiClient.get<{ success: boolean; data: { ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number; activeAgents: number } }>(`/people/${person.id}/impact`);
                                   setDeletePersonImpact(res.data || null);
                                 } catch { setDeletePersonImpact(null); }
                                 setConfirmDeletePerson(person.id);
-                              }} />
+                              }} />}
                             </div>
                           </td>
                         </tr>

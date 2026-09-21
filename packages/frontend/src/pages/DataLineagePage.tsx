@@ -12,6 +12,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import ExportMenu from '../components/ExportMenu';
 import { usePolling } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -262,6 +263,9 @@ const LINEAGE_COLUMN_DEFS: Array<{ id: LineageColId; label: string; defaultVisib
 
 export default function DataLineagePage() {
   const { activeOrgId } = useOrgContext();
+  // /data-lineage writes need data-asset:write (EDITOR+); gate write
+  // affordances so non-writers get a read-only lineage view, not 403 buttons.
+  const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const lineageCols = useColumnPicker<LineageColId>('procela.dataLineage.visibleCols.v1', LINEAGE_COLUMN_DEFS);
   const [links, setLinks] = useState<LineageLink[]>([]);
@@ -600,6 +604,7 @@ export default function DataLineagePage() {
     {
       key: 'actions', header: 'Actions', align: 'center' as const,
       render: (link: LineageLink) => (
+        !canWrite ? <span style={{ color: 'var(--color-text-muted)' }}>—</span> :
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
           <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(link)} />
           <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(link.id)} />
@@ -641,8 +646,8 @@ export default function DataLineagePage() {
           <>
             <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
               onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
-            <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />
-            {snowflakeConns.length > 0 && (
+            {canWrite && <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />}
+            {canWrite && snowflakeConns.length > 0 && (
               <IconButton icon="download" label="Extract lineage from query history"
                 onClick={() => { setSqlExtractSummary(null); setSqlExtractColumnSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
             )}
@@ -663,7 +668,7 @@ export default function DataLineagePage() {
               })} />
             )}
             <ColumnPicker state={lineageCols} />
-            <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} />
+            {canWrite && <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} />}
           </>
         }
       />
@@ -784,7 +789,7 @@ export default function DataLineagePage() {
               icon={renderNavIcon('/data-lineage')}
               title="No lineage flows defined yet"
               description="How data moves between systems — which system feeds which."
-              action={{ label: '+ Add Flow', onClick: openAdd }}
+              action={canWrite ? { label: '+ Add Flow', onClick: openAdd } : undefined}
             />
           ) : (
             <Card padding={0} style={{ overflow: 'auto' }}>
@@ -792,7 +797,7 @@ export default function DataLineagePage() {
                 rows={sorted}
                 columns={lineageColumns}
                 rowKey={(l) => l.id}
-                selection={sel}
+                selection={canWrite ? sel : undefined}
                 sort={{ sortKey, sortDir, onSort: toggleSort }}
                 selectAllLabel="Select all flows"
                 emptyMessage="No flows match the current filters."

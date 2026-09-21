@@ -84,8 +84,8 @@ interface FlatOrg { id: string; parentId: string | null; name: string; type: str
 
 // OrgRolePill moved to components/OrgRolePill.tsx for unit testing.
 
-function InlineField({ label, value, field, personId, onSaved }: {
-  label: string; value: string; field: string; personId: string; onSaved: () => void;
+function InlineField({ label, value, field, personId, onSaved, canEdit = true }: {
+  label: string; value: string; field: string; personId: string; onSaved: () => void; canEdit?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -109,6 +109,16 @@ function InlineField({ label, value, field, personId, onSaved }: {
           onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
           style={{ fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '3px 8px', width: '100%', background: 'var(--color-surface)' }}
         />
+      </div>
+    );
+  }
+  if (!canEdit) {
+    return (
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{label}</div>
+        <div style={{ fontSize: 13 }}>
+          {value || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}
+        </div>
       </div>
     );
   }
@@ -340,6 +350,7 @@ export default function PersonDetailPage() {
             <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2 }}>Application role</div>
             <select
               value={p.role}
+              disabled={!isAdmin}
               onChange={async (e) => {
                 try {
                   await apiClient.put(`/people/${p.id}`, { role: e.target.value });
@@ -350,7 +361,7 @@ export default function PersonDetailPage() {
               style={{
                 fontSize: 13, fontWeight: 500, border: '1px solid var(--color-border)',
                 borderRadius: 4, padding: '3px 8px', background: 'var(--color-surface)',
-                cursor: 'pointer',
+                cursor: isAdmin ? 'pointer' : 'not-allowed',
               }}
             >
               {['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER'].map((r) => (
@@ -358,8 +369,8 @@ export default function PersonDetailPage() {
               ))}
             </select>
           </div>
-          <InlineField label="Email" value={p.email} field="email" personId={p.id} onSaved={fetch360} />
-          <InlineField label="Job Title" value={p.title} field="title" personId={p.id} onSaved={fetch360} />
+          <InlineField label="Email" value={p.email} field="email" personId={p.id} onSaved={fetch360} canEdit={isAdmin} />
+          <InlineField label="Job Title" value={p.title} field="title" personId={p.id} onSaved={fetch360} canEdit={isAdmin} />
           {/* "Job Role" editor removed: it duplicated Job Title as a second
               free-text job descriptor. The jobRole field itself is kept (it
               backs the RACI "group by Job Role" dimension and sync mapping)
@@ -403,12 +414,12 @@ export default function PersonDetailPage() {
                   <OrgRolePill
                     role={effectiveRole}
                     isOverride={!!override}
-                    disabled={busy}
+                    disabled={busy || !isAdmin}
                     onChange={(role) => setOrgRole(oid, role)}
                   />
                   <button
                     onClick={() => toggleOrgAssignment(oid)}
-                    disabled={isLast || busy}
+                    disabled={isLast || busy || !isAdmin}
                     aria-label={`Unassign from ${o.name}`}
                     title={isLast ? 'Cannot unassign the last org' : `Unassign from ${o.name}`}
                     style={{
@@ -424,7 +435,9 @@ export default function PersonDetailPage() {
             })}
           </div>
         )}
-        <OrgPicker
+        {/* Add/remove-org picker is a people:write action — admins only.
+            Non-admins still see the assigned-org chips above, read-only. */}
+        {isAdmin && <OrgPicker
           orgs={allOrgs}
           selectedIds={new Set(data.person.orgIds || [])}
           onToggle={toggleOrgAssignment}
@@ -438,7 +451,7 @@ export default function PersonDetailPage() {
           }}
           maxHeight={260}
           aria-label="Search organizations" placeholder="Search organizations (press / to focus)"
-        />
+        />}
       </div>
 
       {/* Skills */}
@@ -461,7 +474,7 @@ export default function PersonDetailPage() {
               setBusy(false);
             }
           }}
-          disabled={busy}
+          disabled={busy || !isAdmin}
           maxHeight={220}
           label="Skills"
         />
@@ -502,7 +515,7 @@ export default function PersonDetailPage() {
                 </div>
                 <button
                   onClick={() => removeDamaRole(r.id)}
-                  disabled={busy}
+                  disabled={busy || !isAdmin}
                   style={{ background: 'none', border: 'none', color: 'var(--color-error)', cursor: busy ? 'default' : 'pointer', fontSize: 12 }}
                 >
                   Remove
@@ -536,7 +549,7 @@ export default function PersonDetailPage() {
                 <input
                   type="checkbox"
                   checked={isMember}
-                  disabled={busy}
+                  disabled={busy || !isAdmin}
                   onChange={() => toggleGroup(group.id, isMember)}
                 />
                 <span style={{ fontSize: 13, fontWeight: isMember ? 500 : 400 }}>{group.name}</span>
@@ -562,6 +575,7 @@ export default function PersonDetailPage() {
         busy={busy}
         onToggleOwner={toggleDomainOwner}
         onToggleSteward={toggleDomainSteward}
+        canEdit={isAdmin}
       />
 
       {/* Related processes */}
@@ -597,12 +611,15 @@ export default function PersonDetailPage() {
 // Split out so the expand/collapse state is local to this card and doesn't
 // re-render the entire page on every toggle.
 
-function DomainResponsibilities({ allDomains, personId, busy, onToggleOwner, onToggleSteward }: {
+function DomainResponsibilities({ allDomains, personId, busy, onToggleOwner, onToggleSteward, canEdit }: {
   allDomains: Array<{ id: string; name: string; ownerId: string | null; stewardIds: string[] }>;
   personId: string;
   busy: boolean;
   onToggleOwner: (domainId: string, isCurrentOwner: boolean) => void;
   onToggleSteward: (domainId: string, isSteward: boolean, currentStewardIds: string[]) => void;
+  // Assigning domain owner/steward is data-asset:write, but this page is a
+  // people admin surface; gate on the same admin flag as the rest.
+  canEdit: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
   const assigned = allDomains.filter((d) => d.ownerId === personId || d.stewardIds.includes(personId));
@@ -622,11 +639,11 @@ function DomainResponsibilities({ allDomains, personId, busy, onToggleOwner, onT
       >
         <span style={{ flex: 1, fontSize: 13 }}>{d.name}</span>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: busy ? 'default' : 'pointer' }}>
-          <input type="checkbox" checked={isOwner} disabled={busy} onChange={() => onToggleOwner(d.id, isOwner)} />
+          <input type="checkbox" checked={isOwner} disabled={busy || !canEdit} onChange={() => onToggleOwner(d.id, isOwner)} />
           Owner
         </label>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: busy ? 'default' : 'pointer' }}>
-          <input type="checkbox" checked={isSteward} disabled={busy} onChange={() => onToggleSteward(d.id, isSteward, d.stewardIds)} />
+          <input type="checkbox" checked={isSteward} disabled={busy || !canEdit} onChange={() => onToggleSteward(d.id, isSteward, d.stewardIds)} />
           Steward
         </label>
       </div>

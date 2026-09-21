@@ -2261,7 +2261,7 @@ export default function DataAssetsPage({
             icon={renderNavIcon('/data-assets')}
             title="No data assets yet"
             description="Business-level concepts — Customer Accounts, Billing Records, Inventory Levels — not the underlying tables or columns."
-            action={canOwnHere ? { label: '+ Add Data Asset', onClick: openAdd } : undefined}
+            action={canWrite && canOwnHere ? { label: '+ Add Data Asset', onClick: openAdd } : undefined}
           />
         ) : (
           <DataTable

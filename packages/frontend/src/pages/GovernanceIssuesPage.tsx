@@ -146,7 +146,7 @@ export default function GovernanceIssuesPage({
   actionsPortal?: HTMLElement | null;
 } = {}) {
   const { activeOrgId } = useOrgContext();
-  const { canWrite } = usePermissions();
+  const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
 
   const issueCols = useColumnPicker<IssueColId>('procela.governanceIssues.visibleCols.v1', ISSUE_COLUMN_DEFS);
@@ -337,8 +337,8 @@ export default function GovernanceIssuesPage({
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
       render: (i: GovernanceIssue) => (
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(i)} />}
-          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(i.id)} />}
+          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(i)} />}
+          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(i.id)} />}
         </div>
       ),
     },
@@ -355,7 +355,7 @@ export default function GovernanceIssuesPage({
         actions={
           <>
             <ColumnPicker state={issueCols} />
-            {canWrite && (
+            {isAdmin && (
               <IconButton icon="plus" label="Add issue" variant="primary" onClick={openAdd} />
             )}
           </>
@@ -496,7 +496,7 @@ export default function GovernanceIssuesPage({
             icon={renderNavIcon('/governance-work')}
             title="No governance issues yet"
             description="Data-quality problems, policy violations, and other concerns are tracked here."
-            action={canWrite ? { label: '+ Add Issue', onClick: openAdd } : undefined}
+            action={isAdmin ? { label: '+ Add Issue', onClick: openAdd } : undefined}
           />
         ) : (
           <DataTable

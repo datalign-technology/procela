@@ -161,7 +161,7 @@ function formatDaysAway(days: number): string {
 
 export default function GovernanceCalendarPage() {
   const { activeOrgId } = useOrgContext();
-  const { canWrite } = usePermissions();
+  const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -454,10 +454,10 @@ export default function GovernanceCalendarPage() {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 140,
       render: (ev) => (
         <div style={{ display: 'inline-flex', gap: 4 }}>
-          {canWrite && <IconButton size="sm" icon="check" label="Mark occurrence done" onClick={() => handleRun(ev.id)} />}
+          {isAdmin && <IconButton size="sm" icon="check" label="Mark occurrence done" onClick={() => handleRun(ev.id)} />}
           <IconButton size="sm" icon="download" label="Add to calendar (.ics)" onClick={() => downloadIcs(ev)} />
-          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(ev)} />}
-          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(ev.id)} />}
+          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(ev)} />}
+          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(ev.id)} />}
         </div>
       ),
     },
@@ -485,10 +485,10 @@ export default function GovernanceCalendarPage() {
               }}>Calendar</button>
             </div>
           )}
-          {canWrite && events.length === 0 && (
+          {isAdmin && events.length === 0 && (
             <Button variant="secondary" onClick={handleSeed}>Seed Standard Events</Button>
           )}
-          {canWrite && <IconButton icon="plus" label="Add event" variant="primary" onClick={openAdd} />}
+          {isAdmin && <IconButton icon="plus" label="Add event" variant="primary" onClick={openAdd} />}
         </>}
       />
 
@@ -858,7 +858,7 @@ export default function GovernanceCalendarPage() {
                 icon={renderNavIcon('/governance-calendar')}
                 title="No governance events yet"
                 description="Set up recurring councils, committees, and reviews. Seed standard events or add your own."
-                action={canWrite ? { label: 'Seed Standard Events', onClick: handleSeed } : undefined}
+                action={isAdmin ? { label: 'Seed Standard Events', onClick: handleSeed } : undefined}
               />
             ) : filteredEvents.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>

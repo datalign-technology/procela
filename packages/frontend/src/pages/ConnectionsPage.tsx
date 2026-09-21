@@ -8,6 +8,7 @@ import Card from '../components/Card';
 import FacetChips from '../components/FacetChips';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -198,6 +199,9 @@ export default function ConnectionsPage({
   actionsPortal?: HTMLElement | null;
 } = {}) {
   const { activeOrgId } = useOrgContext();
+  // /connections writes need connection:write (EDITOR+); gate every write
+  // affordance so Viewers/Contributors get a read-only list, not 403 buttons.
+  const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const [searchParams, setSearchParams] = useSearchParams();
   // System filter read from / synced to the URL so Systems-tab shortcuts
@@ -959,6 +963,9 @@ export default function ConnectionsPage({
       key: 'actions', header: 'Actions', align: 'center' as const, cellStyle: { whiteSpace: 'nowrap' },
       render: (conn: ConnectionProfile) => {
         const isTesting = testingIds.has(conn.id);
+        // Every action here (test, discover, edit, duplicate, delete) writes,
+        // so non-writers get no actions rather than buttons that 403.
+        if (!canWrite) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
         return (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
             <IconButton size="sm" icon={isTesting ? 'refresh' : 'play'}
@@ -1018,7 +1025,7 @@ export default function ConnectionsPage({
               })}
             />
             <ColumnPicker state={connCols} />
-            <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />
+            {canWrite && <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />}
           </>
         }
       />
@@ -1264,14 +1271,14 @@ export default function ConnectionsPage({
             icon={renderNavIcon('/connections')}
             title={filterSystem ? `No connections for ${filterSystem.name} yet` : 'No connections configured yet'}
             description="The bridge between a system and its actual data — a database, a file, a warehouse."
-            action={{ label: '+ Add Connection', onClick: openAdd }}
+            action={canWrite ? { label: '+ Add Connection', onClick: openAdd } : undefined}
           />
         ) : (
           <DataTable
             rows={sorted}
             columns={connectionColumns}
             rowKey={(c) => c.id}
-            selection={sel}
+            selection={canWrite ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all connections"
             emptyMessage="No connections match the current filters."
