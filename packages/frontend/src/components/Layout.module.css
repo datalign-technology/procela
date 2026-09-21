@@ -384,7 +384,7 @@
 
 .content {
   flex: 1;
-  padding: 14px 20px 18px;
+  padding: 12px 18px 14px;
   overflow-y: auto;
   /* Reserve gutter so the scrollbar appearing/disappearing between
      short pages (loading spinner, empty states) and tall pages
