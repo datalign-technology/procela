@@ -52,15 +52,18 @@ export default function DataAssetsHubPage() {
     setSearchParams(params, { replace: true });
   };
 
+  // Matches the shared <Tabs> strip (components/Tabs.tsx) so this hub's
+  // hand-rolled bar reads identically to every other tabbed page.
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    padding: '10px 20px',
-    fontSize: 14,
-    fontWeight: active ? 600 : 400,
+    padding: '10px 18px',
+    fontSize: 13,
+    fontWeight: active ? 600 : 500,
     cursor: 'pointer',
     border: 'none',
-    background: 'none',
+    background: 'transparent',
     color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
     borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
+    marginBottom: -1,
   });
 
   return (
@@ -86,9 +89,9 @@ export default function DataAssetsHubPage() {
           marginBottom: 16,
         }}
       >
-        <div style={{ display: 'flex' }}>
+        <div role="tablist" style={{ display: 'flex' }}>
           {TABS.map((t) => (
-            <button key={t.key} style={tabStyle(tab === t.key)} onClick={() => setTab(t.key)}>
+            <button key={t.key} role="tab" aria-selected={tab === t.key} style={tabStyle(tab === t.key)} onClick={() => setTab(t.key)}>
               {t.label}
             </button>
           ))}

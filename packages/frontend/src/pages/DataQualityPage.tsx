@@ -537,15 +537,18 @@ export default function DataQualityPage({
   const systemNameById: Record<string, string> = {};
   for (const s of systemsList) systemNameById[s.id] = s.name;
 
+  // Matches the shared <Tabs> strip (components/Tabs.tsx) so the hand-rolled
+  // standalone tab bar reads identically to every other tabbed page.
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    padding: '10px 20px',
-    fontSize: 14,
-    fontWeight: active ? 600 : 400,
+    padding: '10px 18px',
+    fontSize: 13,
+    fontWeight: active ? 600 : 500,
     cursor: 'pointer',
     border: 'none',
-    background: 'none',
+    background: 'transparent',
     color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
     borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
+    marginBottom: -1,
   });
 
   const ruleColumns = ([
@@ -667,9 +670,9 @@ export default function DataQualityPage({
             </HelpPopover>
           </PageHeader>
 
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
-            <button style={tabStyle(tab === 'assets')} onClick={() => setTab('assets')}>Assets</button>
-            <button style={tabStyle(tab === 'rules')} onClick={() => setTab('rules')}>Rules</button>
+          <div role="tablist" style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
+            <button role="tab" aria-selected={tab === 'assets'} style={tabStyle(tab === 'assets')} onClick={() => setTab('assets')}>Assets</button>
+            <button role="tab" aria-selected={tab === 'rules'} style={tabStyle(tab === 'rules')} onClick={() => setTab('rules')}>Rules</button>
           </div>
         </>
       )}
