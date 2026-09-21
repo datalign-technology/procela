@@ -51,6 +51,39 @@ pieces live, and the repository pattern every entity follows.
    the JSON files under `.procela-data/`. The switch is per-store and
    automatic — no code change flips between them.
 
+### Troubleshooting: `EPERM` on Windows during generate / reset
+
+`prisma generate` (which `prisma migrate reset` runs at the end) writes the
+query engine to a temp file and then **renames** it into place:
+
+```
+EPERM: operation not permitted, rename
+'…\node_modules\.prisma\client\query_engine-windows.dll.node.tmp<NNNNN>' ->
+'…\node_modules\.prisma\client\query_engine-windows.dll.node'
+```
+
+The migrations themselves usually succeeded — the rename fails because
+something has the engine DLL (or the leftover `.tmp` file) locked. Fix:
+
+```powershell
+# Clear the stale generated client, then regenerate cleanly:
+Remove-Item -Recurse -Force node_modules\.prisma
+npx prisma generate
+```
+
+Then re-run the command that failed. Three things commonly hold the lock —
+address whichever applies:
+
+- **A running Node process** (a dev server or `prisma studio` still up):
+  `taskkill /F /IM node.exe`, then retry.
+- **OneDrive** syncing the file mid-write. This is the usual cause when the
+  repo lives under `C:\Users\<you>\…` (check `echo $env:OneDrive`). Pause
+  syncing before running, or — the durable fix — **move the repo out of the
+  OneDrive/profile folder** (e.g. `C:\dev\procela`, then `npm install`
+  there). That also removes a steady source of `npm install` EPERM errors.
+- **Antivirus** scanning the new `.dll.node`. Add `…\procela\node_modules`
+  to Windows Defender exclusions.
+
 ## The repository conversion pattern
 
 Every entity has a repository (`db/<entity>.repo.ts`), and every route
