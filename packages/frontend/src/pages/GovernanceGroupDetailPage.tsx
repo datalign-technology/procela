@@ -436,6 +436,8 @@ export default function GovernanceGroupDetailPage() {
           </>
         }
         title={group.name}
+        copyId={group.id}
+        copyLabel="Copy group ID"
         subtitle={group.description || undefined}
         actions={
           <>

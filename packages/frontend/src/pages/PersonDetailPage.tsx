@@ -312,6 +312,8 @@ export default function PersonDetailPage() {
       <PageHeader
         kicker="Person"
         title={p.name}
+        copyId={p.id}
+        copyLabel="Copy person ID"
         subtitle={
           <>
             {p.email && <span>{p.email}</span>}

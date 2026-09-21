@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import CopyButton from './CopyButton';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PageHeader — the band at the top of every page. Establishes hierarchy
@@ -27,13 +28,19 @@ interface PageHeaderProps {
   subtitle?: ReactNode;
   /** Inline next to the H1 — used for HelpPopover (?) buttons etc. */
   children?: ReactNode;
+  /** When set, a quiet copy button sits next to the title that copies this
+   *  value (typically the entity id) — a "reference this thing" affordance
+   *  for detail pages. Optional; list pages leave it unset. */
+  copyId?: string;
+  /** Tooltip/label for the copy button. Defaults to "Copy ID". */
+  copyLabel?: string;
   /** Right-aligned action cluster (buttons, menus). */
   actions?: ReactNode;
   /** Row below the subtitle for status chips, counts, badges, etc. */
   meta?: ReactNode;
 }
 
-export default function PageHeader({ kicker, title, subtitle, children, actions, meta }: PageHeaderProps) {
+export default function PageHeader({ kicker, title, subtitle, children, copyId, copyLabel, actions, meta }: PageHeaderProps) {
   return (
     <div
       className="procela-stack-on-mobile"
@@ -64,6 +71,7 @@ export default function PageHeader({ kicker, title, subtitle, children, actions,
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <h1 style={{ fontSize: '1.375rem', fontWeight: 700, lineHeight: 1.25, margin: 0 }}>{title}</h1>
+          {copyId && <CopyButton value={copyId} label={copyLabel} />}
           {children}
         </div>
         {subtitle && (
