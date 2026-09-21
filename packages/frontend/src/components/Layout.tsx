@@ -61,6 +61,15 @@ export default function Layout() {
   // Close the mobile nav drawer on navigation.
   useEffect(() => { setMobileDrawerOpen(false); }, [location.pathname]);
 
+  // Scroll back to the top of the content area on navigation, so clicking a
+  // nav item lands at the top of the new page instead of wherever the previous
+  // page happened to be scrolled. Keyed on pathname only (not search params),
+  // so switching tabs within a page (?tab=…) doesn't jump the scroll.
+  useEffect(() => {
+    document.getElementById('main-content')?.scrollTo({ top: 0, left: 0 });
+    window.scrollTo({ top: 0, left: 0 });
+  }, [location.pathname]);
+
 
 
   // Search state
