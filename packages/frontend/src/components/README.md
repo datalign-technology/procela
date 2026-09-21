@@ -692,6 +692,34 @@ import WizardProgress from '@/components/WizardProgress';
 used by the Process Wizard's Generate step so the step-bar and the
 big token-progress bar underneath can't disagree.
 
+### `<PersonPicker>`
+
+The one shared control for assigning people anywhere — process owner,
+data-asset / system / domain owner & steward, group members, role
+holders. One popover with three ways to find someone: **Search**
+(name / title / org path), **Org tree**, and **By group** (governance
+bodies). Single or multi select. Do NOT hand-roll a name dropdown.
+
+```tsx
+import PersonPicker from '@/components/PersonPicker';
+
+<PersonPicker mode="single" valueMode="id"
+  value={ownerId} onChange={setOwnerId} placeholder="-- Unassigned --" />
+
+<PersonPicker mode="multi" valueMode="id"
+  value={stewardIds} onChange={(ids) => setStewardIds(ids as string[])} />
+```
+
+Org scope: the picker fetches people from the header's active org (or
+an explicit `orgId` prop) via `GET /people?orgId=…&subtree=1` — the
+`subtree` flag widens to that org **and its descendant sub-orgs**, so a
+picker scoped to a company still lists (and resolves the names of)
+owners/stewards assigned to a division or department. Without it, an
+owner in a sub-org rendered as a raw id. `valueMode` is `'id'` (default)
+or `'name'` for legacy name-string fields; `eligibleKeys` gates
+selection to role-holders. The three datasets are cached per org scope,
+so many pickers on a page fire one request each.
+
 ---
 
 ## Icons
