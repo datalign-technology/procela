@@ -162,6 +162,11 @@ const openApiSpec = {
         summary: 'List all people',
         tags: ['People'],
         security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'orgId', in: 'query', required: false, schema: { type: 'string' }, description: 'Filter to people who belong to this organization. By default this is exact-org membership.' },
+          { name: 'subtree', in: 'query', required: false, schema: { type: 'boolean' }, description: 'When true (with orgId), widen the org filter to that org AND all its descendant sub-orgs — so a picker scoped to a company also lists people in its divisions/departments. Bounded to the subtree; never crosses into a sibling tenant.' },
+          { name: 'includeInactive', in: 'query', required: false, schema: { type: 'boolean' }, description: 'When true, include soft-deleted (deactivated) people. Defaults to false.' },
+        ],
         responses: { '200': { description: 'Array of people' } },
       },
       post: {
@@ -554,7 +559,10 @@ const openApiSpec = {
         summary: 'List all data domains',
         tags: ['Data Domains'],
         security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'Array of data domains' } },
+        parameters: [
+          { name: 'orgId', in: 'query', required: false, schema: { type: 'string' }, description: 'Filter to domains visible from this org scope.' },
+        ],
+        responses: { '200': { description: 'Array of data domains. Each domain carries DIRECT membership (assets, dataAssetIds, directAssetCount) plus a rolled-up subtree view — subtreeAssetCount / subtreeAssetIds / subtreeAssets — that includes this domain\'s own assets and every descendant sub-domain\'s. Ownership stays on the single domain each asset is assigned to; the subtree view is read-only aggregation for per-domain coverage/health/gap metrics.' } },
       },
       post: {
         summary: 'Create a new data domain',
@@ -569,7 +577,7 @@ const openApiSpec = {
         tags: ['Data Domains'],
         security: [{ bearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'Data domain details' } },
+        responses: { '200': { description: 'Data domain details, incl. the rolled-up subtree view (subtreeAssetCount / subtreeAssetIds / subtreeAssets) alongside DIRECT membership (assets / directAssetCount).' } },
       },
       put: {
         summary: 'Update a data domain',

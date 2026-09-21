@@ -37,7 +37,7 @@ That brings up the normal stack **plus** the demo services:
 | Service | Role |
 |---|---|
 | `source-db` | A stand-in **customer** Postgres, seeded from `docker/demo/source-db/init/*.sql` with `utility.*` and `shipbuilder.*` operational tables (with deliberately dirty rows so DQ is non-trivial). This is **not** Procela's store. |
-| `tidewater-seed` / `momentum-seed` | Seed the two tenants — Tidewater Utilities and Momentum Industries — so each connector has a home to pair into. Run once. |
+| `tidewater-seed` / `momentum-seed` | Seed the two tenants — Tidewater Utilities and Momentum Industries — so each connector has a home to pair into. Idempotent: each seeder cleans first (cascade-deletes its own tenant) before reloading, so a re-run converges rather than duplicating. |
 | `tidewater-bootstrap` / `momentum-bootstrap` | Pair a real connector each (`pair/start` → `pair/claim`), one scoped to `utility` and one to `shipbuilder`, writing `connector.yaml` / `ship-connector.yaml` to a shared volume. Run once. |
 | `tidewater-connector` / `momentum-connector` | The real agents. Each reads its config, discovers its schema's tables, reports them into its tenant, and measures any DQ rules. |
 

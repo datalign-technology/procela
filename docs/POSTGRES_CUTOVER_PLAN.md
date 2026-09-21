@@ -195,6 +195,16 @@ tests. **All 24 caller files are untouched** and JSON-mode behavior is
 byte-identical. *Follow-up:* invalidate the cache on org writes for immediate
 read-your-writes (currently eventually-consistent within the TTL).
 
+> **Boot-readiness gate (added later).** The "under-inclusive while cold"
+> window had a user-visible edge: at startup the people cache could warm before
+> the org-scope cache, so a scoped (non-super-admin) user was found (restricted)
+> while their accessible-org set computed empty — denied even their own org with
+> `Not authorized for orgId <id>` until the org cache hydrated. In Postgres mode
+> `index.ts` now holds `/api/v1` requests (health + auth exempt) until **both**
+> `initOrgScope()` and `initPeopleCache()` resolve, so no request is served
+> against a cold access-control cache. No-op in JSON mode (the caches are the
+> live arrays).
+
 **PR 5 — report-engine (done).** Implemented per its design doc
 [`POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md`](./POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md):
 the `STORES` array-thunk registry became a `REPOS` registry over the 9 entity
