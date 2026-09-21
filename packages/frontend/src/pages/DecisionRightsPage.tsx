@@ -7,7 +7,6 @@ import SectionLabel from '../components/SectionLabel';
 import FacetChips from '../components/FacetChips';
 import Card from '../components/Card';
 import Button from '../components/Button';
-import TruncatedText from '../components/TruncatedText';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -271,7 +270,11 @@ const DECISION_COLUMN_DEFS: Array<{ id: DecisionColId; label: string; defaultVis
 
 export default function DecisionRightsPage() {
   const { activeOrgId } = useOrgContext();
-  const { canWrite } = usePermissions();
+  // Decision Rights is a governance surface: the backend gates every write
+  // (seed / add / edit / delete) on `governance:write`, which only admins
+  // hold. Gate the write affordances on `isAdmin` so editors get a clean
+  // read-only view instead of buttons the API rejects with a 403.
+  const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
 
   const decisionCols = useColumnPicker<DecisionColId>('procela.decisionRights.visibleCols.v1', DECISION_COLUMN_DEFS);
@@ -458,18 +461,16 @@ export default function DecisionRightsPage() {
     decisionCols.isVisible('decision') && {
       key: 'decision', header: 'Decision', sortable: true, cellStyle: { fontWeight: 500, verticalAlign: 'top' },
       render: (r: DecisionRight) => (
-        <>
-          <button
-            type="button"
-            onClick={() => toggleExpand(r.id)}
-            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
-          >
-            {r.decision}
-          </button>
-          {r.description && (
-            <TruncatedText text={r.description} style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 480 }} />
-          )}
-        </>
+        // Description isn't shown inline — rows stay single-line; hover the
+        // decision to read it (full text also in the expanded row + edit form).
+        <button
+          type="button"
+          onClick={() => toggleExpand(r.id)}
+          title={r.description || undefined}
+          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
+        >
+          {r.decision}
+        </button>
       ),
     },
     decisionCols.isVisible('category') && {
@@ -500,8 +501,8 @@ export default function DecisionRightsPage() {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100, cellStyle: { verticalAlign: 'top' },
       render: (r: DecisionRight) => (
         <div style={{ display: 'inline-flex', gap: 4 }}>
-          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(r)} />}
-          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />}
+          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(r)} />}
+          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />}
         </div>
       ),
     },
@@ -516,7 +517,7 @@ export default function DecisionRightsPage() {
         subtitle="Who has authority to decide, recommend, approve, and be informed for governance decisions."
         actions={
           <>
-            {canWrite && rows.length === 0 && (
+            {isAdmin && rows.length === 0 && (
               <Button
                 variant="secondary"
                 disabled={seeding}
@@ -534,7 +535,7 @@ export default function DecisionRightsPage() {
               }}
             />
             <ColumnPicker state={decisionCols} />
-            {canWrite && <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} />}
+            {isAdmin && <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} />}
           </>
         }
       />
@@ -730,8 +731,10 @@ export default function DecisionRightsPage() {
             <EmptyState
               icon={renderNavIcon('/decision-rights')}
               title="No decision rights defined yet"
-              description="Who has authority to decide, recommend, approve, and be informed. Seed the standard set or add your own."
-              action={canWrite ? { label: 'Seed Standard Decisions', onClick: handleSeed } : undefined}
+              description={isAdmin
+                ? 'Who has authority to decide, recommend, approve, and be informed. Seed the standard set or add your own.'
+                : 'Who has authority to decide, recommend, approve, and be informed. An administrator can seed the standard set.'}
+              action={isAdmin ? { label: 'Seed Standard Decisions', onClick: handleSeed } : undefined}
             />
           ) : filteredRows.length === 0 ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
@@ -743,7 +746,9 @@ export default function DecisionRightsPage() {
                 rows={sorted}
                 columns={decisionColumns}
                 rowKey={(r) => r.id}
-                selection={sel}
+                // Selection drives the bulk-delete bar, an admin-only write, so
+                // editors get no checkboxes (read-only governance view).
+                selection={isAdmin ? sel : undefined}
                 sort={{ sortKey, sortDir, onSort: toggleSort }}
                 expansion={{
                   expandedIds,
