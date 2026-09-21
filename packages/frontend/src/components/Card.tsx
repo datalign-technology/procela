@@ -3,10 +3,11 @@ import React from 'react';
 interface CardProps {
   children: React.ReactNode;
   /**
-   * Interior padding. Defaults to 16px which matches most existing
-   * cards in the app; longer-form content (Settings sections, wizard
-   * steps) commonly uses 24. Pass 0 to opt out of built-in padding
-   * (e.g. when the card wraps a table that supplies its own).
+   * Interior padding. Defaults to 12px for catalog density — enough to
+   * frame the content without the roomy feel that reads as boilerplate;
+   * longer-form content (Settings sections, wizard steps) commonly passes
+   * 24. Pass 0 to opt out of built-in padding (e.g. when the card wraps a
+   * table that supplies its own).
    */
   padding?: number | string;
   /**
@@ -84,7 +85,7 @@ const SHADOW_MAP: Record<NonNullable<CardProps['shadow']>, string | undefined> =
  */
 export default function Card({
   children,
-  padding = 16,
+  padding = 12,
   marginBottom,
   radius = 'md',
   shadow = 'sm',

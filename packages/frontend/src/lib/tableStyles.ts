@@ -10,9 +10,14 @@
 
 import type { CSSProperties } from 'react';
 
+// Row padding is intentionally tight (7px vertical) so list pages read at
+// catalog density — more rows on screen without horizontal cramping (14px
+// sides stay). The opt-in `data-density="compact"` mode drops the vertical
+// padding further still (5–6px), so the cozy/compact toggle keeps a visible
+// difference.
 export const thStyle: CSSProperties = {
   textAlign: 'left',
-  padding: '10px 14px',
+  padding: '7px 14px',
   fontSize: 11,
   fontWeight: 600,
   color: 'var(--color-text-muted)',
@@ -21,7 +26,7 @@ export const thStyle: CSSProperties = {
 };
 
 export const tdStyle: CSSProperties = {
-  padding: '10px 14px',
+  padding: '7px 14px',
   fontSize: 13,
   borderTop: '1px solid var(--color-border)',
 };
