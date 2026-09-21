@@ -312,7 +312,9 @@ export default function DamaRolesPage({
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
         apiClient.get<{ success: boolean; data: Record<string, number> }>(`/dama-roles/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
-        apiClient.get<{ success: boolean; data: AgentOption[] }>(`/agents${query}`),
+        // agent:read is admin-only; degrade to an empty list for non-admins
+        // (403) instead of failing the page load.
+        apiClient.get<{ success: boolean; data: AgentOption[] }>(`/agents${query}`).catch(() => ({ success: true, data: [] as AgentOption[] })),
         apiClient.get<{ success: boolean; data: OrgOption[] }>('/organizations'),
         apiClient.get<{ success: boolean; data: DomainOption[] }>(`/data-domains${query}`),
         apiClient.get<{ success: boolean; data: SystemOption[] }>(`/systems${query}`).catch(() => ({ success: true, data: [] as SystemOption[] })),

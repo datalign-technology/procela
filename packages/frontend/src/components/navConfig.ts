@@ -27,7 +27,11 @@
 // overrides the browser tab title so a short sidebar label (e.g.
 // "Structure" inside the Organizations section) can still produce a
 // meaningful tab title ("Organizations").
-export type NavItem = { to: string; label: string; titleLabel?: string };
+// `adminOnly` items require an elevated (SUPER_ADMIN / ORG_ADMIN) role — their
+// pages hit backend reads that are deliberately admin-only (agent:read,
+// audit:read), so showing the link to an EDITOR/VIEWER just leads to an
+// "insufficient permissions" error. The sidebar hides these for non-admins.
+export type NavItem = { to: string; label: string; titleLabel?: string; adminOnly?: boolean };
 
 // `items` is always the flat source of truth (active-state, flyout,
 // collapsed icon). `subGroups`, when present, only adds labelled
@@ -92,7 +96,7 @@ export const navSections: NavSection[] = [
       // "Organizations · Procela" via titleLabel.
       { to: '/organizations', label: 'Structure', titleLabel: 'Organizations' },
       { to: '/people', label: 'People' },
-      { to: '/agents', label: 'Agents' },
+      { to: '/agents', label: 'Agents', adminOnly: true },
       { to: '/skills', label: 'Skills' },
     ],
   },
@@ -159,7 +163,7 @@ export const navSections: NavSection[] = [
       { to: '/council-dashboard', label: 'Council Dashboard' },
       { to: '/council-scorecard', label: 'Council Scorecard' },
       { to: '/gap-detection',     label: 'Gap Detection' },
-      { to: '/audit-log',         label: 'Audit Log' },
+      { to: '/audit-log',         label: 'Audit Log', adminOnly: true },
     ],
     subGroups: [
       { label: 'Explore', itemTos: ['/enterprise-view', '/analysis', '/processes/data-map'] },
