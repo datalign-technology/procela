@@ -19,6 +19,7 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { usePolling } from '../hooks/usePolling';
+import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import Button from '../components/Button';
@@ -495,6 +496,12 @@ export default function SystemsPage({
   // directly. Departments / teams can't own; only company /
   // division can.
   const canOwnHere = canCreateValueStreams;
+  // Role guard. The backend gates every /systems write on `system:write`
+  // (EDITOR and up); canOwnHere is only an org-SCOPE check, so without this
+  // a Viewer/Contributor in an ownable org would see Add/Edit/Delete/Import
+  // buttons that the API rejects with a 403. Gate every write affordance on
+  // canWrite as well (mirrors Data Assets).
+  const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -946,14 +953,14 @@ export default function SystemsPage({
         return (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
             <IconButton size="sm" icon="eye" label="View details" onClick={() => setViewingSystemId(sys.id)} />
-            <IconButton size="sm" icon="edit" label={hint || 'Edit'} disabled={inherited} onClick={() => openEdit(sys)} />
-            <IconButton size="sm" icon="trash" label={hint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
+            {canWrite && <IconButton size="sm" icon="edit" label={hint || 'Edit'} disabled={inherited} onClick={() => openEdit(sys)} />}
+            {canWrite && <IconButton size="sm" icon="trash" label={hint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
               try {
                 const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
                 setDeleteImpact(res.data || null);
               } catch { setDeleteImpact(null); }
               setConfirmDelete(sys.id);
-            }} />
+            }} />}
           </div>
         );
       },
@@ -1001,10 +1008,10 @@ export default function SystemsPage({
                 ]),
               })}
             />
-            <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
-            <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
+            {canWrite && <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />}
+            {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
             <ColumnPicker state={systemCols} />
-            {canOwnHere && (
+            {canWrite && canOwnHere && (
               <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
             )}
           </>
@@ -1518,8 +1525,8 @@ export default function SystemsPage({
             icon={renderNavIcon('/systems')}
             title="No systems defined yet"
             description="The applications and platforms where your data lives — ERP, CRM, GIS, and so on."
-            action={canOwnHere ? { label: '+ Add System', onClick: openAdd } : undefined}
-            secondaryAction={{ label: 'Import from CSV', onClick: () => setShowImport(true) }}
+            action={canWrite && canOwnHere ? { label: '+ Add System', onClick: openAdd } : undefined}
+            secondaryAction={canWrite ? { label: 'Import from CSV', onClick: () => setShowImport(true) } : undefined}
           />
         ) : (
           <DataTable
@@ -1527,7 +1534,9 @@ export default function SystemsPage({
             columns={systemColumns}
             rowKey={(s) => s.id}
             rowId={(s) => `row-${s.id}`}
-            selection={sel}
+            // Selection drives the bulk-delete bar (a write), so only writers
+            // get checkboxes — Viewers/Contributors get a clean read-only list.
+            selection={canWrite ? sel : undefined}
             isRowDisabled={(s) => isInheritedAsset(s.orgId, activeOrgId)}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all systems"
