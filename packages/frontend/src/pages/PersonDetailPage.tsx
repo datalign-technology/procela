@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
@@ -153,6 +154,9 @@ export default function PersonDetailPage() {
   }, [id]);
 
   useEffect(() => { fetch360(); }, [fetch360]);
+
+  // End the breadcrumb trail on the person's name (Dashboard › People › Ada Lovelace).
+  useBreadcrumbLeaf(data?.person?.name);
 
   // Toggle an org in the person's assignment list, persisting immediately.
   // Backend requires at least one assignment, so we block the last unassign.

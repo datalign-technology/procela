@@ -7,6 +7,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 // code-split with React.lazy(); each page becomes its own chunk and
 // only downloads when the user navigates to it.
 import Layout from '@/components/Layout';
+import { BreadcrumbProvider } from '@/components/BreadcrumbContext';
 import Spinner from '@/components/Spinner';
 import LoginPage from '@/pages/LoginPage';
 
@@ -71,7 +72,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/oidc-complete" element={<OidcCompletePage />} />
-        <Route element={<Layout />}>
+        <Route element={<BreadcrumbProvider><Layout /></BreadcrumbProvider>}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/setup" element={<SetupHubPage />} />
           <Route path="/processes" element={<ProcessCatalogPage />} />

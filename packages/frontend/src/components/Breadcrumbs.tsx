@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useBreadcrumbLeafValue } from './BreadcrumbContext';
 
 // Segment → label. Where a segment is a top-level nav destination the
 // label MUST match the sidebar item exactly — a breadcrumb that
@@ -49,7 +50,7 @@ const ROUTE_LABELS: Record<string, string> = {
 
 const containerStyle: React.CSSProperties = {
   fontSize: 12,
-  color: '#6b7280',
+  color: 'var(--color-text-muted)',
   marginBottom: 10,
   display: 'flex',
   alignItems: 'center',
@@ -58,18 +59,30 @@ const containerStyle: React.CSSProperties = {
 };
 
 const linkStyle: React.CSSProperties = {
-  color: '#6b7280',
+  color: 'var(--color-text-muted)',
   textDecoration: 'none',
 };
 
 const separatorStyle: React.CSSProperties = {
-  color: '#d1d5db',
+  color: 'var(--color-border)',
   userSelect: 'none',
+};
+
+// The current page (the leaf), rendered as text rather than a link — a touch
+// stronger than the ancestor links so "you are here" reads at a glance.
+const leafStyle: React.CSSProperties = {
+  color: 'var(--color-text)',
+  fontWeight: 500,
+  maxWidth: 280,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
 };
 
 export default function Breadcrumbs() {
   const location = useLocation();
   const pathname = location.pathname;
+  const leaf = useBreadcrumbLeafValue();
 
   // Don't render on dashboard
   if (pathname === '/') return null;
@@ -89,23 +102,41 @@ export default function Breadcrumbs() {
     crumbs.push({ label, path: builtPath });
   });
 
-  // De-duplicate the current page: the last crumb always names the page you're
-  // on, which the <PageHeader> H1 immediately below already states — showing it
-  // again (and, on detail pages, as a raw id/slug) is redundant. Render only the
-  // ancestor trail as up-navigation links. When that leaves just "Dashboard"
-  // (a top-level page), the trail carries no information the sidebar + title
-  // don't, so render nothing rather than a lone one-item crumb.
+  // The last crumb always names the page you're on. Its handling depends on
+  // whether the page registered a human-readable leaf (see BreadcrumbContext):
+  //
+  //  • No leaf — the ancestor trail alone. On a detail route the last segment
+  //    is a raw id/slug, and on a top-level page the <PageHeader> H1 below
+  //    already states the name, so showing it again is redundant. Drop it, and
+  //    when that leaves just "Dashboard" render nothing rather than a lone crumb.
+  //  • Leaf set — a detail page told us the entity's name, so end the trail on
+  //    it (as text, not a link) the way a catalog reads "Catalog › Schema ›
+  //    Table". The ancestors already exclude the raw id segment.
   const ancestors = crumbs.slice(0, -1);
-  if (ancestors.length <= 1) return null;
+
+  if (!leaf) {
+    if (ancestors.length <= 1) return null;
+    return (
+      <nav style={containerStyle} aria-label="Breadcrumb">
+        {ancestors.map((crumb, idx) => (
+          <span key={crumb.path} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {idx > 0 && <span style={separatorStyle}>{'>'}</span>}
+            <Link to={crumb.path} style={linkStyle}>{crumb.label}</Link>
+          </span>
+        ))}
+      </nav>
+    );
+  }
 
   return (
     <nav style={containerStyle} aria-label="Breadcrumb">
-      {ancestors.map((crumb, idx) => (
+      {ancestors.map((crumb) => (
         <span key={crumb.path} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {idx > 0 && <span style={separatorStyle}>{'>'}</span>}
           <Link to={crumb.path} style={linkStyle}>{crumb.label}</Link>
+          <span style={separatorStyle}>{'>'}</span>
         </span>
       ))}
+      <span style={leafStyle} aria-current="page">{leaf}</span>
     </nav>
   );
 }
