@@ -1146,7 +1146,7 @@ export default function ConnectionsPage({
                     <span key={sid} style={{
                       display: 'inline-flex', alignItems: 'center', gap: 4,
                       padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
-                      background: '#dbeafe', color: '#1e40af',
+                      background: 'var(--color-primary-light)', color: 'var(--color-primary)',
                     }}>
                       {s?.name || sid}
                       <button
