@@ -395,7 +395,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             ]).map((opt) => (
               <label key={opt.type} style={{
                 display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', marginBottom: 6,
-                background: sourceType === opt.type ? '#eff6ff' : 'var(--color-bg)',
+                background: sourceType === opt.type ? 'var(--color-primary-light)' : 'var(--color-bg)',
                 border: `1px solid ${sourceType === opt.type ? '#93c5fd' : 'var(--color-border)'}`,
                 borderRadius: 'var(--radius-md)', cursor: 'pointer',
               }}>
@@ -419,7 +419,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             ]).map((opt) => (
               <label key={opt.mode} style={{
                 display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', marginBottom: 6,
-                background: executionMode === opt.mode ? '#eff6ff' : 'var(--color-bg)',
+                background: executionMode === opt.mode ? 'var(--color-primary-light)' : 'var(--color-bg)',
                 border: `1px solid ${executionMode === opt.mode ? '#93c5fd' : 'var(--color-border)'}`,
                 borderRadius: 'var(--radius-md)', cursor: 'pointer',
               }}>
@@ -436,7 +436,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
         {step === 1 && sourceType === 'DATABASE' && executionMode === 'DIRECT' && (
           <label style={{
             display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', marginBottom: 12,
-            background: sampleData ? '#eff6ff' : 'var(--color-bg)',
+            background: sampleData ? 'var(--color-primary-light)' : 'var(--color-bg)',
             border: `1px solid ${sampleData ? '#93c5fd' : 'var(--color-border)'}`,
             borderRadius: 'var(--radius-md)', cursor: 'pointer',
           }}>

@@ -267,7 +267,7 @@ export default function LinkConnectionModal({
                           display: 'flex', alignItems: 'center', gap: 8,
                           padding: '8px 12px', borderBottom: '1px solid var(--color-border)',
                           cursor: 'pointer',
-                          background: isThisAssetPicked ? '#eff6ff' : 'transparent',
+                          background: isThisAssetPicked ? 'var(--color-primary-light)' : 'transparent',
                         }}
                       >
                         <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 10 }}>
@@ -285,7 +285,7 @@ export default function LinkConnectionModal({
                             style={{
                               display: 'flex', alignItems: 'center', gap: 8,
                               padding: '6px 12px 6px 28px', borderBottom: '1px solid var(--color-border)',
-                              background: isColChecked ? '#eff6ff' : '#fafafa',
+                              background: isColChecked ? 'var(--color-primary-light)' : '#fafafa',
                               cursor: 'pointer',
                             }}
                           >

@@ -1446,7 +1446,7 @@ export default function ProcessCatalogPage() {
             {['DRAFT', 'ACTIVE', 'DEPRECATED'].map((s) => (
               <label key={s} style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                background: bulkStatusValue === s ? '#eff6ff' : 'var(--color-bg)',
+                background: bulkStatusValue === s ? 'var(--color-primary-light)' : 'var(--color-bg)',
                 border: `1px solid ${bulkStatusValue === s ? '#93c5fd' : 'var(--color-border)'}`,
                 borderRadius: 'var(--radius-md)', cursor: 'pointer',
               }}>
