@@ -17,7 +17,7 @@ import UserMenu from './UserMenu';
 import SupportModal from './SupportModal';
 import Sidebar from './Sidebar';
 import { renderNavIcon } from './navIcons';
-import { MessageGlyph, FlagGlyph } from './UiGlyphs';
+import { MessageGlyph, FlagGlyph, SearchGlyph } from './UiGlyphs';
 import {
   navSections,
   bottomNavItems,
@@ -457,7 +457,7 @@ export default function Layout() {
               }}
               title="Search (press / or Ctrl+K)"
             >
-              <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
+              <span className={styles.searchIcon} style={{ display: 'inline-flex' }}><SearchGlyph size={15} /></span>
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 Search anything...
               </span>
