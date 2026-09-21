@@ -474,7 +474,9 @@ export default function GovernanceGroupsPage() {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [rolesRes, agentsRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
-        apiClient.get<{ success: boolean; data: Agent[] }>(`/agents${query}`),
+        // agent:read is admin-only; for non-admins this returns 403, so degrade
+        // to an empty agent list rather than failing the whole page load.
+        apiClient.get<{ success: boolean; data: Agent[] }>(`/agents${query}`).catch(() => ({ success: true, data: [] as Agent[] })),
         apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
       ]);
       const allRoles = rolesRes.data || [];

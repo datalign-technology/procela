@@ -47,4 +47,13 @@ describe('navConfig', () => {
       expect(desktopTos.has(item.to), `mobile primary ${item.to} not in desktop nav`).toBe(true);
     }
   });
+
+  it('gates the admin-only read surfaces so non-admins do not hit a permission error', () => {
+    // Agents (agent:read) and Audit Log (audit:read) are admin-only on the
+    // backend; the sidebar hides adminOnly items for non-admins, so these
+    // must stay flagged or an EDITOR/VIEWER sees the link and gets a 403.
+    const byTo = new Map(navSections.flatMap((s) => s.items).map((i) => [i.to, i]));
+    expect(byTo.get('/agents')?.adminOnly).toBe(true);
+    expect(byTo.get('/audit-log')?.adminOnly).toBe(true);
+  });
 });

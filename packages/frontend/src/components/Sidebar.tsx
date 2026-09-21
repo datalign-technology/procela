@@ -76,7 +76,14 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
   const baseSections = showSetup
     ? [{ label: null, items: [GET_STARTED_ITEM] } as NavSection, ...navSections]
     : navSections;
-  const visibleSections = baseSections.filter((s) => !s.adminOnly || isAdmin);
+  // Hide whole admin-only sections, and admin-only items within an otherwise
+  // shared section (e.g. Agents / Audit Log, whose pages require admin-only
+  // backend reads), for non-admins.
+  const visibleSections = baseSections
+    .filter((s) => !s.adminOnly || isAdmin)
+    .map((s) => (isAdmin || !s.items.some((i) => i.adminOnly)
+      ? s
+      : { ...s, items: s.items.filter((i) => !i.adminOnly) }));
 
   // Sidebar collapse state — local to the sidebar; no callers elsewhere
   // care about whether it's open or collapsed.

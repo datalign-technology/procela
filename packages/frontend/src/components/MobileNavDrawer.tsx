@@ -34,7 +34,11 @@ export default function MobileNavDrawer({ bottomItems, pathname, onClose }: {
   const baseSections = showSetup
     ? [{ label: null, items: [GET_STARTED_ITEM] } as NavSection, ...navSections]
     : navSections;
-  const sections = baseSections.filter((s) => !s.adminOnly || isAdmin);
+  const sections = baseSections
+    .filter((s) => !s.adminOnly || isAdmin)
+    .map((s) => (isAdmin || !s.items.some((i) => i.adminOnly)
+      ? s
+      : { ...s, items: s.items.filter((i) => !i.adminOnly) }));
   // Flat lookup of every nav item across every section — so the
   // exact-match-on-a-sibling suppression below works across the
   // whole drawer rather than just within one section.
