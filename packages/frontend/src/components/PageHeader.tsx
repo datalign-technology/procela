@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import CopyButton from './CopyButton';
+import EditableTitle from './EditableTitle';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PageHeader — the band at the top of every page. Establishes hierarchy
@@ -34,13 +35,19 @@ interface PageHeaderProps {
   copyId?: string;
   /** Tooltip/label for the copy button. Defaults to "Copy ID". */
   copyLabel?: string;
+  /** When set, a quiet pencil sits next to the title that renames the entity
+   *  in place. Pass only where the name is genuinely editable (a Procela-owned
+   *  entity, not an IdP-sourced person). Optional. */
+  onRename?: (name: string) => void | Promise<void>;
+  /** Tooltip/label for the rename affordance. Defaults to "Rename". */
+  renameLabel?: string;
   /** Right-aligned action cluster (buttons, menus). */
   actions?: ReactNode;
   /** Row below the subtitle for status chips, counts, badges, etc. */
   meta?: ReactNode;
 }
 
-export default function PageHeader({ kicker, title, subtitle, children, copyId, copyLabel, actions, meta }: PageHeaderProps) {
+export default function PageHeader({ kicker, title, subtitle, children, copyId, copyLabel, onRename, renameLabel, actions, meta }: PageHeaderProps) {
   return (
     <div
       className="procela-stack-on-mobile"
@@ -70,7 +77,7 @@ export default function PageHeader({ kicker, title, subtitle, children, copyId, 
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, lineHeight: 1.25, margin: 0 }}>{title}</h1>
+          <EditableTitle title={title} onRename={onRename} renameLabel={renameLabel} />
           {copyId && <CopyButton value={copyId} label={copyLabel} />}
           {children}
         </div>
