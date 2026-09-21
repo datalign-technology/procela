@@ -5,6 +5,7 @@ import { errorMessage } from '../lib/errorToast';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import CreateScopeNotice from '../components/CreateScopeNotice';
 import TruncatedText from '../components/TruncatedText';
+import FacetChips from '../components/FacetChips';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
@@ -1031,6 +1032,9 @@ export default function SystemsPage({
           {/* System Types chips — only rendered when the facet actually splits
               the list (≥2 populated values), to save vertical space. */}
           {(() => {
+            // System types are data-derived (the API returns the distinct
+            // types present), so there are no fixed-taxonomy zeros to show;
+            // keep hiding the strip when it can't actually split the list.
             const chips = [
               { key: '', label: 'All', count: systems.length },
               ...systemTypes.map((t) => ({ key: t, label: t, count: systems.filter((s) => s.systemType === t).length })),
@@ -1038,26 +1042,12 @@ export default function SystemsPage({
             ].filter((o) => o.key === '' || o.count > 0);
             if (chips.filter((o) => o.key !== '').length < 2) return null;
             return (
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                {chips.map((o) => {
-                  const active = filterType === o.key;
-                  return (
-                    <button
-                      key={o.key || 'all'}
-                      onClick={() => setFilterType(o.key)}
-                      style={{
-                        padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
-                        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                        background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                        color: active ? 'var(--color-primary)' : 'var(--color-text)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <FacetChips
+                ariaLabel="Filter by system type"
+                activeKey={filterType}
+                onSelect={setFilterType}
+                facets={chips}
+              />
             );
           })()}
           {/* Filters (left-aligned, mirrors Data Assets) */}
