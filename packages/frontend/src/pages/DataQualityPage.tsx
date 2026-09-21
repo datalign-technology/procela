@@ -1062,7 +1062,7 @@ export default function DataQualityPage({
             rows={sortedRules}
             columns={ruleColumns}
             rowKey={(r) => r.id}
-            selection={sel}
+            selection={canWrite ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all rules"
             emptyMessage="No rules match the current filters."
