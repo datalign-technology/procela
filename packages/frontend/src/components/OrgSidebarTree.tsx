@@ -19,12 +19,15 @@ export interface OrgTreeNode {
   children: OrgTreeNode[];
 }
 
-export default function OrgSidebarTree({ nodes, selectedId, onSelect, counts }: {
+export default function OrgSidebarTree({ nodes, selectedId, onSelect, counts, nounLabel = 'organization' }: {
   nodes: OrgTreeNode[];
   selectedId: string;
   onSelect: (id: string) => void;
-  /** Per-org item count, keyed by org id. Zero/absent hides the badge. */
+  /** Per-node item count, keyed by node id. Zero/absent hides the badge. */
   counts: Record<string, number>;
+  /** Noun for the row's accessible label — the tree is reused for non-org
+   *  hierarchies (e.g. "data domain"). Defaults to "organization". */
+  nounLabel?: string;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     // Auto-expand root nodes on mount.
@@ -48,7 +51,7 @@ export default function OrgSidebarTree({ nodes, selectedId, onSelect, counts }: 
     return (
       <div key={node.id}>
         <div
-          {...clickable(() => onSelect(node.id), { label: `Select organization ${node.name}` })}
+          {...clickable(() => onSelect(node.id), { label: `Select ${nounLabel} ${node.name}` })}
           style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 6px', paddingLeft: 6 + depth * 14,

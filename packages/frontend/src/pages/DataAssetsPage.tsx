@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import PageHeader from '../components/PageHeader';
 import CreateScopeNotice from '../components/CreateScopeNotice';
@@ -7,6 +7,7 @@ import FacetChips from '../components/FacetChips';
 import OwnerCell from '../components/OwnerCell';
 import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import Card from '../components/Card';
+import OrgSidebarTree, { type OrgTreeNode } from '../components/OrgSidebarTree';
 import FieldStack from '../components/FieldStack';
 import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
@@ -402,7 +403,7 @@ export default function DataAssetsPage({
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
   const [peopleList, setPeopleList] = useState<{ id: string; name: string }[]>([]);
-  const [domainsList, setDomainsList] = useState<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }[]>([]);
+  const [domainsList, setDomainsList] = useState<{ id: string; name: string; parentDomainId?: string | null; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }[]>([]);
   const [standardDataTypes, setStandardDataTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -437,7 +438,9 @@ export default function DataAssetsPage({
   // Owner / Domain filters — match by the effective owner/domain name shown in
   // the list columns; '__none__' isolates the unassigned buckets.
   const [filterOwner, setFilterOwner] = useState('');
-  const [filterDomain, setFilterDomain] = useState('');
+  // Domain filter is driven by the left-rail tree (id-based, with sub-domain
+  // rollup), replacing the old by-name domain dropdown.
+  const [selectedDomainId, setSelectedDomainId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Keep the URL in sync with the mapping filter so the view is
@@ -557,7 +560,7 @@ export default function DataAssetsPage({
         apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/connections${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/people${query}`),
-        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }> }>(`/data-domains${query}`),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; parentDomainId?: string | null; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }> }>(`/data-domains${query}`),
       ]);
       setPeopleList(peopleRes.data || []);
       setDomainsList(domainsRes.data || []);
@@ -642,6 +645,49 @@ export default function DataAssetsPage({
     return sys ? sys.name : '';
   };
 
+  // ── Data-domain left rail ──
+  // Domain → sub-domain hierarchy for the rail (domains nest one level deep).
+  const domainTree = useMemo<OrgTreeNode[]>(() => {
+    return domainsList
+      .filter((d) => !d.parentDomainId)
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        children: domainsList
+          .filter((c) => c.parentDomainId === d.id)
+          .map((c) => ({ id: c.id, name: c.name, children: [] as OrgTreeNode[] }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [domainsList]);
+
+  // Per-domain asset counts, rolled up so a parent reflects its sub-domains too.
+  const domainCounts = useMemo<Record<string, number>>(() => {
+    const assetIds = new Set(assets.map((a) => a.id));
+    const own: Record<string, number> = {};
+    for (const d of domainsList) own[d.id] = (d.dataAssetIds || []).filter((id) => assetIds.has(id)).length;
+    const counts: Record<string, number> = { ...own };
+    for (const d of domainsList) {
+      if (d.parentDomainId && counts[d.parentDomainId] != null) counts[d.parentDomainId] += own[d.id];
+    }
+    return counts;
+  }, [domainsList, assets]);
+
+  // Asset ids in the selected domain, rolled up through its sub-domains, so
+  // picking a parent shows everything beneath it.
+  const selectedDomainAssetIds = useMemo<Set<string> | null>(() => {
+    if (!selectedDomainId) return null;
+    const domainIds = new Set<string>([
+      selectedDomainId,
+      ...domainsList.filter((d) => d.parentDomainId === selectedDomainId).map((d) => d.id),
+    ]);
+    const ids = new Set<string>();
+    for (const d of domainsList) {
+      if (domainIds.has(d.id)) for (const aid of d.dataAssetIds || []) ids.add(aid);
+    }
+    return ids;
+  }, [selectedDomainId, domainsList]);
+
   const filteredAssets = assets.filter((a) => {
     if (filterCategory) {
       if (filterCategory === '__none__') { if (a.dataType) return false; }
@@ -653,10 +699,7 @@ export default function DataAssetsPage({
       if (filterOwner === '__none__') { if (a.ownerName) return false; }
       else if ((a.ownerName || '') !== filterOwner) return false;
     }
-    if (filterDomain) {
-      if (filterDomain === '__none__') { if (a.domainName) return false; }
-      else if ((a.domainName || '') !== filterDomain) return false;
-    }
+    if (selectedDomainAssetIds && !selectedDomainAssetIds.has(a.id)) return false;
     if (filterOrigin && (a.origin || 'MANUAL') !== filterOrigin) return false;
     if (filterMapping === 'unmapped' && !a.isOrphan) return false;
     if (filterMapping === 'mapped' && a.isOrphan) return false;
@@ -676,12 +719,11 @@ export default function DataAssetsPage({
     return true;
   });
 
-  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOwner || filterDomain || filterOrigin || filterMapping || filterCoverage || searchQuery);
+  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOwner || selectedDomainId || filterOrigin || filterMapping || filterCoverage || searchQuery);
 
-  // Distinct owner / domain names present in the current asset set, for the
-  // filter dropdowns.
+  // Distinct owner names present in the current asset set, for the owner filter
+  // dropdown. (Domain filtering moved to the left-rail tree.)
   const ownerOptions = Array.from(new Set(assets.map((a) => a.ownerName).filter(Boolean))).sort() as string[];
-  const domainOptions = Array.from(new Set(assets.map((a) => a.domainName).filter(Boolean))).sort() as string[];
 
   // URL-persisted sort.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -1455,13 +1497,13 @@ export default function DataAssetsPage({
     <>
       <SavedViewsMenu
         pageKey="data-assets"
-        currentFilters={{ filterCategory, filterTier, filterSystemId, filterOwner, filterDomain, filterOrigin, filterMapping, searchQuery }}
+        currentFilters={{ filterCategory, filterTier, filterSystemId, filterOwner, selectedDomainId, filterOrigin, filterMapping, searchQuery }}
         onApply={(f) => {
           setFilterCategory((f.filterCategory as string) || '');
           setFilterTier((f.filterTier as string) || '');
           setFilterSystemId((f.filterSystemId as string) || '');
           setFilterOwner((f.filterOwner as string) || '');
-          setFilterDomain((f.filterDomain as string) || '');
+          setSelectedDomainId((f.selectedDomainId as string) || '');
           setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
           setFilterMapping((f.filterMapping as '' | 'mapped' | 'unmapped') || '');
           setSearchQuery((f.searchQuery as string) || '');
@@ -1532,8 +1574,33 @@ export default function DataAssetsPage({
           read inherited rows from above. */}
       {activeOrgId && !canOwnHere && <CreateScopeNotice noun="data assets" />}
 
-      {/* Full-width content — Data Classification is now a facet in the top Filters row */}
-      <div>
+      {/* Content + a left-rail Data Domain tree (Domain → Sub-domain) that
+          filters the list — the catalog navigator that replaces the old
+          domain dropdown. Collapses to full width when there are no domains. */}
+      <div style={{ display: 'grid', gridTemplateColumns: domainTree.length > 0 ? '220px minmax(0, 1fr)' : '1fr', gap: 16, alignItems: 'start' }}>
+        {domainTree.length > 0 && (
+          <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>Data Domains</div>
+            <div
+              onClick={() => setSelectedDomainId('')}
+              style={{
+                padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                fontWeight: !selectedDomainId ? 600 : 400,
+                background: !selectedDomainId ? 'var(--color-primary-light)' : 'transparent',
+                color: !selectedDomainId ? 'var(--color-primary)' : 'var(--color-text)',
+              }}
+            >
+              All ({assets.length})
+            </div>
+            <OrgSidebarTree
+              nodes={domainTree}
+              selectedId={selectedDomainId}
+              onSelect={setSelectedDomainId}
+              counts={domainCounts}
+              nounLabel="data domain"
+            />
+          </Card>
+        )}
 
         {/* Content area */}
         <div>
@@ -1600,11 +1667,7 @@ export default function DataAssetsPage({
           {ownerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
           <option value="__none__">No owner ({assets.filter((a) => !a.ownerName).length})</option>
         </select>
-        <select aria-label="Filter by domain" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
-          <option value="">All Domains</option>
-          {domainOptions.map((d) => <option key={d} value={d}>{d}</option>)}
-          <option value="__none__">No domain ({assets.filter((a) => !a.domainName).length})</option>
-        </select>
+        {/* Domain filtering moved to the left-rail Data Domain tree. */}
         <select
           aria-label="Filter by mapping status"
           title="Whether the asset is mapped to any process step"
@@ -1632,7 +1695,7 @@ export default function DataAssetsPage({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOwner(''); setFilterDomain(''); setFilterOrigin(''); setFilterMapping(''); setFilterCoverage(''); setSearchQuery(''); }}
+            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOwner(''); setSelectedDomainId(''); setFilterOrigin(''); setFilterMapping(''); setFilterCoverage(''); setSearchQuery(''); }}
           >
             Clear Filters
           </Button>
