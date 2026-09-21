@@ -915,7 +915,7 @@ export default function PeoplePage() {
                     {Object.entries(ROLE_LABELS).map(([key, label]) => (
                       <label key={key} style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                        background: bulkRoleValue === key ? '#eff6ff' : 'var(--color-bg)',
+                        background: bulkRoleValue === key ? 'var(--color-primary-light)' : 'var(--color-bg)',
                         border: `1px solid ${bulkRoleValue === key ? '#93c5fd' : 'var(--color-border)'}`,
                         borderRadius: 'var(--radius-md)', cursor: 'pointer',
                       }}>

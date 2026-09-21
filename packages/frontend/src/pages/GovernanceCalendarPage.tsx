@@ -764,7 +764,7 @@ export default function GovernanceCalendarPage() {
                   minHeight: 90, padding: '4px 6px',
                   borderRight: (idx + 1) % 7 === 0 ? 'none' : '1px solid var(--color-border)',
                   borderBottom: '1px solid var(--color-border)',
-                  background: cell.date == null ? 'var(--color-bg)' : isToday ? '#eff6ff' : 'var(--color-surface)',
+                  background: cell.date == null ? 'var(--color-bg)' : isToday ? 'var(--color-primary-light)' : 'var(--color-surface)',
                   opacity: cell.date == null ? 0.4 : 1,
                 }}>
                   {cell.date != null && (

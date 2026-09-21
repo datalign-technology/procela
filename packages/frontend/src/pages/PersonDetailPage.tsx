@@ -529,7 +529,7 @@ export default function PersonDetailPage() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '6px 10px', borderRadius: 6,
-                  background: isMember ? '#eff6ff' : 'transparent',
+                  background: isMember ? 'var(--color-primary-light)' : 'transparent',
                   cursor: busy ? 'default' : 'pointer',
                 }}
               >
