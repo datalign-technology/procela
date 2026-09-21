@@ -6,13 +6,11 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import Spinner from '../components/Spinner';
 import Button from '../components/Button';
-import ConfirmDialog from '../components/ConfirmDialog';
 import ScorecardTargetsPanel from '../components/ScorecardTargetsPanel';
 import RoiModelPanel from '../components/RoiModelPanel';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
-import { usePermissions } from '../hooks/usePermissions';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -39,8 +37,6 @@ interface Program {
 }
 
 interface CatalogItem { id: string; name: string }
-
-interface IncompletePhase { phase: number; name: string; missing: string[] }
 
 interface Ratio { covered: number; total: number; pct: number }
 interface ScopeCoverageData {
@@ -165,7 +161,6 @@ function OverridePicker({ label, hint, items, selectedIds, onChange, tone }: {
 export default function GovernanceFoundationPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
-  const { isAdmin } = usePermissions();
   const navigate = useNavigate();
 
   const [program, setProgram] = useState<Program | null>(null);
@@ -176,12 +171,6 @@ export default function GovernanceFoundationPage() {
   const [searchParams] = useSearchParams();
   const initialTab = (['scope', 'principles', 'targets', 'value'] as const).find((t) => t === searchParams.get('tab')) ?? 'scope';
   const [activeTab, setActiveTab] = useState<'scope' | 'principles' | 'targets' | 'value'>(initialTab);
-  // Launch flow (mirrors the governed transition on Get Started, scoped to
-  // launching from PLANNING — later lifecycle changes live on Get Started).
-  const [launching, setLaunching] = useState(false);
-  const [earlyLaunchInfo, setEarlyLaunchInfo] = useState<IncompletePhase[] | null>(null);
-  const [launchReason, setLaunchReason] = useState('');
-
   // Foundation (Phase 1) is complete when the *saved* program has scope,
   // at least one principle, and an operating model — the same three checks the
   // backend uses. Computed off the saved program so it matches what the server
@@ -199,33 +188,6 @@ export default function GovernanceFoundationPage() {
     && (program.principles?.principles || []).length > 0
     && (program.principles?.operatingModel || '') !== ''
   );
-
-  const launchProgram = async (opts: { force?: boolean; reason?: string } = {}) => {
-    if (!program) return;
-    setLaunching(true);
-    try {
-      await apiClient.put(`/governance-program/${program.id}`, {
-        status: 'ACTIVE',
-        ...(opts.force ? { force: true } : {}),
-        ...(opts.reason ? { reason: opts.reason } : {}),
-      });
-      addToast('success', 'Program launched.');
-      setEarlyLaunchInfo(null);
-      setLaunchReason('');
-      fetchProgram();
-    } catch (e: any) {
-      const body = (e && typeof e === 'object' && 'body' in e ? e.body : null) || {};
-      if (body?.requiresConfirmation && Array.isArray(body.incompletePhases)) {
-        setEarlyLaunchInfo(body.incompletePhases);
-      } else if (body?.blockingPhase) {
-        addToast('error', `${body.error} Missing: ${(body.missing || []).join(', ')}`);
-      } else {
-        addToast('error', body?.error || errorMessage(e, 'Launch failed'));
-      }
-    } finally {
-      setLaunching(false);
-    }
-  };
 
   const [inScope, setInScope] = useState('');
   const [outOfScope, setOutOfScope] = useState('');
@@ -372,18 +334,12 @@ export default function GovernanceFoundationPage() {
                 ? `Launched ${new Date(program.launchedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
                 : undefined}
             >{STATUS_META[program.status].label}</StatusBadge>
-            {program.status === 'PLANNING' ? (
-              <Button
-                variant="primary"
-                disabled={!isAdmin || launching || !foundationComplete}
-                title={!isAdmin ? 'Only an admin / program owner can launch the program'
-                  : !foundationComplete ? 'Complete the Foundation — scope (at least one governed entity), one guiding principle, and an operating model — and save, before launching.'
-                  : 'Foundation is the prerequisite. Structure, roles, and policies can follow — launching with those still incomplete asks you to confirm, recorded in the audit log.'}
-                onClick={() => launchProgram()}
-              >{launching ? 'Launching…' : 'Launch program'}</Button>
-            ) : (
-              <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>Manage lifecycle &rarr;</Link>
-            )}
+            {/* Foundation shows the program status read-only. Every lifecycle
+                control (launch / pause / resume) lives on the Get Started hub,
+                so there's a single home for changing program state. */}
+            <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>
+              {program.status === 'PLANNING' ? 'Launch on Get Started' : 'Manage lifecycle'} &rarr;
+            </Link>
           </>
         ) : (
           <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>&larr; Set up Procela</Link>
@@ -391,7 +347,7 @@ export default function GovernanceFoundationPage() {
       />
       {program && program.status === 'PLANNING' && !foundationComplete && (
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 12, lineHeight: 1.4 }}>
-          Complete the Foundation below — pick at least one governed entity, add a guiding principle, and select an operating model — then save to enable launch.
+          Complete the Foundation below — pick at least one governed entity, add a guiding principle, and select an operating model — then launch the program from Get Started.
         </div>
       )}
 
@@ -622,37 +578,6 @@ export default function GovernanceFoundationPage() {
           )}
         </Card>
       )}
-
-      {/* Early-launch confirmation — phases 2–4 incomplete; the backend returned
-          the gaps, an admin confirms to force it (recorded in the audit log). */}
-      <ConfirmDialog
-        open={!!earlyLaunchInfo}
-        title="Launch with incomplete phases?"
-        message="Foundation is in place, but the program isn't fully set up. Launching now marks it active in the scorecard and dashboards with these gaps:"
-        confirmLabel="Launch anyway"
-        variant="danger"
-        onConfirm={() => launchProgram({ force: true, reason: launchReason })}
-        onCancel={() => { setEarlyLaunchInfo(null); setLaunchReason(''); }}
-      >
-        <div style={{ marginTop: 8, marginBottom: 12 }}>
-          {(earlyLaunchInfo || []).map((p) => (
-            <div key={p.phase} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>Phase {p.phase} — {p.name}</div>
-              <ul style={{ margin: '2px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                {p.missing.map((m) => <li key={m}>{m}</li>)}
-              </ul>
-            </div>
-          ))}
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginTop: 8, marginBottom: 4 }}>Reason (recorded in the audit log)</label>
-          <input
-            aria-label="Reason (recorded in the audit log)"
-            value={launchReason}
-            onChange={(e) => setLaunchReason(e.target.value)}
-            placeholder="e.g. running a 30-day pilot ahead of full rollout"
-            style={{ ...inputStyle, fontSize: 12 }}
-          />
-        </div>
-      </ConfirmDialog>
     </div>
   );
 }
