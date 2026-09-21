@@ -6,6 +6,7 @@ import { useOrgContext } from '../stores/orgContext';
 import PageHeader from '../components/PageHeader';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import { usePagination } from '../hooks/usePagination';
 import Pager from '../components/Pager';
 
@@ -143,7 +144,7 @@ export default function AuditLogPage() {
       <div>
         <PageHeader title="Audit Log" />
         <EmptyState
-          icon="🗂"
+          icon={renderNavIcon('/organizations', { size: 36 })}
           title="No organization selected"
           description="Audit entries are scoped to one organization. Pick or create one from the Organizations page to see its history."
           action={{ label: 'Go to Organizations', onClick: () => { window.location.href = '/organizations'; } }}
@@ -226,7 +227,7 @@ export default function AuditLogPage() {
         <SkeletonRows rows={8} columnWidths={[140, 140, 100, null]} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          icon="◌"
+          icon={renderNavIcon('/audit-log', { size: 36 })}
           title={entries.length === 0 ? 'No activity recorded yet' : 'No entries match these filters'}
           description={entries.length === 0
             ? 'As soon as someone creates, edits or deletes anything in this organization, it will show up here.'

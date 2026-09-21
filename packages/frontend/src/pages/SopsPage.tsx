@@ -16,6 +16,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import ErrorState from '../components/ErrorState';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -608,7 +609,7 @@ export default function SopsPage({
         </Card>
       ) : sops.length === 0 ? (
         <EmptyState
-          icon="☑"
+          icon={renderNavIcon('/documentation', { size: 36 })}
           title="No SOPs yet"
           description="Standard Operating Procedures document the step-by-step work your stewards do. Start with the 5 standard SOPs or create your own."
           action={{ label: seeding ? 'Seeding...' : 'Seed Standard SOPs', onClick: handleSeed }}

@@ -16,6 +16,8 @@ import NotificationsMenu from './NotificationsMenu';
 import UserMenu from './UserMenu';
 import SupportModal from './SupportModal';
 import Sidebar from './Sidebar';
+import { renderNavIcon } from './navIcons';
+import { MessageGlyph, FlagGlyph } from './UiGlyphs';
 import {
   navSections,
   bottomNavItems,
@@ -506,7 +508,7 @@ export default function Layout() {
                 cursor: 'pointer', transition: 'background 0.15s, color 0.15s, border-color 0.15s',
               }}
             >
-              <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>💬</span>
+              <MessageGlyph size={15} />
               <span>Ask Procela</span>
               {!chatOpen && chatMessageCount > 0 && (
                 <span
@@ -545,7 +547,7 @@ export default function Layout() {
                 cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
               }}
             >
-              <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>{'⍰'}</span>
+              {renderNavIcon('/help', { size: 15, strokeWidth: 1.9 })}
               <span>Help</span>
             </button>
             {/* Report a problem — opens the in-app support form. Sits next
@@ -564,7 +566,7 @@ export default function Layout() {
                 cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
               }}
             >
-              <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>{'⚑'}</span>
+              <FlagGlyph size={15} />
               <span>Report a problem</span>
             </button>
             {/* Notifications bell + dropdown */}
@@ -580,7 +582,7 @@ export default function Layout() {
               background: 'var(--color-surface)', border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-md)',
             }}>
-              <div style={{ fontSize: 36, marginBottom: 12, color: 'var(--color-text-muted)' }}>&#x2616;</div>
+              <div style={{ marginBottom: 12, color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'center' }}>{renderNavIcon('/organizations', { size: 36 })}</div>
               <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Organization Required</h2>
               <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
                 You need to create an organization before you can use this feature.

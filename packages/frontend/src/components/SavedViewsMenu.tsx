@@ -4,6 +4,7 @@ import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
 import { useToastStore } from '../stores/toastStore';
+import { MenuGlyph } from './UiGlyphs';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SavedViewsMenu - the "Saved views" dropdown that lives in the action
@@ -138,7 +139,7 @@ export default function SavedViewsMenu({ pageKey, currentFilters, onApply, activ
           cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
         }}
       >
-        <span style={{ fontSize: 13, lineHeight: 1 }}>{'☰'}</span>
+        <MenuGlyph size={14} />
         <span>Views</span>
         {views.length > 0 && (
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>({views.length})</span>

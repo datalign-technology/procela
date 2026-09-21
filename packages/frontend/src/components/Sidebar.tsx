@@ -375,7 +375,7 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
         onClick={() => setSidebarCollapsed((c) => !c)}
         title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
-        {'☰'}
+        {NAV_MENU_ICON}
       </button>
     </aside>
   );
