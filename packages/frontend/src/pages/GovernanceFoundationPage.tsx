@@ -292,7 +292,10 @@ export default function GovernanceFoundationPage() {
     const [sysRes, domRes, vsRes, assetRes] = await Promise.allSettled([
       apiClient.get<{ data: CatalogItem[] }>('/systems'),
       apiClient.get<{ data: CatalogItem[] }>('/data-domains'),
-      apiClient.get<{ data: CatalogItem[] }>('/value-streams'),
+      // Value streams live under the process-catalog router
+      // (/process-catalog/value-streams). Calling bare /value-streams 404s,
+      // which silently left this picker empty even when value streams exist.
+      apiClient.get<{ data: CatalogItem[] }>('/process-catalog/value-streams'),
       apiClient.get<{ data: CatalogItem[] }>('/data-assets'),
     ]);
     if (sysRes.status === 'fulfilled') setSystems((sysRes.value.data || []).map((s) => ({ id: s.id, name: s.name })));
