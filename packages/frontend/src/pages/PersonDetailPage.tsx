@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Tabs from '../components/Tabs';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
@@ -128,6 +130,7 @@ export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
+  const { isAdmin } = usePermissions();
   const { activeOrgId } = useOrgContext();
   const [data, setData] = useState<Person360Data | null>(null);
   const [allOrgs, setAllOrgs] = useState<FlatOrg[]>([]);
@@ -302,7 +305,10 @@ export default function PersonDetailPage() {
 
   return (
     <div>
-      {/* Header */}
+      {/* Header leads; the 360 sections become tabs so the page reads as one
+          entity with facets rather than a long scroll. */}
+      <Tabs
+        header={
       <PageHeader
         kicker="Person"
         title={p.name}
@@ -321,7 +327,9 @@ export default function PersonDetailPage() {
           </Link>
         }
       />
-
+        }
+        tabs={[
+          { id: 'overview', label: 'Overview', render: () => (<>
       {/* Identity summary */}
       <div style={cardStyle}>
         <SectionLabel marginBottom={10}>Identity</SectionLabel>
@@ -456,7 +464,8 @@ export default function PersonDetailPage() {
           label="Skills"
         />
       </div>
-
+          </>) },
+          { id: 'accountabilities', label: 'Accountabilities', render: () => (<>
       {/* Governance roles */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -569,15 +578,15 @@ export default function PersonDetailPage() {
         </div>
       )}
 
-      {/* Security — admin-only panel for credential lifecycle.
-        *  Surfaces deactivate / reactivate (soft-delete state) and
-        *  Reset MFA (forces the user back through enrollment on
-        *  next login). Hidden for non-admins so the usual people
-        *  page doesn't grow these controls for everyone. */}
+          </>) },
+          // Security is admin-only (SecurityCard renders nothing for others),
+          // so the tab only exists for admins — credential lifecycle:
+          // deactivate / reactivate and Reset MFA.
+          ...(isAdmin ? [{ id: 'security', label: 'Security', render: () => (
       <SecurityCard person={p} onChanged={fetch360} />
-      {/* Per-person Discussion and Activity panels removed: low-value
-          per-person threaded comments, and a per-user audit feed that
-          duplicates the global Audit Log filtered by user. */}
+          ) }] : []),
+        ]}
+      />
     </div>
   );
 }

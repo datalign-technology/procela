@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Tabs from '../components/Tabs';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
@@ -418,7 +419,10 @@ export default function GovernanceGroupDetailPage() {
 
   return (
     <div>
-      {/* ── Header ── */}
+      {/* Header leads; the five owned/derived sections become tabs so the
+          page reads as one entity with facets, not a long scroll. */}
+      <Tabs
+        header={
       <PageHeader
         kicker={
           <>
@@ -450,8 +454,9 @@ export default function GovernanceGroupDetailPage() {
           </>
         }
       />
-
-      {/* ── Section 1: Composition ── */}
+        }
+        tabs={[
+          { id: 'composition', label: 'Composition', render: () => (
       <SectionShell
         title="Composition"
         hint="Members and the governance roles they hold. Required roles for this group type are tracked at the top. Each role chip shows its typical RACI letter on common decisions."
@@ -699,8 +704,8 @@ export default function GovernanceGroupDetailPage() {
           </div>
         )}
       </SectionShell>
-
-      {/* ── Section 2: Decision Rights this group owns ── */}
+          ) },
+          { id: 'decision-rights', label: 'Decision Rights', render: () => (
       <SectionShell
         title={`Decision Rights (${groupDRs.length})`}
         hint="Decisions where this group is the decider, recommends, approves, or is informed. Edit the full list on the Decision Rights page."
@@ -737,8 +742,8 @@ export default function GovernanceGroupDetailPage() {
           </div>
         )}
       </SectionShell>
-
-      {/* ── Section 3: Policies via members ── */}
+          ) },
+          { id: 'policies', label: 'Policies', render: () => (
       <SectionShell
         title={`Policies (${memberPolicies.length})`}
         hint="Policies owned by anyone holding a governance role inside this group. Edit on the Policies page."
@@ -763,8 +768,8 @@ export default function GovernanceGroupDetailPage() {
           </ul>
         )}
       </SectionShell>
-
-      {/* ── Section 4: Calendar — upcoming events for members ── */}
+          ) },
+          { id: 'calendar', label: 'Calendar', render: () => (
       <SectionShell
         title={`Calendar (${memberEvents.length})`}
         hint="Recurring events where at least one member is an attendee. Manage cadence and attendees on the Calendar page."
@@ -793,8 +798,8 @@ export default function GovernanceGroupDetailPage() {
           </ul>
         )}
       </SectionShell>
-
-      {/* ── Section 5: RACI snapshot ── */}
+          ) },
+          { id: 'raci', label: 'RACI', render: () => (
       <SectionShell
         title={`RACI snapshot (${groupRaciRows.length}${raciRows.length > 0 && groupRaciRows.length < 25 ? '' : '+'} activities)`}
         hint="Process activities where at least one member is Responsible, Accountable, Consulted, or Informed. Edit cells on the RACI matrix page."
@@ -841,6 +846,9 @@ export default function GovernanceGroupDetailPage() {
           </div>
         )}
       </SectionShell>
+          ) },
+        ]}
+      />
 
       <ConfirmDialog
         open={confirmDelete}
