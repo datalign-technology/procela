@@ -145,7 +145,10 @@ const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible
 
 export default function GovernancePoliciesPage() {
   const { activeOrgId } = useOrgContext();
-  const { canWrite } = usePermissions();
+  // Governance CRUD (policies + controls) needs governance:write = admins.
+  // Attachments go through the collaboration:write route (editors too), so
+  // that panel keeps the looser canWrite gate.
+  const { canWrite, isAdmin } = usePermissions();
   const deps = useDependencyChecks();
   const { addToast } = useToastStore();
 
@@ -413,8 +416,8 @@ export default function GovernancePoliciesPage() {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
       render: (pol: Policy) => (
         <div style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(pol)} />}
-          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(pol.id)} />}
+          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(pol)} />}
+          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(pol.id)} />}
         </div>
       ),
     },
@@ -464,7 +467,7 @@ export default function GovernancePoliciesPage() {
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h3 style={{ fontSize: 14, fontWeight: 600 }}>Controls for {pol.name}</h3>
-              {canWrite && <Button variant="primary" size="sm" onClick={openAddControl}>+ Add Control</Button>}
+              {isAdmin && <Button variant="primary" size="sm" onClick={openAddControl}>+ Add Control</Button>}
             </div>
 
             {/* Control Add/Edit Form */}
@@ -535,8 +538,8 @@ export default function GovernancePoliciesPage() {
                       <td style={tdStyle}>{ctl.evidenceRequired ? 'Yes' : 'No'}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', gap: 4 }}>
-                          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditControl(ctl)} />}
-                          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeleteControl(ctl.id)} />}
+                          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditControl(ctl)} />}
+                          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeleteControl(ctl.id)} />}
                         </div>
                       </td>
                     </tr>
@@ -575,7 +578,7 @@ export default function GovernancePoliciesPage() {
         actions={
           <>
             <ColumnPicker state={policyCols} />
-            {canWrite && <IconButton icon="plus" label="Add document" variant="primary" onClick={openAdd} />}
+            {isAdmin && <IconButton icon="plus" label="Add document" variant="primary" onClick={openAdd} />}
           </>
         }
       />
@@ -714,7 +717,7 @@ export default function GovernancePoliciesPage() {
         ) : policies.length === 0 && !showForm ? (
           <EmptyState icon={renderNavIcon('/governance-policies')} title="No governance documents yet"
             description="Charters, policies, standards, and frameworks that define the governance program."
-            action={canWrite ? { label: '+ Add Document', onClick: openAdd } : undefined} />
+            action={isAdmin ? { label: '+ Add Document', onClick: openAdd } : undefined} />
         ) : (
           <DataTable
             rows={sorted}

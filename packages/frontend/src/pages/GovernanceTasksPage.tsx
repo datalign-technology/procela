@@ -144,7 +144,7 @@ export default function GovernanceTasksPage({
   actionsPortal?: HTMLElement | null;
 } = {}) {
   const { activeOrgId } = useOrgContext();
-  const { canWrite } = usePermissions();
+  const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
 
   const taskCols = useColumnPicker<TaskColId>('procela.governanceTasks.visibleCols.v1', TASK_COLUMN_DEFS);
@@ -375,8 +375,8 @@ export default function GovernanceTasksPage({
               {tr.label}
             </button>
           ))}
-          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
-          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
+          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
+          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
         </div>
       ),
     },
@@ -393,7 +393,7 @@ export default function GovernanceTasksPage({
         actions={
           <>
             <ColumnPicker state={taskCols} />
-            {canWrite && (
+            {isAdmin && (
               <IconButton icon="plus" label="Add task" variant="primary" onClick={openAdd} />
             )}
           </>
@@ -562,7 +562,7 @@ export default function GovernanceTasksPage({
             icon={renderNavIcon('/governance-work')}
             title="No governance tasks yet"
             description="Reviews, approvals, remediations, and other work items are tracked here."
-            action={canWrite ? { label: '+ Add Task', onClick: openAdd } : undefined}
+            action={isAdmin ? { label: '+ Add Task', onClick: openAdd } : undefined}
           />
         ) : (
           <DataTable

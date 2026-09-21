@@ -286,7 +286,7 @@ const emptyForm: GroupFormData = { name: '', type: 'COUNCIL', parentId: null, de
 
 // ── Tree Node Component ──
 
-function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, selectedId, expanded, toggleExpand, checkedIds, onToggleCheck }: {
+function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, selectedId, expanded, toggleExpand, checkedIds, onToggleCheck, canEdit }: {
   node: GovernanceGroup; depth: number;
   onEdit: (group: GovernanceGroupFlat) => void;
   onDelete: (id: string) => void;
@@ -297,6 +297,9 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
   toggleExpand: (id: string) => void;
   checkedIds: Set<string>;
   onToggleCheck: (id: string) => void;
+  // Governance groups are governance:write (admins). Non-admins get a
+  // read-only tree: no bulk checkbox, no per-node add/edit/delete.
+  canEdit: boolean;
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
@@ -330,7 +333,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
           style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none' }}>
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
-        <input type="checkbox" checked={checkedIds.has(node.id)} onChange={() => onToggleCheck(node.id)} onClick={(e) => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0 }} />
+        {canEdit && <input type="checkbox" checked={checkedIds.has(node.id)} onChange={() => onToggleCheck(node.id)} onClick={(e) => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0 }} />}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
@@ -339,18 +342,20 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
             {memberCount > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: '#f1f5f9', padding: '0px 5px', borderRadius: 8 }}>{memberCount}</span>}
           </div>
         </div>
-        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-          <IconButton size="sm" icon="plus" label="Add child group" variant="primary" onClick={() => onAddChild(node.id, node.type)} />
-          <IconButton size="sm" icon="edit" label="Edit" onClick={() => onEdit(node)} />
-          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />
-        </div>
+        {canEdit && (
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <IconButton size="sm" icon="plus" label="Add child group" variant="primary" onClick={() => onAddChild(node.id, node.type)} />
+            <IconButton size="sm" icon="edit" label="Edit" onClick={() => onEdit(node)} />
+            <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />
+          </div>
+        )}
       </div>
       {isExpanded && node.children.map((child) => (
         <GroupTreeNode key={child.id} node={child} depth={depth + 1}
           onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
           onSelect={onSelect} selectedId={selectedId}
           expanded={expanded} toggleExpand={toggleExpand}
-          checkedIds={checkedIds} onToggleCheck={onToggleCheck} />
+          checkedIds={checkedIds} onToggleCheck={onToggleCheck} canEdit={canEdit} />
       ))}
     </div>
   );
@@ -362,7 +367,7 @@ export default function GovernanceGroupsPage() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
-  const { canWrite } = usePermissions();
+  const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
 
   // Data state
@@ -821,7 +826,7 @@ export default function GovernanceGroupsPage() {
                 ]),
               })} />
             )}
-            {canWrite && (
+            {isAdmin && (
               <IconButton icon="wand"
                 label={
                   flatGroups.length > 0
@@ -831,7 +836,7 @@ export default function GovernanceGroupsPage() {
                 disabled={flatGroups.length > 0}
                 onClick={() => setConfirmGenerate(true)} />
             )}
-            {canWrite && (
+            {isAdmin && (
               <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
             )}
           </>
@@ -896,6 +901,7 @@ export default function GovernanceGroupsPage() {
             </div>
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Get started quickly by creating the core governance groups in one click.</div>
           </div>
+          {isAdmin && (
           <Button
             variant="primary"
             style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
@@ -923,6 +929,7 @@ export default function GovernanceGroupsPage() {
           >
             Create Recommended Structure
           </Button>
+          )}
         </div>
       ) : (
         <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '6px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
@@ -1003,7 +1010,7 @@ export default function GovernanceGroupsPage() {
         <Card padding={0} shadow="none" style={{ alignSelf: 'start' }}>
           {/* Tree toolbar */}
           <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
-            <input type="checkbox" checked={flatGroups.length > 0 && checkedIds.size === flatGroups.length} onChange={toggleCheckAll} style={{ cursor: 'pointer' }} title="Select all" />
+            {isAdmin && <input type="checkbox" checked={flatGroups.length > 0 && checkedIds.size === flatGroups.length} onChange={toggleCheckAll} style={{ cursor: 'pointer' }} title="Select all" />}
             <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={collapseAll} />
           </div>
 
@@ -1014,7 +1021,7 @@ export default function GovernanceGroupsPage() {
                 icon={renderNavIcon('/governance-groups')}
                 title="No governance groups defined yet"
                 description="Councils, committees, and working groups that carry governance decisions."
-                action={{ label: '+ Add Group', onClick: openAdd }}
+                action={isAdmin ? { label: '+ Add Group', onClick: openAdd } : undefined}
               />
             ) : (
               tree.map((node) => (
@@ -1022,7 +1029,7 @@ export default function GovernanceGroupsPage() {
                   onEdit={openEdit} onDelete={(id) => setConfirmDelete(id)} onAddChild={openAddChild}
                   onSelect={handleSelect} selectedId={selectedGroupId}
                   expanded={expanded} toggleExpand={toggleExpand}
-                  checkedIds={checkedIds} onToggleCheck={toggleCheck} />
+                  checkedIds={checkedIds} onToggleCheck={toggleCheck} canEdit={isAdmin} />
               ))
             )}
           </div>
@@ -1097,7 +1104,9 @@ export default function GovernanceGroupsPage() {
                         const peopleAssigned = assigned.filter((a) => !a.agentId).length;
                         const agentsAssigned = assigned.filter((a) => !!a.agentId).length;
                         const isFilled = peopleAssigned > 0;
-                        const canAddPerson = expected.multiAssign || peopleAssigned === 0;
+                        // Assigning a governance role is governance:write (admins).
+                        // Non-admins see the read-only roster with no assign forms.
+                        const canAddPerson = isAdmin && (expected.multiAssign || peopleAssigned === 0);
                         // Accountability roles (CDO, Governance Lead,
                         // Data Owner, Business Steward) keep the agent
                         // path visible-but-disabled with a tooltip
@@ -1107,7 +1116,7 @@ export default function GovernanceGroupsPage() {
                         // has nothing left to explain and a disabled
                         // picker on every satisfied row is pure noise.
                         const isPeopleOnly = PEOPLE_ONLY_ROLE_TYPES.has(expected.roleType);
-                        const canAddAgent = !isPeopleOnly && (expected.multiAssign || agentsAssigned === 0);
+                        const canAddAgent = isAdmin && !isPeopleOnly && (expected.multiAssign || agentsAssigned === 0);
                         const canAddMore = canAddPerson || canAddAgent;
                         return (
                           <div key={expected.roleType} style={{
@@ -1169,7 +1178,7 @@ export default function GovernanceGroupsPage() {
                                           style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : inThisGroup ? '#d1f0eb' : '#fef3c7', color: isAgent ? '#5b21b6' : inThisGroup ? '#0f4f46' : '#92400e', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                           {isAgent && <span title="AI Agent" style={{ display: 'inline-flex' }}><Bot size={11} strokeWidth={2.4} /></span>}
                                           {displayName}
-                                          {!inThisGroup && (
+                                          {!inThisGroup && isAdmin && (
                                             <button
                                               onClick={() => a.personId && addMemberById(a.personId)}
                                               title="Add to this group"
@@ -1178,7 +1187,7 @@ export default function GovernanceGroupsPage() {
                                               + add to group
                                             </button>
                                           )}
-                                          <button type="button" onClick={() => handleRemoveDamaRole(a.id)} aria-label="Remove role assignment" title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}><span aria-hidden="true">&times;</span></button>
+                                          {isAdmin && <button type="button" onClick={() => handleRemoveDamaRole(a.id)} aria-label="Remove role assignment" title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}><span aria-hidden="true">&times;</span></button>}
                                         </span>
                                       );
                                     })}
@@ -1319,7 +1328,8 @@ export default function GovernanceGroupsPage() {
                 );
               })()}
 
-              {/* Add Member (collapsed by default) */}
+              {/* Add Member (collapsed by default) — admin-only write. */}
+              {isAdmin && (
               <div style={{ marginBottom: 12 }}>
                 {!showAddMember ? (
                   <button onClick={() => setShowAddMember(true)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: 0 }}>
@@ -1352,6 +1362,7 @@ export default function GovernanceGroupsPage() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Members Table */}
               {(!selectedGroupDetail.members || selectedGroupDetail.members.length === 0) ? (
@@ -1392,11 +1403,11 @@ export default function GovernanceGroupsPage() {
                                   {personRoles.map((r) => (
                                     <span key={r.id} style={{ ...makeBadge(roleChipColors(r.roleType)), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                                       {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
-                                      <button
+                                      {isAdmin && <button
                                         onClick={() => handleRemoveDamaRole(r.id)}
                                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: 'inherit', padding: 0, lineHeight: 1, opacity: 0.7 }}
                                         title="Remove role"
-                                      >&times;</button>
+                                      >&times;</button>}
                                     </span>
                                   ))}
                                 </div>
@@ -1408,6 +1419,7 @@ export default function GovernanceGroupsPage() {
                               {new Date(member.since).toLocaleDateString()}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'center' }}>
+                              {isAdmin ? (
                               <button
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11, padding: '2px 6px' }}
                                 onClick={() => setConfirmRemoveMember({ personId: member.personId, personName: member.personName || 'this member' })}
@@ -1415,6 +1427,7 @@ export default function GovernanceGroupsPage() {
                               >
                                 Remove from group
                               </button>
+                              ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
                             </td>
                           </tr>
                         );
@@ -1427,7 +1440,7 @@ export default function GovernanceGroupsPage() {
 
 
               {/* Recommended Child Groups */}
-              {recommendations.length > 0 && !showRecommendations && (
+              {isAdmin && recommendations.length > 0 && !showRecommendations && (
                 <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button
                     onClick={() => setShowRecommendations(true)}
@@ -1446,7 +1459,7 @@ export default function GovernanceGroupsPage() {
                   </span>
                 </div>
               )}
-              {showRecommendations && recommendations.length > 0 && (
+              {isAdmin && showRecommendations && recommendations.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

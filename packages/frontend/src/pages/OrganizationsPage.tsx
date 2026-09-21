@@ -9,6 +9,7 @@ import Card from '../components/Card';
 import Button from '../components/Button';
 import FieldStack from '../components/FieldStack';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { INDUSTRIES } from '../types';
 import Combobox from '../components/Combobox';
 import ExportMenu from '../components/ExportMenu';
@@ -112,7 +113,7 @@ function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>, all
 // Root org is system-protected — never selectable for bulk delete.
 
 
-function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect, onSelect, activeDetailId }: {
+function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect, onSelect, activeDetailId, isAdmin }: {
   node: OrgNode; depth: number;
   onEdit: (org: OrgFlat) => void; onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
   expanded: Set<string>; toggleExpand: (id: string) => void; peopleCounts: Record<string, number>;
@@ -122,11 +123,14 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
   toggleSelect: (id: string) => void;
   onSelect: (id: string) => void;
   activeDetailId: string | null;
+  // /organizations is org:write = admin-only. Editing also requires the org
+  // be in the user's accessible set; both must hold.
+  isAdmin: boolean;
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
   const count = peopleCounts[node.id] || 0;
-  const canEdit = accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds, allOrgs);
+  const canEdit = isAdmin && (accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds, allOrgs));
   const isSelected = selectedIds.has(node.id);
   const isRoot = false;
   const isActive = activeDetailId === node.id;
@@ -213,7 +217,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
           expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
           accessibleOrgIds={accessibleOrgIds} allOrgs={allOrgs}
           selectedIds={selectedIds} toggleSelect={toggleSelect}
-          onSelect={onSelect} activeDetailId={activeDetailId} />
+          onSelect={onSelect} activeDetailId={activeDetailId} isAdmin={isAdmin} />
       ))}
     </div>
   );
@@ -225,6 +229,9 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
 
 export default function OrganizationsPage() {
   const { triggerRefresh, orgs: accessibleOrgs, activeOrgId } = useOrgContext();
+  // /organizations writes are org:write = admin-only. Gate every write
+  // affordance on isAdmin so non-admins get a read-only org tree.
+  const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -506,9 +513,9 @@ export default function OrganizationsPage() {
                 ]),
               })} />
             )}
-            <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />
-            <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
-            <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} />
+            {isAdmin && <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />}
+            {isAdmin && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
+            {isAdmin && <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} />}
           </>
         }
       >
@@ -719,8 +726,8 @@ export default function OrganizationsPage() {
               icon={renderNavIcon('/organizations')}
               title="No organizations yet"
               description="Your company, its divisions, and sub-teams. Most of Procela is scoped to the org you pick at the top."
-              action={{ label: '+ Add Organization', onClick: () => openAddOrg(null) }}
-              secondaryAction={{ label: 'Import from CSV', onClick: () => setShowImport(true) }}
+              action={isAdmin ? { label: '+ Add Organization', onClick: () => openAddOrg(null) } : undefined}
+              secondaryAction={isAdmin ? { label: 'Import from CSV', onClick: () => setShowImport(true) } : undefined}
             />
           ) : (
             tree.map((node) => (
@@ -729,7 +736,7 @@ export default function OrganizationsPage() {
                 expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
                 accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
                 selectedIds={selectedIds} toggleSelect={toggleOrgSelect}
-                onSelect={setDetailOrgId} activeDetailId={detailOrgId} />
+                onSelect={setDetailOrgId} activeDetailId={detailOrgId} isAdmin={isAdmin} />
             ))
           )}
         </div>
@@ -802,9 +809,9 @@ export default function OrganizationsPage() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{detailOrg.name}</h3>
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => openAddOrg(detailOrg.id)} />
-                    <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditOrg(detailOrg)} />
-                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => promptDeleteOrg(detailOrg.id)} />
+                    {isAdmin && <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => openAddOrg(detailOrg.id)} />}
+                    {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditOrg(detailOrg)} />}
+                    {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => promptDeleteOrg(detailOrg.id)} />}
                   </div>
                 </div>
                 {detailOrg.description && (

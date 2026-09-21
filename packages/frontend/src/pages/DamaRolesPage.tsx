@@ -4,6 +4,7 @@ import { renderNavIcon } from '../components/navIcons';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -265,6 +266,9 @@ export default function DamaRolesPage({
   actionsPortal?: HTMLElement | null;
 } = {}) {
   const { activeOrgId } = useOrgContext();
+  // /dama-roles writes are governance:write = admin-only. Gate assignment /
+  // removal so non-admins get a read-only roster ("Manage" links out stay).
+  const { isAdmin } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const [roles, setRoles] = useState<DamaRoleAssignment[]>([]);
@@ -534,7 +538,7 @@ export default function DamaRolesPage({
               ]),
             })} />
           )}
-          <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />
+          {isAdmin && <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />}
         </>}
       >
       </EmbeddablePageHeader>
@@ -858,6 +862,7 @@ export default function DamaRolesPage({
                 onSelectRole={(rt) => setPreviewRoleType(prev => prev === rt ? null : rt)}
                 onAssign={openAddForRole}
                 programInUse={roles.length > 0}
+                canEdit={isAdmin}
               />
             )}
           </Card>
@@ -879,6 +884,7 @@ export default function DamaRolesPage({
             navigateToEntity={navigateToEntity}
             onOpenDrawer={openRoleDrawer}
             setConfirmDelete={setConfirmDelete}
+            canEdit={isAdmin}
           />
         )}
       </div>
@@ -933,9 +939,11 @@ function ScopeChip({ scope, rawId }: {
 //   - dama-storage → open the page's own assign form pre-scoped to
 //     this entity (+ Assign), and a × per holder for direct removal.
 // Unfilled rows surface visibly so staffing gaps are obvious.
-function renderEntityMatrix({ rt, info, dama, domains, systems, dataAssets, personById, onAssignToEntity, navigateToEntity, setConfirmDelete }: {
+function renderEntityMatrix({ rt, info, dama, domains, systems, dataAssets, personById, onAssignToEntity, navigateToEntity, setConfirmDelete, canEdit }: {
   rt: string;
   info: EntityRoleScope;
+  /** Admin (governance:write). Non-admins get the read-only matrix. */
+  canEdit: boolean;
   /** DAMA role assignments for `rt` (passed already filtered). Only
    *  used when info.storage === 'dama' — entity-storage roles pull
    *  holders directly from the entity's FK field. */
@@ -1037,7 +1045,7 @@ function renderEntityMatrix({ rt, info, dama, domains, systems, dataAssets, pers
           // Single-cardinality roles hide the +Assign action once a
           // holder is set, since picking a second would be replacing
           // not adding. The user clicks the row name to drill in.
-          const showRowAction = empty || info.cardinality === 'many';
+          const showRowAction = (empty || info.cardinality === 'many') && (info.storage !== 'dama' || canEdit);
           return (
             <li
               key={row.id}
@@ -1091,7 +1099,7 @@ function renderEntityMatrix({ rt, info, dama, domains, systems, dataAssets, pers
                         {(personById.get(h.personId) || '?').charAt(0).toUpperCase()}
                       </span>
                       {personById.get(h.personId) || 'Unknown person'}
-                      {h.assignmentId && (
+                      {h.assignmentId && canEdit && (
                         <button
                           type="button"
                           onClick={() => setConfirmDelete(h.assignmentId as string)}
@@ -1159,7 +1167,8 @@ const tableTdStyle: React.CSSProperties = {
 // columns for Role, Holders, Status, Action. Clicking a row opens the
 // role's detail in the right preview pane (matrix / holders list /
 // purpose). Replaces the previous nested-cards layout.
-function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, dataAssets, personById, previewRoleType, onSelectRole, onAssign, programInUse }: {
+function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, dataAssets, personById, previewRoleType, onSelectRole, onAssign, programInUse, canEdit }: {
+  canEdit: boolean;
   catalog: string[];
   damaRoles: DamaRoleAssignment[];
   filterCategory: string | null;
@@ -1305,6 +1314,7 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
                 )}
               </td>
               <td style={{ ...tableTdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                {canEdit ? (
                 <button
                   type="button"
                   onClick={() => onAssign(rt)}
@@ -1320,6 +1330,7 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
                 >
                   + Assign
                 </button>
+                ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
               </td>
             </tr>
           );
@@ -1338,8 +1349,9 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
 function RolePreviewPane({
   roleType, dama, domains, systems, dataAssets, personById,
   roleBadge, resolveScope, onClose, onAssign, onAssignToEntity,
-  navigateToEntity, onOpenDrawer, setConfirmDelete,
+  navigateToEntity, onOpenDrawer, setConfirmDelete, canEdit,
 }: {
+  canEdit: boolean;
   roleType: string;
   dama: DamaRoleAssignment[];
   domains: DomainOption[];
@@ -1399,7 +1411,7 @@ function RolePreviewPane({
         renderEntityMatrix({
           rt: roleType, info,
           dama, domains, systems, dataAssets, personById,
-          onAssignToEntity, navigateToEntity, setConfirmDelete,
+          onAssignToEntity, navigateToEntity, setConfirmDelete, canEdit,
         })
       ) : (
         // Org-scoped: render the simple holder list.
@@ -1428,7 +1440,7 @@ function RolePreviewPane({
                     <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                       <ScopeChip scope={resolveScope(r.scopeId)} rawId={r.scopeId} />
                     </span>
-                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
+                    {canEdit && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />}
                   </li>
                 );
               })}
@@ -1437,6 +1449,7 @@ function RolePreviewPane({
         </div>
       )}
 
+      {canEdit && (
       <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-border)' }}>
         <Button
           variant="primary"
@@ -1447,6 +1460,7 @@ function RolePreviewPane({
           + Assign
         </Button>
       </div>
+      )}
     </Card>
   );
 }

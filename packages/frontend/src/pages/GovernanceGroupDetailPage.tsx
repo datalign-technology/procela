@@ -162,7 +162,7 @@ export default function GovernanceGroupDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
-  const { canWrite } = usePermissions();
+  const { isAdmin } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
 
@@ -452,7 +452,7 @@ export default function GovernanceGroupDetailPage() {
           </>
         }
         title={group.name}
-        onRename={canWrite ? handleRename : undefined}
+        onRename={isAdmin ? handleRename : undefined}
         renameLabel="Rename group"
         copyId={group.id}
         copyLabel="Copy group ID"
@@ -460,7 +460,7 @@ export default function GovernanceGroupDetailPage() {
         actions={
           <>
             <Button size="sm" onClick={() => navigate('/governance-groups')}>← Back to list</Button>
-            <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>
+            {isAdmin && <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>}
           </>
         }
         meta={
@@ -507,13 +507,13 @@ export default function GovernanceGroupDetailPage() {
                 return (
                   <button
                     key={er.roleType}
-                    onClick={() => { setAssignRoleSlot(er.roleType); setAssignRolePersonId(''); }}
+                    onClick={isAdmin ? () => { setAssignRoleSlot(er.roleType); setAssignRolePersonId(''); } : undefined}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       padding: '4px 10px', borderRadius: 4, border: `1px solid ${color}33`,
-                      background: bg, color, fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                      background: bg, color, fontSize: 12, fontWeight: 500, cursor: isAdmin ? 'pointer' : 'default',
                     }}
-                    title={`${assigned.length} assigned${er.required ? ' (required)' : ''} — click to assign`}
+                    title={isAdmin ? `${assigned.length} assigned${er.required ? ' (required)' : ''} — click to assign` : `${assigned.length} assigned${er.required ? ' (required)' : ''}`}
                   >
                     <span style={{ fontWeight: 700 }}>{indicator}</span>
                     <span>{er.label}</span>
@@ -522,8 +522,8 @@ export default function GovernanceGroupDetailPage() {
                 );
               })}
             </div>
-            {/* Inline assign panel for the active slot */}
-            {assignRoleSlot && (
+            {/* Inline assign panel for the active slot (admin-only write) */}
+            {isAdmin && assignRoleSlot && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '8px 10px', background: 'var(--color-surface)', borderRadius: 4, border: '1px solid var(--color-border)' }}>
                 <span style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Assign {DAMA_ROLE_LABELS[assignRoleSlot]} to:</span>
                 <div style={{ flex: 1, minWidth: 200, maxWidth: 320 }}>
@@ -611,13 +611,14 @@ export default function GovernanceGroupDetailPage() {
                             key={r.id}
                             roleType={r.roleType}
                             onOpenDrawer={() => openRoleDrawer(r.roleType)}
-                            onRemove={() => handleUnassignRole(r.id)}
+                            onRemove={isAdmin ? () => handleUnassignRole(r.id) : undefined}
                           />
                         ))}
                       </div>
                     )}
                   </td>
                   <td style={{ ...td, textAlign: 'right' }}>
+                    {isAdmin ? (
                     <button
                       onClick={() => setConfirmRemoveMember(m)}
                       aria-label={`Remove ${displayName}`}
@@ -625,6 +626,7 @@ export default function GovernanceGroupDetailPage() {
                     >
                       Remove
                     </button>
+                    ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
                   </td>
                 </tr>
               );
@@ -636,7 +638,8 @@ export default function GovernanceGroupDetailPage() {
         {/* Add-member panel — supports both people and agent advisors.
             Agents are locked to the ADVISOR group role so the row keeps
             its accountability boundary (see backend
-            AGENT_ALLOWED_GROUP_ROLES). */}
+            AGENT_ALLOWED_GROUP_ROLES). Admin-only write. */}
+        {isAdmin && (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '8px 10px', background: 'var(--color-bg)', borderRadius: 4, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Add member:</span>
           <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
@@ -723,6 +726,7 @@ export default function GovernanceGroupDetailPage() {
             No active agents in this org — create one on the Agents page first.
           </div>
         )}
+        </>)}
       </SectionShell>
           ) },
           { id: 'decision-rights', label: 'Decision Rights', render: () => (
@@ -921,7 +925,7 @@ function SectionShell({
 //    assignment. ──
 function RoleChip({
   roleType, onOpenDrawer, onRemove,
-}: { roleType: string; onOpenDrawer: () => void; onRemove: () => void }) {
+}: { roleType: string; onOpenDrawer: () => void; onRemove?: () => void }) {
   // Top RACI letters this role typically holds. Use the first three
   // typicalDecisions so the chip stays compact; the drawer shows the
   // full set. Deduplicate so 'A A A' renders as just 'A'.
@@ -948,10 +952,10 @@ function RoleChip({
           })}
         </span>
       )}
-      <button onClick={onRemove} aria-label="Remove role"
+      {onRemove && <button onClick={onRemove} aria-label="Remove role"
         style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12, padding: 0, lineHeight: 1 }}>
         ×
-      </button>
+      </button>}
     </span>
   );
 }

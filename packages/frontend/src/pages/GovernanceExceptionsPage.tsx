@@ -5,6 +5,7 @@ import Card from '../components/Card';
 import Button from '../components/Button';
 import Spinner from '../components/Spinner';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 
 interface GovException {
@@ -16,6 +17,9 @@ const inputStyle: React.CSSProperties = { border: '1px solid var(--color-border)
 
 export default function GovernanceExceptionsPage() {
   const { activeOrgId } = useOrgContext();
+  // Exceptions are governance:write = admin-only. Non-admins see the
+  // read-only roster with no grant form and no row actions.
+  const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
   const [rows, setRows] = useState<GovException[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +70,7 @@ export default function GovernanceExceptionsPage() {
         subtitle="Time-boxed waivers of a policy or control. Those still active past their expiry are what the council watches."
       />
 
+      {isAdmin && (
       <Card padding={16} marginBottom={16}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 10 }}>Grant an exception</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -75,6 +80,7 @@ export default function GovernanceExceptionsPage() {
           <Button variant="primary" disabled={!title.trim() || !expiresAt} loading={saving} onClick={add}>Grant</Button>
         </div>
       </Card>
+      )}
 
       {loading ? <Spinner center label="Loading…" /> : (
         <Card padding={0}>
@@ -108,10 +114,12 @@ export default function GovernanceExceptionsPage() {
                       <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: e.status === 'ACTIVE' ? 'var(--color-primary-light)' : 'var(--color-bg)', color: e.status === 'ACTIVE' ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>{e.status}</span>
                     </td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {isAdmin ? (<>
                       {e.status === 'ACTIVE'
                         ? <Button size="sm" variant="secondary" onClick={() => setStatus(e, 'CLOSED')}>Close</Button>
                         : <Button size="sm" variant="secondary" onClick={() => setStatus(e, 'ACTIVE')}>Reopen</Button>}
                       <Button size="sm" variant="ghost" onClick={() => remove(e)}>Delete</Button>
+                      </>) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
                     </td>
                   </tr>
                 ))}
