@@ -68,10 +68,15 @@ interface IncompletePhase { phase: number; name: string; missing: string[] }
 // authoritative; this only decides which transition buttons to show. Ported
 // from the (removed) Governance Program page, whose governed lifecycle
 // transitions now live on the Get Started lifecycle bar.
+// "Complete program" is intentionally NOT offered: data governance is a
+// continuous discipline, not a project that finishes — ACTIVE ⇄ PAUSED
+// models the real lifecycle. COMPLETED remains a valid backend state (and
+// can still be reopened here) only so any program a prior version marked
+// complete isn't stranded.
 const VALID_TRANSITIONS: Record<ProgramStatus, ProgramStatus[]> = {
   PLANNING: ['ACTIVE'],
-  ACTIVE: ['PAUSED', 'COMPLETED'],
-  PAUSED: ['ACTIVE', 'COMPLETED'],
+  ACTIVE: ['PAUSED'],
+  PAUSED: ['ACTIVE'],
   COMPLETED: ['ACTIVE'],
 };
 const STATUS_ACTION_LABEL: Record<string, string> = {
@@ -79,8 +84,6 @@ const STATUS_ACTION_LABEL: Record<string, string> = {
   'PAUSED>ACTIVE': 'Resume program',
   'COMPLETED>ACTIVE': 'Reopen program',
   'ACTIVE>PAUSED': 'Pause program',
-  'ACTIVE>COMPLETED': 'Complete program',
-  'PAUSED>COMPLETED': 'Complete program',
 };
 // Next Actions priority palette. Board-derived: items in the current stage
 // are HIGH (do these now), items in later stages are NEXT.
