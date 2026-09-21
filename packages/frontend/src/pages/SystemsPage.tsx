@@ -4,7 +4,6 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import CreateScopeNotice from '../components/CreateScopeNotice';
-import TruncatedText from '../components/TruncatedText';
 import FacetChips from '../components/FacetChips';
 import OwnerCell from '../components/OwnerCell';
 import { relativeTime, absoluteTime } from '../lib/relativeTime';
@@ -857,7 +856,7 @@ export default function SystemsPage({
             <button
               type="button"
               onClick={() => setViewingSystemId(sys.id)}
-              title={sys.name}
+              title={sys.description || sys.name}
               style={{
                 background: 'none', border: 'none', padding: 0,
                 color: 'var(--color-primary)', cursor: 'pointer',
@@ -872,14 +871,8 @@ export default function SystemsPage({
             </button>
             <OwnerBadge assetOrgId={sys.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
           </div>
-          <TruncatedText
-            text={sys.description}
-            emptyPlaceholder="--"
-            style={{
-              fontSize: 12, fontWeight: 400, marginTop: 2,
-              ...(sys.description?.trim() ? { color: 'var(--color-text-secondary)' } : null),
-            }}
-          />
+          {/* Description isn't shown inline — rows stay single-line; hover the
+              name to read it (full text also in the system detail view). */}
         </div>
       ),
     },

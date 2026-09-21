@@ -10,7 +10,6 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
-import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
@@ -459,12 +458,10 @@ export default function AgentsPage() {
         const execs = agentExecutions.filter((e) => e.agentId === a.id);
         return (
           <>
-            <span onClick={() => toggleAgentExpanded(a.id)} style={{ cursor: 'pointer' }}>
+            {/* Description isn't shown inline — hover the name to read it. */}
+            <span onClick={() => toggleAgentExpanded(a.id)} title={a.description || undefined} style={{ cursor: 'pointer' }}>
               {a.name}
             </span>
-            {a.description && (
-              <TruncatedText text={a.description} style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }} />
-            )}
             {(roles.length > 0 || execs.length > 0) && (
               <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
                 {roles.length > 0 && <StatusBadge variant="agent">{roles.length} role{roles.length !== 1 ? 's' : ''}</StatusBadge>}
