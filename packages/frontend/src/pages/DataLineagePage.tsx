@@ -1543,7 +1543,7 @@ function LineageVisualization({ nodes, links }: { nodes: VisNode[]; links: VisLi
   if (nodes.length === 0) {
     return (
       <Card padding={40} shadow="none" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>
-        <div style={{ fontSize: 32, marginBottom: 8 }}>{'\u21C4'}</div>
+        <div style={{ marginBottom: 8 }}>{renderNavIcon('/data-lineage', { size: 32 })}</div>
         <div>No lineage data to visualize. Add some flows first.</div>
       </Card>
     );
