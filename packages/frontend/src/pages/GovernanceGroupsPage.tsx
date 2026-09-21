@@ -1011,7 +1011,7 @@ export default function GovernanceGroupsPage() {
               <EmptyState
                 icon={renderNavIcon('/governance-groups')}
                 title="No governance groups defined yet"
-                description="Use the + Add Group button above to get started."
+                description="Councils, committees, and working groups that carry governance decisions."
                 action={{ label: '+ Add Group', onClick: openAdd }}
               />
             ) : (

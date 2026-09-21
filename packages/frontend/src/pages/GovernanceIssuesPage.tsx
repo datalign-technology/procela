@@ -495,7 +495,7 @@ export default function GovernanceIssuesPage({
           <EmptyState
             icon={renderNavIcon('/governance-work')}
             title="No governance issues yet"
-            description="Governance issues track data quality problems, policy violations, and other concerns. Create your first issue to get started."
+            description="Data-quality problems, policy violations, and other concerns are tracked here."
             action={canWrite ? { label: '+ Add Issue', onClick: openAdd } : undefined}
           />
         ) : (

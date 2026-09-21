@@ -713,7 +713,7 @@ export default function GovernancePoliciesPage() {
           <SkeletonRows rows={5} columns={9} />
         ) : policies.length === 0 && !showForm ? (
           <EmptyState icon={renderNavIcon('/governance-policies')} title="No governance documents yet"
-            description="Charters set the program's scope, policies set the rules, standards set the conventions, and frameworks set the structure. Create your first document to get started."
+            description="Charters, policies, standards, and frameworks that define the governance program."
             action={canWrite ? { label: '+ Add Document', onClick: openAdd } : undefined} />
         ) : (
           <DataTable

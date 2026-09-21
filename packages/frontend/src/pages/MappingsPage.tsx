@@ -847,7 +847,7 @@ export default function MappingsPage({
           <EmptyState
             icon={renderNavIcon('/mappings')}
             title="No mappings yet"
-            description="Mappings link your data assets to the process activities they support. They're how Procela knows which processes a piece of data flows through (and where the gaps are)."
+            description="Links between data assets and the process activities they support — and where the gaps are."
             action={{ label: '+ Add Mapping', onClick: openForm }}
           />
         ) : (

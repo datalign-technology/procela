@@ -1524,7 +1524,7 @@ export default function SystemsPage({
           <EmptyState
             icon={renderNavIcon('/systems')}
             title="No systems defined yet"
-            description="Systems are the applications and platforms where your data lives — ERP, CRM, GIS, and so on. Define them first so you can connect and map data assets to each one."
+            description="The applications and platforms where your data lives — ERP, CRM, GIS, and so on."
             action={canOwnHere ? { label: '+ Add System', onClick: openAdd } : undefined}
             secondaryAction={{ label: 'Import from CSV', onClick: () => setShowImport(true) }}
           />

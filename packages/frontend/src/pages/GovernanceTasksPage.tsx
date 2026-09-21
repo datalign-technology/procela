@@ -561,7 +561,7 @@ export default function GovernanceTasksPage({
           <EmptyState
             icon={renderNavIcon('/governance-work')}
             title="No governance tasks yet"
-            description="Governance tasks track reviews, approvals, remediations, and other work items. Create your first task to get started."
+            description="Reviews, approvals, remediations, and other work items are tracked here."
             action={canWrite ? { label: '+ Add Task', onClick: openAdd } : undefined}
           />
         ) : (

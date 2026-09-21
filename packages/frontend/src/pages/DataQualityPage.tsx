@@ -1046,7 +1046,7 @@ export default function DataQualityPage({
           <EmptyState
             icon={renderNavIcon('/data-quality')}
             title="No quality rules yet"
-            description="Quality rules validate your data — uniqueness, non-null, regex match, value ranges. Pick an asset, attach a rule, and Procela will run it and score the asset's health."
+            description="Validate assets — uniqueness, non-null, regex, value ranges — and score their health."
             action={{ label: '+ Add Rule', onClick: openAdd }}
           />
         ) : (
