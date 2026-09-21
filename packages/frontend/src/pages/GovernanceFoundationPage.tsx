@@ -402,14 +402,15 @@ export default function GovernanceFoundationPage() {
 
       {!loading && program && (
         <Card padding={24}>
-          <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
+          {/* Matches the shared <Tabs> strip (components/Tabs.tsx). */}
+          <div role="tablist" style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
             {([['scope', 'Scope'], ['principles', 'Principles'], ['targets', 'Targets'], ['value', 'Value model']] as const).map(([t, label]) => (
-              <button key={t} onClick={() => setActiveTab(t)} style={{
-                padding: '8px 16px', fontSize: 13,
+              <button key={t} role="tab" aria-selected={activeTab === t} onClick={() => setActiveTab(t)} style={{
+                padding: '10px 18px', fontSize: 13,
                 fontWeight: activeTab === t ? 600 : 500,
                 background: 'transparent', border: 'none',
                 borderBottom: activeTab === t ? '2px solid var(--color-primary)' : '2px solid transparent',
-                color: activeTab === t ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                color: activeTab === t ? 'var(--color-primary)' : 'var(--color-text-muted)',
                 marginBottom: -1, cursor: 'pointer',
               }}>{label}</button>
             ))}
