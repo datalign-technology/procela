@@ -485,11 +485,13 @@ export default function BusinessGlossaryPage() {
            *  related-terms - the inline editor only let users
            *  change the headword, missing the rest. Viewers
            *  get a plain label since they can't edit. */}
+          {/* Definition isn't shown inline — rows stay single-line; hover the
+           *  term to read it (also searchable and editable via the Edit form). */}
           {canWrite ? (
             <button
               type="button"
               onClick={() => openEdit(t)}
-              title="Click to edit term"
+              title={t.definition || 'Click to edit term'}
               style={{
                 background: 'none', border: 'none', padding: 0,
                 color: 'var(--color-primary)', cursor: 'pointer',
@@ -501,19 +503,8 @@ export default function BusinessGlossaryPage() {
               {t.term}
             </button>
           ) : (
-            t.term
+            <span title={t.definition || undefined}>{t.term}</span>
           )}
-          {/* Definition renders as a single-line, ellipsised
-           *  sub-label under the term (directory-entry style,
-           *  matching Data Assets). It stays searchable and
-           *  fully editable via the row's Edit form. */}
-          <TruncatedText
-            text={t.definition}
-            style={{
-              fontSize: 12, fontWeight: 400, marginTop: 2, maxWidth: 460,
-              ...(t.definition?.trim() ? { color: 'var(--color-text-secondary)' } : null),
-            }}
-          />
         </div>
       ),
     },

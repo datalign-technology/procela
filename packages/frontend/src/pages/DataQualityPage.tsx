@@ -7,7 +7,6 @@ import Card from '../components/Card';
 import StatTile from '../components/StatTile';
 import Spinner from '../components/Spinner';
 import Button from '../components/Button';
-import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import { usePolling } from '../hooks/usePolling';
@@ -1266,17 +1265,8 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
   const assetColumns = [
     {
       key: 'asset', header: 'Asset', sortable: true, cellStyle: { fontWeight: 500 },
-      render: (a: DataAssetFull) => (
-        <>
-          {a.name}
-          {a.description && (
-            <TruncatedText
-              text={a.description}
-              style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 1 }}
-            />
-          )}
-        </>
-      ),
+      // Description isn't shown inline — hover the asset name to read it.
+      render: (a: DataAssetFull) => <span title={a.description || undefined}>{a.name}</span>,
     },
     assetCols.isVisible('system') && {
       key: 'system', header: 'System', sortable: true,
