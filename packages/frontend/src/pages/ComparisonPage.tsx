@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { processTypeIcon } from '../components/processTypeIcons';
 import PageHeader from '../components/PageHeader';
 import Spinner from '../components/Spinner';
 import { useOrgContext } from '../stores/orgContext';
@@ -26,15 +27,15 @@ interface ProcessNode {
 
 // ── Level Configuration ──
 
-const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string; icon: string }> = {
-  VALUE_STREAM: { color: '#0f4f46', bg: '#d1f0eb', label: 'Value Stream', icon: '\u2B95' },
-  DOMAIN:       { color: '#5b21b6', bg: '#ede9fe', label: 'Domain', icon: '\u25CE' },
-  CAPABILITY:   { color: '#1e40af', bg: '#dbeafe', label: 'Capability', icon: '\u2B50' },
-  PROCESS:      { color: '#92400e', bg: '#fef3c7', label: 'Process', icon: '\u2699' },
-  SUBPROCESS:   { color: '#9d174d', bg: '#fce7f3', label: 'Sub-Process', icon: '\u21B3' },
-  ACTIVITY:     { color: '#065f46', bg: '#d1fae5', label: 'Activity', icon: '\u25B6' },
-  TASK:         { color: '#64748b', bg: '#f1f5f9', label: 'Task', icon: '\u2022' },
-  EXECUTION:    { color: '#475569', bg: '#e2e8f0', label: 'System/Execution', icon: '\u2318' },
+const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string; icon: ReactNode }> = {
+  VALUE_STREAM: { color: '#0f4f46', bg: '#d1f0eb', label: 'Value Stream', icon: processTypeIcon('VALUE_STREAM', '#0f4f46') },
+  DOMAIN:       { color: '#5b21b6', bg: '#ede9fe', label: 'Domain', icon: processTypeIcon('DOMAIN', '#5b21b6') },
+  CAPABILITY:   { color: '#1e40af', bg: '#dbeafe', label: 'Capability', icon: processTypeIcon('CAPABILITY', '#1e40af') },
+  PROCESS:      { color: '#92400e', bg: '#fef3c7', label: 'Process', icon: processTypeIcon('PROCESS', '#92400e') },
+  SUBPROCESS:   { color: '#9d174d', bg: '#fce7f3', label: 'Sub-Process', icon: processTypeIcon('SUBPROCESS', '#9d174d') },
+  ACTIVITY:     { color: '#065f46', bg: '#d1fae5', label: 'Activity', icon: processTypeIcon('ACTIVITY', '#065f46') },
+  TASK:         { color: '#64748b', bg: '#f1f5f9', label: 'Task', icon: processTypeIcon('TASK', '#64748b') },
+  EXECUTION:    { color: '#475569', bg: '#e2e8f0', label: 'System/Execution', icon: processTypeIcon('EXECUTION', '#475569') },
 };
 
 // ── Helpers ──

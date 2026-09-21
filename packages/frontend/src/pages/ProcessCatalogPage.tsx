@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense, type ReactNode } from 'react';
+import { processTypeIcon } from '../components/processTypeIcons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient, ApiError } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
@@ -116,15 +117,15 @@ export interface TagEntry {
 
 // ── Level Configuration ──
 
-export const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string; plural: string; required: boolean; icon: string; hint: string }> = {
-  VALUE_STREAM: { color: '#0f4f46', bg: '#d1f0eb', label: 'Value Stream', plural: 'Value Streams', required: true, icon: '\u2B95', hint: 'End-to-end flow delivering value to a customer or stakeholder' },
-  DOMAIN:       { color: '#5b21b6', bg: '#ede9fe', label: 'Domain', plural: 'Domains', required: false, icon: '\u25CE', hint: 'A business domain grouping related capabilities' },
-  CAPABILITY:   { color: '#1e40af', bg: '#dbeafe', label: 'Capability', plural: 'Capabilities', required: false, icon: '\u2B50', hint: 'A business capability that the organization performs' },
-  PROCESS:      { color: '#92400e', bg: '#fef3c7', label: 'Process', plural: 'Processes', required: true, icon: '\u2699', hint: 'A defined set of activities achieving a specific outcome' },
-  SUBPROCESS:   { color: '#9d174d', bg: '#fce7f3', label: 'Sub-Process', plural: 'Sub-Processes', required: false, icon: '\u21B3', hint: 'A grouping of related activities within a process' },
-  ACTIVITY:     { color: '#065f46', bg: '#d1fae5', label: 'Activity', plural: 'Activities', required: true, icon: '\u25B6', hint: 'A specific unit of work with inputs and outputs' },
-  TASK:         { color: '#64748b', bg: '#f1f5f9', label: 'Task', plural: 'Tasks', required: false, icon: '\u2022', hint: 'A detailed task within an activity' },
-  EXECUTION:    { color: '#475569', bg: '#e2e8f0', label: 'System/Execution', plural: 'Systems/Executions', required: false, icon: '\u2318', hint: 'System or automation that executes a task' },
+export const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string; plural: string; required: boolean; icon: ReactNode; hint: string }> = {
+  VALUE_STREAM: { color: '#0f4f46', bg: '#d1f0eb', label: 'Value Stream', plural: 'Value Streams', required: true, icon: processTypeIcon('VALUE_STREAM', '#0f4f46'), hint: 'End-to-end flow delivering value to a customer or stakeholder' },
+  DOMAIN:       { color: '#5b21b6', bg: '#ede9fe', label: 'Domain', plural: 'Domains', required: false, icon: processTypeIcon('DOMAIN', '#5b21b6'), hint: 'A business domain grouping related capabilities' },
+  CAPABILITY:   { color: '#1e40af', bg: '#dbeafe', label: 'Capability', plural: 'Capabilities', required: false, icon: processTypeIcon('CAPABILITY', '#1e40af'), hint: 'A business capability that the organization performs' },
+  PROCESS:      { color: '#92400e', bg: '#fef3c7', label: 'Process', plural: 'Processes', required: true, icon: processTypeIcon('PROCESS', '#92400e'), hint: 'A defined set of activities achieving a specific outcome' },
+  SUBPROCESS:   { color: '#9d174d', bg: '#fce7f3', label: 'Sub-Process', plural: 'Sub-Processes', required: false, icon: processTypeIcon('SUBPROCESS', '#9d174d'), hint: 'A grouping of related activities within a process' },
+  ACTIVITY:     { color: '#065f46', bg: '#d1fae5', label: 'Activity', plural: 'Activities', required: true, icon: processTypeIcon('ACTIVITY', '#065f46'), hint: 'A specific unit of work with inputs and outputs' },
+  TASK:         { color: '#64748b', bg: '#f1f5f9', label: 'Task', plural: 'Tasks', required: false, icon: processTypeIcon('TASK', '#64748b'), hint: 'A detailed task within an activity' },
+  EXECUTION:    { color: '#475569', bg: '#e2e8f0', label: 'System/Execution', plural: 'Systems/Executions', required: false, icon: processTypeIcon('EXECUTION', '#475569'), hint: 'System or automation that executes a task' },
 };
 
 import { getStatusColor } from '@/lib/statusBadge';
@@ -353,7 +354,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
           <select aria-label="Level" style={{ ...inputStyle, width: 'auto', fontWeight: 500 }} value={level} onChange={(e) => setLevel(e.target.value as NodeLevel)}>
             {validChildren.map((l) => (
               <option key={l} value={l}>
-                {LEVEL_CONFIG[l].icon} {LEVEL_CONFIG[l].label}{LEVEL_CONFIG[l].required ? ' *' : ''}
+                {LEVEL_CONFIG[l].label}{LEVEL_CONFIG[l].required ? ' *' : ''}
               </option>
             ))}
           </select>

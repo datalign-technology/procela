@@ -1395,7 +1395,7 @@ export default function ConnectionsPage({
               </div>
             ) : discoveredAssets.length === 0 ? (
               <EmptyState
-                icon={'\u{1F50D}'}
+                icon={renderNavIcon('/data-assets')}
                 title="No assets discovered"
                 description="This connection didn't return any tables, files, or objects. Check that it points at a populated source and try testing it again."
               />

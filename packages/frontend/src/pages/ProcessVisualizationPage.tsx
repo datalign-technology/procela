@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { processTypeIcon } from '../components/processTypeIcons';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import Page from '../components/Page';
@@ -34,15 +35,15 @@ interface FlowRelationship {
 
 // ── Level Visual Config ──
 
-const LEVEL_VISUAL: Record<NodeLevel, { bg: string; border: string; width: number; label: string; icon: string }> = {
-  VALUE_STREAM: { bg: '#d1f0eb', border: '#0f4f46', width: 280, label: 'Value Stream', icon: '\u2B95' },
-  DOMAIN:       { bg: '#ede9fe', border: '#5b21b6', width: 240, label: 'Domain', icon: '\u25CE' },
-  CAPABILITY:   { bg: '#dbeafe', border: '#1e40af', width: 240, label: 'Capability', icon: '\u2B50' },
-  PROCESS:      { bg: '#fef3c7', border: '#92400e', width: 240, label: 'Process', icon: '\u2699' },
-  SUBPROCESS:   { bg: '#fce7f3', border: '#9d174d', width: 220, label: 'Sub-Process', icon: '\u21B3' },
-  ACTIVITY:     { bg: '#d1fae5', border: '#065f46', width: 200, label: 'Activity', icon: '\u25B6' },
-  TASK:         { bg: '#f1f5f9', border: '#64748b', width: 180, label: 'Task', icon: '\u2022' },
-  EXECUTION:    { bg: '#e2e8f0', border: '#475569', width: 180, label: 'System/Execution', icon: '\u2318' },
+const LEVEL_VISUAL: Record<NodeLevel, { bg: string; border: string; width: number; label: string; icon: ReactNode }> = {
+  VALUE_STREAM: { bg: '#d1f0eb', border: '#0f4f46', width: 280, label: 'Value Stream', icon: processTypeIcon('VALUE_STREAM', '#0f4f46') },
+  DOMAIN:       { bg: '#ede9fe', border: '#5b21b6', width: 240, label: 'Domain', icon: processTypeIcon('DOMAIN', '#5b21b6') },
+  CAPABILITY:   { bg: '#dbeafe', border: '#1e40af', width: 240, label: 'Capability', icon: processTypeIcon('CAPABILITY', '#1e40af') },
+  PROCESS:      { bg: '#fef3c7', border: '#92400e', width: 240, label: 'Process', icon: processTypeIcon('PROCESS', '#92400e') },
+  SUBPROCESS:   { bg: '#fce7f3', border: '#9d174d', width: 220, label: 'Sub-Process', icon: processTypeIcon('SUBPROCESS', '#9d174d') },
+  ACTIVITY:     { bg: '#d1fae5', border: '#065f46', width: 200, label: 'Activity', icon: processTypeIcon('ACTIVITY', '#065f46') },
+  TASK:         { bg: '#f1f5f9', border: '#64748b', width: 180, label: 'Task', icon: processTypeIcon('TASK', '#64748b') },
+  EXECUTION:    { bg: '#e2e8f0', border: '#475569', width: 180, label: 'System/Execution', icon: processTypeIcon('EXECUTION', '#475569') },
 };
 
 // Use the shared status palette — identical colors across every page now.
