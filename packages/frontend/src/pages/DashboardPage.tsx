@@ -92,8 +92,11 @@ interface ScheduleItem { id: string; kind: 'event' | 'task' | 'review'; name: st
 // Shared floor height for the personal list panels (Needs Attention, Schedule,
 // Tasks, Issues) so they read as the same-height cards even when one has fewer
 // rows than another. The Attention/Schedule pair share a grid row, so a floor
-// on Schedule lifts Attention with it.
-const PANEL_MIN_HEIGHT = 176;
+// on Schedule lifts Attention with it. Kept low so a panel with only a row or
+// two doesn't carry a tall block of dead space — the goal is a compact
+// dashboard that fits on one screen; a panel with more rows still grows past
+// this floor and its grid-row partner stretches to match.
+const PANEL_MIN_HEIGHT = 120;
 interface MyDomain { id: string; name: string; relation: string; assetCount: number; directAssetCount?: number; totalAssets: number; healthyAssets: number; }
 // Aggregate over the assets in the domains I own or steward — powers the
 // personal "My Portfolio Health" widget (the tier mix + health of what I'm
