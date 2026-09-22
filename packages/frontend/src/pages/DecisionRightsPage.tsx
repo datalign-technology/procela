@@ -482,23 +482,24 @@ export default function DecisionRightsPage() {
       ),
     },
     decisionCols.isVisible('decides') && {
-      key: 'decides', header: 'Decides', sortable: true, cellStyle: { verticalAlign: 'top' },
+      key: 'decides', header: 'Decides', sortable: true,
       render: (r: DecisionRight) => {
         const decidesLabel = r.deciderName || (r.decider ? labelFor(r.decider, people, groups) : null);
+        // Single line (chip + muted type) so rows keep the same height as
+        // every other entity list — the type used to sit on a second line
+        // below the chip, which made these rows taller than their neighbours.
         return decidesLabel ? (
-          <div>
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, whiteSpace: 'nowrap' }}>
             <span style={chipStyle}>{decidesLabel}</span>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
-              {r.deciderType.toLowerCase()}
-            </div>
-          </div>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{r.deciderType.toLowerCase()}</span>
+          </span>
         ) : (
           <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>Unassigned</span>
         );
       },
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 100, cellStyle: { verticalAlign: 'top' },
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
       render: (r: DecisionRight) => (
         <div style={{ display: 'inline-flex', gap: 4 }}>
           {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(r)} />}
