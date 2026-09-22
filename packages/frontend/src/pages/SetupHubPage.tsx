@@ -103,9 +103,10 @@ interface StageItem { label: string; done: boolean; to: string; src: Src; detail
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 interface Stage { num: number; name: string; color: string; blurb: string; items: StageItem[] }
 
-// Per-stage accent — Capture blue, Assign purple, Govern green, Operate amber.
-// The four flow left→right through the stepper and the board.
-const STAGE_COLOR = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b'];
+// Per-stage accent, drawn from the app's semantic palette tokens so the board
+// matches the rest of the app (no off-brand shades): Capture = info blue,
+// Assign = brand teal, Govern = success green, Operate = warning amber.
+const STAGE_COLOR = ['var(--color-info)', 'var(--color-primary)', 'var(--color-success)', 'var(--color-warning)'];
 
 const LIFECYCLE: Array<{ key: Prog['status']; label: string }> = [
   { key: 'PLANNING', label: 'Planning' },
