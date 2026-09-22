@@ -78,9 +78,9 @@ function healthDots(domain: DataDomain) {
   const hasAssets = (domain.subtreeAssetCount ?? domain.assets.length) > 0;
   return (
     <span style={{ display: 'inline-flex', gap: 3 }}>
-      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasOwner ? '#22c55e' : '#d1d5db' }} title={hasOwner ? 'Owner assigned' : 'No owner'} />
-      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasStewards ? '#22c55e' : '#d1d5db' }} title={hasStewards ? 'Stewards assigned' : 'No stewards'} />
-      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasAssets ? '#22c55e' : '#d1d5db' }} title={hasAssets ? 'Assets linked' : 'No assets'} />
+      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasOwner ? 'var(--color-success)' : 'var(--color-border)' }} title={hasOwner ? 'Owner assigned' : 'No owner'} />
+      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasStewards ? 'var(--color-success)' : 'var(--color-border)' }} title={hasStewards ? 'Stewards assigned' : 'No stewards'} />
+      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasAssets ? 'var(--color-success)' : 'var(--color-border)' }} title={hasAssets ? 'Assets linked' : 'No assets'} />
     </span>
   );
 }
@@ -658,7 +658,7 @@ export default function DataDomainsPage() {
 
       {/* Ownership gap warning */}
       {unownedCount > 0 && (
-        <div style={{ padding: '8px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', background: '#fffbeb', border: '1px solid #fcd34d', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#92400e' }}>
+        <div style={{ padding: '8px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>
           <span style={{ fontWeight: 700 }}>{unownedCount}</span> domain{unownedCount !== 1 ? 's have' : ' has'} no owner assigned
         </div>
       )}
