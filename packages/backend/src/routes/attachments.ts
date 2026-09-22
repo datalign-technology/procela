@@ -284,11 +284,13 @@ router.put('/:id', async (req: Request, res: Response) => {
   const putAssignErr = enforceAssignment((req as AuthenticatedRequest).user, a);
   if (putAssignErr) { res.status(putAssignErr.statusCode).json({ success: false, error: putAssignErr.message }); return; }
 
+  const before = { ...a };
   const { name, description } = req.body;
   const patch: Partial<StoredAttachment> = { updatedAt: new Date().toISOString() };
   if (name !== undefined) patch.name = name;
   if (description !== undefined) patch.description = description;
   const updated = await attachmentsRepo.update(a.id, patch);
+  auditService.log(a.orgId, (req as AuthenticatedRequest).user?.sub || null, 'Attachment', a.id, 'UPDATE', before, updated);
   res.json({ success: true, data: updated });
 });
 
@@ -308,7 +310,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
   }
   await attachmentsRepo.delete(removed.id);
-  auditService.log(removed.orgId, null, 'Attachment', removed.id, 'DELETE', removed, null);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'Attachment', removed.id, 'DELETE', removed, null);
   res.status(204).send();
 });
 

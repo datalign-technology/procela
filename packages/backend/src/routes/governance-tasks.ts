@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { auditService } from '../services/audit.service';
 import { loadStore, registerStore } from '../lib/persistence';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
+import { AuthenticatedRequest } from '../middleware/auth';
 import { people } from './people';
 import { createNotification } from './notifications';
 import logger from '../lib/logger';
@@ -293,7 +294,7 @@ router.post('/', async (req: Request, res: Response) => {
   };
 
   await governanceTasksRepo.create(task);
-  auditService.log(task.orgId, null, 'GovernanceTask', task.id, 'CREATE', null, task);
+  auditService.log(task.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceTask', task.id, 'CREATE', null, task);
   logger.info({ taskId: task.id, title: task.title, taskType: task.taskType }, 'Created governance task');
   res.status(201).json({ success: true, data: enrichTask(task, await peopleRepo().list()) });
 });
@@ -363,7 +364,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   task.updatedAt = new Date().toISOString();
   await governanceTasksRepo.update(task.id, task);
-  auditService.log(task.orgId, null, 'GovernanceTask', task.id, 'UPDATE', before, task);
+  auditService.log(task.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceTask', task.id, 'UPDATE', before, task);
   logger.info({ taskId: task.id, title: task.title }, 'Updated governance task');
   res.json({ success: true, data: enrichTask(task, await peopleRepo().list()) });
 });
@@ -372,7 +373,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await governanceTasksRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
-  auditService.log(removed.orgId, null, 'GovernanceTask', removed.id, 'DELETE', removed, null);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceTask', removed.id, 'DELETE', removed, null);
   await governanceTasksRepo.delete(removed.id);
   logger.info({ taskId: removed.id, title: removed.title }, 'Deleted governance task');
   res.status(204).send();

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
+import { AuthenticatedRequest } from '../middleware/auth';
 import { dataDomains } from './data-domains';
 import { people } from './people';
 import { agents } from './agents';
@@ -254,6 +255,7 @@ router.post('/generate-template', async (req: Request, res: Response) => {
       status: 'ACTIVE', members: [], createdAt: now, updatedAt: now,
     };
     await governanceGroupsRepo.create(group);
+    auditService.log(group.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceGroup', group.id, 'CREATE', null, group);
     created.push(group);
     orgGroups.push(group);
     if (!typeToId[t.type]) typeToId[t.type] = group.id;
@@ -417,7 +419,7 @@ router.post('/', async (req: Request, res: Response) => {
     status: status || 'ACTIVE', members: [], createdAt: now, updatedAt: now,
   };
   await governanceGroupsRepo.create(group);
-  auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'CREATE', null, group);
+  auditService.log(group.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceGroup', group.id, 'CREATE', null, group);
   logger.info({ groupId: group.id, name: group.name, type: group.type, parentId }, 'Created governance group');
   res.status(201).json({ success: true, data: group, warning, validChildTypes: VALID_CHILDREN[group.type] || [] });
 });
@@ -443,7 +445,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (parentId !== undefined) group.parentId = parentId;
   group.updatedAt = new Date().toISOString();
   await governanceGroupsRepo.update(group.id, group);
-  auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'UPDATE', before, group);
+  auditService.log(group.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceGroup', group.id, 'UPDATE', before, group);
   res.json({ success: true, data: group });
 });
 
@@ -456,7 +458,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   for (const child of children) {
     await governanceGroupsRepo.update(child.id, { parentId: removed.parentId });
   }
-  auditService.log(removed.orgId, null, 'GovernanceGroup', removed.id, 'DELETE', removed, null);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceGroup', removed.id, 'DELETE', removed, null);
   await governanceGroupsRepo.delete(removed.id);
   res.status(204).send();
 });
@@ -501,7 +503,7 @@ router.post('/:id/members', async (req: Request, res: Response) => {
     group.members.push({ personId, agentId: null, groupRole, since: now });
     group.updatedAt = now;
     await governanceGroupsRepo.update(group.id, group);
-    auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { personId, groupRole });
+    auditService.log(group.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { personId, groupRole });
     res.status(201).json({ success: true, data: { personId, agentId: null, groupRole, personName: person.name, agentName: null, since: now } });
     return;
   }
@@ -517,7 +519,7 @@ router.post('/:id/members', async (req: Request, res: Response) => {
   group.members.push({ personId: null, agentId: agentId!, groupRole, since: now });
   group.updatedAt = now;
   await governanceGroupsRepo.update(group.id, group);
-  auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { agentId, groupRole });
+  auditService.log(group.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { agentId, groupRole });
   res.status(201).json({ success: true, data: { personId: null, agentId, groupRole, personName: null, agentName: agent.name, since: now } });
 });
 
@@ -531,9 +533,11 @@ router.delete('/:id/members/:memberId', async (req: Request, res: Response) => {
   const { memberId } = req.params;
   const idx = group.members.findIndex((m) => m.personId === memberId || m.agentId === memberId);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Member not found' }); return; }
+  const removedMember = group.members[idx];
   group.members.splice(idx, 1);
   group.updatedAt = new Date().toISOString();
   await governanceGroupsRepo.update(group.id, group);
+  auditService.log(group.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GovernanceGroup', group.id, 'REMOVE_MEMBER', removedMember, null);
   res.status(204).send();
 });
 

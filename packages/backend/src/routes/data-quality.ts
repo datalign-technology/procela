@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, registerStore } from '../lib/persistence';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
+import { AuthenticatedRequest } from '../middleware/auth';
 import { startBackgroundSweep } from '../lib/background-timer';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
@@ -274,6 +275,7 @@ router.post('/compute-health/:assetId', async (req: Request, res: Response) => {
   const rollup = rollupAssetHealth(rules);
   if (rollup.health !== null) {
     await dataAssetsRepo.update(asset.id, { healthScore: rollup.health, updatedAt: new Date().toISOString() });
+    auditService.log(asset.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataAsset', asset.id, 'HEALTH_RECOMPUTE', { healthScore: asset.healthScore }, { healthScore: rollup.health });
   }
 
   res.json({
@@ -456,7 +458,7 @@ router.post('/', async (req: Request, res: Response) => {
   };
 
   await dataQualityRulesRepo.create(rule);
-  auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'CREATE', null, rule);
+  auditService.log(rule.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataQualityRule', rule.id, 'CREATE', null, rule);
   res.status(201).json({ success: true, data: rule });
 });
 
@@ -465,6 +467,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const rule = await dataQualityRulesRepo.get(String(req.params.id));
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
 
+  const before = { ...rule };
   const { dataAssetId, columnId, dimension, name, description, threshold, currentScore, weight,
     ruleType, parameters, templateId, scheduleFrequency } = req.body;
 
@@ -529,7 +532,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     nextRunAt: rule.nextRunAt,
     updatedAt: rule.updatedAt,
   });
-  auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'UPDATE', null, rule);
+  auditService.log(rule.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataQualityRule', rule.id, 'UPDATE', before, rule);
   res.json({ success: true, data: rule });
 });
 
@@ -537,7 +540,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await dataQualityRulesRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
-  auditService.log(DEV_ORG_ID, null, 'DataQualityRule', removed.id, 'DELETE', removed, null);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataQualityRule', removed.id, 'DELETE', removed, null);
   await dataQualityRulesRepo.delete(removed.id);
   res.status(204).send();
 });

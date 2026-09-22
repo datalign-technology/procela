@@ -455,6 +455,7 @@ router.post('/', async (req: Request, res: Response) => {
     updatedAt: now,
   };
   await dataDomainsRepo.create(domain);
+  auditService.log(domain.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataDomain', domain.id, 'CREATE', null, domain);
   const [allPeople, allAssets] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list()]);
   res.status(201).json({ success: true, data: enrichDomain(domain, allPeople, allAssets, [...allDomains, domain]) });
 });
@@ -464,6 +465,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const domain = await dataDomainsRepo.get(String(req.params.id));
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
   if (!assertOrgAccess(req, res, domain.orgId, 'Data domain not found')) return;
+  const before = { ...domain };
 
   const { name, description, ownerId, stewardIds, dataAssetIds, status, scopeDefinition } = req.body;
 
@@ -567,6 +569,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   domain.updatedAt = new Date().toISOString();
   await dataDomainsRepo.update(domain.id, domain);
+  auditService.log(domain.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataDomain', domain.id, 'UPDATE', before, domain);
 
   const [allPeople, allAssets, allDomains] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list(), dataDomainsRepo.list()]);
   res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets, allDomains) });
@@ -611,6 +614,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     await dataDomainsRepo.update(child.id, child);
   }
   await dataDomainsRepo.delete(removed.id);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataDomain', removed.id, 'DELETE', removed, null);
   res.status(204).send();
 });
 
@@ -642,6 +646,7 @@ router.patch('/bulk', async (req: Request, res: Response) => {
   for (const id of ids) {
     const domain = await dataDomainsRepo.get(String(id));
     if (!domain) { skipped.push({ id, reason: 'not found' }); continue; }
+    const before = { ...domain };
 
     const domainOrg = getCachedOrgList().find((o) => o.id === domain.orgId) as any;
     const isAdvanced = domainOrg?.statusMode === 'advanced';
@@ -666,7 +671,7 @@ router.patch('/bulk', async (req: Request, res: Response) => {
 
     domain.updatedAt = now;
     await dataDomainsRepo.update(domain.id, domain);
-    auditService.log('system', domain.orgId, 'DataDomain', domain.id, 'BULK_UPDATE', null, domain);
+    auditService.log(domain.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataDomain', domain.id, 'BULK_UPDATE', before, domain);
     updated++;
   }
 
@@ -688,7 +693,7 @@ router.post('/bulk-delete', async (req: Request, res: Response) => {
   const idSet = new Set(ids);
   const removed = (await dataDomainsRepo.list()).filter((d) => idSet.has(d.id));
   for (const r of removed) {
-    auditService.log('system', r.orgId, 'DataDomain', r.id, 'DELETE', r, null);
+    auditService.log(r.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataDomain', r.id, 'DELETE', r, null);
     await dataDomainsRepo.delete(r.id);
   }
   logger.info({ count: removed.length }, 'Bulk-deleted data domains');

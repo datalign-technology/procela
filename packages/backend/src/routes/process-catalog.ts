@@ -922,7 +922,7 @@ router.post('/nodes', async (req: Request, res: Response) => {
 
   await processNodesRepo.create(node);
   if (hasDatabase()) await refreshProcessNodesCache();
-  auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'CREATE', null, node);
+  auditService.log(node.orgId, (req as AuthenticatedRequest).user?.sub || null, 'ProcessNode', node.id, 'CREATE', null, node);
   logger.info({ level, name, parentId }, 'Created process node');
 
   res.status(201).json({
@@ -936,6 +936,7 @@ router.post('/nodes', async (req: Request, res: Response) => {
 router.put('/nodes/:id', async (req: Request, res: Response) => {
   const node = (await processNodesRepo.get(param(req.params.id))) ?? undefined;
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+  const before = { ...node };
 
   // Layer-2: a CONTRIBUTOR may only edit nodes assigned to them.
   const putAssignErr = enforceAssignment((req as AuthenticatedRequest).user, node);
@@ -1274,7 +1275,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
 
   await processNodesRepo.update(node.id, node);
   if (hasDatabase()) await refreshProcessNodesCache();
-  auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'UPDATE', null, node);
+  auditService.log(node.orgId, (req as AuthenticatedRequest).user?.sub || null, 'ProcessNode', node.id, 'UPDATE', before, node);
   res.json({ success: true, data: node });
 });
 
@@ -1309,7 +1310,7 @@ router.delete('/nodes/:id', async (req: Request, res: Response) => {
   // Cascade: drop data mappings that referenced any deleted step.
   const mappingsRemoved = await cascadeDeleteMappings(idsToRemove);
 
-  auditService.log(DEV_ORG_ID, null, 'ProcessNode', nodeId, 'DELETE', node, null);
+  auditService.log(node.orgId, (req as AuthenticatedRequest).user?.sub || null, 'ProcessNode', nodeId, 'DELETE', node, null);
   logger.info({ id: nodeId, level: node.level, descendantsRemoved: descendants.length, mappingsRemoved }, 'Deleted process node');
 
   res.status(204).send();
@@ -1352,7 +1353,7 @@ router.post('/nodes/:id/clone', async (req: Request, res: Response) => {
 
   for (const c of cloned) await processNodesRepo.create(c);
   if (hasDatabase()) await refreshProcessNodesCache();
-  auditService.log(DEV_ORG_ID, null, 'ProcessNode', cloned[0].id, 'CLONE', null, { sourceId: source.id, count: cloned.length });
+  auditService.log(cloned[0].orgId, (req as AuthenticatedRequest).user?.sub || null, 'ProcessNode', cloned[0].id, 'CLONE', null, { sourceId: source.id, count: cloned.length });
   logger.info({ sourceId: source.id, clonedRoot: cloned[0].id, count: cloned.length }, 'Cloned process node tree');
 
   res.status(201).json({ success: true, data: cloned, message: `Cloned ${cloned.length} nodes` });
@@ -1651,6 +1652,7 @@ router.post('/flows', async (req: Request, res: Response) => {
   };
 
   await flowRelationshipsRepo.create(flow);
+  auditService.log(fromNode.orgId || (flow as { orgId?: string }).orgId || '', (req as AuthenticatedRequest).user?.sub || null, 'ProcessFlow', flow.id, 'FLOW_CREATE', null, flow);
   logger.info({ from: fromNode.name, to: toNode.name, type: flow.type }, 'Created flow relationship');
 
   res.status(201).json({ success: true, data: flow });
@@ -1661,6 +1663,8 @@ router.delete('/flows/:id', async (req: Request, res: Response) => {
   const flow = (await flowRelationshipsRepo.list()).find((f) => f.id === param(req.params.id));
   if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
   await flowRelationshipsRepo.delete(flow.id);
+  const flowSrc = findNode(flow.fromNodeId);
+  auditService.log(flowSrc?.orgId || (flow as { orgId?: string }).orgId || '', (req as AuthenticatedRequest).user?.sub || null, 'ProcessFlow', flow.id, 'FLOW_DELETE', flow, null);
   res.status(204).send();
 });
 
@@ -1773,6 +1777,7 @@ router.post('/apply-template', async (req: Request, res: Response) => {
     }
 
     if (hasDatabase()) await refreshProcessNodesCache();
+    auditService.log(templateOrgId, (req as AuthenticatedRequest).user?.sub || null, 'ProcessNode', '*', 'APPLY_TEMPLATE', null, { created: created.length });
     logger.info({ count: created.length, industry }, 'Applied template with universal hierarchy');
     res.status(201).json({ success: true, data: created, tree: buildTree(nodeSource()) });
   } catch (err) {
@@ -2078,6 +2083,7 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
   } catch (err) {
     logger.error({ err }, 'Failed to seed governance documents (non-fatal)');
   }
+  auditService.log(templateOrgId, (req as AuthenticatedRequest).user?.sub || null, 'ProcessNode', '*', 'APPLY_GOVERNANCE_TEMPLATE', null, { created: created.length });
   logger.info({ created: created.length, orgId: templateOrgId }, 'Applied governance process template');
   res.status(201).json({ success: true, data: created, message: `Created ${created.length} governance process nodes at ${companyName} (company level)` });
 });

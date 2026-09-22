@@ -5,6 +5,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { auditService } from '../services/audit.service';
 import { getOrganizationsRepository } from '../db/organizations.repo';
 import type { Repository } from '../db/repository';
 import type { StoredPerson } from './people';
@@ -354,6 +355,7 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   await orgRepo.create(org);
+  auditService.log(org.id, req.user?.sub || null, 'Organization', org.id, 'CREATE', null, org);
   // Refresh the org-scope cache so a system/asset owned by this new org can be
   // created in the same request burst (e.g. the seed scripts) without tripping
   // the "company or division level" check on a stale cache. Lazy-required to
@@ -413,6 +415,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
     res.status(403).json({ success: false, error: 'You do not have access to this organization' });
     return;
   }
+  const before = { ...org };
   const { name, parentId, type, industry, description, headCount } = req.body;
   // If the caller is trying to reparent, make sure the new parent is also in scope.
   if (parentId !== undefined && parentId !== org.parentId && parentId !== null) {
@@ -540,6 +543,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
   }
   org.updatedAt = new Date().toISOString();
   await orgRepo.update(org.id, org);
+  auditService.log(org.id, req.user?.sub || null, 'Organization', org.id, 'UPDATE', before, org);
   // A type/parent change alters ownership-level and visibility; refresh the
   // scope cache so the change is reflected on the next request, not after the TTL.
   await (require('../lib/org-scope').invalidateOrgScopeCache)();
@@ -1007,6 +1011,7 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
 
   // Finally, remove the root org itself.
   await orgRepo.delete(org.id);
+  auditService.log(org.id, req.user?.sub || null, 'Organization', org.id, 'DELETE', org, { actions: resolved, summary });
 
   // Single summary audit entry — easier to scan than 16 separate lines.
   logger.info({
@@ -1053,6 +1058,7 @@ router.post('/:id/status-mode', async (req: AuthenticatedRequest, res: Response)
   org.statusMode = mode;
   org.updatedAt = new Date().toISOString();
   await orgRepo.update(org.id, org);
+  auditService.log(org.id, req.user?.sub || null, 'Organization', org.id, 'STATUS_MODE_CHANGED', { statusMode: oldMode }, { statusMode: mode });
 
   // Migrate process nodes and data domains in this org's scope. When
   // switching *out of* a mode that carries statuses the new mode
@@ -1252,6 +1258,9 @@ router.post('/import', async (req: AuthenticatedRequest, res: Response) => {
     // data-assets CSV import (or seed step) sees them as valid owners.
     await (require('../lib/org-scope').invalidateOrgScopeCache)();
     logger.info({ created: created.length, skipped: skipped.length }, 'Imported organizations');
+    if (created.length > 0) {
+      auditService.log(created[0].id, req.user?.sub || null, 'Organization', '*', 'IMPORT', null, { created: created.length, skipped: skipped.length });
+    }
     res.status(201).json({
       success: true,
       data: created,

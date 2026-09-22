@@ -8,6 +8,8 @@ import logger from '../lib/logger';
 import { hasDatabase } from '../db/prisma';
 import { getAgentsRepository } from '../db/agents.repo';
 import { getPeopleRepository } from '../db/people.repo';
+import { auditService } from '../services/audit.service';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -232,6 +234,7 @@ router.post('/', async (req: Request, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   await agentsRepo.create(agent);
+  auditService.log(agent.orgIds[0], (req as AuthenticatedRequest).user?.sub || null, 'Agent', agent.id, 'CREATE', null, agent);
   res.status(201).json({ success: true, data: agent });
 });
 
@@ -239,6 +242,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const agent = await agentsRepo.get(String(req.params.id));
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
+  const before = { ...agent };
   const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds, instructions } = req.body;
 
   // Case 1: caller explicitly asked for ACTIVE. Reject if the resulting
@@ -299,6 +303,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   agent.updatedAt = new Date().toISOString();
   await agentsRepo.update(agent.id, agent);
+  auditService.log(agent.orgIds[0], (req as AuthenticatedRequest).user?.sub || null, 'Agent', agent.id, 'UPDATE', before, agent);
   res.json({ success: true, data: agent, cascade });
 });
 
@@ -307,6 +312,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const existing = await agentsRepo.get(String(req.params.id));
   if (!existing) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
   await agentsRepo.delete(existing.id);
+  auditService.log(existing.orgIds[0], (req as AuthenticatedRequest).user?.sub || null, 'Agent', existing.id, 'DELETE', existing, null);
   res.status(204).send();
 });
 
@@ -375,6 +381,7 @@ router.post('/import', async (req: Request, res: Response) => {
         createdAt: now, updatedAt: now,
       };
       await agentsRepo.create(agent);
+      auditService.log(agent.orgIds[0], (req as AuthenticatedRequest).user?.sub || null, 'Agent', agent.id, 'CREATE', null, agent);
       created.push(agent);
     }
     logger.info({ created: created.length, orgId }, 'Imported agents');

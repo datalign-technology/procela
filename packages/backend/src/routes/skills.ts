@@ -4,6 +4,8 @@ import { isOwnershipLevel, getVisibleOrgScope, OWNERSHIP_LEVELS } from '../lib/o
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import logger from '../lib/logger';
 import { getSkillsRepository } from '../db/skills.repo';
+import { auditService } from '../services/audit.service';
+import { AuthenticatedRequest } from '../middleware/auth';
 import {
   unqualifiedSummaryByPerson,
   listUnqualifiedAssignments,
@@ -143,6 +145,7 @@ router.post('/', async (req: Request, res: Response) => {
     updatedAt: now,
   };
   await skillsRepo.create(skill);
+  auditService.log(skill.orgId, (req as AuthenticatedRequest).user?.sub || null, 'Skill', skill.id, 'CREATE', null, skill);
   res.status(201).json({ success: true, data: skill });
 });
 
@@ -173,6 +176,7 @@ router.post('/seed', async (req: Request, res: Response) => {
       updatedAt: now,
     };
     await skillsRepo.create(skill);
+    auditService.log(skill.orgId, (req as AuthenticatedRequest).user?.sub || null, 'Skill', skill.id, 'CREATE', null, skill);
     created.push(skill);
     existing.push(skill);
   }
@@ -185,6 +189,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const skill = await skillsRepo.get(String(req.params.id));
   if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
   if (!assertOrgAccess(req, res, skill.orgId, 'Skill not found')) return;
+  const before = { ...skill };
   const { name, category, description } = req.body;
   if (name !== undefined) {
     if (typeof name !== 'string' || !name.trim()) {
@@ -209,6 +214,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (description !== undefined) skill.description = description;
   skill.updatedAt = new Date().toISOString();
   await skillsRepo.update(skill.id, skill);
+  auditService.log(skill.orgId, (req as AuthenticatedRequest).user?.sub || null, 'Skill', skill.id, 'UPDATE', before, skill);
   res.json({ success: true, data: skill });
 });
 
@@ -230,6 +236,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   if (!removed) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
   if (!assertOrgAccess(req, res, removed.orgId, 'Skill not found')) return;
   await skillsRepo.delete(removed.id);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'Skill', removed.id, 'DELETE', removed, null);
 
   // Cascade off people, agents, and process nodes. Lazy requires break
   // any lingering import-graph cycle at boot; each cascade lists through

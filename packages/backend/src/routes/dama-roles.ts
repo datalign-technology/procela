@@ -15,6 +15,7 @@ import { getAgentsRepository } from '../db/agents.repo';
 import { getSkillsRepository } from '../db/skills.repo';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { hasDatabase } from '../db/prisma';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 export const DAMA_ROLE_TYPES = [
   // Executive/Strategic
@@ -286,6 +287,7 @@ router.post('/', async (req: Request, res: Response) => {
     createdAt: now,
   };
   await damaRolesRepo.create(role);
+  auditService.log(assignmentOrgId, (req as AuthenticatedRequest).user?.sub || null, 'DamaRole', role.id, 'CREATE', null, role);
 
   // Auto-generate onboarding tasks for steward roles (people only)
   let onboardingTaskCount = 0;
@@ -339,6 +341,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await damaRolesRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance role assignment not found' }); return; }
   await damaRolesRepo.delete(removed.id);
+  const removedOrgId = roleOrgId(removed, await dataDomainsRepo().list()) || removed.scopeId;
+  auditService.log(removedOrgId, (req as AuthenticatedRequest).user?.sub || null, 'DamaRole', removed.id, 'DELETE', removed, null);
   res.status(204).send();
 });
 

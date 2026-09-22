@@ -18,6 +18,7 @@ import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getMappingsRepository } from '../db/mappings.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import type { AuthenticatedRequest } from '../middleware/auth';
 
 // Foreign-store repos, lazily bound — the systems route is imported by
 // most of the catalog graph, so eager binding of a value-imported store
@@ -618,7 +619,7 @@ router.post('/', async (req: Request, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   await systemsRepo.create(sys);
-  auditService.log(sys.orgId, null, 'System', sys.id, 'CREATE', null, sys);
+  auditService.log(sys.orgId, (req as AuthenticatedRequest).user?.sub || null, 'System', sys.id, 'CREATE', null, sys);
   res.status(201).json({ success: true, data: sys });
 });
 
@@ -682,7 +683,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     custodianIds: sys.custodianIds,
     updatedAt: sys.updatedAt,
   });
-  auditService.log(sys.orgId, null, 'System', sys.id, 'UPDATE', null, sys);
+  auditService.log(sys.orgId, (req as AuthenticatedRequest).user?.sub || null, 'System', sys.id, 'UPDATE', null, sys);
   res.json({ success: true, data: sys });
 });
 
@@ -709,7 +710,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await systemsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   if (!assertOrgAccess(req, res, removed.orgId, 'System not found')) return;
-  auditService.log(removed.orgId, null, 'System', removed.id, 'DELETE', removed, null);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'System', removed.id, 'DELETE', removed, null);
   await systemsRepo.delete(removed.id);
   // Cascade: remove every connection→system link that pointed at this
   // system. The connections themselves keep existing — they may still
@@ -838,6 +839,7 @@ router.post('/import', async (req: Request, res: Response) => {
         createdAt: now, updatedAt: now,
       };
       await systemsRepo.create(sys);
+      auditService.log(sys.orgId, (req as AuthenticatedRequest).user?.sub || null, 'System', sys.id, 'IMPORT', null, sys);
       existing.push(sys);
       created.push(sys);
     }

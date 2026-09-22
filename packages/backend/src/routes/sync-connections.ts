@@ -22,6 +22,8 @@ import type { Repository } from '../db/repository';
 import { hasDatabase } from '../db/prisma';
 import { fetchDbRows, SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
 import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
+import { auditService } from '../services/audit.service';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 // Lazy repo for the saved Connection profiles — the imported `connections`
 // array is empty in Postgres mode, so resolving a connectionId must go
@@ -770,6 +772,7 @@ router.post('/', async (req: Request, res: Response) => {
   };
 
   await syncConnectionsRepo.create(sc);
+  auditService.log(sc.orgId, (req as AuthenticatedRequest).user?.sub || null, 'SyncConnection', sc.id, 'CREATE', null, sc);
   logger.info({ id: sc.id, name: sc.name, targetEntity: sc.targetEntity, sourceType: sc.sourceType }, 'Created sync connection');
   res.status(201).json({ success: true, data: sc });
 });
@@ -781,6 +784,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
     return;
   }
+  const before = { ...sc };
 
   const parsed = updateSyncConnectionBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -857,6 +861,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     status: sc.status,
     updatedAt: sc.updatedAt,
   });
+  auditService.log(sc.orgId, (req as AuthenticatedRequest).user?.sub || null, 'SyncConnection', sc.id, 'UPDATE', before, sc);
   res.json({ success: true, data: sc });
 });
 
@@ -868,6 +873,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return;
   }
   await syncConnectionsRepo.delete(removed.id);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'SyncConnection', removed.id, 'DELETE', removed, null);
   logger.info({ id: removed.id, name: removed.name }, 'Deleted sync connection');
   res.status(204).send();
 });
@@ -902,6 +908,8 @@ router.post('/:id/run', async (req: Request, res: Response) => {
   } finally {
     runningSyncIds.delete(sc.id);
   }
+
+  auditService.log(sc.orgId, (req as AuthenticatedRequest).user?.sub || null, 'SyncConnection', sc.id, 'RUN', null, { status: outcome.status, result: sc.lastSyncResult });
 
   if (outcome.status === 'config-error') {
     res.status(500).json({ success: false, error: outcome.error });

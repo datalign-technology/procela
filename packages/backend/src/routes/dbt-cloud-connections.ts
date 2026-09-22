@@ -154,6 +154,7 @@ router.post('/', async (req: Request, res: Response) => {
     updatedAt: now.toISOString(),
   };
   await dbtCloudConnectionsRepo.create(conn);
+  auditService.log(conn.orgId, (req as any).user?.sub || null, 'DbtCloudConnection', conn.id, 'CREATE', null, publicShape(conn));
   res.status(201).json({ success: true, data: publicShape(conn) });
 });
 
@@ -161,6 +162,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.patch('/:id', async (req: Request, res: Response) => {
   const conn = await requireConn(req, res);
   if (!conn) return;
+  const before = publicShape(conn);
   const { name, host, accountId, jobId, token, pollFrequency } = req.body as Partial<DbtCloudConnection>;
   if (name !== undefined) conn.name = name.trim();
   if (host !== undefined) conn.host = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
@@ -180,13 +182,18 @@ router.patch('/:id', async (req: Request, res: Response) => {
   }
   conn.updatedAt = new Date().toISOString();
   await dbtCloudConnectionsRepo.update(conn.id, conn);
+  auditService.log(conn.orgId, (req as any).user?.sub || null, 'DbtCloudConnection', conn.id, 'UPDATE', before, publicShape(conn));
   res.json({ success: true, data: publicShape(conn) });
 });
 
 /** DELETE /api/v1/dbt-cloud-connections/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
+  const existing = await dbtCloudConnectionsRepo.get(String(req.params.id));
   const removed = await dbtCloudConnectionsRepo.delete(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'not found' }); return; }
+  if (existing) {
+    auditService.log(existing.orgId, (req as any).user?.sub || null, 'DbtCloudConnection', existing.id, 'DELETE', publicShape(existing), null);
+  }
   res.status(204).send();
 });
 
