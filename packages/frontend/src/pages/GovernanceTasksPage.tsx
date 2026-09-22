@@ -357,9 +357,12 @@ export default function GovernanceTasksPage({
       render: (t: GovernanceTask) => <span style={badge(t.automationMode, MODE_COLORS[t.automationMode] || { bg: '#f3f4f6', color: '#6b7280' })}>{t.automationMode}</span>,
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 140,
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 190,
       render: (t: GovernanceTask) => (
-        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+        // Keep every action on a single line so rows stay the same height as
+        // other entity lists — the transition buttons + edit/delete icons must
+        // not wrap onto a second row.
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'center' }}>
           {(STATUS_TRANSITIONS[t.status] || []).map((tr) => (
             <button
               key={tr.target}
