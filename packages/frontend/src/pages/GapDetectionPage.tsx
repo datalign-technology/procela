@@ -396,9 +396,15 @@ export default function GapDetectionPage() {
                     // longhands — React warns about that conflict on re-render.
                     borderStyle: 'solid',
                     borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderLeftWidth: 4,
-                    borderTopColor: isSelected ? 'var(--color-primary)' : (count > 0 ? sev.border : 'var(--color-border)'),
-                    borderRightColor: isSelected ? 'var(--color-primary)' : (count > 0 ? sev.border : 'var(--color-border)'),
-                    borderBottomColor: isSelected ? 'var(--color-primary)' : (count > 0 ? sev.border : 'var(--color-border)'),
+                    // Top/right/bottom stay neutral so a tile reads like every other
+                    // Card in the app (calm grey outline); severity is carried by the
+                    // 4px left rail, the count pill, the icon and the label — the same
+                    // convention the Dashboard panels use. A tinted full-tile border
+                    // here (pastel red/amber/blue) appeared on no other page and made
+                    // this one look off-palette.
+                    borderTopColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
+                    borderRightColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
+                    borderBottomColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
                     borderLeftColor: count > 0 ? sev.badge : 'var(--color-border)',
                     borderRadius: 'var(--radius-md)', padding: '11px 14px',
                     boxShadow: isSelected ? 'var(--shadow-md)' : 'var(--shadow-sm)',
