@@ -191,8 +191,9 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     case 'clock':
       return <svg {...common}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
     case 'columns':
-      // Three vertical bars — column-visibility / table layout intent.
-      return <svg {...common}><rect x="3" y="4" width="4" height="16" rx="1" /><rect x="10" y="4" width="4" height="16" rx="1" /><rect x="17" y="4" width="4" height="16" rx="1" /></svg>;
+      // A bordered table divided into columns — reads as "table columns /
+      // column visibility" more clearly than three free-floating bars.
+      return <svg {...common}><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" /><line x1="15" y1="4" x2="15" y2="20" /></svg>;
     case 'printer':
       // Printer — for "Print / PDF" actions, so they don't share the
       // download (tray + down-arrow) glyph with Export.
