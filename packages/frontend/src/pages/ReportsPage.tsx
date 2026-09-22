@@ -1,9 +1,16 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
 import ExportMenu from '../components/ExportMenu';
-import type { Cell, ExportPayload, ExportFormat } from '../lib/export';
+import DataTable, { type DataTableColumn } from '../components/DataTable';
+import Modal from '../components/Modal';
+import IconButton from '../components/IconButton';
+import TruncatedText from '../components/TruncatedText';
+import { renderNavIcon } from '../components/navIcons';
+import { useSortedList } from '../hooks/useSortedList';
+import type { Cell, ExportPayload } from '../lib/export';
+import { exportData } from '../lib/export';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -28,9 +35,9 @@ interface RunResult {
   totalMatched: number;
 }
 
-// Formats offered by the per-row run+export menu (PDF included, matching the
-// Report Builder's menu).
-const REPORT_EXPORT_FORMATS: ExportFormat[] = ['csv', 'xlsx', 'json', 'pdf', 'clipboard'];
+// Download formats offered in the results modal (Print is a separate action,
+// so PDF is not listed here — see the decoupled Print button).
+const DOWNLOAD_FORMATS = ['csv', 'xlsx', 'json', 'clipboard'] as const;
 
 function toExportCell(v: unknown): Cell {
   if (v == null) return '';
@@ -49,13 +56,30 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ── User Reports tab — saved Report Builder definitions ────────────────────
+// Turn an already-run result into an export payload — used by both Download
+// and Print so neither re-runs the report (run and export are decoupled).
+function resultToPayload(name: string, result: RunResult): ExportPayload {
+  const headers = result.columns.map((c) => c.label);
+  const rows: Cell[][] = result.rows.map((row) => result.columns.map((c) => toExportCell(row[c.field])));
+  const base = (name || 'report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'report';
+  return { filenameBase: base, headers, rows, sheetName: name || 'Report' };
+}
+
+const badgeStyle = (bg: string, color: string): React.CSSProperties => ({
+  marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: bg, color, whiteSpace: 'nowrap',
+});
+
+// ── User Reports — saved Report Builder definitions ────────────────────────
 
 function UserReportsTab() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
   const [reports, setReports] = useState<UserReportSummary[] | null>(null);
+  const [runningId, setRunningId] = useState<string | null>(null);
+  // The produced report shown in the results modal — the result of a Run.
+  // Download/Print in the modal act on this cached data, never re-running.
+  const [result, setResult] = useState<{ report: UserReportSummary; data: RunResult } | null>(null);
 
   const load = useCallback(() => {
     if (!activeOrgId) { setReports([]); return; }
@@ -77,43 +101,88 @@ function UserReportsTab() {
     }
   };
 
-  // Run the report and hand its rows to the export dispatcher. Running a
-  // saved report records it in the report's run history server-side, so we
-  // refresh the list afterward to surface the updated "last run".
-  const buildRunExport = (r: UserReportSummary) => async (): Promise<ExportPayload | null> => {
-    const res = await apiClient.post<{ success: boolean; data: RunResult }>(`/reports/${r.id}/run`, {});
-    const result = res.data;
-    load(); // refresh run-history metadata
-    if (result.rows.length === 0) {
-      addToast('info', 'No rows match this report — nothing to export.');
-      return null;
+  // Run (execute) a report: fetch its rows and open the results modal. Running
+  // records a run server-side, so refresh the list for the updated "last run".
+  const runReport = async (r: UserReportSummary) => {
+    setRunningId(r.id);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: RunResult }>(`/reports/${r.id}/run`, {});
+      load(); // refresh run-history metadata
+      setResult({ report: r, data: res.data });
+    } catch (err) {
+      addToast('error', `Run failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRunningId(null);
     }
-    if (result.totalMatched > result.rows.length) {
-      addToast('info', `Export capped at ${result.rows.length.toLocaleString()} of ${result.totalMatched.toLocaleString()} matched rows.`);
-    }
-    const headers = result.columns.map((c) => c.label);
-    const rows: Cell[][] = result.rows.map((row) => result.columns.map((c) => toExportCell(row[c.field])));
-    const base = (r.name || 'report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'report';
-    return { filenameBase: base, headers, rows, sheetName: r.name || 'Report' };
   };
 
-  return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-          Reports you've built with the Report Builder. Click any to open it.
+  const printResult = () => {
+    if (!result) return;
+    if (result.data.rows.length === 0) { addToast('info', 'No rows to print.'); return; }
+    exportData('pdf', resultToPayload(result.report.name, result.data)).catch((err) =>
+      addToast('error', `Print failed: ${err instanceof Error ? err.message : String(err)}`));
+  };
+
+  const columns: DataTableColumn<UserReportSummary>[] = [
+    {
+      key: 'name', header: 'Report', sortable: true,
+      render: (r) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)' }}>{renderNavIcon('/reports', { size: 16 })}</span>
+          <TruncatedText text={r.name} style={{ fontWeight: 600 }} />
+          {r.visibility === 'private' && <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
         </div>
-        <Link
-          to="/reports/builder"
-          style={{
-            fontSize: 13, fontWeight: 600,
-            color: '#fff', background: 'var(--color-primary)',
-            padding: '6px 14px', borderRadius: 4, textDecoration: 'none',
-          }}
-        >
-          + New report
-        </Link>
-      </div>
+      ),
+    },
+    {
+      key: 'description', header: 'Description',
+      render: (r) => r.description
+        ? <TruncatedText text={r.description} style={{ color: 'var(--color-text-secondary)' }} />
+        : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
+    },
+    {
+      key: 'source', header: 'Source', sortable: true, width: 150,
+      render: (r) => <span style={{ color: 'var(--color-text-secondary)' }}>{r.primaryEntity}</span>,
+    },
+    {
+      key: 'columns', header: 'Columns', align: 'center', width: 90,
+      render: (r) => <span style={{ color: 'var(--color-text-secondary)' }}>{r.columnCount}</span>,
+    },
+    {
+      key: 'lastRun', header: 'Last run', sortable: true, width: 200,
+      render: (r) => (
+        <span style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+          {r.lastRunAt
+            ? <>{timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
+            : <span style={{ color: 'var(--color-text-muted)' }}>Never run</span>}
+          {r.scheduleFrequency === 'weekly' && <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>WEEKLY</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'center', width: 130,
+      render: (r) => (
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap' }}>
+          <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => runReport(r)} />
+          <IconButton size="sm" icon="edit" label="Edit report" onClick={() => navigate(`/reports/builder/${r.id}`)} />
+          <IconButton size="sm" icon="trash" label="Delete report" variant="danger" onClick={() => remove(r.id, r.name)} />
+        </div>
+      ),
+    },
+  ];
+
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList<UserReportSummary>(
+    reports || [],
+    {
+      name: (a, b) => a.name.localeCompare(b.name),
+      source: (a, b) => a.primaryEntity.localeCompare(b.primaryEntity),
+      lastRun: (a, b) => (a.lastRunAt ? new Date(a.lastRunAt).getTime() : 0) - (b.lastRunAt ? new Date(b.lastRunAt).getTime() : 0),
+    },
+    'name',
+  );
+
+  return (
+    <>
       {reports === null ? (
         <SkeletonRows rows={4} columnWidths={[220, null, 120]} />
       ) : reports.length === 0 ? (
@@ -121,63 +190,77 @@ function UserReportsTab() {
           No reports yet. Click <strong>+ New report</strong> to build one.
         </div>
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-          {reports.map((r) => (
-            <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>
-                  {r.name}
-                  {r.visibility === 'private' && (
-                    <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: 'var(--color-bg)', color: 'var(--color-text-muted)' }}>
-                      PRIVATE
-                    </span>
-                  )}
-                </div>
-                {r.description && <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{r.description}</div>}
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                  {r.primaryEntity} · {r.columnCount} {r.columnCount === 1 ? 'column' : 'columns'}
-                  {r.lastRunAt && (
-                    <> · Last run {timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
-                  )}
-                  {r.scheduleFrequency === 'weekly' && (
-                    <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: 'var(--color-primary-light, #e0f2f1)', color: 'var(--color-primary)' }}>
-                      WEEKLY EMAIL
-                    </span>
-                  )}
-                </div>
-              </div>
-              <ExportMenu
-                label="Run & export"
-                formats={REPORT_EXPORT_FORMATS}
-                build={buildRunExport(r)}
-              />
-              <button
-                onClick={() => navigate(`/reports/builder/${r.id}`)}
-                style={{ fontSize: 12, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
-              >
-                Open →
-              </button>
-              <button
-                onClick={() => remove(r.id, r.name)}
-                style={{ fontSize: 12, color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                title="Delete report"
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          rows={sorted}
+          columns={columns}
+          rowKey={(r) => r.id}
+          sort={{ sortKey, sortDir, onSort: toggleSort }}
+          emptyMessage="No reports match."
+        />
       )}
-    </div>
+
+      {result && (
+        <Modal
+          open
+          onClose={() => setResult(null)}
+          size="lg"
+          kicker={result.report.primaryEntity}
+          title={result.report.name}
+          subtitle={`${result.data.totalMatched.toLocaleString()} ${result.data.totalMatched === 1 ? 'row' : 'rows'} matched${result.data.totalMatched > result.data.rows.length ? ` · showing first ${result.data.rows.length.toLocaleString()}` : ''}`}
+          actions={
+            <>
+              <IconButton size="sm" icon="printer" label="Print" onClick={printResult} />
+              <ExportMenu label="Download" formats={[...DOWNLOAD_FORMATS]} build={() => resultToPayload(result.report.name, result.data)} />
+            </>
+          }
+        >
+          {result.data.rows.length === 0 ? (
+            <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
+              No rows match this report.
+            </div>
+          ) : (
+            <div style={{ overflow: 'auto', maxHeight: '60vh', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    {result.data.columns.map((c) => (
+                      <th key={c.field} style={{ position: 'sticky', top: 0, background: 'var(--color-bg)', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)', padding: '8px 12px', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.data.rows.map((row, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      {result.data.columns.map((c) => (
+                        <td key={c.field} style={{ padding: '6px 12px', whiteSpace: 'nowrap', color: 'var(--color-text)' }}>
+                          {String(toExportCell(row[c.field]))}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      )}
+    </>
   );
 }
 
 export default function ReportsPage() {
-  // Reports is now just the report catalog + Builder. The Executive Report and
-  // Governance Maturity Scorecard tabs were removed, so the tab bar is gone too.
+  const navigate = useNavigate();
+  // Reports is the report catalog + Builder. The Executive Report and
+  // Governance Maturity Scorecard tabs were removed, so there's no tab bar.
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Reports you and your org have built against the Procela data model." />
+      <PageHeader
+        title="Reports"
+        subtitle="Reports you and your org have built against the Procela data model."
+        actions={<IconButton icon="plus" label="New report" variant="primary" onClick={() => navigate('/reports/builder')} />}
+      />
       <UserReportsTab />
     </div>
   );
