@@ -262,6 +262,17 @@ function collectAllIds(nodes: GovernanceGroup[]): string[] {
   return ids;
 }
 
+// Find a node anywhere in the tree by id (used to collect a group's own
+// subtree so it can't be reparented under itself or a descendant).
+function findNodeById(nodes: GovernanceGroup[], id: string): GovernanceGroup | null {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const found = findNodeById(node.children, id);
+    if (found) return found;
+  }
+  return null;
+}
+
 // Returns which group types can be a valid parent of the given child type
 function findValidParentTypes(validChildren: Record<string, string[]>, childType: string): string[] {
   const result: string[] = [];
@@ -771,24 +782,37 @@ export default function GovernanceGroupsPage() {
   const existingMemberIds = new Set(selectedGroupDetail?.members?.map((m: GroupMember) => m.personId) || []);
   const availablePeople = people.filter((p) => !existingMemberIds.has(p.id));
 
-  // For the parent dropdown in the form: show all groups (flattened tree), filtered by valid parents for the selected type
+  // Parent dropdown options: any group EXCEPT the one being edited and its own
+  // descendants (which would create a cycle). We deliberately do NOT restrict
+  // to the DAMA type hierarchy here — the backend accepts any parent, and the
+  // advisory note below nudges toward best practice without blocking, so a
+  // team can arrange their own hierarchy (e.g. nest a Council under an Office).
   const treeOptions = flattenTreeForSelect(tree);
 
-  // Filter parent options: only groups whose validChildren include the selected type
   const getValidParentOptions = () => {
-    if (!form.type) return treeOptions;
-    const validParentTypes = findValidParentTypes(validChildren, form.type);
-    return treeOptions.filter((opt) => {
-      // Don't allow selecting the group being edited as its own parent
-      if (editingId && opt.id === editingId) return false;
-      return validParentTypes.includes(opt.type);
-    });
+    if (!editingId) return treeOptions;
+    const editedNode = findNodeById(tree, editingId);
+    const excluded = new Set(editedNode ? collectAllIds([editedNode]) : [editingId]);
+    return treeOptions.filter((opt) => !excluded.has(opt.id));
   };
 
   // Determine which types to show in the type dropdown
   const typeOptions = groupTypes; // always show all types
   const parentGroup = form.parentId ? flatGroups.find((g) => g.id === form.parentId) : null;
   const recommendedTypes = parentGroup ? (validChildren[parentGroup.type] || []) : [];
+
+  // Advisory only: flag when the chosen parent isn't a DAMA-recommended parent
+  // for this group's type, mirroring the "saved anyway" warning the create
+  // endpoint returns. Never blocks the save.
+  const labelForType = (t: string) => groupTypeLabels[t] || GROUP_TYPE_LABELS[t] || t;
+  const parentPlacementNote = (() => {
+    if (!parentGroup || !form.type) return null;
+    if ((validChildren[parentGroup.type] || []).includes(form.type)) return null;
+    const recommendedParents = findValidParentTypes(validChildren, form.type);
+    return recommendedParents.length > 0
+      ? `Governance best practices place ${labelForType(form.type)} under ${recommendedParents.map(labelForType).join(' or ')}, not ${labelForType(parentGroup.type)}. You can still save it here.`
+      : `${labelForType(form.type)} is normally a top-level body. You can still nest it under ${labelForType(parentGroup.type)} if you want.`;
+  })();
 
   // ── Render ──
 
@@ -972,6 +996,9 @@ export default function GovernanceGroupsPage() {
                 <option value="">-- No parent (top-level) --</option>
                 {getValidParentOptions().map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
               </select>
+              {parentPlacementNote && (
+                <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-warning)' }}>{parentPlacementNote}</div>
+              )}
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
