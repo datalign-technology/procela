@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import Page from '../components/Page';
 import Spinner from '../components/Spinner';
+import { Icon } from '../components/IconButton';
 import { installPrintFit } from '../lib/printFit';
 
 // ── Types ──
@@ -584,12 +585,13 @@ export default function ProcessVisualizationPage() {
         <button
           onClick={handlePrint}
           style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '8px 16px', background: 'var(--color-primary)',
             color: '#fff', border: 'none',
             borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer',
           }}
         >
-          Export PDF
+          <Icon name="printer" size={14} /> Export PDF
         </button>
 
         {/* Zoom controls */}

@@ -4,6 +4,7 @@ import { renderMarkdown } from '../lib/markdown';
 import Page from '../components/Page';
 import PageHeader from '../components/PageHeader';
 import Spinner from '../components/Spinner';
+import { Icon } from '../components/IconButton';
 
 // ──────────────────────────────────────────────────────────────────────────
 // HelpTrainingPage — Tidewater Utilities training walkthrough.
@@ -27,6 +28,7 @@ const printBarStyle: React.CSSProperties = {
 };
 
 const printBtnStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
   fontSize: 12, padding: '6px 12px',
   background: 'var(--color-surface)',
   color: 'var(--color-primary)',
@@ -59,7 +61,7 @@ export default function HelpTrainingPage() {
           style={printBtnStyle}
           title="Print or save the guide as a PDF for offline reading"
         >
-          Print / Save PDF
+          <Icon name="printer" size={14} /> Print / Save PDF
         </button>
       </div>
 

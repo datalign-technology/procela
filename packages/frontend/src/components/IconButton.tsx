@@ -34,6 +34,7 @@ export type IconName =
   | 'copy'
   | 'clock'
   | 'columns'
+  | 'printer'
   | 'wand';
 
 interface IconButtonProps {
@@ -149,7 +150,7 @@ function hideTip(button: HTMLElement) {
 // Inline SVG set. Outline style matches the bell icon in the header.
 // ──────────────────────────────────────────────────────────────────────────
 
-function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const common = {
     width: size, height: size, viewBox: '0 0 24 24',
     fill: 'none', stroke: 'currentColor', strokeWidth: 1.8,
@@ -192,6 +193,10 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     case 'columns':
       // Three vertical bars — column-visibility / table layout intent.
       return <svg {...common}><rect x="3" y="4" width="4" height="16" rx="1" /><rect x="10" y="4" width="4" height="16" rx="1" /><rect x="17" y="4" width="4" height="16" rx="1" /></svg>;
+    case 'printer':
+      // Printer — for "Print / PDF" actions, so they don't share the
+      // download (tray + down-arrow) glyph with Export.
+      return <svg {...common}><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>;
     case 'wand':
       // Magic wand — used for "Generate from template / industry" actions
       // so they don't share the gear icon with unrelated configuration.

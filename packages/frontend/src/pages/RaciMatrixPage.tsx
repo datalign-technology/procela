@@ -48,6 +48,10 @@ const RACI_COLORS: Record<string, { bg: string; text: string }> = {
   I: { bg: '#f3f4f6', text: '#4b5563' },
 };
 
+// Rotation angle (degrees) for the person-column header labels and the
+// diagonal separators that match them.
+const RACI_HEADER_ANGLE = 55;
+
 const RACI_LABELS: Record<string, string> = {
   R: 'Responsible',
   A: 'Accountable',
@@ -283,6 +287,20 @@ export default function RaciMatrixPage({
     return treeFilteredRows.some((row) => data.matrix[row.id]?.[col.personId]);
   });
 
+  // Angled column headers: the person labels are rotated (RACI_HEADER_ANGLE),
+  // and each column draws a diagonal separator at that same angle instead of a
+  // vertical border, so the header reads as slanted lanes rather than upright
+  // boxes behind slanted text. For the diagonals to align into continuous
+  // parallel rails, every person column shares one header height (tallest label
+  // wins) so all the baselines sit on the same line.
+  const headerHeight = Math.max(
+    120,
+    ...activeColumns.map((col) => getColumnLabel(col).length * 5.5 + 40),
+  );
+  // Length of the diagonal rail needed to rise the full header height at the
+  // label angle (rise = L·sin θ ⇒ L = height / sin θ).
+  const railLength = headerHeight / Math.sin((RACI_HEADER_ANGLE * Math.PI) / 180);
+
   // Hide empty rows: when Hide-Empty is on, drop rows that have no
   // assignment in any active column. Parents are kept either way so
   // the tree structure remains navigable even when intermediate nodes
@@ -364,7 +382,7 @@ export default function RaciMatrixPage({
           {/* Controls */}
           <div className="raci-print-hide" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <ExportMenu build={buildExport} disabled={!data} />
-            <IconButton icon="download" label="Print / PDF" variant="primary" onClick={() => window.print()} />
+            <IconButton icon="printer" label="Print / PDF" variant="primary" onClick={() => window.print()} />
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
             <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={collapseAll} />
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
@@ -418,29 +436,50 @@ export default function RaciMatrixPage({
                     Process Hierarchy
                   </th>
                   {activeColumns.map((col, ci) => {
-                    const bgColors = ['#fef3c7', '#dbeafe', '#d1fae5', '#ede9fe', '#fce7f3', '#fee2e2', '#f0fdf4', '#e0e7ff'];
-                    const bg = bgColors[ci % bgColors.length];
                     const label = getColumnLabel(col);
                     return (
                       <th scope="col" key={col.personId} style={{
                         ...thStyle, padding: 0, minWidth: 36, maxWidth: 40,
-                        verticalAlign: 'bottom', background: bg,
+                        // The diagonal rails replace the vertical side borders,
+                        // so the header reads as slanted lanes; keep the bottom
+                        // border as the header/body divider. overflow:visible
+                        // lets each rail extend up-right across the header.
+                        borderLeft: 'none', borderRight: 'none', borderTop: 'none',
+                        verticalAlign: 'bottom', background: 'var(--color-surface)',
+                        overflow: 'visible',
                       }}>
-                        <div style={{
-                          height: Math.max(120, label.length * 5.5 + 40),
-                          position: 'relative',
-                          width: '100%',
-                        }}>
+                        <div style={{ height: headerHeight, position: 'relative', width: '100%', overflow: 'visible' }}>
+                          {/* Diagonal separator at the column's left edge, at the
+                              same angle as the label. The last column also draws
+                              its right edge so the final lane is closed. */}
+                          <div aria-hidden style={{
+                            position: 'absolute', bottom: 0, left: 0,
+                            width: railLength, height: 1,
+                            background: 'var(--color-border)',
+                            transformOrigin: 'bottom left',
+                            transform: `rotate(-${RACI_HEADER_ANGLE}deg)`,
+                            pointerEvents: 'none',
+                          }} />
+                          {ci === activeColumns.length - 1 && (
+                            <div aria-hidden style={{
+                              position: 'absolute', bottom: 0, right: 0,
+                              width: railLength, height: 1,
+                              background: 'var(--color-border)',
+                              transformOrigin: 'bottom left',
+                              transform: `rotate(-${RACI_HEADER_ANGLE}deg)`,
+                              pointerEvents: 'none',
+                            }} />
+                          )}
                           <div style={{
                             position: 'absolute',
                             bottom: 6,
                             left: '50%',
                             transformOrigin: 'bottom left',
-                            transform: 'rotate(-55deg)',
+                            transform: `rotate(-${RACI_HEADER_ANGLE}deg)`,
                             whiteSpace: 'nowrap',
                             fontSize: 11,
                             fontWeight: 500,
-                            color: '#374151',
+                            color: 'var(--color-text-secondary)',
                             padding: '2px 4px',
                           }}>
                             {label}
