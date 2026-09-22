@@ -20,7 +20,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
-import IconButton from '../components/IconButton';
+import IconButton, { Icon } from '../components/IconButton';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
 import PersonPicker from '../components/PersonPicker';
@@ -754,7 +754,8 @@ export default function GovernanceGroupsPage() {
         orgId: activeOrgId || undefined,
         parentId: selectedGroupId,
       });
-      addToast('success', `Created "${rec.name}"`);
+      const parentName = selectedGroupDetail?.name;
+      addToast('success', parentName ? `Created "${rec.name}" under "${parentName}"` : `Created "${rec.name}"`);
       fetchGroups();
       fetchGroupDetail(selectedGroupId);
     } catch (e: any) {
@@ -1035,8 +1036,10 @@ export default function GovernanceGroupsPage() {
           </div>
         </Card>
 
-        {/* Right Panel — Detail */}
-        <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+        {/* Right Panel — Detail. Grows with its content (e.g. the expanded
+            recommendations list) and lets the page scroll, rather than
+            capping height and showing an inner scrollbar. */}
+        <div style={{ alignSelf: 'start' }}>
           {selectedGroupId && selectedGroupDetail ? (
             <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -1451,7 +1454,7 @@ export default function GovernanceGroupsPage() {
                       cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
                     }}
                   >
-                    <span style={{ fontSize: 14 }}>{'ℹ'}</span>
+                    <Icon name="wand" size={14} />
                     Explore Recommendations ({recommendations.length})
                   </button>
                   <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
@@ -1463,10 +1466,10 @@ export default function GovernanceGroupsPage() {
                 <div style={{ marginTop: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 14, color: '#2563eb' }}>{'ℹ'}</span>
+                      <span style={{ display: 'inline-flex', color: 'var(--color-primary)' }}><Icon name="wand" size={14} /></span>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>Recommended Groups</div>
                       <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        Based on DAMA best practices{selectedGroupDetail.type === 'COMMITTEE' || selectedGroupDetail.type === 'OFFICE' ? ' and your data domains' : ''}
+                        Added under "{selectedGroupDetail.name}" · based on DAMA best practices{selectedGroupDetail.type === 'COMMITTEE' || selectedGroupDetail.type === 'OFFICE' ? ' and your data domains' : ''}
                       </span>
                     </div>
                     <button
