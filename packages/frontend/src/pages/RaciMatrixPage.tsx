@@ -439,7 +439,7 @@ export default function RaciMatrixPage({
                     const label = getColumnLabel(col);
                     return (
                       <th scope="col" key={col.personId} style={{
-                        ...thStyle, padding: 0, minWidth: 36, maxWidth: 40,
+                        ...thStyle, padding: 0, minWidth: 26, maxWidth: 30,
                         // The diagonal rails replace the vertical side borders,
                         // so the header reads as slanted lanes; keep the bottom
                         // border as the header/body divider. overflow:visible
@@ -470,12 +470,17 @@ export default function RaciMatrixPage({
                               pointerEvents: 'none',
                             }} />
                           )}
+                          {/* Center the rotated name on the column: the text's
+                              lower end sits at the column's horizontal centre
+                              (left:50%, translateX(-50%)), directly above the
+                              centred R/A/C/I value below, and leans up at the
+                              label angle. */}
                           <div style={{
                             position: 'absolute',
-                            bottom: 6,
+                            bottom: 4,
                             left: '50%',
-                            transformOrigin: 'bottom left',
-                            transform: `rotate(-${RACI_HEADER_ANGLE}deg)`,
+                            transformOrigin: 'center bottom',
+                            transform: `translateX(-50%) rotate(-${RACI_HEADER_ANGLE}deg)`,
                             whiteSpace: 'nowrap',
                             fontSize: 11,
                             fontWeight: 500,

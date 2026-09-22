@@ -646,11 +646,7 @@ export default function DataLineagePage() {
           <>
             <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
               onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
-            {canWrite && <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />}
-            {canWrite && snowflakeConns.length > 0 && (
-              <IconButton icon="download" label="Extract lineage from query history"
-                onClick={() => { setSqlExtractSummary(null); setSqlExtractColumnSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
-            )}
+            {/* Export before Import, matching every other entity list. */}
             {links.length > 0 && (
               <ExportMenu build={() => ({
                 filenameBase: 'data-lineage',
@@ -666,6 +662,11 @@ export default function DataLineagePage() {
                   l.description,
                 ]),
               })} />
+            )}
+            {canWrite && <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />}
+            {canWrite && snowflakeConns.length > 0 && (
+              <IconButton icon="wand" label="Extract lineage from query history"
+                onClick={() => { setSqlExtractSummary(null); setSqlExtractColumnSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
             )}
             <ColumnPicker state={lineageCols} />
             {canWrite && <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} />}
