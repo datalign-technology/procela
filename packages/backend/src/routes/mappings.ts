@@ -301,6 +301,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     updatedAt: now,
   };
   await mappingsRepo.create(mapping);
+  auditService.log(mapping.orgId, actorId(req), 'Mapping', mapping.id, 'CREATE', null, mapping);
   res.status(201).json({ success: true, data: enrichMapping(mapping, await buildEnrichContext()) });
 }));
 
@@ -312,6 +313,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
   if (!assertOrgAccess(req, res, mapping.orgId, 'Mapping not found')) return;
+  const before = { ...mapping };
 
   const { processStepId, dataAssetId, linkType, notes, aiSuggested, userOverridden,
     criticality, dataFormat, sla, qualityRequirement, fulfillsExpected } = req.body;
@@ -339,6 +341,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
   mapping.updatedAt = new Date().toISOString();
   await mappingsRepo.update(mapping.id, mapping);
+  auditService.log(mapping.orgId, actorId(req), 'Mapping', mapping.id, 'UPDATE', before, mapping);
   res.json({ success: true, data: enrichMapping(mapping, await buildEnrichContext()) });
 }));
 
@@ -351,6 +354,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
   if (!assertOrgAccess(req, res, mapping.orgId, 'Mapping not found')) return;
   await mappingsRepo.delete(mapping.id);
+  auditService.log(mapping.orgId, actorId(req), 'Mapping', mapping.id, 'DELETE', mapping, null);
   res.status(204).send();
 }));
 

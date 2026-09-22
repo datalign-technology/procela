@@ -5,6 +5,7 @@ import { getCachedOrgList } from '../lib/org-scope';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { parseCsv } from '../lib/csv';
 import { auditService } from '../services/audit.service';
+import { AuthenticatedRequest } from '../middleware/auth';
 import logger from '../lib/logger';
 import { people } from './people';
 import { dataDomains } from './data-domains';
@@ -280,7 +281,7 @@ router.post('/', async (req: Request, res: Response) => {
   };
 
   await glossaryTermsRepo.create(newTerm);
-  auditService.log('system', orgId, 'GlossaryTerm', newTerm.id, 'CREATE', null, newTerm);
+  auditService.log(orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', newTerm.id, 'CREATE', null, newTerm);
   logger.info({ id: newTerm.id, term: newTerm.term }, 'Created glossary term');
   const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
   res.status(201).json({ success: true, data: enrichTerm(newTerm, allPeople, allDomains) });
@@ -326,7 +327,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   existing.updatedAt = new Date().toISOString();
   await glossaryTermsRepo.update(existing.id, existing);
-  auditService.log('system', existing.orgId, 'GlossaryTerm', existing.id, 'UPDATE', before, existing);
+  auditService.log(existing.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', existing.id, 'UPDATE', before, existing);
   logger.info({ id: existing.id, term: existing.term }, 'Updated glossary term');
   const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
   res.json({ success: true, data: enrichTerm(existing, allPeople, allDomains) });
@@ -340,7 +341,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return;
   }
   await glossaryTermsRepo.delete(removed.id);
-  auditService.log('system', removed.orgId, 'GlossaryTerm', removed.id, 'DELETE', removed, null);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', removed.id, 'DELETE', removed, null);
   logger.info({ id: removed.id, term: removed.term }, 'Deleted glossary term');
   res.status(204).send();
 });
@@ -410,7 +411,7 @@ router.post('/seed', async (req: Request, res: Response) => {
   }
 
   if (created.length > 0) {
-    auditService.log('system', orgId, 'GlossaryTerm', '*', 'SEED', null, { count: created.length, industry });
+    auditService.log(orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', '*', 'SEED', null, { count: created.length, industry });
     logger.info({ orgId, count: created.length, industry }, 'Seeded glossary terms');
   }
 
@@ -456,7 +457,7 @@ router.patch('/bulk', async (req: Request, res: Response) => {
     if (updates.domainId !== undefined) t.domainId = updates.domainId || null;
     t.updatedAt = now;
     await glossaryTermsRepo.update(t.id, t);
-    auditService.log('system', t.orgId, 'GlossaryTerm', t.id, 'BULK_UPDATE', before, t);
+    auditService.log(t.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', t.id, 'BULK_UPDATE', before, t);
     updated++;
   }
 
@@ -480,7 +481,7 @@ router.post('/bulk-delete', async (req: Request, res: Response) => {
   const idSet = new Set(ids);
   const removed = (await glossaryTermsRepo.list()).filter((t) => idSet.has(t.id));
   for (const r of removed) {
-    auditService.log('system', r.orgId, 'GlossaryTerm', r.id, 'DELETE', r, null);
+    auditService.log(r.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', r.id, 'DELETE', r, null);
     await glossaryTermsRepo.delete(r.id);
   }
   logger.info({ count: removed.length }, 'Bulk-deleted glossary terms');
@@ -610,7 +611,7 @@ router.post('/import', async (req: Request, res: Response) => {
     }
 
     if (created.length > 0) {
-      auditService.log('system', orgId, 'GlossaryTerm', '*', 'IMPORT', null, { count: created.length, skipped: skipped.length });
+      auditService.log(orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', '*', 'IMPORT', null, { count: created.length, skipped: skipped.length });
     }
     logger.info({ created: created.length, skipped: skipped.length, orgId }, 'Imported glossary terms');
     const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
