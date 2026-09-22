@@ -701,8 +701,12 @@ async function seedCollabAndReporting(repos: DemoRepos, ts: string, ctx: CollabR
     { id: demoId('report-tiers'), orgId, name: 'Assets by governance tier', description: 'All assets with their tier and health.', ownerId: personId, visibility: 'private', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }], filters: [], limit: 500 }, createdAt: ts, updatedAt: ts },
   ]);
 
-  // Analysis report (pivot config).
-  await repos.analysisReports.create({ id: demoId('analysis-coverage'), orgId, name: 'Coverage by division', description: 'Asset coverage split across divisions.', ownerId: personId, config: { rowDim: 'org', colDim: 'governanceTier', measure: 'count' }, createdAt: ts, updatedAt: ts });
+  // Analysis report (pivot config). Dims must be real analysis dimensions
+  // (see ALL_DIMS in routes/analysis.ts): systems | dataAssets | domains |
+  // processes | roles | people | connections. There is no org/tier axis, so
+  // this pivots the asset-coverage story the engine can actually run —
+  // domains × systems, which every asset fact populates.
+  await repos.analysisReports.create({ id: demoId('analysis-coverage'), orgId, name: 'Asset coverage by domain & system', description: 'Which systems supply the assets in each data domain.', ownerId: personId, config: { rowDim: 'domains', colDim: 'systems', measure: 'count' }, createdAt: ts, updatedAt: ts });
 
   // Saved views (per-page filter snapshots).
   await createAll(repos.savedViews, [
