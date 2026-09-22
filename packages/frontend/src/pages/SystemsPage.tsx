@@ -204,8 +204,12 @@ const emptyForm: FormData = {
   connectionIds: [],
 };
 
-function InlineCellEdit({ value, onSave, type = 'text', options }: {
+function InlineCellEdit({ value, onSave, type = 'text', options, display }: {
   value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
+  // Optional resting-state renderer so an editable cell can display the same
+  // treatment (e.g. a badge) as its read-only counterpart on locked rows,
+  // keeping the column visually uniform. Falls back to dashed-underline text.
+  display?: (v: string) => React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -218,10 +222,10 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
         aria-label="Edit field"
         onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
         onKeyDown={activateOnKeyStop(() => { setDraft(value); setEditing(true); })}
-        style={{ cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
+        style={display ? { cursor: 'pointer' } : { cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
         title="Click to edit"
       >
-        {value || '—'}
+        {display ? display(value) : (value || '—')}
       </span>
     );
   }
@@ -891,15 +895,18 @@ export default function SystemsPage({
       key: 'type', header: 'Type', sortable: true,
       render: (sys: SystemEntity) => {
         const inherited = isInheritedAsset(sys.orgId, activeOrgId);
+        const typeDisplay = (v: string) =>
+          v ? <span style={typeBadge}>{v}</span> : <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
         return systemTypes.length > 0 && !inherited ? (
           <InlineCellEdit
             value={sys.systemType || ''}
             onSave={(v) => inlineSaveField(sys.id, 'systemType', v)}
             type="select"
             options={systemTypes}
+            display={typeDisplay}
           />
         ) : (
-          sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>
+          typeDisplay(sys.systemType || '')
         );
       },
     },
