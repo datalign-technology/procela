@@ -7,6 +7,7 @@ import { isOwnershipLevel, getCachedOrgList } from '../lib/org-scope';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { REGULATORY_SENSITIVITY_TAGS } from '../services/ai.service';
 import { auditService } from '../services/audit.service';
+import { AuthenticatedRequest } from '../middleware/auth';
 import { getAiServiceForOrg, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
 import logger from '../lib/logger';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
@@ -1150,6 +1151,7 @@ router.post('/', async (req: Request, res: Response) => {
   };
   await dataAssetsRepo.create(asset);
   await syncBindingFromAssetFields(asset);
+  auditService.log(asset.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataAsset', asset.id, 'CREATE', null, asset);
   res.status(201).json({ success: true, data: asset });
 });
 
@@ -1172,6 +1174,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     retentionPolicy, retentionDuration, retentionReason,
     refreshFrequency } = parsed.data;
   const now = new Date().toISOString();
+  // Snapshot before mutating in place, so the audit entry can record the diff.
+  const before = { ...asset };
 
   if (name !== undefined) asset.name = name;
   if (description !== undefined) asset.description = description;
@@ -1215,6 +1219,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   asset.updatedAt = now;
   await dataAssetsRepo.update(asset.id, asset);
   await syncBindingFromAssetFields(asset);
+  auditService.log(asset.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataAsset', asset.id, 'UPDATE', before, asset);
   res.json({ success: true, data: asset });
 });
 
@@ -1227,6 +1232,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   // Cascade: delete this asset's bindings so they don't linger.
   const ownBindings = (await dataAssetBindingsRepo.list()).filter((b) => b.dataAssetId === removed.id);
   for (const b of ownBindings) await dataAssetBindingsRepo.delete(b.id);
+  auditService.log(removed.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataAsset', removed.id, 'DELETE', removed, null);
   res.status(204).send();
 });
 

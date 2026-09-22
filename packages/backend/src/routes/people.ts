@@ -18,7 +18,13 @@ import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { dataDomains } from './data-domains';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { getAgentsRepository } from '../db/agents.repo';
+import { auditService } from '../services/audit.service';
+import { AuthenticatedRequest } from '../middleware/auth';
 import logger from '../lib/logger';
+
+// Fallback org for audit scoping when a person somehow has no org membership
+// (create requires at least one, so this is defensive).
+const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const ROLES = [
   'SUPER_ADMIN',
@@ -658,6 +664,7 @@ router.post('/', async (req: Request, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   await peopleRepo.create(person);
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, (req as AuthenticatedRequest).user?.sub || null, 'Person', person.id, 'CREATE', null, publicPerson(person));
   res.status(201).json({ success: true, data: publicPerson(person) });
 });
 
@@ -665,6 +672,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  const before = publicPerson(person);
   const { name, email, role, title, jobRole, orgIds, orgId, accessibleOrgIds, skillIds } = req.body;
   if (name !== undefined) person.name = name;
   if (email !== undefined) person.email = email;
@@ -684,6 +692,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
   person.updatedAt = new Date().toISOString();
   await peopleRepo.update(person.id, person);
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, (req as AuthenticatedRequest).user?.sub || null, 'Person', person.id, 'UPDATE', before, publicPerson(person));
   res.json({ success: true, data: publicPerson(person) });
 });
 
@@ -736,6 +745,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   );
 
   await peopleRepo.delete(personId);
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, (req as AuthenticatedRequest).user?.sub || null, 'Person', personId, 'DELETE', publicPerson(person), null);
 
   // 204 has no body, so switch to 200 when the cascade produced work
   // the caller needs to know about (frontend uses this to render a
@@ -824,6 +834,7 @@ router.post('/:id/deactivate', async (req: Request, res: Response) => {
   person.deactivatedAt = new Date().toISOString();
   person.updatedAt = person.deactivatedAt;
   await peopleRepo.update(person.id, person);
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, (req as AuthenticatedRequest).user?.sub || null, 'Person', person.id, 'DEACTIVATE', null, publicPerson(person));
 
   // Cascade: a deactivated person is no longer a valid responsible
   // party. Any ACTIVE agent they own auto-pauses (owner reference is
@@ -852,6 +863,7 @@ router.post('/:id/reactivate', async (req: Request, res: Response) => {
   person.deactivatedAt = undefined;
   person.updatedAt = new Date().toISOString();
   await peopleRepo.update(person.id, person);
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, (req as AuthenticatedRequest).user?.sub || null, 'Person', person.id, 'REACTIVATE', null, publicPerson(person));
   res.json({ success: true, data: publicPerson(person) });
 });
 
@@ -869,6 +881,7 @@ router.post('/:id/reactivate', async (req: Request, res: Response) => {
 router.put('/:id/org-role', async (req: Request, res: Response) => {
   const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  const before = publicPerson(person);
   const { orgId, role } = req.body || {};
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!person.orgIds.includes(orgId)) {
@@ -882,6 +895,7 @@ router.put('/:id/org-role', async (req: Request, res: Response) => {
   person.orgRoles = next;
   person.updatedAt = new Date().toISOString();
   await peopleRepo.update(person.id, person);
+  auditService.log(orgId, (req as AuthenticatedRequest).user?.sub || null, 'Person', person.id, 'ORG_ROLE_CHANGED', before, publicPerson(person));
   res.json({ success: true, data: publicPerson(person) });
 });
 
@@ -1040,6 +1054,7 @@ router.post('/import', async (req: Request, res: Response) => {
     }
 
     logger.info({ created: created.length, skipped: skipped.length, warnings: warnings.length, defaultOrg: org.name }, 'Imported people');
+    auditService.log(org.id, (req as AuthenticatedRequest).user?.sub || null, 'Person', '*', 'IMPORT', null, { created: created.length, skipped: skipped.length });
     const parts: string[] = [`Imported ${created.length}`];
     if (skipped.length > 0) parts.push(`skipped ${skipped.length} duplicate${skipped.length === 1 ? '' : 's'}`);
     if (warnings.length > 0) parts.push(`${warnings.length} fell back to ${org.name}`);
