@@ -33,6 +33,14 @@ const glossaryRouter = require('../routes/business-glossary').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { glossaryTerms } = require('../routes/business-glossary');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const systemsRouter = require('../routes/systems').default;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { systems } = require('../routes/systems');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const dataDomainsRouter = require('../routes/data-domains').default;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { dataDomains } = require('../routes/data-domains');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { organizations } = require('../routes/organizations');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { auditLogs } = require('../services/audit.service');
@@ -78,6 +86,8 @@ describe('audit coverage — core entity CRUD writes audit entries', () => {
     app.use('/people', peopleRouter);
     app.use('/mappings', mappingsRouter);
     app.use('/business-glossary', glossaryRouter);
+    app.use('/systems', systemsRouter);
+    app.use('/data-domains', dataDomainsRouter);
     server = http.createServer(app);
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     port = (server.address() as AddressInfo).port;
@@ -85,7 +95,7 @@ describe('audit coverage — core entity CRUD writes audit entries', () => {
 
   after(async () => {
     // Remove seeded org, entities, and audit entries scoped to the test org.
-    for (const arr of [organizations, dataAssets, people, mappings, glossaryTerms]) {
+    for (const arr of [organizations, dataAssets, people, mappings, glossaryTerms, systems, dataDomains]) {
       for (let i = arr.length - 1; i >= 0; i--) {
         if (arr[i].id === ORG || arr[i].orgId === ORG || (arr[i].orgIds && arr[i].orgIds.includes(ORG))) arr.splice(i, 1);
       }
@@ -167,5 +177,47 @@ describe('audit coverage — core entity CRUD writes audit entries', () => {
     assert.notStrictEqual(e.orgId, 'system');
     assert.strictEqual(e.entityType, 'GlossaryTerm');
     assert.strictEqual(e.userId, ACTOR, 'glossary audit records the acting user, not the org id');
+  });
+
+  it('system create / update / delete each write an audit entry (org + actor)', async () => {
+    const created = await request(port, 'POST', '/systems', { name: 'Audit System', orgId: ORG, systemType: 'ERP' });
+    assert.strictEqual(created.status, 201);
+    const id = created.body.data.id;
+
+    await request(port, 'PUT', `/systems/${id}`, { description: 'changed' });
+    const del = await request(port, 'DELETE', `/systems/${id}`);
+    assert.strictEqual(del.status, 204);
+
+    const actions = entriesFor(id).map((e: any) => e.action);
+    assert.ok(actions.includes('CREATE'));
+    assert.ok(actions.includes('UPDATE'));
+    assert.ok(actions.includes('DELETE'));
+    for (const e of entriesFor(id)) {
+      assert.strictEqual(e.orgId, ORG);
+      assert.strictEqual(e.entityType, 'System');
+      assert.strictEqual(e.userId, ACTOR);
+    }
+  });
+
+  it('data-domain create/update/delete audit is scoped to the domain org — never "system"', async () => {
+    const created = await request(port, 'POST', '/data-domains', { name: 'Audit Domain', orgId: ORG });
+    assert.strictEqual(created.status, 201);
+    const id = created.body.data.id;
+
+    await request(port, 'PUT', `/data-domains/${id}`, { description: 'changed' });
+    const del = await request(port, 'DELETE', `/data-domains/${id}`);
+    assert.strictEqual(del.status, 204);
+
+    const entries = entriesFor(id);
+    const actions = entries.map((e: any) => e.action);
+    assert.ok(actions.includes('CREATE'));
+    assert.ok(actions.includes('UPDATE'));
+    assert.ok(actions.includes('DELETE'));
+    for (const e of entries) {
+      assert.strictEqual(e.orgId, ORG, 'data-domain audit must be scoped to the domain org, not "system"');
+      assert.notStrictEqual(e.orgId, 'system');
+      assert.strictEqual(e.entityType, 'DataDomain');
+      assert.strictEqual(e.userId, ACTOR);
+    }
   });
 });
