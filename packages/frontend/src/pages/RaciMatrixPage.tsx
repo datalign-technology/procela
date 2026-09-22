@@ -10,7 +10,6 @@ import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
 import { installPrintFit } from '../lib/printFit';
-import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 import EmptyState from '../components/EmptyState';
@@ -382,7 +381,6 @@ export default function RaciMatrixPage({
           {/* Controls */}
           <div className="raci-print-hide" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <ExportMenu build={buildExport} disabled={!data} />
-            <IconButton icon="printer" label="Print / PDF" variant="primary" onClick={() => window.print()} />
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
             <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={collapseAll} />
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
@@ -470,17 +468,19 @@ export default function RaciMatrixPage({
                               pointerEvents: 'none',
                             }} />
                           )}
-                          {/* Center the rotated name on the column: the text's
-                              lower end sits at the column's horizontal centre
-                              (left:50%, translateX(-50%)), directly above the
-                              centred R/A/C/I value below, and leans up at the
-                              label angle. */}
+                          {/* Anchor the name's bottom-left corner at the
+                              column's horizontal centre and lean it up-right at
+                              the label angle. Anchoring the corner (not the
+                              centre) keeps the whole label above the header /
+                              value divider — a 'center bottom' origin swings the
+                              label's left half down into the R/A/C/I cell below,
+                              which is what made long names overlap the values. */}
                           <div style={{
                             position: 'absolute',
                             bottom: 4,
                             left: '50%',
-                            transformOrigin: 'center bottom',
-                            transform: `translateX(-50%) rotate(-${RACI_HEADER_ANGLE}deg)`,
+                            transformOrigin: 'left bottom',
+                            transform: `rotate(-${RACI_HEADER_ANGLE}deg)`,
                             whiteSpace: 'nowrap',
                             fontSize: 11,
                             fontWeight: 500,
