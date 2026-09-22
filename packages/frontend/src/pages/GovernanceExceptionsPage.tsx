@@ -94,7 +94,7 @@ export default function GovernanceExceptionsPage() {
               <thead>
                 <tr>
                   {['Exception', 'Granted', 'Expires', 'Status', ''].map((h, i) => (
-                    <th key={h || i} style={{ textAlign: i > 0 && i < 4 ? 'left' : 'left', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', padding: '10px 14px', borderBottom: '1.5px solid var(--color-border)' }}>{h}</th>
+                    <th key={h || i} style={{ textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', padding: '10px 14px', borderBottom: '1.5px solid var(--color-border)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -111,7 +111,22 @@ export default function GovernanceExceptionsPage() {
                       </span>
                     </td>
                     <td style={td}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: e.status === 'ACTIVE' ? 'var(--color-primary-light)' : 'var(--color-bg)', color: e.status === 'ACTIVE' ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>{e.status}</span>
+                      {(() => {
+                        // A waiver that's still ACTIVE past its expiry is the
+                        // thing the council watches, so flag it red in the
+                        // status column too — not just via the expires date.
+                        const overdue = e.status === 'ACTIVE' && e.pastExpiry;
+                        const pal = overdue
+                          ? { bg: '#fee2e2', color: '#dc2626' }
+                          : e.status === 'ACTIVE'
+                            ? { bg: 'var(--color-primary-light)', color: 'var(--color-primary)' }
+                            : { bg: 'var(--color-bg)', color: 'var(--color-text-muted)' };
+                        return (
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', background: pal.bg, color: pal.color }}>
+                            {e.status}{overdue ? ' · overdue' : ''}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {isAdmin ? (<>
