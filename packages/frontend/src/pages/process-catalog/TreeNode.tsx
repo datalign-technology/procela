@@ -285,9 +285,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           <span style={{ flexShrink: 0 }}><ScopeBadge inScope={nodeInScope(node.id)} /></span>
         )}
 
-        {/* Activity ID */}
+        {/* Node ID — fixed min-width so codes of different lengths (VS-0001,
+            VS-DEMO-W1, …) occupy the same horizontal space and the names that
+            follow line up down the list. */}
         {node.activityId && (
-          <span style={{ fontSize: 10, color: config.color, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', background: '#fff', padding: '1px 4px', borderRadius: 3, border: '1px solid #e2e8f0' }}>
+          <span style={{ fontSize: 10, color: config.color, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', background: '#fff', padding: '1px 4px', borderRadius: 3, border: '1px solid #e2e8f0', minWidth: 72, textAlign: 'center', flexShrink: 0, boxSizing: 'border-box' }}>
             {node.activityId}
           </span>
         )}
