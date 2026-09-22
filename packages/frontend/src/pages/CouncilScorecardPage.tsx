@@ -135,6 +135,17 @@ function pctBarColor(v: number | null, target: number): string {
   return 'var(--color-error)';
 }
 
+// Status colour for a KPI tile's headline number, so the most prominent
+// figures convey target status at a glance — the same read the table's bars
+// give. Percentages track the coverage/classification thresholds; counts are
+// ceilings (fewer is better) and only flag amber when over target. No-data
+// and on-target values stay in the default text colour rather than shouting.
+function measureStatusColor(kind: 'pct' | 'count', val: number | null, target: number): string {
+  if (val == null) return 'var(--color-text)';
+  if (kind === 'pct') return pctBarColor(val, target);
+  return val <= target ? 'var(--color-text)' : 'var(--color-warning)';
+}
+
 export default function CouncilScorecardPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
@@ -369,7 +380,7 @@ export default function CouncilScorecardPage() {
                   {m.label}
                   <span aria-hidden style={{ color: 'var(--color-primary)', fontSize: 13 }}>→</span>
                 </div>
-                <div style={{ fontSize: 30, fontWeight: 700, marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ fontSize: 30, fontWeight: 700, marginTop: 6, fontVariantNumeric: 'tabular-nums', color: measureStatusColor(m.kind, val, tgt) }}>
                   {val == null ? '—' : `${val}${m.kind === 'pct' ? '%' : ''}`}
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 4 }}>
