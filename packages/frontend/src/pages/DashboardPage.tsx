@@ -88,6 +88,12 @@ interface MyEvent { name: string; daysAway: number; }
 // Unified time-ordered entry for My Schedule — a calendar event, a task due
 // date, or a policy review due date, all reduced to "what & when".
 interface ScheduleItem { id: string; kind: 'event' | 'task' | 'review'; name: string; daysAway: number; to: string; }
+
+// Shared floor height for the personal list panels (Needs Attention, Schedule,
+// Tasks, Issues) so they read as the same-height cards even when one has fewer
+// rows than another. The Attention/Schedule pair share a grid row, so a floor
+// on Schedule lifts Attention with it.
+const PANEL_MIN_HEIGHT = 176;
 interface MyDomain { id: string; name: string; relation: string; assetCount: number; directAssetCount?: number; totalAssets: number; healthyAssets: number; }
 // Aggregate over the assets in the domains I own or steward — powers the
 // personal "My Portfolio Health" widget (the tier mix + health of what I'm
@@ -302,7 +308,7 @@ function MyDashboard({ lens = 'all', orgId = null }: LensProps) {
             preview rather than a flat list, and never mirrors the Attention
             queue beside it. A muted kind tag distinguishes a task/review due
             date from a meeting. */}
-        <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-info)' }}>
+        <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-info)', minHeight: PANEL_MIN_HEIGHT }}>
           <CardHeaderRow color="var(--color-info)" icon={renderNavIcon('/governance-calendar', { size: 13 })} label="Schedule" />
           {scheduleItems.length === 0 ? (
             <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Nothing scheduled in the next 14 days.</div>
@@ -380,7 +386,7 @@ function MyTasks({ lens = 'all', orgId = null }: LensProps) {
         <SectionLabel marginBottom={0}>Tasks</SectionLabel>
         <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {tasks.length}</Link>
       </div>
-      <Card padding={0} style={{ overflow: 'hidden' }}>
+      <Card padding={0} style={{ overflow: 'hidden', minHeight: PANEL_MIN_HEIGHT }}>
         {loading ? (
           <div style={{ padding: 14 }}><SkeletonRows rows={3} columnWidths={[70, null, 80]} /></div>
         ) : tasks.length === 0 ? (
@@ -422,7 +428,7 @@ function MyIssues({ lens = 'all', orgId = null }: LensProps) {
         <SectionLabel marginBottom={0}>Issues</SectionLabel>
         <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {issues.length}</Link>
       </div>
-      <Card padding={0} style={{ overflow: 'hidden' }}>
+      <Card padding={0} style={{ overflow: 'hidden', minHeight: PANEL_MIN_HEIGHT }}>
         {loading ? (
           <div style={{ padding: 14 }}><SkeletonRows rows={3} columnWidths={[70, null, 80]} /></div>
         ) : issues.length === 0 ? (
