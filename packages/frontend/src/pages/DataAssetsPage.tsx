@@ -16,7 +16,7 @@ import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { apiClient } from '../api/client';
-import { useTierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
+import { useTierLabel, TIER_VALUES, TIER_COLORS, tierKey, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
@@ -1257,14 +1257,23 @@ export default function DataAssetsPage({
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {canWrite && !inherited ? (
-              <select
-                aria-label="Governance tier"
-                value={asset.governanceTier || 'BRONZE'}
-                onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
-                style={{ fontSize: 13, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
-              >
-                {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
-              </select>
+              // Editable tier: a native <select> styled to read as the same
+              // coloured tier pill as the read-only TierBadge, so the column
+              // looks uniform down the list. The native caret is what signals
+              // it's editable, not a different colour treatment.
+              (() => {
+                const tc = TIER_COLORS[tierKey(asset.governanceTier)];
+                return (
+                  <select
+                    aria-label="Governance tier"
+                    value={asset.governanceTier || 'BRONZE'}
+                    onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
+                    style={{ fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 999, background: tc.bg, color: tc.color, border: `1px solid ${tc.bg}`, cursor: 'pointer', alignSelf: 'flex-start' }}
+                  >
+                    {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
+                  </select>
+                );
+              })()
             ) : (
               <TierBadge tier={asset.governanceTier} />
             )}
