@@ -706,7 +706,10 @@ async function seedCollabAndReporting(repos: DemoRepos, ts: string, ctx: CollabR
 
   // Saved views (per-page filter snapshots).
   await createAll(repos.savedViews, [
-    { id: demoId('view-bronze'), orgId, pageKey: 'data-assets', name: 'Bronze tier', ownerId: personId, ownerName: personName, filters: { governanceTier: 'BRONZE' }, createdAt: ts, updatedAt: ts },
+    // The filter key must match what the Data Assets page's SavedViewsMenu
+    // reads back in onApply (`filterTier`), not the raw asset field name — the
+    // stored filters are applied verbatim to the page's filter state.
+    { id: demoId('view-bronze'), orgId, pageKey: 'data-assets', name: 'Bronze tier', ownerId: personId, ownerName: personName, filters: { filterTier: 'BRONZE' }, createdAt: ts, updatedAt: ts },
     { id: demoId('view-tier1'), orgId, pageKey: 'processes', name: 'Tier 1 activities', ownerId: personId, ownerName: personName, filters: { criticalityTier: 'TIER_1' }, createdAt: ts, updatedAt: ts },
   ]);
 }
