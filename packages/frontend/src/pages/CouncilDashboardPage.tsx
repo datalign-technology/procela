@@ -278,10 +278,13 @@ export default function CouncilDashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
             {measures.map((m) => (
               <Link key={m.label} to={m.to}
-                style={{ textDecoration: 'none', color: 'inherit', display: 'block', borderRadius: 'var(--radius-md)', transition: 'transform .08s ease, box-shadow .08s ease' }}
+                style={{ textDecoration: 'none', color: 'inherit', display: 'flex', borderRadius: 'var(--radius-md)', transition: 'transform .08s ease, box-shadow .08s ease' }}
                 onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
-                <Card padding={16}>
+                {/* flex:1 so every tile fills the grid row's height — tiles with
+                    a progress meter (e.g. Classification) no longer stand taller
+                    than the number-only ones. */}
+                <Card padding={16} style={{ flex: 1 }}>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     {m.label}
                     <span aria-hidden style={{ color: m.ok ? 'var(--color-success)' : 'var(--color-warning)', fontSize: 13 }}>{m.ok ? '✓' : '!'}</span>
