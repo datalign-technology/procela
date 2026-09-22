@@ -41,6 +41,8 @@ const dataDomainsRouter = require('../routes/data-domains').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataDomains } = require('../routes/data-domains');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const auditRouter = require('../routes/audit').default;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { organizations } = require('../routes/organizations');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { auditLogs } = require('../services/audit.service');
@@ -88,6 +90,7 @@ describe('audit coverage — core entity CRUD writes audit entries', () => {
     app.use('/business-glossary', glossaryRouter);
     app.use('/systems', systemsRouter);
     app.use('/data-domains', dataDomainsRouter);
+    app.use('/audit', auditRouter);
     server = http.createServer(app);
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     port = (server.address() as AddressInfo).port;
@@ -219,5 +222,14 @@ describe('audit coverage — core entity CRUD writes audit entries', () => {
       assert.strictEqual(e.entityType, 'DataDomain');
       assert.strictEqual(e.userId, ACTOR);
     }
+
+    // The /audit route resolves a display name for the domain from the
+    // entry's own snapshot — not the "(deleted)" fallback — even though
+    // DataDomain has no dedicated name-store lookup.
+    const feed = await request(port, 'GET', `/audit?orgId=${ORG}&limit=50`);
+    assert.strictEqual(feed.status, 200);
+    const domainEntry = (feed.body.data || []).find((e: any) => e.entityType === 'DataDomain' && e.action === 'CREATE');
+    assert.ok(domainEntry, 'expected the DataDomain CREATE entry in the audit feed');
+    assert.strictEqual(domainEntry.entityName, 'Audit Domain', 'audit feed resolves the domain name, not "(deleted)"');
   });
 });

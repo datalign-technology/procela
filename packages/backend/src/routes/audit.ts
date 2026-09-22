@@ -94,6 +94,21 @@ function entityName(entityType: string, entityId: string, maps: NameMaps): strin
   }
 }
 
+/** Fallback name resolver for entity types without a dedicated store map
+ *  (data domains, glossary terms, governance groups/tasks, agents, skills,
+ *  sync connections, orgs, DQ rules, …) and for rows the store no longer
+ *  holds (deletes). Pulls a display name from the audited entry's own
+ *  before/after snapshot instead of "(deleted)". */
+function pickName(obj: unknown): string | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const o = obj as Record<string, unknown>;
+  for (const k of ['name', 'term', 'title', 'label', 'filename']) {
+    const v = o[k];
+    if (typeof v === 'string' && v.trim()) return v;
+  }
+  return null;
+}
+
 function userName(userId: string | null, peopleMap: NameMaps['people']): string | null {
   if (!userId) return null;
   return peopleMap.get(userId)?.name ?? null;
@@ -133,7 +148,7 @@ router.get('/', async (req: Request, res: Response) => {
   const maps = await buildNameMaps();
   const enriched = entries.map((e) => ({
     ...e,
-    entityName: entityName(e.entityType, e.entityId, maps),
+    entityName: entityName(e.entityType, e.entityId, maps) ?? pickName(e.after) ?? pickName(e.before),
     userName: userName(e.userId, maps.people),
   }));
 
@@ -174,7 +189,7 @@ router.get('/export.csv', async (req: Request, res: Response) => {
     userName(e.userId, maps.people) || '',
     e.entityType,
     e.entityId,
-    entityName(e.entityType, e.entityId, maps) || '',
+    (entityName(e.entityType, e.entityId, maps) ?? pickName(e.after) ?? pickName(e.before)) || '',
     e.action,
     (e as any).entryHash || '',
   ]);
