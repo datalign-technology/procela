@@ -470,7 +470,7 @@ function SeverityBar({ total, critical, warning, info, active, onSelect }: {
   const segs: { key: Severity; label: string; count: number; color: string }[] = [
     { key: 'critical', label: 'Critical',      count: critical, color: 'var(--color-error)' },
     { key: 'warning',  label: 'Warning',       count: warning,  color: 'var(--color-warning)' },
-    { key: 'info',     label: 'Informational', count: info,     color: 'var(--color-info)' },
+    { key: 'info',     label: 'Info',          count: info,     color: 'var(--color-info)' },
   ];
   const toggle = (s: Severity) => onSelect(active === s ? null : s);
   return (

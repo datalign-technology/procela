@@ -1157,10 +1157,14 @@ export default function ProcessCatalogPage() {
         meta={
           <>
             <DomainLensToggle pageKey="process-catalog" />
-            {/* Simple ↔ Advanced view toggle — Simple hides Compliance,
+            {/* Basic ↔ Detailed view toggle — Basic hides Compliance,
                 Frequency, Risk Level, Automation and Est. Duration from
                 the per-node panel and downplays rare levels in the
-                legend. Default is Simple for first-time users. */}
+                legend. Default is Basic for first-time users. Named
+                Basic/Detailed (not Simple/Advanced) so it doesn't clash
+                with the org's "Lifecycle: Simple/Advanced" status mode
+                shown right beside it. The persisted value keys stay
+                'simple'/'advanced'. */}
             <div role="tablist" aria-label="View detail" style={{
               display: 'inline-flex', border: '1px solid var(--color-border)',
               borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)',
@@ -1181,7 +1185,7 @@ export default function ProcessCatalogPage() {
                       color: active ? '#fff' : 'var(--color-text)',
                     }}
                   >
-                    {m === 'simple' ? 'Simple' : 'Advanced'}
+                    {m === 'simple' ? 'Basic' : 'Detailed'}
                   </button>
                 );
               })}
