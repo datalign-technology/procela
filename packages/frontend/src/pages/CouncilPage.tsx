@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
@@ -197,17 +197,6 @@ function pctBarColor(v: number | null, target: number): string {
   return 'var(--color-error)';
 }
 
-// Status colour for a KPI tile's headline number, so the most prominent
-// figures convey target status at a glance — the same read the table's bars
-// give. Percentages track the coverage/classification thresholds; counts are
-// ceilings (fewer is better) and only flag amber when over target. No-data
-// and on-target values stay in the default text colour rather than shouting.
-function measureStatusColor(kind: 'pct' | 'count', val: number | null, target: number): string {
-  if (val == null) return 'var(--color-text)';
-  if (kind === 'pct') return pctBarColor(val, target);
-  return val <= target ? 'var(--color-text)' : 'var(--color-warning)';
-}
-
 export default function CouncilPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
@@ -228,6 +217,9 @@ export default function CouncilPage() {
   // "governed" narrows to the entities the governance program governs. Live
   // control only — a saved version shows its own stored basis (derived.scope).
   const [lens, setLens] = useState<'all' | 'governed'>('all');
+  // Saved-versions dropdown in the header (next to Save snapshot).
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const versionsRef = useRef<HTMLDivElement>(null);
   // Set when a save collides with an existing snapshot for the same period —
   // holds the replace target so the prompt can offer Replace vs. Save-as-new.
   const [pendingSave, setPendingSave] = useState<{ replaceId: string; period: string; savedAt: string } | null>(null);
@@ -292,6 +284,16 @@ export default function CouncilPage() {
   }, [activeOrgId]);
 
   useEffect(() => { loadBriefing(); }, [loadBriefing]);
+
+  // Close the saved-versions dropdown on an outside click or Escape.
+  useEffect(() => {
+    if (!versionsOpen) return;
+    const onDown = (e: MouseEvent) => { if (versionsRef.current && !versionsRef.current.contains(e.target as Node)) setVersionsOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setVersionsOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [versionsOpen]);
 
   const openVersion = async (id: string) => {
     try {
@@ -412,8 +414,6 @@ export default function CouncilPage() {
     );
   };
 
-  const ent = derived.enterprise;
-
   return (
     <div>
       <PageHeader
@@ -442,7 +442,39 @@ export default function CouncilPage() {
                 ))}
               </div>
             )}
-            {viewingVersionId && <Button variant="secondary" onClick={loadDerived}>Back to live</Button>}
+            {!editing && (
+              <div ref={versionsRef} style={{ position: 'relative', display: 'inline-block' }}>
+                <Button variant="secondary" onClick={() => setVersionsOpen((v) => !v)} aria-haspopup="menu" aria-expanded={versionsOpen}>
+                  Versions{versions.length > 0 ? ` (${versions.length})` : ''} ▾
+                </Button>
+                {versionsOpen && (
+                  <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260, maxHeight: 320, overflowY: 'auto', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)', padding: 6 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', padding: '4px 8px 6px' }}>Saved versions</div>
+                    {viewingVersionId && (
+                      <button type="button" role="menuitem" onClick={() => { setVersionsOpen(false); loadDerived(); }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', marginBottom: 4, border: '1px solid var(--color-border)', borderRadius: 6, background: 'var(--color-bg)', cursor: 'pointer', font: 'inherit', color: 'var(--color-primary)', fontWeight: 600, fontSize: 12 }}>
+                        ← Back to live
+                      </button>
+                    )}
+                    {versions.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '4px 8px 8px', lineHeight: 1.4 }}>
+                        No versions saved yet.{canEdit ? ' Click Save snapshot to keep a monthly record.' : ''}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {versions.map((v) => (
+                          <button key={v.id} type="button" role="menuitem" onClick={() => { setVersionsOpen(false); openVersion(v.id); }}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '7px 8px', border: `1px solid ${viewingVersionId === v.id ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 6, background: viewingVersionId === v.id ? 'var(--color-primary-light)' : 'var(--color-surface)', cursor: 'pointer', font: 'inherit', textAlign: 'left', color: 'var(--color-text)' }}>
+                            <span style={{ fontWeight: 600, fontSize: 12.5 }}>{v.period}</span>
+                            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{v.status} · {new Date(v.createdAt).toLocaleDateString()}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             {canEdit && !editing && <Button variant="secondary" onClick={() => setEditing(true)}>Edit &amp; override</Button>}
             {canEdit && !editing && <Button variant="primary" onClick={attemptSave} loading={saving}>Save snapshot</Button>}
             {canEdit && editing && <Button variant="secondary" onClick={cancelEdit} disabled={saving}>Cancel</Button>}
@@ -550,36 +582,6 @@ export default function CouncilPage() {
             )}
           </Card>
         </div>
-      </div>
-
-      {/* ── Governance health — enterprise KPI rollup (one strip; drills to source) ── */}
-      <SectionHeading title="Governance health" as="h3" right={statusPill(ent.status)} />
-      <div style={{ ...tileGrid, marginBottom: 16 }}>
-        {MEASURES.map((m) => {
-          const val = resolved(ent, m.key);
-          const tgt = derived.targets[m.key];
-          return (
-            <Link
-              key={m.key}
-              to={m.href}
-              title={`Open ${m.label} — ${MEASURE_DEST[m.key]}`}
-              style={{ textDecoration: 'none', color: 'inherit', display: 'flex', borderRadius: 'var(--radius-md)', transition: 'transform .08s ease, box-shadow .08s ease' }}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-            >
-              <div style={{ ...statTile, flex: 1 }}>
-                <div style={tileLabel}>
-                  {m.label}
-                  <span aria-hidden style={{ color: 'var(--color-primary)', fontSize: 13 }}>→</span>
-                </div>
-                <div style={{ ...tileNumber, color: measureStatusColor(m.kind, val, tgt) }}>
-                  {val == null ? '—' : `${val}${m.kind === 'pct' ? '%' : ''}`}
-                </div>
-                <div style={tileSub}>{m.kind === 'pct' ? `Target ${tgt}%` : `Target ${tgt}`}</div>
-              </div>
-            </Link>
-          );
-        })}
       </div>
 
       {/* Scorecard table */}
@@ -827,23 +829,6 @@ export default function CouncilPage() {
         ))}
       </div>
 
-      {/* Version history */}
-      <Card padding={18}>
-        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: 12 }}>Saved versions</div>
-        {versions.length === 0 ? (
-          <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No versions saved yet. {canEdit ? 'Click Save snapshot to keep a monthly record.' : ''}</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {versions.map((v) => (
-              <button key={v.id} type="button" onClick={() => openVersion(v.id)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 10px', border: `1px solid ${viewingVersionId === v.id ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 6, background: viewingVersionId === v.id ? 'var(--color-primary-light)' : 'var(--color-surface)', cursor: 'pointer', font: 'inherit', textAlign: 'left', color: 'var(--color-text)' }}>
-                <span style={{ fontWeight: 600 }}>{v.period}</span>
-                <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{v.status} · saved {new Date(v.createdAt).toLocaleDateString()}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </Card>
 
       {/* Same-period save collision — let the editor replace the existing
           snapshot or keep it and save an additional one (new id + timestamp). */}
