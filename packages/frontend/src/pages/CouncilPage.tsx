@@ -13,6 +13,8 @@ import Meter from '../components/Meter';
 import { renderNavIcon } from '../components/navIcons';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
+import { useBrandingStore } from '../stores/brandingStore';
+import { useAuthStore } from '../stores/authStore';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Council — the single governance-council page. Merges the old Council
@@ -64,10 +66,9 @@ interface CouncilGroup { id: string; name: string; charter: string; status: stri
 interface Occurrence { eventId: string; name: string; occursAt: string; daysAway: number; cadence: string; attendeeNames: string[] }
 interface MaturitySnapshot { timestamp: string; overall: number; dimensions: { name: string; score: number }[] }
 
-const ROLE_LABEL: Record<string, string> = {
-  CHAIR: 'Chair', VICE_CHAIR: 'Vice-chair', SECRETARY: 'Secretary', MEMBER: 'Member', ADVISOR: 'Advisor',
-};
 const ROLE_ORDER: Record<string, number> = { CHAIR: 0, VICE_CHAIR: 1, SECRETARY: 2, MEMBER: 3, ADVISOR: 4 };
+// Compact link used in the condensed briefing bar.
+const briefLink: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none', whiteSpace: 'nowrap' };
 
 // A tiny inline sparkline for the maturity trend (no chart lib). Draws the
 // series as a line with an emphasised end point over a faint area fill.
@@ -204,6 +205,13 @@ function pctBarColor(v: number | null, target: number): string {
 export default function CouncilPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
+  // Branding + signed-in user for the printed briefing's letterhead/footer.
+  // The default company name ("Procela") is treated as unset so a briefing
+  // isn't stamped with the product's own name (same rule as reports).
+  const logoUrl = useBrandingStore((s) => s.branding.logoUrl);
+  const rawCompanyName = useBrandingStore((s) => s.branding.companyName);
+  const companyName = rawCompanyName && rawCompanyName !== 'Procela' ? rawCompanyName : undefined;
+  const userName = useAuthStore((s) => s.user?.name);
   const [derived, setDerived] = useState<Derived | null>(null);
   const [loading, setLoading] = useState(true);
   // Briefing sources — independent of the scorecard lens, so they load once
@@ -419,7 +427,30 @@ export default function CouncilPage() {
   };
 
   return (
-    <div>
+    <div className="council-page">
+      {/* Print rules — landscape, hide the app's action bar, show the branded
+          letterhead/footer, and keep every card/section from splitting across
+          a page break. Scoped here so it only applies to the Council page. */}
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 14mm; }
+          .council-page .council-print-header,
+          .council-page .council-print-footer { display: block !important; }
+          .council-page > * { break-inside: avoid; }
+          .council-page h2, .council-page h3 { break-after: avoid; }
+        }
+      `}</style>
+
+      {/* Print-only branded letterhead — replaces the on-screen page header on
+          paper (which is marked no-print below). */}
+      <div className="council-print-header" style={{ display: 'none', position: 'relative', paddingBottom: 12, marginBottom: 16, borderBottom: '2px solid #1e40af', minHeight: 44 }}>
+        {logoUrl && <img src={logoUrl} alt="" style={{ position: 'absolute', right: 0, top: 0, maxHeight: 44, maxWidth: 180, objectFit: 'contain' }} />}
+        {companyName && <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b', marginBottom: 2 }}>{companyName}</div>}
+        <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>Council Briefing</div>
+        <div style={{ fontSize: 13, color: '#475569', marginTop: 2 }}>{derived.orgName} — {derived.period}{viewingVersionId ? ' · saved version' : ''}</div>
+      </div>
+
+      <div className="no-print">
       <PageHeader
         title="Council"
         subtitle={`${derived.orgName} — ${derived.period}${viewingVersionId ? ' · saved version' : ''}. The council's meeting brief and its governance scorecard.`}
@@ -490,6 +521,7 @@ export default function CouncilPage() {
           </div>
         )}
       />
+      </div>
 
       {/* Scope note — driven by what was actually measured (derived.scope), so a
           saved version shows its own basis. Under the governed lens: the scope
@@ -514,83 +546,45 @@ export default function CouncilPage() {
         </div>
       )}
 
-      {/* ── Briefing: who's on the council + when it next meets ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginBottom: 16 }}>
-        <div>
-          <SectionHeading title="The council" as="h3" />
-          <Card padding={16}>
+      {/* ── Briefing bar — who's on the council + when it next meets, condensed
+          to one line so the scorecard leads. The roster lives on Governance
+          Groups; the meeting on the Calendar (both linked). ── */}
+      <Card padding="10px 14px" marginBottom={16}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ color: 'var(--color-primary)', display: 'inline-flex' }}>{renderNavIcon('/governance-groups', { size: 16 })}</span>
             {council ? (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-                    <span style={{ color: 'var(--color-primary)', display: 'inline-flex' }}>{renderNavIcon('/governance-groups', { size: 18 })}</span>
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>{council.name}</span>
-                  </div>
-                  <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: council.status === 'ACTIVE' ? 'var(--color-success)' : 'var(--color-text-muted)' }}>{council.status}</span>
-                </div>
-                {council.charter && (
-                  <p style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.5, margin: '0 0 14px', borderLeft: '2px solid var(--color-border)', paddingLeft: 10 }}>{council.charter}</p>
-                )}
-                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 8 }}>Membership ({sortedMembers.length})</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {sortedMembers.map((m, i) => {
-                    const name = m.personName || m.agentName || 'Unknown';
-                    const isAgent = !!m.agentName;
-                    return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 13 }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {name}{isAgent && <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '0 5px', borderRadius: 3, marginLeft: 6 }}>Agent</span>}
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: m.groupRole === 'CHAIR' ? 600 : 500, color: m.groupRole === 'CHAIR' ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0 }}>{ROLE_LABEL[m.groupRole] || m.groupRole}</span>
-                      </div>
-                    );
-                  })}
-                  {sortedMembers.length === 0 && <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>No members assigned yet.</span>}
-                </div>
-                <div style={{ marginTop: 14 }}><Link to="/governance-groups" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>Manage the council →</Link></div>
+                <span style={{ fontWeight: 700 }}>{council.name}</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>· {sortedMembers.length} member{sortedMembers.length === 1 ? '' : 's'}</span>
+                <Link to="/governance-groups" style={briefLink}>Manage →</Link>
               </>
             ) : (
-              <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                No governance council is defined for this organization yet. Create one — with a charter and members — to anchor this briefing.
-                <div style={{ marginTop: 8 }}><Link to="/governance-groups" style={{ fontSize: 12.5, color: 'var(--color-primary)' }}>Set up governance groups →</Link></div>
-              </div>
+              <>
+                <span style={{ color: 'var(--color-text-muted)' }}>No governance council defined</span>
+                <Link to="/governance-groups" style={briefLink}>Set one up →</Link>
+              </>
             )}
-          </Card>
-        </div>
-
-        <div>
-          <SectionHeading title="Next meeting" as="h3" />
-          <Card padding={16}>
+          </div>
+          <span aria-hidden style={{ width: 1, height: 18, background: 'var(--color-border)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ color: 'var(--color-primary)', display: 'inline-flex' }}>{renderNavIcon('/governance-calendar', { size: 16 })}</span>
             {meeting ? (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-                  <span style={{ color: 'var(--color-primary)', display: 'inline-flex' }}>{renderNavIcon('/governance-calendar', { size: 18 })}</span>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>{meeting.name}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
-                  <span style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-primary)', fontVariantNumeric: 'tabular-nums' }}>
-                    {meeting.daysAway <= 0 ? 'Today' : meeting.daysAway === 1 ? 'Tomorrow' : `${meeting.daysAway} days`}
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{new Date(meeting.occursAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                </div>
-                <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', textTransform: 'capitalize', marginBottom: 12 }}>{meeting.cadence.toLowerCase()} cadence</div>
-                {meeting.attendeeNames.length > 0 && (
-                  <>
-                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 6 }}>Attendees ({meeting.attendeeNames.length})</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{meeting.attendeeNames.join(', ')}</div>
-                  </>
-                )}
-                <div style={{ marginTop: 14 }}><Link to="/governance-calendar" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>Open the calendar →</Link></div>
+                <span style={{ color: 'var(--color-text-muted)' }}>Next meeting</span>
+                <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{meeting.daysAway <= 0 ? 'Today' : meeting.daysAway === 1 ? 'Tomorrow' : `${meeting.daysAway} days`}</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>· {new Date(meeting.occursAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                <Link to="/governance-calendar" style={briefLink}>Calendar →</Link>
               </>
             ) : (
-              <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                No upcoming governance meeting is scheduled in the next 120 days.
-                <div style={{ marginTop: 8 }}><Link to="/governance-calendar" style={{ fontSize: 12.5, color: 'var(--color-primary)' }}>Schedule one →</Link></div>
-              </div>
+              <>
+                <span style={{ color: 'var(--color-text-muted)' }}>No meeting scheduled</span>
+                <Link to="/governance-calendar" style={briefLink}>Schedule →</Link>
+              </>
             )}
-          </Card>
+          </div>
         </div>
-      </div>
+      </Card>
 
       {/* ── Scorecard — the enterprise verdict + division-by-division grid ── */}
       <SectionHeading title="Scorecard" as="h3" right={statusPill(resolvedStatus(derived.enterprise))} />
@@ -855,6 +849,10 @@ export default function CouncilPage() {
         ))}
       </div>
 
+      {/* Print-only provenance footer — mirrors the report footer. */}
+      <div className="council-print-footer" style={{ display: 'none', marginTop: 20, paddingTop: 8, borderTop: '1px solid #cbd5e1', fontSize: 10, color: '#64748b', textAlign: 'center' }}>
+        {[companyName, 'Council Briefing', `${derived.orgName} — ${derived.period}`, `Generated ${new Date().toLocaleDateString()}`, userName ? `by ${userName}` : null].filter(Boolean).join('  ·  ')}
+      </div>
 
       {/* Same-period save collision — let the editor replace the existing
           snapshot or keep it and save an additional one (new id + timestamp). */}
