@@ -33,6 +33,9 @@ export interface ExportHeader {
   /** Brand logo — a data: URI, an absolute http(s) URL, or an app-relative
    *  path (resolved against the current origin for the print window). */
   logoUrl?: string;
+  /** Tenant/company name, shown small above the title so the letterhead is
+   *  self-identifying even when the logo is abstract. */
+  companyName?: string;
 }
 
 export interface ExportPayload {
@@ -45,6 +48,10 @@ export interface ExportPayload {
   sheetName?: string;
   /** Letterhead for the PDF/print output (logo + name + description). */
   header?: ExportHeader;
+  /** A single provenance line rendered at the foot of the PDF/print output
+   *  (e.g. "Company · Report · Generated <date> · by <user>"). The data-only
+   *  formats ignore it. */
+  footer?: string;
 }
 
 export const FORMAT_LABELS: Record<ExportFormat, string> = {
@@ -155,7 +162,7 @@ function resolveLogoUrl(logoUrl: string | undefined): string | null {
   try { return new URL(logoUrl, window.location.origin).href; } catch { return null; }
 }
 
-function exportPdfImpl({ filenameBase, headers, rows, sheetName, header }: ExportPayload): void {
+function exportPdfImpl({ filenameBase, headers, rows, sheetName, header, footer }: ExportPayload): void {
   const title = header?.title || sheetName || filenameBase;
   const win = window.open('', '_blank', 'width=900,height=700');
   if (!win) {
@@ -168,6 +175,7 @@ function exportPdfImpl({ filenameBase, headers, rows, sheetName, header }: Expor
     /* Letterhead: logo pinned left, name + description centred across the page. */
     .letterhead { position: relative; text-align: center; padding: 0 0 12px; margin-bottom: 12px; border-bottom: 2px solid #e2e8f0; min-height: 44px; }
     .letterhead img { position: absolute; left: 0; top: 0; max-height: 44px; max-width: 180px; object-fit: contain; }
+    .letterhead .rcompany { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; margin: 0 0 2px; }
     .letterhead .rname { font-size: 20px; font-weight: 700; margin: 0; }
     .letterhead .rdesc { font-size: 12px; color: #475569; margin: 4px auto 0; max-width: 70%; line-height: 1.4; }
     .meta { font-size: 11px; color: #64748b; margin-bottom: 16px; }
@@ -175,6 +183,7 @@ function exportPdfImpl({ filenameBase, headers, rows, sheetName, header }: Expor
     th, td { padding: 6px 10px; border: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
     thead th { background: #f1f5f9; font-weight: 600; }
     tr:nth-child(even) td { background: #fafafa; }
+    .report-footer { margin-top: 16px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #64748b; text-align: center; }
     @media print { body { padding: 0; } }
   `;
   const logo = resolveLogoUrl(header?.logoUrl);
@@ -182,6 +191,7 @@ function exportPdfImpl({ filenameBase, headers, rows, sheetName, header }: Expor
   const heading = header
     ? `<div class="letterhead">
          ${logo ? `<img src="${escapeHtml(logo)}" alt="">` : ''}
+         ${header.companyName ? `<div class="rcompany">${escapeHtml(header.companyName)}</div>` : ''}
          <h1 class="rname">${escapeHtml(header.title)}</h1>
          ${header.description ? `<div class="rdesc">${escapeHtml(header.description)}</div>` : ''}
        </div>`
@@ -193,6 +203,7 @@ function exportPdfImpl({ filenameBase, headers, rows, sheetName, header }: Expor
       <thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(cellToString(c))}</td>`).join('')}</tr>`).join('')}</tbody>
     </table>
+    ${footer ? `<div class="report-footer">${escapeHtml(footer)}</div>` : ''}
   `;
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${styles}</style></head><body>${body}</body></html>`);
   win.document.close();
