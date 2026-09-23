@@ -14,6 +14,7 @@ import { exportData } from '../lib/export';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
+import { useBrandingStore } from '../stores/brandingStore';
 
 interface UserReportSummary {
   id: string;
@@ -58,11 +59,18 @@ function timeAgo(iso: string): string {
 
 // Turn an already-run result into an export payload — used by both Download
 // and Print so neither re-runs the report (run and export are decoupled).
-function resultToPayload(name: string, result: RunResult): ExportPayload {
+// The `logoUrl` (tenant branding) rides along in `header` so the PDF/print
+// output carries the same letterhead the results modal shows on screen; the
+// data-only formats (CSV/XLSX/JSON) ignore it.
+function resultToPayload(report: UserReportSummary, result: RunResult, logoUrl?: string): ExportPayload {
+  const name = report.name;
   const headers = result.columns.map((c) => c.label);
   const rows: Cell[][] = result.rows.map((row) => result.columns.map((c) => toExportCell(row[c.field])));
   const base = (name || 'report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'report';
-  return { filenameBase: base, headers, rows, sheetName: name || 'Report' };
+  return {
+    filenameBase: base, headers, rows, sheetName: name || 'Report',
+    header: { title: name || 'Report', description: report.description || undefined, logoUrl },
+  };
 }
 
 const badgeStyle = (bg: string, color: string): React.CSSProperties => ({
@@ -75,6 +83,9 @@ function UserReportsTab() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
+  // Brand logo for the report letterhead (shown in the results modal and the
+  // printed/PDF output). Falls back to the built-in Procela mark.
+  const logoUrl = useBrandingStore((s) => s.branding.logoUrl);
   const [reports, setReports] = useState<UserReportSummary[] | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   // The produced report shown in the results modal — the result of a Run.
@@ -119,7 +130,7 @@ function UserReportsTab() {
   const printResult = () => {
     if (!result) return;
     if (result.data.rows.length === 0) { addToast('info', 'No rows to print.'); return; }
-    exportData('pdf', resultToPayload(result.report.name, result.data)).catch((err) =>
+    exportData('pdf', resultToPayload(result.report, result.data, logoUrl)).catch((err) =>
       addToast('error', `Print failed: ${err instanceof Error ? err.message : String(err)}`));
   };
 
@@ -205,15 +216,29 @@ function UserReportsTab() {
           onClose={() => setResult(null)}
           size="lg"
           kicker={result.report.primaryEntity}
-          title={result.report.name}
+          // The report name lives in the branded letterhead inside the body, so
+          // the window chrome stays neutral (and keeps the name as its
+          // accessible label) rather than printing the name twice.
+          title="Report results"
+          ariaLabel={result.report.name}
           subtitle={`${result.data.totalMatched.toLocaleString()} ${result.data.totalMatched === 1 ? 'row' : 'rows'} matched${result.data.totalMatched > result.data.rows.length ? ` · showing first ${result.data.rows.length.toLocaleString()}` : ''}`}
           actions={
             <>
               <IconButton size="sm" icon="printer" label="Print" onClick={printResult} />
-              <ExportMenu label="Download" formats={[...DOWNLOAD_FORMATS]} build={() => resultToPayload(result.report.name, result.data)} />
+              <ExportMenu label="Download" formats={[...DOWNLOAD_FORMATS]} build={() => resultToPayload(result.report, result.data, logoUrl)} />
             </>
           }
         >
+          {/* Report letterhead — brand logo pinned left, report name centred,
+              description centred below it. Mirrors the printed/PDF header so the
+              on-screen report and the export read the same. */}
+          <div style={{ position: 'relative', textAlign: 'center', paddingBottom: 12, marginBottom: 14, borderBottom: '2px solid var(--color-border)', minHeight: 40 }}>
+            {logoUrl && <img src={logoUrl} alt="" style={{ position: 'absolute', left: 0, top: 0, maxHeight: 40, maxWidth: 160, objectFit: 'contain' }} />}
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text)' }}>{result.report.name}</div>
+            {result.report.description && (
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '4px auto 0', maxWidth: '70%', lineHeight: 1.4 }}>{result.report.description}</div>
+            )}
+          </div>
           {result.data.rows.length === 0 ? (
             <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
               No rows match this report.
