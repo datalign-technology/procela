@@ -370,12 +370,62 @@ function priorityBadge(p: string): React.CSSProperties {
   };
 }
 
+// ── Shared weekly trend series (my open tasks / issues / overdue), read from
+//    /dashboard/my-trends. Its numbers used to live in a standalone "Trends"
+//    card row that duplicated the Tasks/Issues list counts; the trend now
+//    rides inline in each list's header instead. ──
+interface MyTrendPoint { date: string; openTasks: number; openIssues: number; overdue: number; }
+
+function useMyTrends(): MyTrendPoint[] | null {
+  const { user } = useAuthStore();
+  const [points, setPoints] = useState<MyTrendPoint[] | null>(null);
+  useEffect(() => {
+    if (!user?.email) { setPoints([]); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: { points: MyTrendPoint[] } }>('/dashboard/my-trends');
+        setPoints(res.data?.points || []);
+      } catch { setPoints([]); }
+    })();
+  }, [user?.email]);
+  return points;
+}
+
+// A compact sparkline + delta for one metric, shown in a list header. Fewer is
+// better for all three metrics, so a downward delta is green.
+function TrendMini({ points, metricKey }: { points: MyTrendPoint[] | null; metricKey: 'openTasks' | 'openIssues' | 'overdue' }) {
+  if (!points || points.length < 2) return null;
+  const series = points.map((p) => p[metricKey]);
+  const spanWeeks = points.length - 1;
+  const delta = series[series.length - 1] - series[0];
+  const deltaColor = delta === 0 ? 'var(--color-text-muted)' : delta < 0 ? 'var(--color-success)' : 'var(--color-error)';
+  const arrow = delta === 0 ? '' : delta > 0 ? '▲' : '▼';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title={`Last ${spanWeeks} week${spanWeeks === 1 ? '' : 's'}`}>
+      <Sparkline points={series} color="var(--color-primary)" />
+      {delta !== 0 && (
+        <span style={{ fontSize: 10, fontWeight: 600, color: deltaColor, whiteSpace: 'nowrap' }}>
+          {arrow}{Math.abs(delta)} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs {spanWeeks}w</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+// A small red pill for a count that needs attention (e.g. overdue tasks).
+const attentionChip: React.CSSProperties = {
+  fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 999,
+  background: 'var(--color-error)', color: '#fff', whiteSpace: 'nowrap',
+};
+
 // My Tasks — the top 5 governance tasks assigned to me. Its own customizable
-// section (default half-width) so it pairs two-up with My Issues.
+// section (default half-width) so it pairs two-up with My Issues. Its header
+// carries the open-task count, an overdue chip, and the weekly trend inline.
 function MyTasks({ lens = 'all', orgId = null }: LensProps) {
   const { user } = useAuthStore();
   const [data, setData] = useState<MyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const trend = useMyTrends();
   useEffect(() => {
     if (!user?.email) { setLoading(false); return; }
     (async () => {
@@ -388,11 +438,19 @@ function MyTasks({ lens = 'all', orgId = null }: LensProps) {
   }, [user?.email, lens, orgId]);
 
   const tasks = data?.myTasks || [];
+  const overdueCount = tasks.filter((t) => t.isOverdue).length;
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <SectionLabel marginBottom={0}>Tasks</SectionLabel>
-        <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {tasks.length}</Link>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <SectionLabel marginBottom={0}>Tasks</SectionLabel>
+          <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{tasks.length}</span>
+          {overdueCount > 0 && <span style={attentionChip}>{overdueCount} overdue</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <TrendMini points={trend} metricKey="openTasks" />
+          <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {tasks.length}</Link>
+        </div>
       </div>
       <Card padding={0} style={{ overflow: 'hidden', minHeight: PANEL_MIN_HEIGHT }}>
         {loading ? (
@@ -418,6 +476,7 @@ function MyIssues({ lens = 'all', orgId = null }: LensProps) {
   const { user } = useAuthStore();
   const [data, setData] = useState<MyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const trend = useMyTrends();
   useEffect(() => {
     if (!user?.email) { setLoading(false); return; }
     (async () => {
@@ -432,9 +491,15 @@ function MyIssues({ lens = 'all', orgId = null }: LensProps) {
   const issues = data?.myIssues || [];
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <SectionLabel marginBottom={0}>Issues</SectionLabel>
-        <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {issues.length}</Link>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <SectionLabel marginBottom={0}>Issues</SectionLabel>
+          <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{issues.length}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <TrendMini points={trend} metricKey="openIssues" />
+          <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {issues.length}</Link>
+        </div>
       </div>
       <Card padding={0} style={{ overflow: 'hidden', minHeight: PANEL_MIN_HEIGHT }}>
         {loading ? (
@@ -684,79 +749,6 @@ function MyCoverage({ lens = 'all', orgId = null }: LensProps) {
   );
 }
 
-// ── My Trends — a real weekly series of MY open governance tasks, open
-//    issues, and overdue tasks, reconstructed server-side from record
-//    timestamps (see /dashboard/my-trends). A you-scoped replacement for the
-//    org Trends strip; no "Sample" badge because the history is real, not
-//    synthesized. Full-width, so the three cards sit compact in one row. ──
-interface MyTrendPoint { date: string; openTasks: number; openIssues: number; overdue: number; }
-function MyTrends() {
-  const { user } = useAuthStore();
-  const [points, setPoints] = useState<MyTrendPoint[] | null>(null);
-  useEffect(() => {
-    if (!user?.email) { setPoints([]); return; }
-    (async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: { points: MyTrendPoint[] } }>('/dashboard/my-trends');
-        setPoints(res.data?.points || []);
-      } catch { setPoints([]); }
-    })();
-  }, [user?.email]);
-
-  if (!points) return null;           // loading — stay quiet to avoid a flash
-  if (points.length < 1) return null; // no history to draw
-
-  const metrics = [
-    { key: 'openTasks' as const, label: 'Open Tasks', to: '/governance-work?tab=tasks', goodUp: false },
-    { key: 'openIssues' as const, label: 'Open Issues', to: '/governance-work?tab=issues', goodUp: false },
-    { key: 'overdue' as const, label: 'Overdue', to: '/governance-work?tab=tasks', goodUp: false },
-  ];
-  const spanWeeks = points.length - 1; // weekly boundaries → intervals
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      {/* Header span is the number of week *intervals* (points − 1), matching
-          the "vs Nw ago" delta on each card — the two used to disagree
-          (e.g. "last 10 weeks" over "vs 9w ago"). Hidden until there's at
-          least one interval to compare. */}
-      <SectionHeading title="Trends" right={spanWeeks >= 1 ? (
-        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {spanWeeks} week{spanWeeks === 1 ? '' : 's'}</span>
-      ) : undefined} />
-      {/* minmax(130px) (not 200) so the three tiles stay in one row when Trends
-          is a half-width widget (~400px+ column); at full width they still
-          render three-across. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
-        {metrics.map((m) => {
-          const series = points.map((pt) => pt[m.key]);
-          const first = series[0];
-          const last = series[series.length - 1];
-          const delta = last - first;
-          const improved = m.goodUp ? delta >= 0 : delta <= 0;
-          const deltaColor = delta === 0 ? 'var(--color-text-muted)' : improved ? 'var(--color-success)' : 'var(--color-error)';
-          const arrow = delta === 0 ? '' : delta > 0 ? '▲' : '▼';
-          return (
-            <Link key={m.key} to={m.to} style={{ ...cardStyle, padding: '12px 14px', textDecoration: 'none', color: 'var(--color-text)', display: 'block' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
-                <div style={{ lineHeight: 1.1 }}>
-                  <span style={{ fontSize: 22, fontWeight: 700 }}>{last}</span>
-                  {spanWeeks >= 1 ? (
-                    <div style={{ fontSize: 11, fontWeight: 600, color: deltaColor, marginTop: 2 }}>
-                      {arrow} {Math.abs(delta)} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs {spanWeeks}w ago</span>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)', marginTop: 2 }}>current</div>
-                  )}
-                </div>
-                <Sparkline points={series} color="var(--color-primary)" title={`${m.label}, last ${points.length} weeks`} />
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ── My Domains — the data domains I own or steward, each with its asset
 //    count and health, as a card grid. Promoted out of the personal
@@ -840,46 +832,43 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'myTasks' | 'myIssues' | 'myPortfolio' | 'myTrends' | 'myCoverage' | 'myDomains';
+type SectionKey = 'myDashboard' | 'myTasks' | 'myIssues' | 'myPortfolio' | 'myCoverage' | 'myDomains';
 
 // Default order follows an inverted-pyramid reading of importance, top → bottom:
 //   1. myDashboard    — personal, act-now (your overdue tasks / critical issues)
-//   2. myTrends       — my open tasks/issues/overdue over time, full-width strip
+//   2. myTasks / myIssues — my open work, each header carrying its count,
+//        overdue chip, and the weekly trend inline (the standalone "Trends"
+//        card row was folded in here — the cards only restated these counts).
 //   3. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
 //   4. myCoverage     — mapping/governance/ownership of my assets          ┘
-//   5. myDomains      — the data domains I own or steward, full-width card grid
+//   5. myDomains      — the data domains I own or steward, card grid
 // Quick actions are NOT a section — they render as a compact menu bar pinned
-// under the page header (see DashboardActionBar), not in this flow. The two
+// under the page header (see DashboardActionBar), not in this flow. The
 // narrow analytical widgets (myPortfolio, myCoverage) stay contiguous so they
-// pair two-up cleanly; My Trends is full-width so its cards sit compact in a
-// single row. The dashboard is fully you-scoped: the org-wide Governance
-// Posture / Trends / Catalog Coverage / Program Maturity / Governance Gaps
-// widgets are all replaced or dropped in favour of My Portfolio Health /
-// My Trends / My Coverage.
+// pair two-up cleanly. The dashboard is fully you-scoped: the org-wide
+// Governance Posture / Trends / Catalog Coverage / Program Maturity /
+// Governance Gaps widgets are all replaced or dropped in favour of My
+// Portfolio Health / My Coverage.
 // Order also sets the two-up pairing of the half-width widgets: keep
 // similar-height widgets adjacent so a short one isn't stretched to match a
-// tall neighbour. Tasks|Issues, then the short Trends|Domains, then the taller
-// analytical Portfolio|Coverage.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTasks', 'myIssues', 'myTrends', 'myDomains', 'myPortfolio', 'myCoverage'];
+// tall neighbour. Tasks|Issues, then Domains|Portfolio, then Coverage.
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTasks', 'myIssues', 'myDomains', 'myPortfolio', 'myCoverage'];
 
 type SectionWidth = 'full' | 'half';
 
 // Default width per section. `full` takes its own row; consecutive `half`
 // sections pack two-up so the page stays tight (less vertical scrolling).
 // The user can override any of these in Customize — this is only the starting
-// layout. The personal two-column body (My Dashboard) and the My Trends strip
-// go full-bleed; the analytical widgets pair up as compact equal-height cards.
+// layout. The personal two-column body (My Dashboard) goes full-bleed; the
+// analytical widgets pair up as compact equal-height cards.
 const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
   myTasks: 'half',
   myIssues: 'half',
-  // Trends and Domains default to half so the six lower widgets pack into a
-  // clean 3×2 grid (Tasks|Issues, Trends|Portfolio, Coverage|Domains) — two
-  // fewer full-width rows — and the dashboard fits a laptop viewport without
-  // scrolling. Both are half (an even count) so no lone half is stranded, and
-  // Trends keeps its 3 tiles in one row at half width (see its minmax below).
+  // The five lower widgets default to half so they pack two-up (Tasks|Issues,
+  // Domains|Portfolio, then Coverage) — fewer full-width rows, so the dashboard
+  // fits a laptop viewport without scrolling.
   myDomains: 'half',
-  myTrends: 'half',
   myPortfolio: 'half',
   myCoverage: 'half',
 };
@@ -890,7 +879,6 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   myIssues: 'Issues',
   myDomains: 'Domains',
   myPortfolio: 'Portfolio Health',
-  myTrends: 'Trends',
   myCoverage: 'Coverage',
 };
 
@@ -1150,7 +1138,6 @@ export default function DashboardPage() {
     myIssues: <MyIssues lens={lens} orgId={activeOrgId} />,
     myDomains: <MyDomains lens={lens} orgId={activeOrgId} />,
     myPortfolio: <MyPortfolioHealth lens={lens} orgId={activeOrgId} />,
-    myTrends: <MyTrends />,
     myCoverage: <MyCoverage lens={lens} orgId={activeOrgId} />,
   };
 
