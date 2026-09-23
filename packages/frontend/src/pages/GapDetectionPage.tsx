@@ -211,15 +211,16 @@ const GAP_SECTIONS: GapSection[] = [
   },
 ];
 
-// `badge` is the solid severity fill (count-pill background, left rail) and is
-// the same colour the SeverityBar/chips draw from the CSS tokens, so it points
-// at those tokens directly — one source of truth, no drift if a token is
-// retuned. The bg/border/color tints have no token and stay as hex (the
-// semantic-badge-palette convention).
+// Severity palette — reused verbatim from the shared criticality badge
+// palette (badgeColors.ts: high = red, medium = amber, low = teal) so the
+// page's severity chips match every entity list. Soft `bg` + dark `color`,
+// no solid fills, no blue, and no coloured tile rails — severity reads
+// through the count pill, the icon and the uppercase label, exactly the
+// way a badge does elsewhere in the app.
 const SEVERITY_CONFIG = {
-  critical: { bg: '#fef2f2', border: '#fca5a5', badge: 'var(--color-error)',   color: '#991b1b', label: 'Critical' },
-  warning:  { bg: '#fffbeb', border: '#fcd34d', badge: 'var(--color-warning)', color: '#92400e', label: 'Warning' },
-  info:     { bg: '#f0f9ff', border: '#93c5fd', badge: 'var(--color-info)',    color: '#1e40af', label: 'Info' },
+  critical: { bg: '#fee2e2', color: '#991b1b', label: 'Critical' },
+  warning:  { bg: '#fef3c7', color: '#92400e', label: 'Warning' },
+  info:     { bg: '#d1f0eb', color: '#0f4f46', label: 'Info' },
 };
 
 // ── Component ──
@@ -390,22 +391,11 @@ export default function GapDetectionPage() {
                   style={{
                     font: 'inherit', textAlign: 'left', cursor: canOpen ? 'pointer' : 'default',
                     background: 'var(--color-surface)',
-                    // Fully per-side longhand borders. The outline colour changes
-                    // on selection, so it must never be set via a shorthand
-                    // (`border`/`borderColor`) alongside the `borderLeft*`
-                    // longhands — React warns about that conflict on re-render.
-                    borderStyle: 'solid',
-                    borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderLeftWidth: 4,
-                    // Top/right/bottom stay neutral so a tile reads like every other
-                    // Card in the app (calm grey outline); severity is carried by the
-                    // 4px left rail, the count pill, the icon and the label — the same
-                    // convention the Dashboard panels use. A tinted full-tile border
-                    // here (pastel red/amber/blue) appeared on no other page and made
-                    // this one look off-palette.
-                    borderTopColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
-                    borderRightColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
-                    borderBottomColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
-                    borderLeftColor: count > 0 ? sev.badge : 'var(--color-border)',
+                    // A plain neutral card, like every entity-list row — no coloured
+                    // rail. Severity reads through the soft count pill, the icon and
+                    // the uppercase label. Selection swaps the whole outline to the
+                    // primary accent.
+                    border: `1px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
                     borderRadius: 'var(--radius-md)', padding: '11px 14px',
                     boxShadow: isSelected ? 'var(--shadow-md)' : 'var(--shadow-sm)',
                     display: 'flex', alignItems: 'center', gap: 10,
@@ -418,7 +408,7 @@ export default function GapDetectionPage() {
                     <span style={{ display: 'block', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: count > 0 ? sev.color : 'var(--color-text-muted)', marginTop: 1 }}>{count > 0 ? sev.label : 'Clear'}</span>
                   </span>
                   {count > 0 ? (
-                    <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.badge, color: '#fff', flexShrink: 0 }}>{count}</span>
+                    <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, flexShrink: 0 }}>{count}</span>
                   ) : (
                     <span style={{ display: 'inline-flex', color: 'var(--color-success)', flexShrink: 0 }}><Check size={16} strokeWidth={2.6} /></span>
                   )}
@@ -439,14 +429,14 @@ export default function GapDetectionPage() {
             const sev = SEVERITY_CONFIG[selectedSection.severity];
             const items = data[selectedSection.key] as any[];
             return (
-              <Card padding={0} style={{ overflow: 'hidden', borderLeft: `4px solid ${sev.badge}` }}>
+              <Card padding={0} style={{ overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
                   <span style={{ display: 'inline-flex', color: sev.color, marginTop: 1 }}>{selectedSection.icon}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 15, fontWeight: 700 }}>{selectedSection.title}</div>
                     <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 2, lineHeight: 1.4 }}>{selectedSection.description}</div>
                   </div>
-                  <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.badge, color: '#fff', flexShrink: 0 }}>{items.length}</span>
+                  <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, flexShrink: 0 }}>{items.length}</span>
                 </div>
                 <div style={{ padding: '8px 16px 12px' }}>
                   {renderItems(selectedSection.key, items)}
@@ -476,7 +466,9 @@ function SeverityBar({ total, critical, warning, info, active, onSelect }: {
   const segs: { key: Severity; label: string; count: number; color: string }[] = [
     { key: 'critical', label: 'Critical',      count: critical, color: 'var(--color-error)' },
     { key: 'warning',  label: 'Warning',       count: warning,  color: 'var(--color-warning)' },
-    { key: 'info',     label: 'Info',          count: info,     color: 'var(--color-info)' },
+    // Teal (the brand's low-severity colour), not blue — keeps the ramp
+    // red → amber → teal, matching the criticality badges used elsewhere.
+    { key: 'info',     label: 'Info',          count: info,     color: 'var(--color-primary)' },
   ];
   const toggle = (s: Severity) => onSelect(active === s ? null : s);
   return (
