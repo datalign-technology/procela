@@ -17,6 +17,7 @@ type PrismaReportRow = {
   name: string;
   description: string;
   ownerId: string | null;
+  folderId: string | null;
   visibility: string;
   definition: unknown;
   lastRunAt: Date | null;
@@ -41,6 +42,7 @@ function fromPrisma(r: PrismaReportRow): StoredReport {
     name: r.name,
     description: r.description ?? '',
     ownerId: r.ownerId ?? null,
+    folderId: r.folderId ?? null,
     visibility: r.visibility as StoredReport['visibility'],
     definition: r.definition as unknown as ReportDefinition,
     lastRunAt: r.lastRunAt ? r.lastRunAt.toISOString() : null,
@@ -58,6 +60,7 @@ function toPrismaData(row: Partial<StoredReport>): Record<string, unknown> {
   if (row.name !== undefined) d.name = row.name;
   if (row.description !== undefined) d.description = row.description;
   if (row.ownerId !== undefined) d.ownerId = row.ownerId ?? null;
+  if (row.folderId !== undefined) d.folderId = row.folderId ?? null;
   if (row.visibility !== undefined) d.visibility = row.visibility;
   if (row.definition !== undefined) d.definition = row.definition;
   if (row.lastRunAt !== undefined) d.lastRunAt = row.lastRunAt ? new Date(row.lastRunAt) : null;

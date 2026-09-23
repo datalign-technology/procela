@@ -103,6 +103,7 @@ import operationsManualsRouter from './routes/operations-manuals';
 import skillsRouter from './routes/skills';
 import dataModelRouter from './routes/data-model';
 import reportsRouter from './routes/reports';
+import reportFoldersRouter from './routes/report-folders';
 import agentExecutionsRouter from './routes/agent-executions';
 import agentSchedulesRouter from './routes/agent-schedules';
 
@@ -362,6 +363,7 @@ app.use('/api/v1/gap-detection', authenticateToken, gapDetectionRouter);
 // user via skill:read in BASE_READS.
 app.use('/api/v1/skills', authenticateToken, requireResource('skill'), skillsRouter);
 app.use('/api/v1/data-model', authenticateToken, dataModelRouter);
+app.use('/api/v1/report-folders', authenticateToken, reportFoldersRouter);
 app.use('/api/v1/reports', authenticateToken, reportsRouter);
 
 // Self-authenticating routers (own auth scheme — left untouched):

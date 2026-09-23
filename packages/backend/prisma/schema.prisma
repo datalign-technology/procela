@@ -1127,12 +1127,33 @@ model SavedView {
   @@map("saved_views")
 }
 
+// Report folders organize reports and drive their audience: a report in a
+// `shared` folder (the system "Public" folder, or a user folder toggled
+// shared) is org-visible; anything else is private to its owner. One system
+// Public folder is ensured per org at runtime.
+model ReportFolder {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @db.Uuid
+  name      String
+  ownerId   String?
+  // 'system' = the built-in Public folder (immutable); 'user' = created by a user.
+  kind      String   @default("user")
+  shared    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("report_folders")
+}
+
 model Report {
   id          String    @id @default(uuid()) @db.Uuid
   orgId       String    @db.Uuid
   name        String
   description String    @default("") @db.Text
   ownerId     String?
+  // Organizing folder. NULL = uncategorized ("My Reports", private to owner).
+  folderId    String?   @db.Uuid
   visibility  String    @default("org")
   definition  Json      @default("{}")
   // Run history — the last N executions ({ranAt,rowCount,byUserId,kind}) as a
@@ -1145,6 +1166,7 @@ model Report {
   updatedAt   DateTime  @updatedAt
 
   @@index([orgId])
+  @@index([folderId])
   @@map("reports")
 }
 
