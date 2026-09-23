@@ -305,29 +305,17 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M12 7 V12 L15 14" />
     </NavSvg>
   ),
-  // Council Dashboard: a briefing board — a header bar over a small grid of
-  // panels, the at-a-glance meeting-prep view the council opens first.
-  '/council-dashboard': (
+  // Council: a briefing board over a report card — the meeting brief and the
+  // scorecard, now one page. A header bar over rows of measures with status
+  // marks on the right.
+  '/council': (
     <NavSvg>
       <rect x="3.5" y="4" width="17" height="16" rx="1.5" />
       <path d="M3.5 8.5 H20.5" />
-      <path d="M8 12 H11.5" />
-      <path d="M8 15.5 H11.5" />
-      <path d="M14 12 H17" />
-      <path d="M14 15.5 H17" />
-    </NavSvg>
-  ),
-  // Council Scorecard: a report card — rows of measures each with a
-  // status mark on the right, the per-division rating the council reads.
-  '/council-scorecard': (
-    <NavSvg>
-      <rect x="4" y="3.5" width="16" height="17" rx="1.5" />
-      <path d="M7 9 H12" />
-      <path d="M7 13 H12" />
-      <path d="M7 17 H12" />
-      <circle cx="16" cy="9"  r="0.9" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="13" r="0.9" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="17" r="0.9" fill="currentColor" stroke="none" />
+      <path d="M7 12 H12.5" />
+      <path d="M7 16 H12.5" />
+      <circle cx="16.5" cy="12" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="16.5" cy="16" r="0.9" fill="currentColor" stroke="none" />
     </NavSvg>
   ),
   // Governance Exceptions: a shield (a control) with a bar through it —
