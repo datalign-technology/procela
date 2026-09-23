@@ -8,6 +8,8 @@ import { governanceGroups } from './governance-groups';
 import { mappings } from './mappings';
 import { connections } from './connections';
 import { glossaryTerms } from './business-glossary';
+import { reports } from './reports';
+import { reportFoldersRepo } from './report-folders';
 import { scopeListForRequest } from '../lib/tenant-scope';
 // Global search is a read aggregator across 9 stores; each is read through
 // its repository so results come from Postgres in DB mode and the in-memory
@@ -22,8 +24,10 @@ import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
 import { getMappingsRepository } from '../db/mappings.repo';
 import { getConnectionsRepository } from '../db/connections.repo';
 import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
+import { getReportsRepository } from '../db/reports.repo';
 
 const processNodesRepo = getProcessNodesRepository(processNodes);
+const reportsRepo = getReportsRepository(reports);
 const systemsRepo = getSystemsRepository(systems);
 const dataAssetsRepo = getDataAssetsRepository(dataAssets);
 const peopleRepo = getPeopleRepository(people);
@@ -61,7 +65,8 @@ type SearchType =
   | 'data-domain'
   | 'governance-group'
   | 'glossary-term'
-  | 'mapping';
+  | 'mapping'
+  | 'report';
 
 interface SearchResult {
   type: SearchType;
@@ -114,11 +119,24 @@ router.get('/', async (req: Request, res: Response) => {
 
   // Each store read through its repository; local consts shadow the
   // module-level array imports so the scoring logic below is unchanged.
-  const [systems, dataAssets, processNodes, connections, people, dataDomains, governanceGroups, glossaryTerms, mappings] = await Promise.all([
+  const [systems, dataAssets, processNodes, connections, people, dataDomains, governanceGroups, glossaryTerms, mappings, reports, reportFolders] = await Promise.all([
     systemsRepo.list(), dataAssetsRepo.list(), processNodesRepo.list(),
     connectionsRepo.list(), peopleRepo.list(), dataDomainsRepo.list(),
     governanceGroupsRepo.list(), glossaryTermsRepo.list(), mappingsRepo.list(),
+    reportsRepo.list(), reportFoldersRepo.list({}),
   ]);
+
+  // Report visibility mirrors routes/reports.ts: a report is visible to the
+  // caller when it sits in a shared folder (or is a legacy org-visible report),
+  // or the caller owns it, or the caller is an org/super admin. Private reports
+  // of other users must never surface in search.
+  const sharedFolderIds = new Set(reportFolders.filter((f) => f.shared).map((f) => f.id));
+  const callerId = (req as { user?: { sub?: string } }).user?.sub || null;
+  const callerRole = (req as { user?: { role?: string } }).user?.role;
+  const callerIsAdmin = callerRole === 'SUPER_ADMIN' || callerRole === 'ORG_ADMIN';
+  const canSeeReport = (r: { folderId?: string | null; visibility: string; ownerId: string | null }): boolean =>
+    (!!r.folderId && sharedFolderIds.has(r.folderId)) || r.visibility === 'org'
+    || callerIsAdmin || (!!callerId && r.ownerId === callerId);
 
   const out: SearchResult[] = [];
   const push = (candidates: SearchResult[]) => {
@@ -257,6 +275,21 @@ router.get('/', async (req: Request, res: Response) => {
       label,
       subtitle: m.linkType,
       path: `/mappings?highlight=${encodeURIComponent(m.id)}`,
+      _score: score,
+    }];
+  }));
+
+  // Reports — saved Report Builder definitions the caller is allowed to see.
+  push(scopeListForRequest(req, reports).flatMap((r) => {
+    if (!canSeeReport(r)) return [];
+    const score = scoreMatch(q, r.name, r.description);
+    if (score < 0) return [];
+    return [{
+      type: 'report' as const,
+      id: r.id,
+      label: r.name,
+      subtitle: r.description ? r.description.slice(0, 80) + (r.description.length > 80 ? '…' : '') : undefined,
+      path: '/reports',
       _score: score,
     }];
   }));
