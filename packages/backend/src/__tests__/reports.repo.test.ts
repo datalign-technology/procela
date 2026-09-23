@@ -61,6 +61,7 @@ describe('prismaReportsRepository', () => {
     const d = delegate({
       findMany: async () => [{
         id: 'a1', orgId: 'o1', name: 'n', description: '', ownerId: null,
+        folderId: null,
         visibility: 'private',
         definition: defaultDefinition,
         lastRunAt: null, runLog: [], schedule: null,
