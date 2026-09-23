@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader';
 import Spinner from '../components/Spinner';
 import ExportMenu from '../components/ExportMenu';
 import type { Cell, ExportPayload } from '../lib/export';
+import { fetchReportFolders, type ReportFolder } from '../lib/reportFolders';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Report Builder — Phase 2 of the Reports rebuild.
@@ -18,7 +19,7 @@ import type { Cell, ExportPayload } from '../lib/export';
 //   2. Columns  — multi-select of direct + joined fields from the LDM.
 //   3. Filters  — direct-field filters with op + value.
 //   4. Preview  — live `POST /reports/preview` against the current spec.
-//   5. Save     — name + description + visibility + persist.
+//   5. Save     — name + description + folder (drives audience) + persist.
 //
 // New mode lives at /reports/builder; edit mode at /reports/builder/:id.
 // ──────────────────────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ interface ReportSchedule {
 interface StoredReport {
   id: string; orgId: string; name: string; description: string;
   ownerId: string | null; visibility: 'private' | 'org';
+  folderId?: string | null;
   definition: ReportDefinition;
   schedule?: ReportSchedule | null;
   createdAt: string; updatedAt: string;
@@ -133,7 +135,10 @@ export default function ReportBuilderPage() {
   // Saved-report metadata (only meaningful in edit mode).
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [visibility, setVisibility] = useState<'private' | 'org'>('org');
+  // A report's folder drives its audience (shared folder ⇒ org-visible; no
+  // folder ⇒ private). '' = no folder / private to me.
+  const [folders, setFolders] = useState<ReportFolder[]>([]);
+  const [folderId, setFolderId] = useState<string>('');
 
   // The live spec.
   const [def, setDef] = useState<ReportDefinition>({
@@ -160,6 +165,22 @@ export default function ReportBuilderPage() {
       .finally(() => setEntitiesLoaded(true));
   }, [addToast]);
 
+  // Load the org's report folders for the audience picker. For a brand-new
+  // report (not an edit or clone), default to the shared Public folder so a
+  // freshly-built report is org-visible by default, matching the prior model.
+  useEffect(() => {
+    if (!activeOrgId) return;
+    fetchReportFolders(activeOrgId)
+      .then((fs) => {
+        setFolders(fs);
+        if (!reportId && !cloneFrom) {
+          const pub = fs.find((f) => f.kind === 'system');
+          if (pub) setFolderId(pub.id);
+        }
+      })
+      .catch(() => { /* folders are optional; the picker just stays empty */ });
+  }, [activeOrgId, reportId, cloneFrom]);
+
   // Load an existing report (edit) or a clone source (new from clone).
   useEffect(() => {
     const sourceId = reportId || cloneFrom;
@@ -171,13 +192,13 @@ export default function ReportBuilderPage() {
         if (reportId) {
           setName(src.name);
           setDescription(src.description);
-          setVisibility(src.visibility);
+          setFolderId(src.folderId ?? '');
           setScheduleOn(src.schedule?.frequency === 'weekly');
           setScheduleRecipients((src.schedule?.recipients || []).join(', '));
         } else {
           setName(`Copy of ${src.name}`);
           setDescription(src.description);
-          setVisibility(src.visibility);
+          setFolderId(src.folderId ?? '');
         }
       })
       .catch(() => addToast('error', 'Failed to load the report.'));
@@ -269,12 +290,12 @@ export default function ReportBuilderPage() {
           ? { frequency: 'weekly', recipients }
           : { frequency: 'off', recipients };
         const res = await apiClient.put<{ success: boolean; data: StoredReport }>(`/reports/${reportId}`, {
-          name: name.trim(), description: description.trim(), visibility, definition: def, schedule,
+          name: name.trim(), description: description.trim(), folderId: folderId || null, definition: def, schedule,
         });
         addToast('success', `Saved "${res.data.name}".`);
       } else {
         const res = await apiClient.post<{ success: boolean; data: StoredReport }>('/reports', {
-          orgId: activeOrgId, name: name.trim(), description: description.trim(), visibility, definition: def,
+          orgId: activeOrgId, name: name.trim(), description: description.trim(), folderId: folderId || null, definition: def,
         });
         addToast('success', `Created "${res.data.name}".`);
         navigate(`/reports/builder/${res.data.id}`, { replace: true });
@@ -285,7 +306,7 @@ export default function ReportBuilderPage() {
     } finally {
       setSaving(false);
     }
-  }, [canSave, activeOrgId, reportId, name, description, visibility, def, scheduleOn, scheduleRecipients, addToast, navigate]);
+  }, [canSave, activeOrgId, reportId, name, description, folderId, def, scheduleOn, scheduleRecipients, addToast, navigate]);
 
   // ── Export ───────────────────────────────────────────────────────────────
   // The on-screen preview is capped at 50 rows; an export must carry the whole
@@ -368,15 +389,19 @@ export default function ReportBuilderPage() {
             />
           </div>
           <div>
-            <label style={labelStyle}>Visibility</label>
+            <label style={labelStyle}>Folder</label>
             <select
-              aria-label="Visibility"
-              value={visibility}
-              onChange={(e) => setVisibility(e.target.value as 'private' | 'org')}
+              aria-label="Folder"
+              value={folderId}
+              onChange={(e) => setFolderId(e.target.value)}
               style={{ ...inputStyle, width: '100%' }}
             >
-              <option value="org">Shared with org</option>
-              <option value="private">Private to me</option>
+              <option value="">No folder (private to me)</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}{f.shared ? ' · shared' : ''}
+                </option>
+              ))}
             </select>
           </div>
         </div>
