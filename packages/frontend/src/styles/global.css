@@ -519,6 +519,14 @@ body[data-density="compact"] textarea {
        pair finding its own height. Content taller than this still grows. */
     min-height: 210px;
   }
+  /* Tasks / Issues are simple list panels, not analytical cards — opt them out
+     of the 210px floor above so they fall back to their card's own
+     PANEL_MIN_HEIGHT (120px) and line up with the Needs Attention band rather
+     than towering over it with dead space. Later + equal specificity, so this
+     wins over the rule above. */
+  .dashboard-half-grid > .dashboard-section-cell--list:not(:empty) {
+    min-height: 0;
+  }
   .dashboard-half-grid > .dashboard-section-cell:not(:empty) > * {
     flex: 1;
     display: flex;

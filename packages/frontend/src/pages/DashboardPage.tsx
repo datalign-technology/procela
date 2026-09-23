@@ -863,6 +863,12 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myCoverage: 'half',
 };
 
+// Half-width sections that are simple list panels (Tasks, Issues) rather than
+// analytical cards. Their cell opts out of the taller 210px analytical-card
+// floor (see .dashboard-section-cell--list in global.css) so they fall back to
+// the personal-panel PANEL_MIN_HEIGHT and line up with the Needs Attention band.
+const LIST_HALF_SECTIONS = new Set<SectionKey>(['myTasks', 'myIssues']);
+
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'Dashboard',
   myTasks: 'Tasks',
@@ -1402,7 +1408,7 @@ export default function DashboardPage() {
                 // auto-flow reflows the remaining halves to fill both columns.
                 return (
                   <div key={`run-${ri}-${keys.join('-')}`} className="dashboard-half-grid">
-                    {keys.map((k) => <div key={k} className="dashboard-section-cell">{sectionMap[k]}</div>)}
+                    {keys.map((k) => <div key={k} className={`dashboard-section-cell${LIST_HALF_SECTIONS.has(k) ? ' dashboard-section-cell--list' : ''}`}>{sectionMap[k]}</div>)}
                   </div>
                 );
               });
