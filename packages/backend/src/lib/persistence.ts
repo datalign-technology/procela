@@ -277,6 +277,15 @@ export function registerStore<T>(name: string, target: T[]): void {
   reloadRegistry.set(name, target);
 }
 
+/** The live in-memory array a route module registered under `name`, or
+ *  undefined if none has. Unlike loadStore (which re-reads from disk), this
+ *  returns the same reference the owning module mutates — so another module
+ *  can read/write a store it doesn't own without importing that route (which
+ *  would create an import cycle). */
+export function getRegisteredStore<T>(name: string): T[] | undefined {
+  return reloadRegistry.get(name) as T[] | undefined;
+}
+
 /** Reload every registered store from disk, mutating the existing
  *  array references so callers that captured them see the new
  *  content. Used after a destructive on-disk operation (GDPR cascade)

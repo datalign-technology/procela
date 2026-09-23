@@ -143,4 +143,36 @@ describe('report folders + folder-driven sharing', () => {
     list = await request(port, 'GET', `/reports?orgId=${ORG}`);
     assert.ok(!list.body.data.map((r: any) => r.id).includes('rf-move'));
   });
+
+  it('folds duplicate Public folders into one and repoints their reports', async () => {
+    const now = new Date().toISOString();
+    // Simulate a past race: two system Public folders. The earliest is canonical.
+    reportFolders.push({ id: 'pub-old', orgId: ORG, name: 'Public', ownerId: null, kind: 'system', shared: true, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: now });
+    reportFolders.push({ id: 'pub-dup', orgId: ORG, name: 'Public', ownerId: null, kind: 'system', shared: true, createdAt: '2026-02-01T00:00:00.000Z', updatedAt: now });
+    seedReport('rf-in-dup', 'user-a', { folderId: 'pub-dup', visibility: 'org' });
+
+    const res = await request(port, 'GET', `/report-folders?orgId=${ORG}`);
+    const systems = res.body.data.filter((f: any) => f.kind === 'system');
+    assert.strictEqual(systems.length, 1, 'duplicate Public folders collapse to one');
+    assert.strictEqual(systems[0].id, 'pub-old', 'the earliest Public folder is canonical');
+    assert.strictEqual(reportFolders.find((f: any) => f.id === 'pub-dup'), undefined, 'the duplicate is deleted');
+    assert.strictEqual(reports.find((r: any) => r.id === 'rf-in-dup').folderId, 'pub-old', 'its report is repointed, not left dangling');
+  });
+
+  it('lets an admin move another user\'s report into a folder', async () => {
+    const pub = await publicFolderId();
+    seedReport('rf-owned', 'owner-x'); // private, owned by someone else
+    actingUser = { sub: 'admin-y', role: 'ORG_ADMIN' };
+    const put = await request(port, 'PUT', '/reports/rf-owned', { folderId: pub });
+    assert.strictEqual(put.status, 200);
+    assert.strictEqual(put.body.data.visibility, 'org', 'moving into Public shares it');
+    assert.strictEqual(reports.find((r: any) => r.id === 'rf-owned').folderId, pub);
+  });
+
+  it('still blocks a non-admin non-owner from modifying a report', async () => {
+    seedReport('rf-owned2', 'owner-x');
+    actingUser = { sub: 'stranger' };
+    const put = await request(port, 'PUT', '/reports/rf-owned2', { name: 'hax' });
+    assert.strictEqual(put.status, 403);
+  });
 });
