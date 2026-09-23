@@ -513,19 +513,13 @@ body[data-density="compact"] textarea {
      collapse rule above still hides a widget that renders nothing. */
   .dashboard-half-grid > .dashboard-section-cell:not(:empty) {
     display: flex;
-    /* A uniform floor so the analytical cards (My Portfolio Health, Gaps,
-       Program Maturity, Catalog Coverage) read as one tight, even band that
-       sits a touch taller than the full-width Trends strip — rather than each
-       pair finding its own height. Content taller than this still grows. */
-    min-height: 210px;
-  }
-  /* Tasks / Issues are simple list panels, not analytical cards — opt them out
-     of the 210px floor above so they fall back to their card's own
-     PANEL_MIN_HEIGHT (120px) and line up with the Needs Attention band rather
-     than towering over it with dead space. Later + equal specificity, so this
-     wins over the rule above. */
-  .dashboard-half-grid > .dashboard-section-cell--list:not(:empty) {
-    min-height: 0;
+    /* One compact floor (matches PANEL_MIN_HEIGHT) for EVERY half-width widget
+       — Tasks, Issues, Trends, Portfolio Health, Coverage — so they line up
+       with the Needs Attention band instead of towering over it. Each cell then
+       sizes to its own content (the charts push past this floor when they need
+       to) and its grid-row partner stretches to match, so a pair stays
+       equal-height with no dead space. */
+    min-height: 120px;
   }
   .dashboard-half-grid > .dashboard-section-cell:not(:empty) > * {
     flex: 1;

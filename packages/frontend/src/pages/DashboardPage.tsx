@@ -360,7 +360,12 @@ function priorityColor(p: string): string {
 }
 function priorityBadge(p: string): React.CSSProperties {
   return {
-    display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+    // Fixed min-width + centred text so every pill in a column is the same
+    // width regardless of label length (LOW/HIGH/MEDIUM/CRITICAL), keeping the
+    // badge edges — and the task/issue titles beside them — aligned. 60px
+    // (border-box) clears the widest label, CRITICAL (~58px).
+    display: 'inline-block', boxSizing: 'border-box', minWidth: 60, textAlign: 'center',
+    padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
     background: priorityColor(p) + '18', color: priorityColor(p),
   };
 }
@@ -862,12 +867,6 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myPortfolio: 'half',
   myCoverage: 'half',
 };
-
-// Half-width sections that are simple list panels (Tasks, Issues) rather than
-// analytical cards. Their cell opts out of the taller 210px analytical-card
-// floor (see .dashboard-section-cell--list in global.css) so they fall back to
-// the personal-panel PANEL_MIN_HEIGHT and line up with the Needs Attention band.
-const LIST_HALF_SECTIONS = new Set<SectionKey>(['myTasks', 'myIssues']);
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'Dashboard',
@@ -1408,7 +1407,7 @@ export default function DashboardPage() {
                 // auto-flow reflows the remaining halves to fill both columns.
                 return (
                   <div key={`run-${ri}-${keys.join('-')}`} className="dashboard-half-grid">
-                    {keys.map((k) => <div key={k} className={`dashboard-section-cell${LIST_HALF_SECTIONS.has(k) ? ' dashboard-section-cell--list' : ''}`}>{sectionMap[k]}</div>)}
+                    {keys.map((k) => <div key={k} className="dashboard-section-cell">{sectionMap[k]}</div>)}
                   </div>
                 );
               });
