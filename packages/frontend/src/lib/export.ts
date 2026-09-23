@@ -23,6 +23,18 @@ export type ExportFormat = 'csv' | 'xlsx' | 'json' | 'pdf' | 'clipboard';
 
 export type Cell = string | number | boolean | null | undefined;
 
+/** Optional letterhead rendered at the top of the printed/PDF output:
+ *  the tenant's brand logo on the left, the report name centred, and the
+ *  description centred below it. Only the PDF formatter uses this — the
+ *  data-only formats (CSV/XLSX/JSON/clipboard) ignore it. */
+export interface ExportHeader {
+  title: string;
+  description?: string;
+  /** Brand logo — a data: URI, an absolute http(s) URL, or an app-relative
+   *  path (resolved against the current origin for the print window). */
+  logoUrl?: string;
+}
+
 export interface ExportPayload {
   /** Filename without extension. The format adds its own. */
   filenameBase: string;
@@ -31,6 +43,8 @@ export interface ExportPayload {
   /** Sheet name for XLSX. Defaults to "Data". Truncated/sanitised
    *  inside the formatter — Excel caps at 31 chars and forbids `:\/?*[]`. */
   sheetName?: string;
+  /** Letterhead for the PDF/print output (logo + name + description). */
+  header?: ExportHeader;
 }
 
 export const FORMAT_LABELS: Record<ExportFormat, string> = {
@@ -131,8 +145,18 @@ function escapeHtml(s: string): string {
   } as Record<string, string>)[ch]);
 }
 
-function exportPdfImpl({ filenameBase, headers, rows, sheetName }: ExportPayload): void {
-  const title = sheetName || filenameBase;
+// Resolve a brand logo URL for the print window (a fresh about:blank document).
+// data: and absolute http(s) URLs are used as-is; an app-relative path
+// (e.g. "/procela-icon.png") is made absolute against the opener's origin so
+// it still resolves in the new window.
+function resolveLogoUrl(logoUrl: string | undefined): string | null {
+  if (!logoUrl) return null;
+  if (/^(data:|https?:)/i.test(logoUrl)) return logoUrl;
+  try { return new URL(logoUrl, window.location.origin).href; } catch { return null; }
+}
+
+function exportPdfImpl({ filenameBase, headers, rows, sheetName, header }: ExportPayload): void {
+  const title = header?.title || sheetName || filenameBase;
   const win = window.open('', '_blank', 'width=900,height=700');
   if (!win) {
     throw new Error('Popup blocked — allow popups for this site to export PDF.');
@@ -141,6 +165,11 @@ function exportPdfImpl({ filenameBase, headers, rows, sheetName }: ExportPayload
     @page { size: A4 landscape; margin: 14mm; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 24px; }
     h1 { font-size: 18px; margin: 0 0 4px; }
+    /* Letterhead: logo pinned left, name + description centred across the page. */
+    .letterhead { position: relative; text-align: center; padding: 0 0 12px; margin-bottom: 12px; border-bottom: 2px solid #e2e8f0; min-height: 44px; }
+    .letterhead img { position: absolute; left: 0; top: 0; max-height: 44px; max-width: 180px; object-fit: contain; }
+    .letterhead .rname { font-size: 20px; font-weight: 700; margin: 0; }
+    .letterhead .rdesc { font-size: 12px; color: #475569; margin: 4px auto 0; max-width: 70%; line-height: 1.4; }
     .meta { font-size: 11px; color: #64748b; margin-bottom: 16px; }
     table { width: 100%; border-collapse: collapse; font-size: 11px; }
     th, td { padding: 6px 10px; border: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
@@ -148,8 +177,17 @@ function exportPdfImpl({ filenameBase, headers, rows, sheetName }: ExportPayload
     tr:nth-child(even) td { background: #fafafa; }
     @media print { body { padding: 0; } }
   `;
+  const logo = resolveLogoUrl(header?.logoUrl);
+  // With a header, render the branded letterhead; otherwise the plain title.
+  const heading = header
+    ? `<div class="letterhead">
+         ${logo ? `<img src="${escapeHtml(logo)}" alt="">` : ''}
+         <h1 class="rname">${escapeHtml(header.title)}</h1>
+         ${header.description ? `<div class="rdesc">${escapeHtml(header.description)}</div>` : ''}
+       </div>`
+    : `<h1>${escapeHtml(title)}</h1>`;
   const body = `
-    <h1>${escapeHtml(title)}</h1>
+    ${heading}
     <div class="meta">${escapeHtml(filenameBase)} &middot; ${rows.length} row${rows.length === 1 ? '' : 's'} &middot; generated ${new Date().toLocaleString()}</div>
     <table>
       <thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
