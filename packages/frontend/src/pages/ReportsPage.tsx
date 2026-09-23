@@ -1,16 +1,19 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
 import ExportMenu from '../components/ExportMenu';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import Modal from '../components/Modal';
-import IconButton from '../components/IconButton';
+import Card from '../components/Card';
+import IconButton, { Icon } from '../components/IconButton';
+import SecondaryButton from '../components/SecondaryButton';
 import TruncatedText from '../components/TruncatedText';
 import { renderNavIcon } from '../components/navIcons';
 import { useSortedList } from '../hooks/useSortedList';
 import type { Cell, ExportPayload } from '../lib/export';
 import { exportData } from '../lib/export';
+import { fetchReportFolders, NO_FOLDER, type ReportFolder } from '../lib/reportFolders';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -22,6 +25,7 @@ interface UserReportSummary {
   name: string;
   description: string;
   visibility: 'private' | 'org';
+  folderId: string | null;
   primaryEntity: string;
   columnCount: number;
   lastRunAt: string | null;
@@ -107,6 +111,15 @@ function UserReportsTab() {
   // Download/Print in the modal act on this cached data, never re-running.
   const [result, setResult] = useState<{ report: UserReportSummary; data: RunResult } | null>(null);
 
+  // Folder rail: the org's folders, the selected filter, and the two folder
+  // dialogs (create/edit a folder; move a report into a folder).
+  const [folders, setFolders] = useState<ReportFolder[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<string>('all'); // 'all' | NO_FOLDER | folderId
+  const [folderModal, setFolderModal] = useState<{ mode: 'create' | 'edit'; id?: string; name: string; shared: boolean } | null>(null);
+  const [moveReport, setMoveReport] = useState<UserReportSummary | null>(null);
+  const [moveTarget, setMoveTarget] = useState<string>(''); // '' = no folder
+  const [busy, setBusy] = useState(false);
+
   const load = useCallback(() => {
     if (!activeOrgId) { setReports([]); return; }
     apiClient.get<{ success: boolean; data: UserReportSummary[] }>(`/reports?orgId=${activeOrgId}`)
@@ -114,7 +127,31 @@ function UserReportsTab() {
       .catch(() => setReports([]));
   }, [activeOrgId]);
 
+  const loadFolders = useCallback(() => {
+    if (!activeOrgId) { setFolders([]); return; }
+    fetchReportFolders(activeOrgId).then(setFolders).catch(() => setFolders([]));
+  }, [activeOrgId]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadFolders(); }, [loadFolders]);
+
+  const folderName = (id: string | null): string | null =>
+    (id ? folders.find((f) => f.id === id)?.name ?? null : null);
+
+  const countFor = (key: string): number => {
+    if (!reports) return 0;
+    if (key === 'all') return reports.length;
+    if (key === NO_FOLDER) return reports.filter((r) => !r.folderId).length;
+    return reports.filter((r) => r.folderId === key).length;
+  };
+
+  // Reports narrowed to the selected folder (the rail filter).
+  const visibleReports = useMemo(() => {
+    const list = reports || [];
+    if (selectedFolder === 'all') return list;
+    if (selectedFolder === NO_FOLDER) return list.filter((r) => !r.folderId);
+    return list.filter((r) => r.folderId === selectedFolder);
+  }, [reports, selectedFolder]);
 
   const remove = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
@@ -149,6 +186,71 @@ function UserReportsTab() {
       addToast('error', `Print failed: ${err instanceof Error ? err.message : String(err)}`));
   };
 
+  // ── Folder CRUD ──────────────────────────────────────────────────────────
+  // Create or rename+re-share a folder from the folder dialog. A folder's
+  // `shared` flag drives the audience of every report inside it, so on save we
+  // refresh the reports too (their SHARED/PRIVATE badges may have flipped).
+  const saveFolder = async () => {
+    if (!folderModal || !activeOrgId) return;
+    const name = folderModal.name.trim();
+    if (!name) { addToast('error', 'Folder name is required.'); return; }
+    setBusy(true);
+    try {
+      if (folderModal.mode === 'create') {
+        const res = await apiClient.post<{ success: boolean; data: ReportFolder }>('/report-folders', { orgId: activeOrgId, name, shared: folderModal.shared });
+        addToast('success', `Created folder "${name}".`);
+        setSelectedFolder(res.data.id);
+      } else if (folderModal.id) {
+        await apiClient.patch(`/report-folders/${folderModal.id}`, { name, shared: folderModal.shared });
+        addToast('success', `Updated folder "${name}".`);
+      }
+      setFolderModal(null);
+      loadFolders();
+      load();
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || 'Could not save the folder.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteFolder = async (id: string, name: string) => {
+    if (!confirm(`Delete folder "${name}"? Reports inside it become uncategorized (private to their owner); the reports themselves are not deleted.`)) return;
+    setBusy(true);
+    try {
+      await apiClient.delete(`/report-folders/${id}`);
+      addToast('success', `Deleted folder "${name}".`);
+      if (selectedFolder === id) setSelectedFolder('all');
+      setFolderModal(null);
+      loadFolders();
+      load();
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || 'Could not delete the folder.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Move a report into a folder (or out of all folders → private). The chosen
+  // folder's shared flag re-derives the report's audience server-side.
+  const moveTo = async () => {
+    if (!moveReport) return;
+    setBusy(true);
+    try {
+      await apiClient.put(`/reports/${moveReport.id}`, { folderId: moveTarget || null });
+      addToast('success', `Moved "${moveReport.name}".`);
+      setMoveReport(null);
+      load();
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || 'Could not move the report.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const columns: DataTableColumn<UserReportSummary>[] = [
     {
       key: 'name', header: 'Report', sortable: true,
@@ -156,7 +258,9 @@ function UserReportsTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)' }}>{renderNavIcon('/reports', { size: 16 })}</span>
           <TruncatedText text={r.name} style={{ fontWeight: 600 }} />
-          {r.visibility === 'private' && <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
+          {r.visibility === 'org'
+            ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>SHARED</span>
+            : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
         </div>
       ),
     },
@@ -167,7 +271,21 @@ function UserReportsTab() {
         : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
     },
     {
-      key: 'source', header: 'Source', sortable: true, width: 150,
+      key: 'folder', header: 'Folder', width: 150,
+      render: (r) => {
+        const name = folderName(r.folderId);
+        return name
+          ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-text-secondary)', minWidth: 0 }}>
+              <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)' }}><Icon name="folder" size={13} /></span>
+              <TruncatedText text={name} />
+            </span>
+          )
+          : <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
+      },
+    },
+    {
+      key: 'source', header: 'Source', sortable: true, width: 140,
       render: (r) => <span style={{ color: 'var(--color-text-secondary)' }}>{r.primaryEntity}</span>,
     },
     {
@@ -186,10 +304,11 @@ function UserReportsTab() {
       ),
     },
     {
-      key: 'actions', header: 'Actions', align: 'center', width: 130,
+      key: 'actions', header: 'Actions', align: 'center', width: 160,
       render: (r) => (
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap' }}>
           <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => runReport(r)} />
+          <IconButton size="sm" icon="folder" label="Move to folder" onClick={() => { setMoveReport(r); setMoveTarget(r.folderId || ''); }} />
           <IconButton size="sm" icon="edit" label="Edit report" onClick={() => navigate(`/reports/builder/${r.id}`)} />
           <IconButton size="sm" icon="trash" label="Delete report" variant="danger" onClick={() => remove(r.id, r.name)} />
         </div>
@@ -198,7 +317,7 @@ function UserReportsTab() {
   ];
 
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList<UserReportSummary>(
-    reports || [],
+    visibleReports,
     {
       name: (a, b) => a.name.localeCompare(b.name),
       source: (a, b) => a.primaryEntity.localeCompare(b.primaryEntity),
@@ -207,23 +326,92 @@ function UserReportsTab() {
     'name',
   );
 
+  // ── Folder rail row ────────────────────────────────────────────────────────
+  const railRow = (key: string, label: string, opts?: { folder?: ReportFolder }) => {
+    const active = selectedFolder === key;
+    const folder = opts?.folder;
+    return (
+      <div
+        key={key}
+        onClick={() => setSelectedFolder(key)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFolder(key); } }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+          fontWeight: active ? 600 : 400,
+          background: active ? 'var(--color-primary-light)' : 'transparent',
+          color: active ? 'var(--color-primary)' : 'var(--color-text)',
+        }}
+        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
+        onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+          {folder?.shared && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', letterSpacing: '0.04em', flexShrink: 0 }}>SHARED</span>}
+        </span>
+        {folder && folder.kind === 'user' && (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={`Edit folder ${folder.name}`}
+            onClick={(e) => { e.stopPropagation(); setFolderModal({ mode: 'edit', id: folder.id, name: folder.name, shared: folder.shared }); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setFolderModal({ mode: 'edit', id: folder.id, name: folder.name, shared: folder.shared }); } }}
+            style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+          >
+            <Icon name="edit" size={12} />
+          </span>
+        )}
+        <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{countFor(key)}</span>
+      </div>
+    );
+  };
+
+  const rail = (
+    <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, padding: '0 4px' }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Folders</span>
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label="New folder"
+          onClick={() => setFolderModal({ mode: 'create', name: '', shared: false })}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFolderModal({ mode: 'create', name: '', shared: false }); } }}
+          style={{ display: 'inline-flex', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+          title="New folder"
+        >
+          <Icon name="plus" size={14} />
+        </span>
+      </div>
+      {railRow('all', 'All reports')}
+      {folders.map((f) => railRow(f.id, f.name, { folder: f }))}
+      {railRow(NO_FOLDER, 'No folder')}
+    </Card>
+  );
+
   return (
     <>
-      {reports === null ? (
-        <SkeletonRows rows={4} columnWidths={[220, null, 120]} />
-      ) : reports.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '24px 0', textAlign: 'center' }}>
-          No reports yet. Click <strong>+ New report</strong> to build one.
+      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16, alignItems: 'start' }}>
+        {rail}
+        <div>
+          {reports === null ? (
+            <SkeletonRows rows={4} columnWidths={[220, null, 120]} />
+          ) : reports.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '24px 0', textAlign: 'center' }}>
+              No reports yet. Click <strong>+ New report</strong> to build one.
+            </div>
+          ) : (
+            <DataTable
+              rows={sorted}
+              columns={columns}
+              rowKey={(r) => r.id}
+              sort={{ sortKey, sortDir, onSort: toggleSort }}
+              emptyMessage="No reports in this folder."
+            />
+          )}
         </div>
-      ) : (
-        <DataTable
-          rows={sorted}
-          columns={columns}
-          rowKey={(r) => r.id}
-          sort={{ sortKey, sortDir, onSort: toggleSort }}
-          emptyMessage="No reports match."
-        />
-      )}
+      </div>
 
       {result && (
         <Modal
@@ -291,6 +479,90 @@ function UserReportsTab() {
           <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--color-border)', fontSize: 10, color: 'var(--color-text-muted)', textAlign: 'center' }}>
             {[companyName, result.report.name, `Generated ${new Date().toLocaleDateString()}`, userName ? `by ${userName}` : null].filter(Boolean).join('  ·  ')}
           </div>
+        </Modal>
+      )}
+
+      {/* Create / rename+re-share a folder. A folder's shared flag drives the
+          audience of every report inside it. */}
+      {folderModal && (
+        <Modal
+          open
+          onClose={() => setFolderModal(null)}
+          size="sm"
+          title={folderModal.mode === 'create' ? 'New folder' : 'Edit folder'}
+          footer={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 8 }}>
+              <div>
+                {folderModal.mode === 'edit' && folderModal.id && (
+                  <IconButton size="sm" icon="trash" label="Delete folder" variant="danger" disabled={busy} onClick={() => deleteFolder(folderModal.id!, folderModal.name)} />
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <SecondaryButton onClick={() => setFolderModal(null)}>Cancel</SecondaryButton>
+                <button
+                  onClick={saveFolder}
+                  disabled={busy || !folderModal.name.trim()}
+                  style={{ padding: '5px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 'var(--radius-md)', cursor: busy || !folderModal.name.trim() ? 'default' : 'pointer', background: folderModal.name.trim() ? 'var(--color-primary)' : '#e5e7eb', color: folderModal.name.trim() ? '#fff' : 'var(--color-text-muted)' }}
+                >
+                  {busy ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 4 }}>Name</label>
+          <input
+            aria-label="Folder name"
+            autoFocus
+            value={folderModal.name}
+            onChange={(e) => setFolderModal({ ...folderModal, name: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter' && folderModal.name.trim()) saveFolder(); }}
+            placeholder="e.g. Compliance"
+            style={{ width: '100%', padding: '7px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)', marginBottom: 14 }}
+          />
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={folderModal.shared} onChange={(e) => setFolderModal({ ...folderModal, shared: e.target.checked })} style={{ marginTop: 2 }} />
+            <span>
+              <span style={{ fontSize: 13, color: 'var(--color-text)' }}>Share with everyone in the organization</span>
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>Reports in a shared folder are visible to your whole org. A private folder keeps its reports visible only to their owner.</span>
+            </span>
+          </label>
+        </Modal>
+      )}
+
+      {/* Move a report into a folder (or out of all folders → private). */}
+      {moveReport && (
+        <Modal
+          open
+          onClose={() => setMoveReport(null)}
+          size="sm"
+          title="Move to folder"
+          subtitle={moveReport.name}
+          footer={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
+              <SecondaryButton onClick={() => setMoveReport(null)}>Cancel</SecondaryButton>
+              <button
+                onClick={moveTo}
+                disabled={busy || (moveTarget || '') === (moveReport.folderId || '')}
+                style={{ padding: '5px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 'var(--radius-md)', cursor: busy || (moveTarget || '') === (moveReport.folderId || '') ? 'default' : 'pointer', background: (moveTarget || '') !== (moveReport.folderId || '') ? 'var(--color-primary)' : '#e5e7eb', color: (moveTarget || '') !== (moveReport.folderId || '') ? '#fff' : 'var(--color-text-muted)' }}
+              >
+                {busy ? 'Moving…' : 'Move'}
+              </button>
+            </div>
+          }
+        >
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 4 }}>Folder</label>
+          <select
+            aria-label="Target folder"
+            value={moveTarget}
+            onChange={(e) => setMoveTarget(e.target.value)}
+            style={{ width: '100%', padding: '7px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+          >
+            <option value="">No folder (private to me)</option>
+            {folders.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}{f.shared ? ' · shared' : ''}</option>
+            ))}
+          </select>
         </Modal>
       )}
     </>

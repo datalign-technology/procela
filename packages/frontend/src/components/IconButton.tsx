@@ -35,6 +35,7 @@ export type IconName =
   | 'clock'
   | 'columns'
   | 'printer'
+  | 'folder'
   | 'wand';
 
 interface IconButtonProps {
@@ -198,6 +199,9 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
       // Printer — for "Print / PDF" actions, so they don't share the
       // download (tray + down-arrow) glyph with Export.
       return <svg {...common}><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>;
+    case 'folder':
+      // Folder — for report folders (organize / move-to-folder actions).
+      return <svg {...common}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>;
     case 'wand':
       // Magic wand — used for "Generate from template / industry" actions
       // so they don't share the gear icon with unrelated configuration.
