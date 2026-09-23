@@ -221,11 +221,13 @@ router.put('/:id', async (req: Request, res: Response) => {
   const report = await reportsRepo.get(String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   // Owner-scoped: a report (including a shared 'org'-visibility one) may only
-  // be edited by the person who owns it. Any-authenticated at the router level,
-  // so this per-record check is what stops one user editing another's report.
+  // be edited by the person who owns it — or by an org/super admin, who
+  // curates the shared catalog (e.g. filing another user's shared report into
+  // a folder). Any-authenticated at the router level, so this per-record check
+  // is what stops one non-admin user editing another's report.
   const editorId = (req as { user?: { sub?: string } }).user?.sub || null;
-  if (report.ownerId && editorId && report.ownerId !== editorId) {
-    res.status(403).json({ success: false, error: 'Only the owner can modify this report' });
+  if (report.ownerId && editorId && report.ownerId !== editorId && !callerIsAdmin(req)) {
+    res.status(403).json({ success: false, error: 'Only the owner or an admin can modify this report' });
     return;
   }
   const { name, description, ownerId, folderId, visibility, definition } = req.body || {};
@@ -260,8 +262,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const report = await reportsRepo.get(String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   const editorId = (req as { user?: { sub?: string } }).user?.sub || null;
-  if (report.ownerId && editorId && report.ownerId !== editorId) {
-    res.status(403).json({ success: false, error: 'Only the owner can delete this report' });
+  if (report.ownerId && editorId && report.ownerId !== editorId && !callerIsAdmin(req)) {
+    res.status(403).json({ success: false, error: 'Only the owner or an admin can delete this report' });
     return;
   }
   await reportsRepo.delete(report.id);

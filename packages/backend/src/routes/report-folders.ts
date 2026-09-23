@@ -1,9 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore, getRegisteredStore } from '../lib/persistence';
 import { getReportFoldersRepository } from '../db/report-folders.repo';
+import { getReportsRepository } from '../db/reports.repo';
 import { auditService } from '../services/audit.service';
 import type { AuthenticatedRequest } from '../middleware/auth';
+// Type-only import (erased at compile time) — no runtime dependency on the
+// reports route, so the import graph stays acyclic (reports → folders).
+import type { StoredReport } from './reports';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Report folders — organize reports and drive their audience.
@@ -45,17 +49,56 @@ registerStore('reportFolders', reportFolders);
 
 export const reportFoldersRepo = getReportFoldersRepository(reportFolders);
 
-/** Find (or lazily create) the org's system "Public" folder. Idempotent, so
- *  every tenant gets exactly one shared bucket without a data migration. */
-export async function ensurePublicFolder(orgId: string): Promise<StoredReportFolder> {
-  const existing = (await reportFoldersRepo.list({ orgId })).find((f) => f.kind === 'system');
-  if (existing) return existing;
-  const now = new Date().toISOString();
-  const folder: StoredReportFolder = {
-    id: uuid(), orgId, name: PUBLIC_FOLDER_NAME, ownerId: null,
-    kind: 'system', shared: true, createdAt: now, updatedAt: now,
-  };
-  return (await reportFoldersRepo.create(folder)) || folder;
+// Per-org in-flight guard. The check-and-create in ensurePublicFolder straddles
+// an `await` (the folder list), so two requests that arrive together — e.g. the
+// Reports page firing GET /reports and GET /report-folders at once — would each
+// see "no Public folder" and each create one, leaving the org with duplicate
+// Public folders. Collapsing concurrent callers onto one promise closes that
+// window within a process; duplicates from other sources are healed on read
+// (below).
+const ensureLocks = new Map<string, Promise<StoredReportFolder>>();
+
+/** Find (or lazily create) the org's single system "Public" folder. Idempotent
+ *  and concurrency-safe, so every tenant gets exactly one shared bucket without
+ *  a data migration — and any duplicate Public folders a past race produced are
+ *  folded back into one on the next call. */
+export function ensurePublicFolder(orgId: string): Promise<StoredReportFolder> {
+  const inflight = ensureLocks.get(orgId);
+  if (inflight) return inflight;
+  const p = ensurePublicFolderUnlocked(orgId).finally(() => ensureLocks.delete(orgId));
+  ensureLocks.set(orgId, p);
+  return p;
+}
+
+async function ensurePublicFolderUnlocked(orgId: string): Promise<StoredReportFolder> {
+  const systems = (await reportFoldersRepo.list({ orgId }))
+    .filter((f) => f.kind === 'system')
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+
+  if (systems.length === 0) {
+    const now = new Date().toISOString();
+    const folder: StoredReportFolder = {
+      id: uuid(), orgId, name: PUBLIC_FOLDER_NAME, ownerId: null,
+      kind: 'system', shared: true, createdAt: now, updatedAt: now,
+    };
+    return (await reportFoldersRepo.create(folder)) || folder;
+  }
+
+  // One canonical Public folder (the earliest); fold any duplicates into it.
+  const [canonical, ...extras] = systems;
+  if (extras.length > 0) {
+    const extraIds = new Set(extras.map((f) => f.id));
+    // Repoint reports out of the duplicates BEFORE deleting them, so no report
+    // is left with a dangling folderId (which would read as private). Use the
+    // live registered reports array (not loadStore, which re-reads from disk)
+    // so the mutation lands on the same instance the reports route serves.
+    const liveReports = getRegisteredStore<StoredReport>('reports') ?? loadStore<StoredReport>('reports');
+    const reportsRepo = getReportsRepository(liveReports);
+    const affected = (await reportsRepo.list({ orgId })).filter((r) => r.folderId && extraIds.has(r.folderId));
+    for (const r of affected) await reportsRepo.update(r.id, { folderId: canonical.id });
+    for (const dup of extras) await reportFoldersRepo.delete(dup.id);
+  }
+  return canonical;
 }
 
 const isAdmin = (req: Request): boolean => {
