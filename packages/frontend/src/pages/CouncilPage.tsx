@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Spinner from '../components/Spinner';
 import TruncatedText from '../components/TruncatedText';
@@ -109,6 +110,9 @@ const statTile: React.CSSProperties = {
 const tileLabel: React.CSSProperties = { fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 };
 const tileNumber: React.CSSProperties = { fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: 'tabular-nums' };
 const tileSub: React.CSSProperties = { fontSize: 10.5, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 };
+// Right-aligned badge used in the ROI section headings.
+const roiBadge: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
+const roiBadgeMuted: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
 
 // Each measure links to the page where you act on it — like the dashboard
 // tiles and Gap Detection rows, the number is a hyperlink to its source.
@@ -420,7 +424,11 @@ export default function CouncilPage() {
         title="Council"
         subtitle={`${derived.orgName} — ${derived.period}${viewingVersionId ? ' · saved version' : ''}. The council's meeting brief and its governance scorecard.`}
         actions={(
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          // no-print: none of these controls belong on a printed briefing (the
+          // global print stylesheet strips the app chrome; this strips the
+          // page's own action bar).
+          <div className="no-print" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <IconButton icon="printer" label="Print briefing" onClick={() => window.print()} />
             {!viewingVersionId && !editing && (
               <div role="group" aria-label="Measure lens" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
                 {([['all', 'All'], ['governed', 'Governed']] as const).map(([mode, label]) => (
@@ -584,7 +592,8 @@ export default function CouncilPage() {
         </div>
       </div>
 
-      {/* Scorecard table */}
+      {/* ── Scorecard — the enterprise verdict + division-by-division grid ── */}
+      <SectionHeading title="Scorecard" as="h3" right={statusPill(resolvedStatus(derived.enterprise))} />
       <Card padding={0} marginBottom={16}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
@@ -633,11 +642,9 @@ export default function CouncilPage() {
           { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, sub: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues' },
         ];
         return (
+          <>
+          <SectionHeading title="Governance value drivers" as="h3" right={<span style={roiBadge}>Leading indicators</span>} />
           <Card padding={18} marginBottom={16}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Governance value drivers</div>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999 }}>LEADING INDICATORS</span>
-            </div>
             <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
               The un-fakeable signals that governance is paying off — measured from your catalog, no assumed dollar figures. {derived.scope?.applied ? 'Scoped to the governed set.' : 'Across the whole org tree.'}
             </div>
@@ -651,6 +658,7 @@ export default function CouncilPage() {
               ))}
             </div>
           </Card>
+          </>
         );
       })()}
 
@@ -661,16 +669,15 @@ export default function CouncilPage() {
         const roi = derived.roi;
         if (!roi.configured) {
           return (
+            <>
+            <SectionHeading title="Estimated governance value" as="h3" right={<span style={roiBadgeMuted}>Not configured</span>} />
             <Card padding={18} marginBottom={16}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Estimated governance value</div>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '2px 7px', borderRadius: 999 }}>NOT CONFIGURED</span>
-              </div>
               <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
                 Turn the drivers above into a dollar figure by setting your organization&rsquo;s value model — what an owned entity, a resolved issue, and an open-risk item are worth to you. Procela invents no figures.{' '}
                 <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Set your value model →</Link>
               </div>
             </Card>
+            </>
           );
         }
         const cur = roi.currency;
@@ -681,11 +688,9 @@ export default function CouncilPage() {
           { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), sub: 'Open-risk items × your exposure per item — drive down', tone: 'risk' },
         ];
         return (
+          <>
+          <SectionHeading title="Estimated governance value" as="h3" right={<span style={roiBadge}>Your assumptions</span>} />
           <Card padding={18} marginBottom={16}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Estimated governance value</div>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999 }}>YOUR ASSUMPTIONS</span>
-            </div>
             <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
               The value drivers monetized with your model — {fmtMoney(roi.model.ownershipValuePerEntity, cur)}/owned entity, {fmtMoney(roi.model.resolutionValuePerIssue, cur)}/issue resolved, {fmtMoney(roi.model.riskCostPerItem, cur)}/open-risk item. An estimate, only as good as those assumptions. {derived.scope?.applied ? 'Scoped to the governed set.' : 'Across the whole org tree.'}{' '}
               <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Edit model →</Link>
@@ -739,6 +744,7 @@ export default function CouncilPage() {
               );
             })()}
           </Card>
+          </>
         );
       })()}
 
@@ -797,14 +803,34 @@ export default function CouncilPage() {
                 ✓ Every measure is on target — nothing to escalate this period.
               </div>
             )}
-            <div style={{ marginTop: 14 }}><Link to="/gap-detection" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>Review all gaps →</Link></div>
+            {/* Council note — the auto-derived / editable summary, folded in from
+                the old "For the council" narrative card so the page has a single
+                decision surface instead of two that said much the same thing. */}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                Council note
+                {narrative.forCouncilAuto && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '1px 6px', borderRadius: 999 }}>Auto-derived</span>}
+              </div>
+              {editing && canEdit ? (
+                <textarea
+                  value={narrative.forCouncil || ''}
+                  onChange={(e) => setNarrative((p) => ({ ...p, forCouncil: e.target.value, forCouncilAuto: false }))}
+                  rows={3}
+                  style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 6, padding: 10, fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-text)', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                />
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{narrative.forCouncil || '—'}</div>
+              )}
+            </div>
+            <div style={{ marginTop: 12 }}><Link to="/gap-detection" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>Review all gaps →</Link></div>
           </Card>
         </div>
       </div>
 
-      {/* Narrative */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 16 }}>
-        {([['whatMoved', 'What moved this month'], ['forCouncil', 'For the council']] as const).map(([key, label]) => (
+      {/* Narrative — the retrospective. "For the council" moved up into the
+          "Needs a decision" card, so this is just the month's changes. */}
+      <div style={{ marginBottom: 16 }}>
+        {([['whatMoved', 'What moved this month']] as const).map(([key, label]) => (
           <Card key={key} padding={18}>
             <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
               {label}
