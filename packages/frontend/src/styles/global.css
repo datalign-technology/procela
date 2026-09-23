@@ -488,12 +488,11 @@ body[data-density="compact"] textarea {
 .dashboard-half-grid {
   display: grid;
   grid-template-columns: 1fr;
-  column-gap: 16px;
-  /* Match the 16px vertical rhythm full-width sections use (their
-     marginBottom) so a half-width section stacked below another — e.g.
-     Catalog Coverage under Program Maturity, or any pair on a narrow
-     single-column viewport — gets the same breathing room above it. */
-  row-gap: 16px;
+  column-gap: 12px;
+  /* Vertical rhythm between stacked half-grid rows. Kept a little tighter than
+     the full-width section rhythm so the packed 3×2 widget grid stays compact
+     enough to fit a laptop viewport without scrolling. */
+  row-gap: 10px;
   /* Stretch (not start) so the two cells in a two-up row share the height
      of the taller one — paired widgets line up flush at the bottom instead
      of one card ending short. On the single-column layout below 700px each

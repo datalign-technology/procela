@@ -722,7 +722,10 @@ function MyTrends() {
       <SectionHeading title="Trends" right={spanWeeks >= 1 ? (
         <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>last {spanWeeks} week{spanWeeks === 1 ? '' : 's'}</span>
       ) : undefined} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+      {/* minmax(130px) (not 200) so the three tiles stay in one row when Trends
+          is a half-width widget (~400px+ column); at full width they still
+          render three-across. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
         {metrics.map((m) => {
           const series = points.map((pt) => pt[m.key]);
           const first = series[0];
@@ -806,7 +809,11 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
   return (
     <div style={{ marginBottom: 16 }}>
       <SectionHeading title="Domains" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+      {/* alignContent stretch (overriding the half-grid's default `start`) +
+          full-height cards so the domain card(s) fill the cell and this widget
+          lines up flush with its taller row-partner (Trends) instead of
+          floating at the top with dead space below. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8, alignContent: 'stretch', flex: 1 }}>
         {domains.map((d) => {
           const healthPct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
           return (
@@ -849,7 +856,11 @@ type SectionKey = 'myDashboard' | 'myTasks' | 'myIssues' | 'myPortfolio' | 'myTr
 // Posture / Trends / Catalog Coverage / Program Maturity / Governance Gaps
 // widgets are all replaced or dropped in favour of My Portfolio Health /
 // My Trends / My Coverage.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTasks', 'myIssues', 'myTrends', 'myPortfolio', 'myCoverage', 'myDomains'];
+// Order also sets the two-up pairing of the half-width widgets: keep
+// similar-height widgets adjacent so a short one isn't stretched to match a
+// tall neighbour. Tasks|Issues, then the short Trends|Domains, then the taller
+// analytical Portfolio|Coverage.
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTasks', 'myIssues', 'myTrends', 'myDomains', 'myPortfolio', 'myCoverage'];
 
 type SectionWidth = 'full' | 'half';
 
@@ -862,8 +873,13 @@ const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
   myDashboard: 'full',
   myTasks: 'half',
   myIssues: 'half',
-  myDomains: 'full',
-  myTrends: 'full',
+  // Trends and Domains default to half so the six lower widgets pack into a
+  // clean 3×2 grid (Tasks|Issues, Trends|Portfolio, Coverage|Domains) — two
+  // fewer full-width rows — and the dashboard fits a laptop viewport without
+  // scrolling. Both are half (an even count) so no lone half is stranded, and
+  // Trends keeps its 3 tiles in one row at half width (see its minmax below).
+  myDomains: 'half',
+  myTrends: 'half',
   myPortfolio: 'half',
   myCoverage: 'half',
 };
