@@ -1013,100 +1013,6 @@ function useDashboardLayout() {
   return { order, hidden, width, hasSaved, moveUp, moveDown, toggle, setWidth, reset };
 }
 
-// Icons match the sidebar rail via renderNavIcon(route). Was
-// hand-picked Unicode glyphs (✶ ⛁ ✓ ▨ ⊞) — one Mappings tile
-// already used a Lucide icon which made the whole row look
-// half-migrated. `iconRoute` decouples the icon from the link
-// target so /processes/wizard (no sidebar entry) can inherit
-// the /processes rail icon instead of falling back to text.
-const quickActions = [
-  { iconRoute: '/processes',       label: 'Run Wizard',      description: 'Generate a process hierarchy with AI',                          link: '/processes/wizard' },
-  { iconRoute: '/data-assets',     label: 'Data Assets',     description: 'Define and manage data assets',                                 link: '/data-assets' },
-  { iconRoute: '/data-quality',    label: 'Data Quality',    description: 'Define quality rules and health scores',                        link: '/data-quality' },
-  { iconRoute: '/mappings',        label: 'Data Mapping',    description: 'Link data to process activities',                               link: '/mappings' },
-  { iconRoute: '/enterprise-view', label: 'Enterprise View', description: 'Full cross-entity visibility',                                   link: '/enterprise-view' },
-  { iconRoute: '/analysis',        label: 'Analysis',        description: 'Pivot the catalog (systems × domains, roles × people…)',       link: '/analysis' },
-];
-
-// Compact action menu pinned under the page header — a horizontal row of
-// icon+label chips (the description rides the tooltip). Replaces the old
-// full-width "Quick Actions" grid of six large cards, which ate a whole
-// section of vertical space for what is really navigation chrome. Renders
-// once at the top in both Simple and Detailed views; not a customizable
-// section, so it's always available as the dashboard's "menu".
-function DashboardActionBar() {
-  const aiEnabled = useAiEnabled();
-  // The Wizard is the recommended starting point, so it reads as a primary
-  // action, distinct from the navigation pills beside it (they're places to
-  // go, not the thing to do first). It's AI-only, so it drops out entirely
-  // when AI features are off — then the row is navigation only.
-  const wizard = aiEnabled ? quickActions.find((a) => a.link === '/processes/wizard') : undefined;
-  const navActions = quickActions.filter((a) => a.link !== '/processes/wizard');
-  return (
-    <div
-      role="navigation"
-      aria-label="Dashboard quick actions"
-      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 16 }}
-    >
-      {wizard && (
-        <>
-          <Link
-            key={wizard.label}
-            to={wizard.link}
-            title={wizard.description}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '6px 14px',
-              background: 'var(--color-primary)',
-              border: '1px solid var(--color-primary)',
-              borderRadius: 999,
-              boxShadow: 'var(--shadow-sm)',
-              fontSize: 12, fontWeight: 600,
-              color: '#fff', textDecoration: 'none', whiteSpace: 'nowrap',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-primary-hover)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; }}
-          >
-            <span style={{ display: 'inline-flex', color: '#fff' }}>{renderNavIcon(wizard.iconRoute, { size: 15, strokeWidth: 1.8 })}</span>
-            {wizard.label}
-          </Link>
-          {/* Divider between the primary action and the navigation pills. */}
-          <span aria-hidden="true" style={{ width: 1, alignSelf: 'stretch', background: 'var(--color-border)', margin: '2px 2px' }} />
-        </>
-      )}
-      {navActions.map((action) => (
-        <Link
-          key={action.label}
-          to={action.link}
-          title={action.description}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 999,
-            boxShadow: 'var(--shadow-sm)',
-            fontSize: 12,
-            fontWeight: 600,
-            color: 'var(--color-text)',
-            textDecoration: 'none',
-            whiteSpace: 'nowrap',
-            transition: 'border-color 0.15s, color 0.15s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text)'; }}
-        >
-          <span style={{ display: 'inline-flex', color: 'var(--color-primary)' }}>{renderNavIcon(action.iconRoute, { size: 15, strokeWidth: 1.8 })}</span>
-          {action.label}
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 // ──────────────────────────────────────────────────────────────────────────
 // EmptyDashboardWelcome — the Dashboard's own empty-org state. Deliberately
 // NOT the setup checklist (that lives only on the Get Started guide, /setup);
@@ -1201,6 +1107,10 @@ export default function DashboardPage() {
 
   const layout = useDashboardLayout();
   const [showCustomize, setShowCustomize] = useState(false);
+  // Run Wizard now rides in the header actions (the separate quick-action bar
+  // was dropped to keep the dashboard on one screen). AI-gated — hidden when
+  // AI features are off.
+  const aiEnabled = useAiEnabled();
 
   if (error) {
     return (
@@ -1250,6 +1160,24 @@ export default function DashboardPage() {
         title="Dashboard"
         actions={!isEmptyOrg ? (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            {/* Run Wizard — the one "do" action from the old quick-action bar,
+                kept here as a primary pill (AI-gated). The bar's other entries
+                were navigation duplicated by the sidebar, so they were dropped. */}
+            {aiEnabled && (
+              <Link
+                to="/processes/wizard"
+                title="Generate a process hierarchy with AI"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 12px', background: 'var(--color-primary)',
+                  border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)',
+                  fontSize: 12, fontWeight: 600, color: '#fff', textDecoration: 'none', whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{ display: 'inline-flex', color: '#fff' }}>{renderNavIcon('/processes', { size: 15, strokeWidth: 1.8 })}</span>
+                Run Wizard
+              </Link>
+            )}
             {/* Governed lens — narrows the you-scoped portfolio sections to the
                 entities the governance program governs. 'All' is the default. */}
             <div role="group" aria-label="Portfolio lens" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
@@ -1292,11 +1220,6 @@ export default function DashboardPage() {
         ) : undefined}
       >
       </PageHeader>
-
-      {/* Quick-action menu bar — pinned under the header as the dashboard's
-          "menu". Hidden on an empty org, which shows the welcome/setup screen
-          instead. */}
-      {!isEmptyOrg && <DashboardActionBar />}
 
       {/* Governed-lens note — only when the lens is on. Explains what narrowed
           (with the scope version) or why it didn't (no scope defined yet). */}
@@ -1465,7 +1388,7 @@ function SetupCompleteBanner({ stats, orgId }: { stats: DashboardStats; orgId: s
       role="status"
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 14px', marginBottom: 20,
+        padding: '8px 14px', marginBottom: 12,
         background: '#dcfce7', border: '1px solid #86efac',
         borderRadius: 'var(--radius-md)', fontSize: 13, color: '#166534',
       }}
