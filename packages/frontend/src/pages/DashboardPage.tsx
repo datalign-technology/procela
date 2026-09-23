@@ -360,7 +360,12 @@ function priorityColor(p: string): string {
 }
 function priorityBadge(p: string): React.CSSProperties {
   return {
-    display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+    // Fixed min-width + centred text so every pill in a column is the same
+    // width regardless of label length (LOW/HIGH/MEDIUM/CRITICAL), keeping the
+    // badge edges — and the task/issue titles beside them — aligned. 60px
+    // (border-box) clears the widest label, CRITICAL (~58px).
+    display: 'inline-block', boxSizing: 'border-box', minWidth: 60, textAlign: 'center',
+    padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
     background: priorityColor(p) + '18', color: priorityColor(p),
   };
 }
