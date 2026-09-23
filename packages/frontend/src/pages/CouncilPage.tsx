@@ -197,17 +197,6 @@ function pctBarColor(v: number | null, target: number): string {
   return 'var(--color-error)';
 }
 
-// Status colour for a KPI tile's headline number, so the most prominent
-// figures convey target status at a glance — the same read the table's bars
-// give. Percentages track the coverage/classification thresholds; counts are
-// ceilings (fewer is better) and only flag amber when over target. No-data
-// and on-target values stay in the default text colour rather than shouting.
-function measureStatusColor(kind: 'pct' | 'count', val: number | null, target: number): string {
-  if (val == null) return 'var(--color-text)';
-  if (kind === 'pct') return pctBarColor(val, target);
-  return val <= target ? 'var(--color-text)' : 'var(--color-warning)';
-}
-
 export default function CouncilPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
@@ -412,8 +401,6 @@ export default function CouncilPage() {
     );
   };
 
-  const ent = derived.enterprise;
-
   return (
     <div>
       <PageHeader
@@ -550,36 +537,6 @@ export default function CouncilPage() {
             )}
           </Card>
         </div>
-      </div>
-
-      {/* ── Governance health — enterprise KPI rollup (one strip; drills to source) ── */}
-      <SectionHeading title="Governance health" as="h3" right={statusPill(ent.status)} />
-      <div style={{ ...tileGrid, marginBottom: 16 }}>
-        {MEASURES.map((m) => {
-          const val = resolved(ent, m.key);
-          const tgt = derived.targets[m.key];
-          return (
-            <Link
-              key={m.key}
-              to={m.href}
-              title={`Open ${m.label} — ${MEASURE_DEST[m.key]}`}
-              style={{ textDecoration: 'none', color: 'inherit', display: 'flex', borderRadius: 'var(--radius-md)', transition: 'transform .08s ease, box-shadow .08s ease' }}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-            >
-              <div style={{ ...statTile, flex: 1 }}>
-                <div style={tileLabel}>
-                  {m.label}
-                  <span aria-hidden style={{ color: 'var(--color-primary)', fontSize: 13 }}>→</span>
-                </div>
-                <div style={{ ...tileNumber, color: measureStatusColor(m.kind, val, tgt) }}>
-                  {val == null ? '—' : `${val}${m.kind === 'pct' ? '%' : ''}`}
-                </div>
-                <div style={tileSub}>{m.kind === 'pct' ? `Target ${tgt}%` : `Target ${tgt}`}</div>
-              </div>
-            </Link>
-          );
-        })}
       </div>
 
       {/* Scorecard table */}
