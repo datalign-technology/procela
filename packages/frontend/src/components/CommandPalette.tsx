@@ -27,7 +27,8 @@ type ResultType =
   | 'data-domain'
   | 'governance-group'
   | 'glossary-term'
-  | 'mapping';
+  | 'mapping'
+  | 'report';
 
 export interface PaletteResult {
   type: ResultType;
@@ -52,7 +53,14 @@ const TYPE_LABEL: Record<ResultType, string> = {
   'governance-group': 'Governance Group',
   'glossary-term': 'Glossary',
   mapping: 'Mapping',
+  report: 'Report',
 };
+
+// Canonical order for the filter chips (and grouping ties).
+const TYPE_ORDER: ResultType[] = [
+  'report', 'activity', 'data-asset', 'system', 'person',
+  'data-domain', 'governance-group', 'glossary-term', 'connection', 'mapping',
+];
 
 const TYPE_COLOR: Record<ResultType, { bg: string; fg: string }> = {
   system: { bg: '#dbeafe', fg: '#1e40af' },
@@ -64,6 +72,7 @@ const TYPE_COLOR: Record<ResultType, { bg: string; fg: string }> = {
   'governance-group': { bg: '#f3e8ff', fg: '#6b21a8' },
   'glossary-term': { bg: '#f1f5f9', fg: '#334155' },
   mapping: { bg: '#fee2e2', fg: '#991b1b' },
+  report: { bg: '#d1f0eb', fg: '#0f4f46' },
 };
 
 const RECENTS_KEY_PREFIX = 'procela.cmdk.recents.';
@@ -102,6 +111,9 @@ export default function CommandPalette({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<PaletteResult[]>(() => loadRecents(orgKey));
   const [activeIndex, setActiveIndex] = useState(0);
+  // Narrow results to one entity type (null = all). Cleared when the palette
+  // opens so each session starts unfiltered.
+  const [typeFilter, setTypeFilter] = useState<ResultType | null>(null);
 
   // Reload recents when the active org switches so users see only the
   // recents they made in this org context.
@@ -114,6 +126,7 @@ export default function CommandPalette({ open, onClose }: Props) {
       setQuery('');
       setResults([]);
       setActiveIndex(0);
+      setTypeFilter(null);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [open]);
@@ -152,17 +165,34 @@ export default function CommandPalette({ open, onClose }: Props) {
     [query, results, recents],
   );
 
+  // The types present in the current results (plus the active filter, so its
+  // chip stays visible even if a new query has none of it), in canonical order.
+  const availableTypes = useMemo(() => {
+    const present = new Set(items.map((r) => r.type));
+    if (typeFilter) present.add(typeFilter);
+    return TYPE_ORDER.filter((t) => present.has(t));
+  }, [items, typeFilter]);
+
+  // The rows actually shown: narrowed to the selected type when a filter is on.
+  const filteredItems = useMemo(
+    () => (typeFilter ? items.filter((r) => r.type === typeFilter) : items),
+    [items, typeFilter],
+  );
+
+  // Reset the active row when the filter changes so nav starts at the top.
+  useEffect(() => { setActiveIndex(0); }, [typeFilter]);
+
   // Group items by type while preserving the rank order: groups appear
   // in the order their first result does.
   const grouped = useMemo(() => {
     const seen = new Map<ResultType, PaletteResult[]>();
-    for (const r of items) {
+    for (const r of filteredItems) {
       const arr = seen.get(r.type) || [];
       arr.push(r);
       seen.set(r.type, arr);
     }
     return Array.from(seen.entries());
-  }, [items]);
+  }, [filteredItems]);
 
   const pick = (r: PaletteResult) => {
     // Bump to front of recents (dedup by type+id).
@@ -181,7 +211,7 @@ export default function CommandPalette({ open, onClose }: Props) {
       if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex((i) => Math.min(items.length - 1, i + 1));
+        setActiveIndex((i) => Math.min(filteredItems.length - 1, i + 1));
         return;
       }
       if (e.key === 'ArrowUp') {
@@ -190,7 +220,7 @@ export default function CommandPalette({ open, onClose }: Props) {
         return;
       }
       if (e.key === 'Enter') {
-        const picked = items[activeIndex];
+        const picked = filteredItems[activeIndex];
         if (picked) {
           e.preventDefault();
           pick(picked);
@@ -199,7 +229,7 @@ export default function CommandPalette({ open, onClose }: Props) {
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, items, activeIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, filteredItems, activeIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll the active row into view as the user arrows down/up.
   useEffect(() => {
@@ -219,8 +249,14 @@ export default function CommandPalette({ open, onClose }: Props) {
   };
 
   const emptyHint = query.trim()
-    ? (loading ? 'Searching…' : 'No matches. Try a different word or check the spelling.')
-    : 'Start typing to search across systems, data assets, activities, people, and more.';
+    ? (loading
+        ? 'Searching…'
+        : (typeFilter && items.length > 0
+            ? `No ${TYPE_LABEL[typeFilter].toLowerCase()} matches — clear the filter to see other results.`
+            : 'No matches. Try a different word or check the spelling.'))
+    : (typeFilter && items.length > 0
+        ? `No recent ${TYPE_LABEL[typeFilter].toLowerCase()} items.`
+        : 'Start typing to search across reports, systems, data assets, activities, people, and more.');
 
   return (
     <div
@@ -260,10 +296,10 @@ export default function CommandPalette({ open, onClose }: Props) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search anything…"
             role="combobox"
-            aria-expanded={items.length > 0}
+            aria-expanded={filteredItems.length > 0}
             aria-controls="cmd-palette-results"
             aria-autocomplete="list"
-            aria-activedescendant={items[activeIndex] ? `cmd-palette-opt-${activeIndex}` : undefined}
+            aria-activedescendant={filteredItems[activeIndex] ? `cmd-palette-opt-${activeIndex}` : undefined}
             aria-label="Search across systems, data assets, activities, people, and more"
             style={{
               flex: 1, border: 'none', outline: 'none',
@@ -276,6 +312,27 @@ export default function CommandPalette({ open, onClose }: Props) {
           <kbd style={kbdStyle}>Esc</kbd>
         </div>
 
+        {/* Type filter — narrow results to one kind of "thing". Chips appear for
+            the types present in the current results, plus an All reset. */}
+        {availableTypes.length > 1 && (
+          <div role="group" aria-label="Filter by type" style={{
+            display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
+            padding: '8px 14px', borderBottom: '1px solid var(--color-border)',
+          }}>
+            <FilterChip label="All" active={typeFilter === null} onClick={() => setTypeFilter(null)} />
+            {availableTypes.map((t) => (
+              <FilterChip
+                key={t}
+                label={TYPE_LABEL[t]}
+                count={items.filter((r) => r.type === t).length}
+                active={typeFilter === t}
+                color={TYPE_COLOR[t]}
+                onClick={() => setTypeFilter((cur) => (cur === t ? null : t))}
+              />
+            ))}
+          </div>
+        )}
+
         <div
           ref={listRef}
           id="cmd-palette-results"
@@ -283,7 +340,7 @@ export default function CommandPalette({ open, onClose }: Props) {
           aria-label="Search results"
           style={{ overflowY: 'auto', flex: 1 }}
         >
-          {items.length === 0 ? (
+          {filteredItems.length === 0 ? (
             <div role="status" aria-live="polite" style={{ padding: 28, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>
               {emptyHint}
             </div>
@@ -362,6 +419,36 @@ export default function CommandPalette({ open, onClose }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+// A single filter pill. `active` reverses to a filled primary look; a color
+// dot echoes the type badge so the chip and its results read as one set.
+function FilterChip({ label, count, active, color, onClick }: {
+  label: string;
+  count?: number;
+  active: boolean;
+  color?: { bg: string; fg: string };
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '3px 9px', borderRadius: 999, cursor: 'pointer',
+        fontSize: 11, fontWeight: 600, lineHeight: 1.4,
+        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+        background: active ? 'var(--color-primary)' : 'var(--color-surface)',
+        color: active ? '#fff' : 'var(--color-text-secondary)',
+      }}
+    >
+      {color && <span style={{ width: 7, height: 7, borderRadius: 999, background: active ? '#fff' : color.fg, flexShrink: 0 }} />}
+      {label}
+      {count != null && <span style={{ opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>{count}</span>}
+    </button>
   );
 }
 
