@@ -226,9 +226,14 @@ function buildQueue(data: MyDashboardData): QueueItem[] {
 }
 
 // Shared style for a queue row's trailing action affordance (a link or a
-// button), so the nav and mutate variants look identical.
+// button), so the nav and mutate variants look identical. A fixed min-width
+// + centred content means "Open", "Start", "Complete" etc. all render at the
+// same width and their left edges line up down the column, whether the row's
+// action is a nav Link or a mutate button.
 function actionStyle(solid: boolean): React.CSSProperties {
   return {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    minWidth: 72, boxSizing: 'border-box',
     fontSize: 11, fontWeight: 600, borderRadius: 7, padding: '4px 10px', flexShrink: 0,
     textDecoration: 'none', whiteSpace: 'nowrap', lineHeight: 1.4,
     border: '1px solid var(--color-primary)',
@@ -363,7 +368,7 @@ function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
                 disabled={busyId === it.id}
                 onClick={() => runAction(it)}
                 title={`${it.action.label} — ${it.title}`}
-                style={{ ...actionStyle(it.action.solid), cursor: busyId === it.id ? 'default' : 'pointer', opacity: busyId && busyId !== it.id ? 0.5 : 1, minWidth: 62, textAlign: 'center' }}
+                style={{ ...actionStyle(it.action.solid), cursor: busyId === it.id ? 'default' : 'pointer', opacity: busyId && busyId !== it.id ? 0.5 : 1 }}
               >{busyId === it.id ? '…' : it.action.label}</button>
             )}
           </div>
