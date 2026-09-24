@@ -135,24 +135,11 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
   const [flyoutTop, setFlyoutTop] = useState(0);
   const flyoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // When the desktop sidebar is collapsed we strip it down to just the brand
-  // icon at the top-left — no nav rail, no bottom toggle. The icon itself is
-  // then the way back: click it to expand. (Mobile is a separate bottom bar
-  // and never enters this state.)
-  const collapsedDesktop = sidebarCollapsed && !isMobile;
-
   return (
     <aside className={clsx(styles.sidebar, sidebarCollapsed && styles.sidebarCollapsed)}>
-      <div
-        className={styles.sidebarBrand}
-        onClick={collapsedDesktop ? () => setSidebarCollapsed(false) : undefined}
-        role={collapsedDesktop ? 'button' : undefined}
-        tabIndex={collapsedDesktop ? 0 : undefined}
-        onKeyDown={collapsedDesktop ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSidebarCollapsed(false); } } : undefined}
-        title={collapsedDesktop ? 'Expand sidebar' : undefined}
-        aria-label={collapsedDesktop ? 'Expand sidebar' : undefined}
-        style={collapsedDesktop ? { cursor: 'pointer' } : undefined}
-      >
+      {/* Collapsed, the brand shows just the icon (the wordmark span is hidden
+          by CSS); the nav below stays as a centered icon-only rail. */}
+      <div className={styles.sidebarBrand}>
         <img
           src={branding.logoUrl || '/procela-icon.png'}
           alt={branding.companyName || 'Procela'}
@@ -161,7 +148,6 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
         />
         {!sidebarCollapsed && <span>{branding.companyName || 'Procela'}</span>}
       </div>
-      {!collapsedDesktop && (
       <nav className={styles.sidebarNav}>
         {isMobile ? (
           /* On phones the sidebar is a fixed bottom bar with four
@@ -393,16 +379,13 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
           </>
         )}
       </nav>
-      )}
-      {!collapsedDesktop && (
-        <button
-          className={styles.sidebarToggle}
-          onClick={() => setSidebarCollapsed((c) => !c)}
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {NAV_MENU_ICON}
-        </button>
-      )}
+      <button
+        className={styles.sidebarToggle}
+        onClick={() => setSidebarCollapsed((c) => !c)}
+        title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {NAV_MENU_ICON}
+      </button>
     </aside>
   );
 }
