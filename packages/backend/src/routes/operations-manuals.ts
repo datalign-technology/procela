@@ -7,6 +7,12 @@ import logger from '../lib/logger';
 import { getOperationsManualsRepository } from '../db/operations-manuals.repo';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { enforceAssignment, ownerOnCreate } from '../lib/assignment';
+import { DAMA_ROLE_TYPES } from './dama-roles';
+
+// A manual documents a role's operating rhythm, so its roleType is one of the
+// canonical DAMA governance roles, or 'CUSTOM' for a manual that doesn't map to
+// a standard role. Keeps the manual↔role vocabulary aligned with the Roles page.
+const VALID_MANUAL_ROLE_TYPES = new Set<string>([...DAMA_ROLE_TYPES, 'CUSTOM']);
 
 // ── Types ──
 
@@ -294,6 +300,9 @@ router.post('/', async (req: Request, res: Response) => {
   const { orgId, label, roleType, purpose, daily, weekly, monthly, quarterly, escalation, customContent, isCustom, ownerPersonId } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!label) { res.status(400).json({ success: false, error: 'label is required' }); return; }
+  if (roleType != null && !VALID_MANUAL_ROLE_TYPES.has(roleType)) {
+    res.status(400).json({ success: false, error: `Invalid roleType "${roleType}"` }); return;
+  }
 
   const now = new Date().toISOString();
   const manual: StoredOperationsManual = {
@@ -333,6 +342,10 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   const before = { ...manual };
   const { label, roleType, purpose, daily, weekly, monthly, quarterly, escalation, customContent, isCustom, ownerPersonId } = req.body;
+
+  if (roleType !== undefined && !VALID_MANUAL_ROLE_TYPES.has(roleType)) {
+    res.status(400).json({ success: false, error: `Invalid roleType "${roleType}"` }); return;
+  }
 
   if (label !== undefined) manual.label = label;
   if (roleType !== undefined) manual.roleType = roleType;
