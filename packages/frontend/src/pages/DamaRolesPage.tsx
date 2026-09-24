@@ -19,7 +19,13 @@ import PersonPicker from '../components/PersonPicker';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { SkeletonRows } from '../components/Skeleton';
-import { GOVERNANCE_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
+import { GOVERNANCE_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON, DAMA_ROLE_TYPES } from '../types';
+
+// Roles an operations manual can document (the manual picker's vocabulary).
+// Entity-attached roles like Data Domain Owner aren't manual-eligible, so the
+// role→manual affordance is shown only for these (plus any role that already
+// has a manual).
+const MANUAL_ELIGIBLE_ROLES = new Set<string>(DAMA_ROLE_TYPES);
 
 // Required governance roles (CDO, Data Governance Lead, Data Owner,
 // Business Data Steward). A required role with zero holders is a
@@ -75,6 +81,14 @@ interface AssetOption {
   name: string;
   ownerPersonId?: string | null;
   stewardIds?: string[];
+}
+
+// The operations manual(s) documenting a role. Surfaced in the role preview
+// as the reverse of the manual→role link authored on the Documentation page.
+interface ManualRef {
+  id: string;
+  roleType: string;
+  label: string;
 }
 
 // ── Entity-scoped role catalogue ────────────────────────────────────────
@@ -279,6 +293,7 @@ export default function DamaRolesPage({
   const [domains, setDomains] = useState<DomainOption[]>([]);
   const [systems, setSystems] = useState<SystemOption[]>([]);
   const [dataAssets, setDataAssets] = useState<AssetOption[]>([]);
+  const [manuals, setManuals] = useState<ManualRef[]>([]);
   // Counts come from the local `roles` list now (see roleCounts below);
   // the /summary endpoint is still fetched so future per-role analytics
   // have a single source of truth, but the result is intentionally
@@ -312,7 +327,7 @@ export default function DamaRolesPage({
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [rolesRes, summaryRes, peopleRes, agentsRes, orgsRes, domainsRes, systemsRes, assetsRes] = await Promise.all([
+      const [rolesRes, summaryRes, peopleRes, agentsRes, orgsRes, domainsRes, systemsRes, assetsRes, manualsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
         apiClient.get<{ success: boolean; data: Record<string, number> }>(`/dama-roles/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
@@ -323,6 +338,7 @@ export default function DamaRolesPage({
         apiClient.get<{ success: boolean; data: DomainOption[] }>(`/data-domains${query}`),
         apiClient.get<{ success: boolean; data: SystemOption[] }>(`/systems${query}`).catch(() => ({ success: true, data: [] as SystemOption[] })),
         apiClient.get<{ success: boolean; data: AssetOption[] }>(`/data-assets${query}`).catch(() => ({ success: true, data: [] as AssetOption[] })),
+        apiClient.get<{ success: boolean; data: ManualRef[] }>(`/operations-manuals${query}`).catch(() => ({ success: true, data: [] as ManualRef[] })),
       ]);
       setRoles(rolesRes.data || []);
       setRoleTypes(rolesRes.roleTypes || []);
@@ -333,6 +349,7 @@ export default function DamaRolesPage({
       setDomains(domainsRes.data || []);
       setSystems(systemsRes.data || []);
       setDataAssets(assetsRes.data || []);
+      setManuals(manualsRes.data || []);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -359,6 +376,18 @@ export default function DamaRolesPage({
     for (const p of people) m.set(p.id, p.name);
     return m;
   }, [people]);
+
+  // roleType → the operations manual(s) that document it, for the reverse
+  // role→manual link in the preview pane.
+  const manualsByRole = useMemo(() => {
+    const m = new Map<string, ManualRef[]>();
+    for (const man of manuals) {
+      if (!man.roleType) continue;
+      const list = m.get(man.roleType);
+      if (list) list.push(man); else m.set(man.roleType, [man]);
+    }
+    return m;
+  }, [manuals]);
 
   // Open the assign form pre-scoped to a specific entity. Used by
   // the matrix's inline +Assign on DAMA-storage rows — pre-fills
@@ -876,6 +905,7 @@ export default function DamaRolesPage({
             systems={systems}
             dataAssets={dataAssets}
             personById={personById}
+            manuals={manualsByRole.get(previewRoleType) || []}
             roleBadge={roleBadge}
             resolveScope={resolveScope}
             onClose={() => setPreviewRoleType(null)}
@@ -1347,7 +1377,7 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
 // (org-scoped) or per-entity matrix (entity-attached), and an Assign
 // action.
 function RolePreviewPane({
-  roleType, dama, domains, systems, dataAssets, personById,
+  roleType, dama, domains, systems, dataAssets, personById, manuals,
   roleBadge, resolveScope, onClose, onAssign, onAssignToEntity,
   navigateToEntity, onOpenDrawer, setConfirmDelete, canEdit,
 }: {
@@ -1358,6 +1388,7 @@ function RolePreviewPane({
   systems: SystemOption[];
   dataAssets: AssetOption[];
   personById: Map<string, string>;
+  manuals: ManualRef[];
   roleBadge: (rt: string) => React.CSSProperties;
   resolveScope: (id: string) => { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string };
   onClose: () => void;
@@ -1371,6 +1402,8 @@ function RolePreviewPane({
   const def = GOVERNANCE_ROLES.find((r) => r.roleType === roleType);
   const purpose = def?.purpose || '';
   const required = REQUIRED_ROLE_TYPES.has(roleType);
+  const navigate = useNavigate();
+  const openManual = () => navigate('/documentation?tab=manual');
 
   return (
     <Card padding={0} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
@@ -1447,6 +1480,43 @@ function RolePreviewPane({
             </ul>
           )}
         </div>
+      )}
+
+      {/* Reverse of the manual→role link authored on the Documentation page:
+          the operations manual(s) that document this role's cadence. Shown for
+          manual-eligible roles, or any role that already has a manual. */}
+      {(manuals.length > 0 || MANUAL_ELIGIBLE_ROLES.has(roleType)) && (
+      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-border)' }}>
+        <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 6 }}>
+          Operations manual
+        </div>
+        {manuals.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+            No manual documents this role yet.{canEdit && <> <button type="button" onClick={openManual} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)', font: 'inherit', fontSize: 12 }}>Add one →</button></>}
+          </div>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {manuals.map((man) => (
+              <li key={man.id}>
+                <button
+                  type="button"
+                  onClick={openManual}
+                  title={`Open "${man.label}" on the Documentation page`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4,
+                    padding: '6px 10px', cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-primary)',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/documentation', { size: 13 })}</span>
+                  <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{man.label}</span>
+                  <span aria-hidden="true" style={{ flexShrink: 0 }}>&rarr;</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       )}
 
       {canEdit && (
