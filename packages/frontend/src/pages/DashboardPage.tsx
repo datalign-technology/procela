@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Check, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -85,18 +85,6 @@ interface MyTask { id: string; title: string; isOverdue?: boolean; priority: str
 interface MyIssue { id: string; title: string; severity: string; status: string; domainName?: string; }
 interface MyReview { id: string; name: string; isOverdue?: boolean; nextReviewDate?: string | null; }
 interface MyEvent { name: string; daysAway: number; }
-// Unified time-ordered entry for My Schedule — a calendar event, a task due
-// date, or a policy review due date, all reduced to "what & when".
-interface ScheduleItem { id: string; kind: 'event' | 'task' | 'review'; name: string; daysAway: number; to: string; }
-
-// Shared floor height for the personal list panels (Needs Attention, Schedule,
-// Tasks, Issues) so they read as the same-height cards even when one has fewer
-// rows than another. The Attention/Schedule pair share a grid row, so a floor
-// on Schedule lifts Attention with it. Kept low so a panel with only a row or
-// two doesn't carry a tall block of dead space — the goal is a compact
-// dashboard that fits on one screen; a panel with more rows still grows past
-// this floor and its grid-row partner stretches to match.
-const PANEL_MIN_HEIGHT = 120;
 interface MyDomain { id: string; name: string; relation: string; assetCount: number; directAssetCount?: number; totalAssets: number; healthyAssets: number; }
 // Aggregate over the assets in the domains I own or steward — powers the
 // personal "My Portfolio Health" widget (the tier mix + health of what I'm
@@ -121,52 +109,6 @@ interface MyDashboardData {
   myDomains?: MyDomain[];
 }
 
-// Small uppercase card header with a leading semantic icon — used by the
-// Attention (amber alert) and Schedule (blue calendar) panels so the pair is
-// told apart by glyph, not by a 4px border colour alone. The icon inherits
-// `color` via currentColor.
-function CardHeaderRow({ color, icon, label }: { color: string; icon: React.ReactNode; label: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-      <span style={{ display: 'inline-flex', color, flexShrink: 0 }}>{icon}</span>
-      <span style={{ fontSize: 11, fontWeight: 600, color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-    </div>
-  );
-}
-
-// Warning-triangle glyph for the "Needs My Attention" header (stroke follows
-// the wrapper's currentColor so it renders in the warning amber).
-function AttentionGlyph() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-
-// Whole-days from today to a YYYY-MM-DD date string (negative = past).
-// Used to place task/review due dates on the same daysAway axis as the
-// server-computed calendar-event offsets.
-function daysUntilDate(dateStr: string): number {
-  const d = new Date(dateStr + 'T00:00:00');
-  if (isNaN(d.getTime())) return Infinity;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((d.getTime() - today.getTime()) / 86400000);
-}
-
-// Bucket any daysAway-bearing items into a calendar-style grouping so My
-// Schedule reads as "when", not a flat list. Empty buckets are dropped.
-function bucketByDaysAway<T extends { daysAway: number }>(items: T[]): Array<{ label: string; items: T[] }> {
-  return [
-    { label: 'Today', items: items.filter((e) => e.daysAway <= 0) },
-    { label: 'This week', items: items.filter((e) => e.daysAway >= 1 && e.daysAway <= 6) },
-    { label: 'Later', items: items.filter((e) => e.daysAway >= 7) },
-  ].filter((g) => g.items.length > 0);
-}
-
 type Lens = 'all' | 'governed';
 // The you-scoped sections share one endpoint; the governed lens (+ the active
 // org) rides the query string so the same call narrows "my" portfolio to the
@@ -181,10 +123,94 @@ function myDashboardUrl(lens: Lens = 'all', orgId: string | null = null): string
   return `/dashboard/my-dashboard${qs ? `?${qs}` : ''}`;
 }
 
-function MyDashboard({ lens = 'all', orgId = null }: LensProps) {
+// ──────────────────────────────────────────────────────────────────────────
+// Today queue — the merged, ranked "what needs me" list. Overdue tasks,
+// critical issues, overdue policy reviews and at-risk domains are all things
+// that need the signed-in user, so they share ONE de-duplicated queue ranked
+// by urgency, rather than the old separate Needs-Attention / Tasks / Issues
+// panels that listed the same items twice. Each row carries the action that
+// resolves it (a deep link to where it's handled); a segmented
+// All / Tasks / Issues filter narrows the same list.
+// ──────────────────────────────────────────────────────────────────────────
+type QueueFilter = 'all' | 'task' | 'issue';
+interface QueueItem {
+  id: string;
+  kind: 'issue' | 'task' | 'review' | 'domain';
+  score: number;                 // lower = more urgent (sort key)
+  dot: string;                   // leading severity dot colour
+  pill: { label: string; color: string };
+  title: string;
+  meta: string;
+  due?: { label: string; over: boolean };
+  action: { label: string; to: string; solid: boolean };
+}
+
+// Fold the personal work items into one urgency-ranked queue. Scores are hand
+// tuned so the most decision-worthy rows float up: a critical issue first, then
+// at-risk domains and overdue work, then open work by priority.
+function buildQueue(data: MyDashboardData): QueueItem[] {
+  const tasksTo = '/governance-work?tab=tasks';
+  const issuesTo = '/governance-work?tab=issues';
+  const items: QueueItem[] = [];
+
+  for (const i of data.myIssues || []) {
+    const crit = i.severity === 'CRITICAL';
+    const high = i.severity === 'HIGH';
+    items.push({
+      id: `issue-${i.id}`, kind: 'issue',
+      score: crit ? 0 : high ? 2 : 3,
+      dot: crit ? '#dc2626' : high ? '#f59e0b' : '#3b82f6',
+      pill: { label: i.severity, color: priorityColor(i.severity) },
+      title: i.title,
+      meta: ['Issue', i.domainName].filter(Boolean).join(' · '),
+      action: { label: 'Triage', to: issuesTo, solid: crit },
+    });
+  }
+  for (const t of data.myTasks || []) {
+    const over = !!t.isOverdue;
+    const high = t.priority === 'HIGH' || t.priority === 'CRITICAL';
+    const med = t.priority === 'MEDIUM';
+    items.push({
+      id: `task-${t.id}`, kind: 'task',
+      score: over ? 1.5 : high ? 2.5 : med ? 4 : 5,
+      dot: over ? '#dc2626' : high ? '#f59e0b' : med ? '#3b82f6' : '#64748b',
+      pill: { label: t.priority, color: priorityColor(t.priority) },
+      title: t.title, meta: 'Task',
+      due: t.dueDate
+        ? { label: over ? 'Overdue' : new Date(t.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), over }
+        : undefined,
+      action: { label: 'Open', to: tasksTo, solid: over },
+    });
+  }
+  for (const r of (data.pendingReviews || []).filter((rv) => rv.isOverdue)) {
+    items.push({
+      id: `review-${r.id}`, kind: 'review', score: 1.8, dot: '#dc2626',
+      pill: { label: 'REVIEW', color: '#dc2626' },
+      title: r.name, meta: 'Policy review · overdue',
+      action: { label: 'Review', to: '/governance-policies', solid: false },
+    });
+  }
+  for (const d of (data.myDomains || []).filter((dm) => dm.totalAssets > 0 && dm.healthyAssets / dm.totalAssets < 0.8)) {
+    const pct = Math.round((d.healthyAssets / d.totalAssets) * 100);
+    items.push({
+      id: `domain-${d.id}`, kind: 'domain', score: 1, dot: '#dc2626',
+      pill: { label: 'AT RISK', color: '#dc2626' },
+      title: d.name, meta: `Domain you ${d.relation === 'owner' ? 'own' : 'steward'} · ${pct}% healthy`,
+      action: { label: 'Open', to: '/data-domains', solid: false },
+    });
+  }
+  return items.sort((a, b) => a.score - b.score);
+}
+
+const QUEUE_MAX = 8;
+
+// The dashboard's left pane: the ranked action queue (Concept B / "Today").
+function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
   const { user } = useAuthStore();
   const [data, setData] = useState<MyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<QueueFilter>('all');
+  const trend = useMyTrends();
 
   useEffect(() => {
     if (!user?.email) { setLoading(false); return; }
@@ -192,27 +218,27 @@ function MyDashboard({ lens = 'all', orgId = null }: LensProps) {
       try {
         const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
         setData(res.data);
-      } catch { /* */ }
-      finally { setLoading(false); }
+      } catch { /* */ } finally { setLoading(false); }
     })();
   }, [user?.email, lens, orgId]);
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <Card padding={20}><SkeletonRows rows={4} columnWidths={[180, null, 90]} /></Card>
+      <SectionLabel>Today</SectionLabel>
+      <Card padding={0}><div style={{ padding: 14 }}><SkeletonRows rows={4} columnWidths={[16, null, 60, 60]} /></div></Card>
     </div>
   );
 
   if (!data?.person) {
-    // Empty state instead of hiding — e.g. when the signed-in account isn't
-    // linked to a person record in this org (admins, SSO users not yet
-    // imported). The section still shows so an enabled widget doesn't vanish.
+    // Not linked to a person in this org (admins, SSO users not yet imported):
+    // show the prompt to link, not an empty queue.
     return (
       <div style={{ marginBottom: 16 }}>
+        <SectionLabel>Today</SectionLabel>
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-            This is your personal view — the tasks, issues, and domains assigned to you will show up
-            here once your account is linked to a person in this organization.
+            This is your personal view — the tasks, issues and domains that need you show up here once
+            your account is linked to a person in this organization.
             <div style={{ marginTop: 8 }}>
               <Link to="/people" style={{ fontSize: 12, color: 'var(--color-primary)' }}>Link your profile in People &rarr;</Link>
             </div>
@@ -222,152 +248,117 @@ function MyDashboard({ lens = 'all', orgId = null }: LensProps) {
     );
   }
 
-  // Needs-My-Attention queue (the "now" side): things that are late or at
-  // risk right now — overdue tasks, critical issues, overdue policy reviews,
-  // and domains I own/steward that have slipped below the 80%-healthy bar.
-  // Reviews that are merely *upcoming* (not yet overdue) belong to Schedule,
-  // not here, so the two panels never show the same review twice.
-  // urgentShown mirrors the per-source slice caps below so the "+N more"
-  // footer only appears when the queue genuinely runs past what's rendered.
-  const overdueTasks = (data.myTasks || []).filter((t) => t.isOverdue);
-  const criticalIssues = (data.myIssues || []).filter((i) => i.severity === 'CRITICAL');
-  const overdueReviews = (data.pendingReviews || []).filter((r) => r.isOverdue);
-  const atRiskDomains = (data.myDomains || []).filter((d) => d.totalAssets > 0 && d.healthyAssets / d.totalAssets < 0.8);
-  const urgentTotal = overdueTasks.length + criticalIssues.length + overdueReviews.length + atRiskDomains.length;
-  const urgentShown = Math.min(overdueTasks.length, 3) + Math.min(criticalIssues.length, 3)
-    + Math.min(overdueReviews.length, 3) + Math.min(atRiskDomains.length, 3);
-
-  // My Schedule (the "next" side): every future-dated thing within 14 days,
-  // on one axis — calendar events (server-dated), plus task and review due
-  // dates that aren't overdue (those are Attention's). Sorted soonest-first.
-  const scheduleItems: ScheduleItem[] = [
-    ...(data.upcomingEvents || []).map((e, i): ScheduleItem => ({ id: `event-${i}`, kind: 'event', name: e.name, daysAway: e.daysAway, to: '/governance-calendar' })),
-    ...(data.myTasks || [])
-      .filter((t) => t.dueDate && !t.isOverdue)
-      .map((t): ScheduleItem => ({ id: t.id, kind: 'task', name: t.title, daysAway: daysUntilDate(t.dueDate!), to: '/governance-work?tab=tasks' }))
-      .filter((t) => t.daysAway >= 0 && t.daysAway <= 14),
-    ...(data.pendingReviews || [])
-      .filter((r) => r.nextReviewDate && !r.isOverdue)
-      .map((r): ScheduleItem => ({ id: r.id, kind: 'review', name: r.name, daysAway: daysUntilDate(r.nextReviewDate!), to: '/governance-policies' }))
-      .filter((r) => r.daysAway >= 0 && r.daysAway <= 14),
-  ].sort((a, b) => a.daysAway - b.daysAway);
+  const queue = buildQueue(data);
+  const taskCount = queue.filter((i) => i.kind === 'task').length;
+  const issueCount = queue.filter((i) => i.kind === 'issue').length;
+  const overdue = (data.myTasks || []).filter((t) => t.isOverdue).length;
+  const filtered = queue.filter((i) => (filter === 'all' ? true : i.kind === filter));
+  const top = filtered.slice(0, QUEUE_MAX);
+  const segs: Array<[QueueFilter, string, number]> = [
+    ['all', 'All', queue.length], ['task', 'Tasks', taskCount], ['issue', 'Issues', issueCount],
+  ];
 
   return (
     <div style={{ marginBottom: 16 }}>
-      {/* Two-column: Attention (the act-now triage queue — given primacy)
-          + Schedule (the look-ahead). Asymmetric 3:2 so the pair reads as
-          "urgent now vs. what's next" rather than two equal twins. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 12, marginBottom: 16 }}>
-        {/* Needs Attention — the act-now triage queue. A leading alert
-            glyph (not just the amber rule) so it's told apart from Schedule
-            at a glance. Sources: overdue tasks, critical issues, overdue
-            reviews, at-risk domains; each capped, with a "+N more" footer
-            when the queue runs longer. */}
-        <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-warning)' }}>
-          <CardHeaderRow color="var(--color-warning)" icon={<AttentionGlyph />} label="Needs Attention" />
-          {urgentTotal === 0 ? (
-            <div style={{ color: 'var(--color-success)', fontSize: 13 }}>All clear — no urgent items.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {overdueTasks.slice(0, 3).map((t) => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Overdue: {t.title}</span>
-                  <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
-                </div>
-              ))}
-              {criticalIssues.slice(0, 3).map((i) => (
-                <div key={i.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Critical: {i.title}</span>
-                  <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
-                </div>
-              ))}
-              {overdueReviews.slice(0, 3).map((r) => (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Overdue review: {r.name}</span>
-                  <Link to="/governance-policies" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
-                </div>
-              ))}
-              {atRiskDomains.slice(0, 3).map((d) => {
-                const pct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
-                return (
-                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: 'var(--color-warning)' }}>Low health: {d.name} ({pct}% healthy)</span>
-                    <Link to="/data-domains" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
-                  </div>
-                );
-              })}
-              {urgentTotal > urgentShown && (
-                <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 2 }}>
-                  +{urgentTotal - urgentShown} more &rarr;
-                </Link>
-              )}
-            </div>
-          )}
-        </Card>
-
-        {/* My Schedule — the look-ahead. Calendar events, upcoming task due
-            dates and upcoming review dates on one time axis, grouped into
-            buckets (Today / This week / Later) so it reads as a calendar
-            preview rather than a flat list, and never mirrors the Attention
-            queue beside it. A muted kind tag distinguishes a task/review due
-            date from a meeting. */}
-        <Card padding="14px 16px" style={{ borderLeft: '4px solid var(--color-info)', minHeight: PANEL_MIN_HEIGHT }}>
-          <CardHeaderRow color="var(--color-info)" icon={renderNavIcon('/governance-calendar', { size: 13 })} label="Schedule" />
-          {scheduleItems.length === 0 ? (
-            <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Nothing scheduled in the next 14 days.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {bucketByDaysAway(scheduleItems).map((g) => (
-                <div key={g.label}>
-                  <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 3 }}>{g.label}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {g.items.slice(0, 5).map((item) => (
-                      <Link key={item.id} to={item.to} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, textDecoration: 'none', color: 'var(--color-text)' }}>
-                        <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.kind !== 'event' && (
-                            <span style={{ color: 'var(--color-text-muted)' }}>{item.kind === 'task' ? 'Task' : 'Review'}: </span>
-                          )}
-                          {item.name}
-                        </span>
-                        <span style={{ fontSize: 10, color: item.daysAway <= 0 ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: item.daysAway <= 0 ? 600 : 400, flexShrink: 0 }}>
-                          {item.daysAway <= 0 ? 'Today' : item.daysAway === 1 ? 'Tomorrow' : `In ${item.daysAway} days`}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <Link to="/governance-calendar" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 2 }}>View calendar</Link>
-            </div>
-          )}
-        </Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <SectionLabel marginBottom={0}>Today</SectionLabel>
+          <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{queue.length}</span>
+          {overdue > 0 && <span style={attentionChip}>{overdue} overdue</span>}
+          <TrendMini points={trend} metricKey="openTasks" />
+        </div>
+        <div role="group" aria-label="Filter the queue" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+          {segs.map(([key, label, n]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setFilter(key)}
+              aria-pressed={filter === key}
+              style={{
+                padding: '4px 11px', fontSize: 11, fontWeight: filter === key ? 600 : 500,
+                border: 'none', cursor: 'pointer',
+                background: filter === key ? 'var(--color-primary)' : 'transparent',
+                color: filter === key ? '#fff' : 'var(--color-text-secondary)',
+              }}
+            >{label} {n}</button>
+          ))}
+        </div>
       </div>
-
-      {/* My Domains, My Tasks and My Issues each moved out to their own
-          customizable sections (MyDomains / MyTasks / MyIssues) so they can be
-          reordered / hidden / resized from Customize like the other sections.
-          What stays here is the personal Attention + Schedule pair. */}
+      <Card padding={0} style={{ overflow: 'hidden' }}>
+        {top.length === 0 ? (
+          <div style={{ padding: 16, fontSize: 13, color: 'var(--color-success)' }}>
+            {queue.length === 0 ? 'All clear — nothing needs you right now.' : `No open ${filter === 'task' ? 'tasks' : 'issues'} in your queue.`}
+          </div>
+        ) : top.map((it, idx) => (
+          <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderTop: idx > 0 ? '1px solid var(--color-border)' : 'none' }}>
+            <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: it.dot, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.title}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.meta}</div>
+            </div>
+            <span style={{ display: 'inline-block', boxSizing: 'border-box', minWidth: 58, textAlign: 'center', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: it.pill.color + '18', color: it.pill.color, flexShrink: 0 }}>{it.pill.label}</span>
+            {it.due && <span style={{ fontSize: 10, fontVariantNumeric: 'tabular-nums', color: it.due.over ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: it.due.over ? 600 : 400, flexShrink: 0, whiteSpace: 'nowrap' }}>{it.due.label}</span>}
+            <Link
+              to={it.action.to}
+              style={{
+                fontSize: 11, fontWeight: 600, borderRadius: 7, padding: '4px 10px', flexShrink: 0,
+                textDecoration: 'none', whiteSpace: 'nowrap',
+                border: '1px solid var(--color-primary)',
+                background: it.action.solid ? 'var(--color-primary)' : 'transparent',
+                color: it.action.solid ? '#fff' : 'var(--color-primary)',
+              }}
+            >{it.action.label}</Link>
+          </div>
+        ))}
+        {filtered.length > top.length && (
+          <Link to="/governance-work" style={{ display: 'block', padding: '9px 14px', borderTop: '1px solid var(--color-border)', fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>
+            +{filtered.length - top.length} more in Governance Work &rarr;
+          </Link>
+        )}
+      </Card>
     </div>
   );
 }
 
-// Priority/severity pill — shared by the Tasks and Issues sections. Fixed hex
-// (not semantic vars) so the four-step CRITICAL/HIGH/MEDIUM/LOW ramp stays a
-// stable, distinguishable scale rather than collapsing onto the theme's single
+// The right-pane header: the next scheduled governance meeting, pulled from the
+// same my-dashboard payload. Renders nothing when there's nothing on the
+// calendar in the look-ahead window, so the portfolio rail stays tight.
+function NextMeeting({ lens = 'all', orgId = null }: LensProps) {
+  const { user } = useAuthStore();
+  const [data, setData] = useState<MyDashboardData | null>(null);
+  useEffect(() => {
+    if (!user?.email) return;
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
+        setData(res.data);
+      } catch { /* */ }
+    })();
+  }, [user?.email, lens, orgId]);
+
+  const ev = (data?.upcomingEvents || [])[0];
+  if (!ev) return null;
+  const when = ev.daysAway <= 0 ? 'Today' : ev.daysAway === 1 ? 'Tomorrow' : `In ${ev.daysAway} days`;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <Card padding="12px 14px" style={{ display: 'flex', alignItems: 'center', gap: 10, borderLeft: '3px solid var(--color-info)' }}>
+        <span style={{ display: 'inline-flex', color: 'var(--color-info)', flexShrink: 0 }}>{renderNavIcon('/governance-calendar', { size: 16 })}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Next meeting</div>
+        </div>
+        <Link to="/governance-calendar" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-warning)', textDecoration: 'none', whiteSpace: 'nowrap' }}>{when} &rarr;</Link>
+      </Card>
+    </div>
+  );
+}
+
+// Priority/severity colour — the four-step CRITICAL/HIGH/MEDIUM/LOW ramp used
+// by the Today queue's severity pills. Fixed hex (not semantic vars) so the
+// scale stays distinguishable rather than collapsing onto the theme's single
 // error/warning colours.
 function priorityColor(p: string): string {
   return p === 'CRITICAL' ? '#dc2626' : p === 'HIGH' ? '#f59e0b' : p === 'MEDIUM' ? '#3b82f6' : '#64748b';
-}
-function priorityBadge(p: string): React.CSSProperties {
-  return {
-    // Fixed min-width + centred text so every pill in a column is the same
-    // width regardless of label length (LOW/HIGH/MEDIUM/CRITICAL), keeping the
-    // badge edges — and the task/issue titles beside them — aligned. 60px
-    // (border-box) clears the widest label, CRITICAL (~58px).
-    display: 'inline-block', boxSizing: 'border-box', minWidth: 60, textAlign: 'center',
-    padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
-    background: priorityColor(p) + '18', color: priorityColor(p),
-  };
 }
 
 // ── Shared weekly trend series (my open tasks / issues / overdue), read from
@@ -417,108 +408,6 @@ const attentionChip: React.CSSProperties = {
   fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 999,
   background: 'var(--color-error)', color: '#fff', whiteSpace: 'nowrap',
 };
-
-// My Tasks — the top 5 governance tasks assigned to me. Its own customizable
-// section (default half-width) so it pairs two-up with My Issues. Its header
-// carries the open-task count, an overdue chip, and the weekly trend inline.
-function MyTasks({ lens = 'all', orgId = null }: LensProps) {
-  const { user } = useAuthStore();
-  const [data, setData] = useState<MyDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const trend = useMyTrends();
-  useEffect(() => {
-    if (!user?.email) { setLoading(false); return; }
-    (async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
-        setData(res.data);
-      } catch { /* */ }
-      finally { setLoading(false); }
-    })();
-  }, [user?.email, lens, orgId]);
-
-  const tasks = data?.myTasks || [];
-  const overdueCount = tasks.filter((t) => t.isOverdue).length;
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <SectionLabel marginBottom={0}>Tasks</SectionLabel>
-          <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{tasks.length}</span>
-          {overdueCount > 0 && <span style={attentionChip}>{overdueCount} overdue</span>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <TrendMini points={trend} metricKey="openTasks" />
-          <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {tasks.length}</Link>
-        </div>
-      </div>
-      <Card padding={0} style={{ overflow: 'hidden', minHeight: PANEL_MIN_HEIGHT }}>
-        {loading ? (
-          <div style={{ padding: 14 }}><SkeletonRows rows={3} columnWidths={[70, null, 80]} /></div>
-        ) : tasks.length === 0 ? (
-          <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-text-muted)' }}>No tasks assigned to you.</div>
-        ) : tasks.slice(0, 5).map((t, i) => (
-          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
-            <span style={priorityBadge(t.priority)}>{t.priority}</span>
-            <span style={{ flex: 1 }}>{t.title}</span>
-            {t.dueDate && <span style={{ fontSize: 10, color: t.isOverdue ? 'var(--color-error)' : 'var(--color-text-muted)' }}>{t.isOverdue ? 'Overdue' : new Date(t.dueDate).toLocaleDateString()}</span>}
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{t.status.replace(/_/g, ' ')}</span>
-          </div>
-        ))}
-      </Card>
-    </div>
-  );
-}
-
-// My Issues — the top 5 governance issues assigned to me. Its own customizable
-// section (default half-width) so it pairs two-up with My Tasks.
-function MyIssues({ lens = 'all', orgId = null }: LensProps) {
-  const { user } = useAuthStore();
-  const [data, setData] = useState<MyDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const trend = useMyTrends();
-  useEffect(() => {
-    if (!user?.email) { setLoading(false); return; }
-    (async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
-        setData(res.data);
-      } catch { /* */ }
-      finally { setLoading(false); }
-    })();
-  }, [user?.email, lens, orgId]);
-
-  const issues = data?.myIssues || [];
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <SectionLabel marginBottom={0}>Issues</SectionLabel>
-          <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{issues.length}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <TrendMini points={trend} metricKey="openIssues" />
-          <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {issues.length}</Link>
-        </div>
-      </div>
-      <Card padding={0} style={{ overflow: 'hidden', minHeight: PANEL_MIN_HEIGHT }}>
-        {loading ? (
-          <div style={{ padding: 14 }}><SkeletonRows rows={3} columnWidths={[70, null, 80]} /></div>
-        ) : issues.length === 0 ? (
-          <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-text-muted)' }}>No issues assigned to you.</div>
-        ) : issues.slice(0, 5).map((issue, i) => (
-          <div key={issue.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
-            <span style={priorityBadge(issue.severity)}>{issue.severity}</span>
-            <span style={{ flex: 1 }}>{issue.title}</span>
-            {issue.domainName && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.domainName}</span>}
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.status.replace(/_/g, ' ')}</span>
-          </div>
-        ))}
-      </Card>
-    </div>
-  );
-}
-
 
 
 // Tier donut fills — a bronze / silver / gold medal ramp. Validated for
@@ -830,183 +719,12 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
   );
 }
 
-// ── Dashboard section ordering (persisted to localStorage) ──
-
-type SectionKey = 'myDashboard' | 'myTasks' | 'myIssues' | 'myPortfolio' | 'myCoverage' | 'myDomains';
-
-// Default order follows an inverted-pyramid reading of importance, top → bottom:
-//   1. myDashboard    — personal, act-now (your overdue tasks / critical issues)
-//   2. myTasks / myIssues — my open work, each header carrying its count,
-//        overdue chip, and the weekly trend inline (the standalone "Trends"
-//        card row was folded in here — the cards only restated these counts).
-//   3. myPortfolio    — the tier mix + health of the domains/assets I own ┐ pair
-//   4. myCoverage     — mapping/governance/ownership of my assets          ┘
-//   5. myDomains      — the data domains I own or steward, card grid
-// Quick actions are NOT a section — they render as a compact menu bar pinned
-// under the page header (see DashboardActionBar), not in this flow. The
-// narrow analytical widgets (myPortfolio, myCoverage) stay contiguous so they
-// pair two-up cleanly. The dashboard is fully you-scoped: the org-wide
-// Governance Posture / Trends / Catalog Coverage / Program Maturity /
-// Governance Gaps widgets are all replaced or dropped in favour of My
-// Portfolio Health / My Coverage.
-// Order also sets the two-up pairing of the half-width widgets: keep
-// similar-height widgets adjacent so a short one isn't stretched to match a
-// tall neighbour. Tasks|Issues, then Domains|Portfolio, then Coverage.
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'myTasks', 'myIssues', 'myDomains', 'myPortfolio', 'myCoverage'];
-
-type SectionWidth = 'full' | 'half';
-
-// Default width per section. `full` takes its own row; consecutive `half`
-// sections pack two-up so the page stays tight (less vertical scrolling).
-// The user can override any of these in Customize — this is only the starting
-// layout. The personal two-column body (My Dashboard) goes full-bleed; the
-// analytical widgets pair up as compact equal-height cards.
-const DEFAULT_WIDTHS: Record<SectionKey, SectionWidth> = {
-  myDashboard: 'full',
-  myTasks: 'half',
-  myIssues: 'half',
-  // The five lower widgets default to half so they pack two-up (Tasks|Issues,
-  // Domains|Portfolio, then Coverage) — fewer full-width rows, so the dashboard
-  // fits a laptop viewport without scrolling.
-  myDomains: 'half',
-  myPortfolio: 'half',
-  myCoverage: 'half',
-};
-
-const SECTION_LABELS: Record<SectionKey, string> = {
-  myDashboard: 'Dashboard',
-  myTasks: 'Tasks',
-  myIssues: 'Issues',
-  myDomains: 'Domains',
-  myPortfolio: 'Portfolio Health',
-  myCoverage: 'Coverage',
-};
-
-interface StoredLayout { order: string[]; hidden: string[]; width?: Record<string, SectionWidth> }
-
-function useDashboardLayout() {
-  // Scope the saved layout to the signed-in user, so two people sharing a
-  // browser (or the same device across accounts) don't clobber each other's
-  // dashboard. `read` falls back to the legacy shared key so anyone who
-  // customized before this change keeps their layout until they next adjust
-  // it — the first write lands under the per-user key.
-  const userId = useAuthStore((s) => s.user?.id) ?? 'anon';
-  const STORAGE_KEY = `procela_dashboard_layout:${userId}`;
-  const LEGACY_KEY = 'procela_dashboard_layout';
-  const KNOWN_KEYS = new Set<SectionKey>(DEFAULT_SECTIONS);
-  const isKnown = (k: string): k is SectionKey => KNOWN_KEYS.has(k as SectionKey);
-  const read = (): StoredLayout | null => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
-      return raw ? JSON.parse(raw) as StoredLayout : null;
-    } catch { return null; }
-  };
-
-  // Captured once at mount: does this user already have a saved layout? Used
-  // by the density default so a user who has customized the dashboard keeps
-  // the Detailed view while a first-time visitor starts in Simple.
-  const [hasSaved] = useState<boolean>(() => read() !== null);
-
-  const [order, setOrder] = useState<SectionKey[]>(() => {
-    const parsed = read();
-    if (parsed) {
-      const cleaned = (parsed.order || []).filter(isKnown);
-      // Insert any DEFAULT keys missing from the stored layout (sections added
-      // in a later release) at their default-relative position — NOT appended
-      // to the end. Appending stranded a new lead section like My Dashboard at
-      // the BOTTOM for every existing user, because their saved order predates
-      // it. For each missing key we splice it in just before the first
-      // later-in-default section that's already present, so it surfaces where
-      // the default layout intends while still preserving the user's own
-      // ordering of the sections they have customized.
-      for (let di = 0; di < DEFAULT_SECTIONS.length; di++) {
-        const key = DEFAULT_SECTIONS[di];
-        if (cleaned.includes(key)) continue;
-        let insertAt = cleaned.length;
-        for (let dj = di + 1; dj < DEFAULT_SECTIONS.length; dj++) {
-          const laterIdx = cleaned.indexOf(DEFAULT_SECTIONS[dj]);
-          if (laterIdx !== -1) { insertAt = laterIdx; break; }
-        }
-        cleaned.splice(insertAt, 0, key);
-      }
-      return cleaned.length > 0 ? cleaned : DEFAULT_SECTIONS;
-    }
-    return DEFAULT_SECTIONS;
-  });
-  const [hidden, setHidden] = useState<Set<SectionKey>>(() => {
-    const parsed = read();
-    return parsed ? new Set((parsed.hidden || []).filter(isKnown)) : new Set();
-  });
-  const [width, setWidthState] = useState<Record<SectionKey, SectionWidth>>(() => {
-    const parsed = read();
-    // Start from the defaults, then apply any stored per-section overrides, so
-    // a section added in a later release inherits its default width.
-    const w = { ...DEFAULT_WIDTHS };
-    if (parsed?.width) for (const [k, v] of Object.entries(parsed.width)) {
-      if (isKnown(k) && (v === 'full' || v === 'half')) w[k] = v;
-    }
-    return w;
-  });
-
-  const persist = (o: SectionKey[], h: Set<SectionKey>, w: Record<SectionKey, SectionWidth>) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ order: o, hidden: Array.from(h), width: w }));
-  };
-
-  const moveUp = (key: SectionKey) => {
-    setOrder((prev) => {
-      const idx = prev.indexOf(key);
-      if (idx <= 0) return prev;
-      const next = [...prev];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      persist(next, hidden, width);
-      return next;
-    });
-  };
-
-  const moveDown = (key: SectionKey) => {
-    setOrder((prev) => {
-      const idx = prev.indexOf(key);
-      if (idx < 0 || idx >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-      persist(next, hidden, width);
-      return next;
-    });
-  };
-
-  const toggle = (key: SectionKey) => {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      persist(order, next, width);
-      return next;
-    });
-  };
-
-  const setWidth = (key: SectionKey, w: SectionWidth) => {
-    setWidthState((prev) => {
-      const next = { ...prev, [key]: w };
-      persist(order, hidden, next);
-      return next;
-    });
-  };
-
-  const reset = () => {
-    setOrder(DEFAULT_SECTIONS);
-    setHidden(new Set());
-    setWidthState({ ...DEFAULT_WIDTHS });
-    persist(DEFAULT_SECTIONS, new Set(), { ...DEFAULT_WIDTHS });
-  };
-
-  return { order, hidden, width, hasSaved, moveUp, moveDown, toggle, setWidth, reset };
-}
-
 // ──────────────────────────────────────────────────────────────────────────
 // EmptyDashboardWelcome — the Dashboard's own empty-org state. Deliberately
 // NOT the setup checklist (that lives only on the Get Started guide, /setup);
 // a second copy of it here made the Dashboard and Setup pages mirror each
 // other. This is a minimal welcome that hands off to the guide, plus the
-// personal "My Dashboard" section so the page still carries real content.
+// personal Today queue so the page still carries real content.
 // ──────────────────────────────────────────────────────────────────────────
 function EmptyDashboardWelcome() {
   return (
@@ -1028,7 +746,7 @@ function EmptyDashboardWelcome() {
           Finish setup in Get Started &rarr;
         </Link>
       </Card>
-      <MyDashboard />
+      <TodayQueue />
     </div>
   );
 }
@@ -1093,8 +811,16 @@ export default function DashboardPage() {
 
   usePolling(fetchData, 30000);
 
-  const layout = useDashboardLayout();
-  const [showCustomize, setShowCustomize] = useState(false);
+  // Focus mode collapses the portfolio rail so the dashboard is just the
+  // action queue (the compact, single-column Concept A view). Per browser.
+  const [focus, setFocus] = useState<boolean>(() => {
+    try { return localStorage.getItem('procela:dashboard-focus') === '1'; } catch { return false; }
+  });
+  const toggleFocus = () => setFocus((f) => {
+    const next = !f;
+    try { localStorage.setItem('procela:dashboard-focus', next ? '1' : '0'); } catch { /* */ }
+    return next;
+  });
   // Run Wizard now rides in the header actions (the separate quick-action bar
   // was dropped to keep the dashboard on one screen). AI-gated — hidden when
   // AI features are off.
@@ -1131,15 +857,6 @@ export default function DashboardPage() {
     && stats.dataAssets === 0
     && stats.systems === 0
     && stats.people === 0;
-
-  const sectionMap: Record<SectionKey, React.ReactNode> = {
-    myDashboard: <MyDashboard lens={lens} orgId={activeOrgId} />,
-    myTasks: <MyTasks lens={lens} orgId={activeOrgId} />,
-    myIssues: <MyIssues lens={lens} orgId={activeOrgId} />,
-    myDomains: <MyDomains lens={lens} orgId={activeOrgId} />,
-    myPortfolio: <MyPortfolioHealth lens={lens} orgId={activeOrgId} />,
-    myCoverage: <MyCoverage lens={lens} orgId={activeOrgId} />,
-  };
 
   return (
     <div>
@@ -1186,22 +903,21 @@ export default function DashboardPage() {
                 >{label}</button>
               ))}
             </div>
-            {/* Customize lets the user reorder / hide / resize the dashboard
-                sections. There's a single dashboard view now (the former
-                Simple/Detailed toggle is gone), so it's always available. */}
+            {/* Focus mode — collapse the portfolio rail to just the action
+                queue (the compact single-column view). */}
             <button
-              onClick={() => setShowCustomize((v) => !v)}
-              aria-expanded={showCustomize}
-              title="Reorder or hide dashboard sections"
+              onClick={toggleFocus}
+              aria-pressed={focus}
+              title={focus ? 'Show the portfolio panel' : 'Focus mode — hide the portfolio panel and show just your action queue'}
               style={{
                 padding: '5px 12px', fontSize: 11, fontWeight: 500,
-                background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: showCustomize ? '#fff' : 'var(--color-text-secondary)',
+                background: focus ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: focus ? '#fff' : 'var(--color-text-secondary)',
                 border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
                 cursor: 'pointer', transition: 'all 0.15s',
               }}
             >
-              {showCustomize ? 'Done' : 'Customize'}
+              {focus ? 'Show portfolio' : 'Focus'}
             </button>
           </div>
         ) : undefined}
@@ -1212,132 +928,27 @@ export default function DashboardPage() {
           (with the scope version) or why it didn't (no scope defined yet). */}
       {!isEmptyOrg && lens === 'governed' && <DashboardScopeNote orgId={activeOrgId} />}
 
-      {showCustomize && (
-        <Card
-          padding={16}
-          marginBottom={24}
-          // Theme tokens, not hardcoded blues — the panel was rendering
-          // a fixed light-blue gradient that clashed on re-branded /
-          // dark-themed tenants.
-          borderColor="var(--color-primary)"
-          style={{ background: 'var(--color-bg)' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Customize Dashboard</div>
-            <button onClick={layout.reset} style={{ fontSize: 11, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Reset to Default</button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {layout.order.map((key, idx) => (
-              <div key={key} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
-                background: layout.hidden.has(key) ? 'var(--color-bg)' : 'var(--color-surface)',
-                border: '1px solid var(--color-border)', borderRadius: 4,
-                opacity: layout.hidden.has(key) ? 0.5 : 1,
-              }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <button
-                    onClick={() => layout.moveUp(key)}
-                    disabled={idx === 0}
-                    aria-label={`Move ${SECTION_LABELS[key]} up`}
-                    title={`Move ${SECTION_LABELS[key]} up`}
-                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 11, color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', width: 24, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}
-                  ><ChevronUp size={12} strokeWidth={2.5} /></button>
-                  <button
-                    onClick={() => layout.moveDown(key)}
-                    disabled={idx === layout.order.length - 1}
-                    aria-label={`Move ${SECTION_LABELS[key]} down`}
-                    title={`Move ${SECTION_LABELS[key]} down`}
-                    style={{ background: 'none', border: 'none', cursor: idx === layout.order.length - 1 ? 'default' : 'pointer', fontSize: 11, color: idx === layout.order.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', width: 24, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}
-                  ><ChevronDown size={12} strokeWidth={2.5} /></button>
-                </div>
-                <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{SECTION_LABELS[key]}</span>
-                {/* Width — Half packs two-up (tighter, less scrolling); Full
-                    takes its own row. Disabled while the section is hidden. */}
-                <div role="group" aria-label={`${SECTION_LABELS[key]} width`} style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', opacity: layout.hidden.has(key) ? 0.5 : 1 }}>
-                  {(['half', 'full'] as const).map((w) => (
-                    <button
-                      key={w}
-                      type="button"
-                      onClick={() => layout.setWidth(key, w)}
-                      disabled={layout.hidden.has(key)}
-                      aria-pressed={layout.width[key] === w}
-                      title={w === 'half' ? 'Half width (pairs two-up)' : 'Full width (own row)'}
-                      style={{
-                        padding: '2px 9px', fontSize: 10, fontWeight: layout.width[key] === w ? 600 : 400,
-                        border: 'none', cursor: layout.hidden.has(key) ? 'default' : 'pointer',
-                        textTransform: 'capitalize',
-                        background: layout.width[key] === w ? 'var(--color-primary)' : 'transparent',
-                        color: layout.width[key] === w ? '#fff' : 'var(--color-text-secondary)',
-                      }}
-                    >
-                      {w}
-                    </button>
-                  ))}
-                </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={!layout.hidden.has(key)}
-                    onChange={() => layout.toggle(key)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  Show
-                </label>
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 8 }}>
-            Reorder with the arrows, set each section Half (pairs two-up) or Full width, and uncheck to hide. Your layout is saved automatically.
-          </div>
-        </Card>
-      )}
-
       {isEmptyOrg ? (
         <EmptyDashboardWelcome />
       ) : (
         <>
           <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
-          {/* Layout packs by each section's user-controlled width: a `full`
-              section takes its own row; runs of consecutive `half` sections
-              chunk two-up so the page stays tight. Deterministic pairing —
-              instead of a masonry column flow — keeps a card from stranding
-              itself, and re-chunking on hide/width-change means a hidden or
-              widened section never leaves an empty half-row (a lone leftover
-              half spans the full width). Pairs drop to one column below ~620px.
-              Vertical rhythm comes from each widget's own marginBottom. */}
-          <div>
-            {(() => {
-              const visible = layout.order.filter((key) => !layout.hidden.has(key));
-              // Split the visible sections into rows: each `full` section is its
-              // own full-width row; a run of consecutive `half` widgets renders
-              // as ONE two-column grid (not fixed pairs) so grid auto-flow can
-              // backfill — a widget that renders nothing collapses and the
-              // following halves move up to fill, keeping every half at half
-              // width with no stranded empty column.
-              const rows: Array<{ band?: SectionKey; run?: SectionKey[] }> = [];
-              let run: SectionKey[] = [];
-              const flushRun = () => {
-                if (run.length > 0) { rows.push({ run: run.slice() }); run = []; }
-              };
-              for (const key of visible) {
-                if (layout.width[key] === 'full') { flushRun(); rows.push({ band: key }); }
-                else run.push(key);
-              }
-              flushRun();
-
-              return rows.map((row, ri) => {
-                if (row.band) return <div key={`band-${row.band}`} className="dashboard-section-cell">{sectionMap[row.band]}</div>;
-                const keys = row.run!;
-                // .dashboard-half-grid is a responsive 2-column grid; each cell
-                // collapses (display:none) when its widget renders nothing, so
-                // auto-flow reflows the remaining halves to fill both columns.
-                return (
-                  <div key={`run-${ri}-${keys.join('-')}`} className="dashboard-half-grid">
-                    {keys.map((k) => <div key={k} className="dashboard-section-cell">{sectionMap[k]}</div>)}
-                  </div>
-                );
-              });
-            })()}
+          {/* Concept B — Focus + Portfolio. Left: the ranked action queue
+              (everything that needs you). Right: the portfolio glance (next
+              meeting, portfolio health, coverage, the domains you own). Focus
+              mode drops the right rail so the queue is the whole page; the
+              two-column split only applies on a wide viewport and when the
+              rail is shown (see .dashboard-two-pane in global.css). */}
+          <div className={`dashboard-two-pane${focus ? '' : ' two-col'}`}>
+            <div className="dtp-main"><TodayQueue lens={lens} orgId={activeOrgId} /></div>
+            {!focus && (
+              <div className="dtp-side">
+                <NextMeeting lens={lens} orgId={activeOrgId} />
+                <MyPortfolioHealth lens={lens} orgId={activeOrgId} />
+                <MyCoverage lens={lens} orgId={activeOrgId} />
+                <MyDomains lens={lens} orgId={activeOrgId} />
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1382,7 +993,7 @@ function SetupCompleteBanner({ stats, orgId }: { stats: DashboardStats; orgId: s
     >
       <Check size={16} strokeWidth={2.6} aria-hidden="true" style={{ flexShrink: 0 }} />
       <span>
-        <strong>Setup complete.</strong> Processes, systems, data assets and people are all in place — use <strong>Customize</strong> above to arrange this dashboard around what you watch most.
+        <strong>Setup complete.</strong> Processes, systems, data assets and people are all in place — your dashboard now leads with everything that needs you.
       </span>
       <button
         type="button"

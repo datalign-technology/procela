@@ -536,3 +536,23 @@ body[data-density="compact"] textarea {
   }
 }
 
+/* ── Dashboard two-pane (Focus + Portfolio layout) ─────────────────────────
+   Left column is the "Today" action queue; the right column is the compact
+   portfolio glance (next meeting, portfolio health, coverage, domains).
+   Single column by default (mobile-first and Focus mode); the split only
+   applies on a wide viewport AND when the side rail is shown — the page adds
+   the `two-col` class only when Focus mode is off. */
+.dashboard-two-pane {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.dashboard-two-pane > .dtp-main { min-width: 0; }
+.dashboard-two-pane > .dtp-side { min-width: 0; }
+@media (min-width: 900px) {
+  .dashboard-two-pane.two-col {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+}
+
