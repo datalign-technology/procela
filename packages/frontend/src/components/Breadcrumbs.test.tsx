@@ -33,13 +33,17 @@ describe('Breadcrumbs', () => {
     expect(container.querySelector('nav')).toBeNull();
   });
 
-  it('shows only the ancestor trail (dropping the raw id) when no leaf is registered', () => {
-    renderAt('/people/abc-123');
-    // Dashboard and People are links; the raw id is dropped, not shown.
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'People' })).toBeInTheDocument();
-    expect(screen.queryByText('abc-123')).toBeNull();
-    expect(screen.queryByText(/you are here/i)).toBeNull();
+  it('renders nothing on a nested section page (no leaf), e.g. Foundation', () => {
+    // The trail is a detail-page affordance only; a section page like
+    // /governance/foundation registers no leaf, so it shows no breadcrumb
+    // (consistent with its sibling section pages).
+    const { container } = renderAt('/governance/foundation');
+    expect(container.querySelector('nav')).toBeNull();
+  });
+
+  it('renders nothing on a detail route until a leaf is registered', () => {
+    const { container } = renderAt('/people/abc-123');
+    expect(container.querySelector('nav')).toBeNull();
   });
 
   it('ends the trail on the registered leaf name as the current page', () => {
@@ -55,10 +59,8 @@ describe('Breadcrumbs', () => {
     expect(screen.queryByText('abc-123')).toBeNull();
   });
 
-  it('falls back to the ancestor-only trail while the leaf is still loading (null)', () => {
-    renderAt('/governance-groups/g-1', null);
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Groups' })).toBeInTheDocument();
-    expect(screen.queryByText('g-1')).toBeNull();
+  it('renders nothing while the leaf is still loading (null)', () => {
+    const { container } = renderAt('/governance-groups/g-1', null);
+    expect(container.querySelector('nav')).toBeNull();
   });
 });
