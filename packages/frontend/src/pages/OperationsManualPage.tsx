@@ -15,6 +15,7 @@ import Button from '../components/Button';
 import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
 import { SkeletonRows } from '../components/Skeleton';
+import { DAMA_ROLE_TYPES, DAMA_ROLE_LABELS } from '../types';
 
 // ── Types ──
 interface OperationsManual {
@@ -23,6 +24,14 @@ interface OperationsManual {
   escalation: string[]; customContent: string; isCustom: boolean;
   createdAt: string; updatedAt: string;
 }
+
+// A manual's role is the DAMA role it documents, or 'CUSTOM' for one that
+// maps to no standard role. The picker offers the standard roles plus Custom.
+const CUSTOM_ROLE = 'CUSTOM';
+const roleLabel = (roleType: string) => DAMA_ROLE_LABELS[roleType] || roleType;
+
+// DAMA role assignment as returned enriched by GET /dama-roles?orgId=.
+interface RoleAssignment { roleType: string; personName: string | null; agentName: string | null; }
 
 type SectionKey = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'escalation';
 interface SectionDef { key: SectionKey; name: string; accentColor: string; description: string; }
@@ -55,19 +64,35 @@ export default function OperationsManualPage({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [addInputs, setAddInputs] = useState<Record<string, string>>({});
   const [editingHeader, setEditingHeader] = useState<string | null>(null);
-  const [headerForm, setHeaderForm] = useState({ label: '', purpose: '' });
+  const [headerForm, setHeaderForm] = useState({ label: '', purpose: '', roleType: CUSTOM_ROLE });
   const [showAddManual, setShowAddManual] = useState(false);
   const [newManualLabel, setNewManualLabel] = useState('');
+  const [newManualRole, setNewManualRole] = useState<string>(CUSTOM_ROLE);
+  // roleType → names of the people/agents currently holding that DAMA role in
+  // this org, so a manual can show who actually operates it.
+  const [roleHolders, setRoleHolders] = useState<Record<string, string[]>>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   const fetchManuals = useCallback(async () => {
-    if (!activeOrgId) { setManuals([]); setLoading(false); return; }
+    if (!activeOrgId) { setManuals([]); setRoleHolders({}); setLoading(false); return; }
     try {
-      const res = await apiClient.get<{ success: boolean; data: OperationsManual[] }>(`/operations-manuals?orgId=${activeOrgId}`);
-      setManuals(res.data || []);
+      // Manuals plus the org's DAMA role assignments, so each manual can show
+      // who currently holds the role it documents.
+      const [manualsRes, rolesRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: OperationsManual[] }>(`/operations-manuals?orgId=${activeOrgId}`),
+        apiClient.get<{ success: boolean; data: RoleAssignment[] }>(`/dama-roles?orgId=${activeOrgId}`).catch(() => ({ data: [] as RoleAssignment[] })),
+      ]);
+      setManuals(manualsRes.data || []);
+      const holders: Record<string, string[]> = {};
+      for (const r of rolesRes.data || []) {
+        const name = r.personName || r.agentName;
+        if (!name) continue;
+        (holders[r.roleType] ||= []).push(name);
+      }
+      setRoleHolders(holders);
     } catch { /* */ } finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -101,10 +126,10 @@ export default function OperationsManualPage({
     updateManual(manual.id, { [section]: manual[section].filter((_, i) => i !== idx) });
   };
 
-  const startEditHeader = (m: OperationsManual) => { setHeaderForm({ label: m.label, purpose: m.purpose }); setEditingHeader(m.id); };
+  const startEditHeader = (m: OperationsManual) => { setHeaderForm({ label: m.label, purpose: m.purpose, roleType: m.roleType || CUSTOM_ROLE }); setEditingHeader(m.id); };
   const saveHeader = async (id: string) => {
     if (!headerForm.label.trim()) return;
-    await updateManual(id, { label: headerForm.label, purpose: headerForm.purpose });
+    await updateManual(id, { label: headerForm.label, purpose: headerForm.purpose, roleType: headerForm.roleType });
     setEditingHeader(null); addToast('success', 'Manual updated');
   };
   const saveCustomContent = (id: string, value: string) => { updateManual(id, { customContent: value }); };
@@ -136,10 +161,19 @@ export default function OperationsManualPage({
   const handleAddManual = async () => {
     if (!activeOrgId || !newManualLabel.trim()) return;
     try {
-      await apiClient.post('/operations-manuals', { orgId: activeOrgId, label: newManualLabel.trim(), roleType: 'CUSTOM', isCustom: true });
-      addToast('success', 'Manual created'); setNewManualLabel(''); setShowAddManual(false); await fetchManuals();
+      await apiClient.post('/operations-manuals', { orgId: activeOrgId, label: newManualLabel.trim(), roleType: newManualRole, isCustom: true });
+      addToast('success', 'Manual created'); setNewManualLabel(''); setNewManualRole(CUSTOM_ROLE); setShowAddManual(false); await fetchManuals();
     } catch { addToast('error', 'Failed to create manual'); }
   };
+
+  // <select> options: each standard DAMA role (that has no manual yet is not
+  // enforced — multiple manuals per role are allowed) plus a Custom fallback.
+  const roleOptions = (
+    <>
+      <option value={CUSTOM_ROLE}>Custom (no specific role)</option>
+      {DAMA_ROLE_TYPES.map((rt) => <option key={rt} value={rt}>{DAMA_ROLE_LABELS[rt]}</option>)}
+    </>
+  );
 
   function renderAddManualDialog() {
     return (
@@ -147,8 +181,10 @@ export default function OperationsManualPage({
         <div style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 400, width: '100%', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
           <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>Add Manual</h3>
           <input aria-label="Manual name" style={inputStyle} value={newManualLabel} onChange={(e) => setNewManualLabel(e.target.value)} placeholder="Manual name" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleAddManual()} />
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', margin: '12px 0 4px' }}>Role this manual is for</label>
+          <select aria-label="Role" style={inputStyle} value={newManualRole} onChange={(e) => setNewManualRole(e.target.value)}>{roleOptions}</select>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-            <Button variant="secondary" onClick={() => { setShowAddManual(false); setNewManualLabel(''); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setShowAddManual(false); setNewManualLabel(''); setNewManualRole(CUSTOM_ROLE); }}>Cancel</Button>
             <Button variant="primary" onClick={handleAddManual} disabled={!newManualLabel.trim()}>Add</Button>
           </div>
         </div>
@@ -237,6 +273,9 @@ export default function OperationsManualPage({
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</span>
+                        {m.roleType && m.roleType !== CUSTOM_ROLE && (
+                          <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap', flexShrink: 0 }}>{roleLabel(m.roleType)}</span>
+                        )}
                         {m.isCustom && <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', padding: '1px 6px', borderRadius: 3, textTransform: 'uppercase' }}>Custom</span>}
                       </div>
                       {!isExpanded && m.purpose && (
@@ -273,15 +312,35 @@ export default function OperationsManualPage({
                       {editingHeader === m.id ? (
                         <div style={{ marginBottom: 16 }}>
                           <input aria-label="Label" style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={headerForm.label} onChange={(e) => setHeaderForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label" />
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Role this manual is for</label>
+                          <select aria-label="Role" style={{ ...inputStyle, marginBottom: 8 }} value={headerForm.roleType} onChange={(e) => setHeaderForm((f) => ({ ...f, roleType: e.target.value }))}>{roleOptions}</select>
                           <textarea aria-label="Purpose" style={{ ...inputStyle, minHeight: 80 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
                           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                             <Button variant="primary" onClick={() => saveHeader(m.id)}>Save</Button>
                             <Button variant="secondary" onClick={() => setEditingHeader(null)}>Cancel</Button>
                           </div>
                         </div>
-                      ) : m.purpose ? (
-                        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, fontStyle: 'italic', lineHeight: 1.5 }}>{m.purpose}</p>
-                      ) : null}
+                      ) : (
+                        <>
+                          {/* Role & who holds it — the manual↔role link, made visible. */}
+                          {m.roleType && m.roleType !== CUSTOM_ROLE && (() => {
+                            const holders = roleHolders[m.roleType] || [];
+                            const shown = holders.slice(0, 3).join(', ');
+                            const extra = holders.length > 3 ? ` +${holders.length - 3}` : '';
+                            return (
+                              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: m.purpose ? 8 : 16 }}>
+                                <span style={{ color: 'var(--color-text-muted)' }}>Role: </span>
+                                <span style={{ fontWeight: 600 }}>{roleLabel(m.roleType)}</span>
+                                {' · '}
+                                {holders.length > 0
+                                  ? <span>Held by {shown}{extra}</span>
+                                  : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>not assigned to anyone yet — assign on the Roles page</span>}
+                              </div>
+                            );
+                          })()}
+                          {m.purpose && <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, fontStyle: 'italic', lineHeight: 1.5 }}>{m.purpose}</p>}
+                        </>
+                      )}
 
                       {/* Sections in 2-column grid when card is expanded */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

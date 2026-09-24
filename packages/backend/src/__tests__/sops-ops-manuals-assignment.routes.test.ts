@@ -190,4 +190,34 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
     const res = await request(port, 'PUT', `/operations-manuals/${PREFIX}m-owned`, { label: 'edited' }, EDITOR);
     assert.strictEqual(res.status, 200);
   });
+
+  // ── roleType (manual ↔ DAMA role association) ──
+
+  it('ops-manuals: create accepts a canonical DAMA roleType', async () => {
+    const res = await request(port, 'POST', '/operations-manuals', { orgId, label: 'CDO manual', roleType: 'CDO' }, EDITOR);
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.data.roleType, 'CDO');
+  });
+
+  it('ops-manuals: create rejects an unknown roleType with 400', async () => {
+    const res = await request(port, 'POST', '/operations-manuals', { orgId, label: 'Bogus', roleType: 'NOT_A_ROLE' }, EDITOR);
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('ops-manuals: create defaults roleType to CUSTOM when omitted', async () => {
+    const res = await request(port, 'POST', '/operations-manuals', { orgId, label: 'Unroled' }, EDITOR);
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.data.roleType, 'CUSTOM');
+  });
+
+  it('ops-manuals: PUT can retarget a manual to a DAMA role', async () => {
+    const res = await request(port, 'PUT', `/operations-manuals/${PREFIX}m-mine`, { roleType: 'DATA_GOVERNANCE_LEAD' }, CONTRIB);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.data.roleType, 'DATA_GOVERNANCE_LEAD');
+  });
+
+  it('ops-manuals: PUT rejects an unknown roleType with 400', async () => {
+    const res = await request(port, 'PUT', `/operations-manuals/${PREFIX}m-mine`, { roleType: 'NONSENSE' }, CONTRIB);
+    assert.strictEqual(res.status, 400);
+  });
 });
