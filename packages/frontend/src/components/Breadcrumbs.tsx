@@ -102,31 +102,20 @@ export default function Breadcrumbs() {
     crumbs.push({ label, path: builtPath });
   });
 
-  // The last crumb always names the page you're on. Its handling depends on
-  // whether the page registered a human-readable leaf (see BreadcrumbContext):
-  //
-  //  • No leaf — the ancestor trail alone. On a detail route the last segment
-  //    is a raw id/slug, and on a top-level page the <PageHeader> H1 below
-  //    already states the name, so showing it again is redundant. Drop it, and
-  //    when that leaves just "Dashboard" render nothing rather than a lone crumb.
-  //  • Leaf set — a detail page told us the entity's name, so end the trail on
-  //    it (as text, not a link) the way a catalog reads "Catalog › Schema ›
-  //    Table". The ancestors already exclude the raw id segment.
-  const ancestors = crumbs.slice(0, -1);
+  // The trail is a detail-page affordance only. A page shows it exactly when it
+  // has registered a human-readable leaf (its entity's name, via
+  // BreadcrumbContext) — a person, a governance group — so the trail reads
+  // "Dashboard › People › Ada Lovelace" and links back up. Section and list
+  // pages register no leaf: there the sidebar already highlights the section
+  // and the <PageHeader> H1 names the page, so an ancestor-only trail like
+  // "Dashboard › Governance" above Foundation was redundant and, because it
+  // showed only on nested routes, inconsistent with the sibling pages that
+  // never had one. So: no leaf ⇒ no breadcrumb.
+  if (!leaf) return null;
 
-  if (!leaf) {
-    if (ancestors.length <= 1) return null;
-    return (
-      <nav style={containerStyle} aria-label="Breadcrumb">
-        {ancestors.map((crumb, idx) => (
-          <span key={crumb.path} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {idx > 0 && <span style={separatorStyle}>{'>'}</span>}
-            <Link to={crumb.path} style={linkStyle}>{crumb.label}</Link>
-          </span>
-        ))}
-      </nav>
-    );
-  }
+  // The ancestors already exclude the raw id/slug segment (it's the last one,
+  // sliced off here); the leaf renders as text, not a link.
+  const ancestors = crumbs.slice(0, -1);
 
   return (
     <nav style={containerStyle} aria-label="Breadcrumb">
