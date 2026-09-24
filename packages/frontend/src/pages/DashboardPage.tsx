@@ -296,8 +296,11 @@ function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
               <div style={{ fontSize: 13, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.title}</div>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.meta}</div>
             </div>
-            <span style={{ display: 'inline-block', boxSizing: 'border-box', minWidth: 58, textAlign: 'center', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: it.pill.color + '18', color: it.pill.color, flexShrink: 0 }}>{it.pill.label}</span>
-            {it.due && <span style={{ fontSize: 10, fontVariantNumeric: 'tabular-nums', color: it.due.over ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: it.due.over ? 600 : 400, flexShrink: 0, whiteSpace: 'nowrap' }}>{it.due.label}</span>}
+            {/* Fixed-width pill + a reserved, right-aligned date column so the
+                pills, the dates, and the action buttons line up in clean
+                columns across every row — including rows with no due date. */}
+            <span style={{ display: 'inline-block', boxSizing: 'border-box', width: 66, textAlign: 'center', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: it.pill.color + '18', color: it.pill.color, flexShrink: 0, whiteSpace: 'nowrap' }}>{it.pill.label}</span>
+            <span style={{ width: 52, textAlign: 'left', flexShrink: 0, fontSize: 10, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: it.due?.over ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: it.due?.over ? 600 : 400 }}>{it.due ? it.due.label : ''}</span>
             <Link
               to={it.action.to}
               style={{

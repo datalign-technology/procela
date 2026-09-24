@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import PageHeader from './PageHeader';
 
 describe('PageHeader', () => {
@@ -22,9 +22,20 @@ describe('PageHeader', () => {
     expect(screen.getByText('POLICY · POL-007')).toBeInTheDocument();
   });
 
-  it('renders the subtitle when provided', () => {
+  it('moves a section-page subtitle behind the title help "?" (revealed on click)', () => {
     render(<PageHeader title="X" subtitle="Sub" />);
+    // No longer a visible line...
+    expect(screen.queryByText('Sub')).not.toBeInTheDocument();
+    // ...but reachable via the "?" next to the title.
+    const help = screen.getByRole('button', { name: /Help: X/ });
+    fireEvent.click(help);
     expect(screen.getByText('Sub')).toBeInTheDocument();
+  });
+
+  it('keeps the subtitle inline on a detail header (kicker present)', () => {
+    render(<PageHeader kicker="Person" title="Ada" subtitle="Data Steward" />);
+    expect(screen.getByText('Data Steward')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Help: Ada/ })).not.toBeInTheDocument();
   });
 
   it('renders meta and actions in distinct slots', () => {
