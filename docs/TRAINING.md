@@ -171,54 +171,43 @@ Top of every page. This is the single most important control in
 Procela. It scopes *everything* — what you see, what you can edit,
 what AI runs against. Spend a minute switching between **Tidewater
 Utilities**, **Tidewater Electric**, and **Tidewater Water** and
-watching the Dashboard KPIs recompute.
+watching the Dashboard recompute.
 
 ### 2.2 Dashboard
 
-The Dashboard's **Overview** strip shows the live KPI tiles. Each is a
-hyperlink:
+The Dashboard is **you-scoped** — it shows your own work and the health
+of the domains and assets you own or steward, not an org-wide rollup.
+(You need a People record with your email for it to populate.)
 
-- **Value Streams** / **Processes** → Process Catalog
-- **Data Assets** → Data Assets page
-- **Systems** → Systems page
-- **Coverage** → Process ↔ Data Map (where unmapped activities + unlinked
-  assets surface)
-- **Avg Health** → Data Assets sorted by health ascending (worst at
-  top)
+The top **My Dashboard** row is your act-now view, split two ways:
 
-The personal **My Dashboard** strip at the top has its own four tiles
-— also hyperlinks — that scope to the signed-in user:
+- **Needs Attention** — the triage queue: overdue tasks, critical
+  issues, overdue policy reviews, and low-health domains you own, each
+  linking to where it's handled.
+- **Schedule** — the next 14 days: calendar events plus upcoming task
+  and review due dates, bucketed *Today / This week / Later*.
 
-- **Open Tasks** → Governance Work (Tasks tab)
-- **Open Issues** → Governance Work (Issues tab)
-- **My Domains** → Data Domains (the ones you own or steward)
-- **Upcoming Events** → Governance Calendar
+Beneath it, each as its own section:
 
-Sub-counts surface when relevant (e.g. *"3 overdue"* in red under
-Open Tasks). Zero-count tiles fade the number but still link through.
-
-Below the KPIs the Dashboard shows its state as charts, not just
-numbers:
-
-- **Governance Posture** — a tier-mix donut (Certified / Managed /
-  Uncertified assets) beside semicircular **Coverage** and **Avg
-  Health** gauges.
-- **Trends** — sparklines of Coverage, Avg Health and Open Gaps over
-  the last several weeks, each with a ▲/▼ delta; the headline matches
-  the live Overview tile.
-- **Governance Gaps** — the open gap signals as a critical-vs-warning
-  severity bar over a list of counts, each linking to its fix.
-- **Catalog Shape** — bars for the size of each process level (Value
-  Streams → Processes → Sub-processes → Activities).
+- **Tasks** / **Issues** — the top items assigned to you. Each list
+  header carries the open count, an *overdue* chip when any are late,
+  and an inline **weekly-trend sparkline** (▲/▼ delta; down is green —
+  fewer open is better), then a *View all* link into Governance Work.
+- **Domains** — the data domains you own or steward, as a card grid.
+- **Portfolio Health** — the tier mix (Certified / Managed /
+  Uncertified) and a health gauge for the assets in your domains.
+- **Coverage** — the mapping / governance / ownership share of your
+  assets.
 
 **Make it yours.** Click **Customize** to reorder each section
 (arrows), set its width **Half** (two-up, tighter) or **Full** (own
 row), and show/hide it. The layout is saved automatically per browser;
 **Reset to Default** restores the shipped importance-ordered
-arrangement.
-
-Skim the rest of the page: **Program Maturity** (current governance
-phase), **Skill Gaps** (more on this in Module 6).
+arrangement. The one "do" button — **Run Wizard** — sits in the page
+header (when AI features are on); the org-wide reads that used to live
+on the Dashboard (Overview KPIs, Governance Posture, Catalog Shape,
+Program Maturity, Skill Gaps) now live on their own pages — Insights →
+Enterprise View, Gap Detection, and the Council page.
 
 ### 2.3 The org tree
 
@@ -892,7 +881,10 @@ artifacts for stakeholders.
 7. **Sort**: Risk Level descending.
 8. The preview pane refreshes live (350 ms after each edit).
 9. **Name**: *Activities by Risk*, **Description**: *All electric +
-   water activities ranked by risk*. **Visibility**: Shared with org.
+   water activities ranked by risk*. **Folder**: leave it in the
+   shared **Public** folder so the whole org can see it (a report's
+   folder is what drives its audience — a shared folder means
+   org-visible; "No folder" keeps it private to you).
 10. Save.
 
 ### 8.2 Second report: Data Assets without Owners
@@ -1020,7 +1012,7 @@ Help Guide for the full mechanics.
 
 Test this end-to-end:
 
-1. From Dashboard, click the **Coverage** KPI tile.
+1. From the Dashboard's **Coverage** section, click the mapping row.
 2. You land on the Process ↔ Data Map with the unmapped-activity banner.
 3. Click an unmapped activity → drops you into Process Catalog on
    that node.
@@ -1105,7 +1097,7 @@ streams), fine-tune the edges with include/exclude overrides, and read a
 live coverage read-out plus a "connected, not governed" backlog. That
 choice resolves to a concrete governed set that the rest of Procela treats
 as a lens: the **All / In-scope** toggle on Gap Detection (Module 9.1), an
-**All / Governed** lens on the Council Scorecard (10.4) and the Dashboard,
+**All / Governed** lens on the Council page (10.4) and the Dashboard,
 per-row **"in scope / not governed"** badges on Data Assets, Systems, Data
 Domains, and the Process Catalog, and context for the AI assistant. A
 **scope version** is stamped whenever the governed set changes, so scorecard
@@ -1114,10 +1106,20 @@ view/coverage lens, not access control — and with no scope defined,
 everything is governed by default, so nothing is hidden until you choose to
 narrow.
 
-### 10.4 Council Scorecard + Exceptions
+### 10.4 Council — scorecard, briefing & exceptions
 
-The **Council Scorecard** (**Insights → Review → Council Scorecard**)
-is the monthly report card a governance council reads: each child
+**Insights → Review → Council** is the governance council's home. It's
+one page now: a pre-meeting **briefing bar** across the top (the
+council roster + the next scheduled meeting) over the monthly
+**scorecard** grid, its ROI value story, a maturity trend, and what
+needs a decision. (The former Council Dashboard and Council Scorecard
+were merged; `/council-dashboard` and `/council-scorecard` redirect
+here.) Its page-header actions carry a **Print** icon, the **All /
+Governed** lens, a **Versions ▾** menu for past snapshots, and **Save
+snapshot**.
+
+The **scorecard** is the monthly report card a governance council
+reads: each child
 division reports four measures — Tier-1 domain coverage, asset
 classification, open issues over 30 days, and exceptions past expiry —
 and they roll up to a true **Enterprise** total (computed across the
@@ -1136,9 +1138,9 @@ council").
    from inside Edit. If a snapshot for this period already exists,
    Procela asks whether to **Replace existing** (overwrite that version
    in place) or **Save as a new snapshot** (keep both as separate dated
-   versions). The version-history panel reopens any past month
-   read-only — that's your historical reference for how governance moved
-   quarter over quarter.
+   versions). The **Versions ▾** menu in the page header reopens any
+   past month read-only — that's your historical reference for how
+   governance moved quarter over quarter.
 
 A division with nothing to assess yet — no governed domains, no
 classified assets, and no open issues or exceptions — shows a neutral
@@ -1192,31 +1194,32 @@ past — it flags red on that page and increments the exceptions column
 on the scorecard. Close it and the count drops. This is the auditable
 way a control gets waived instead of quietly going unmet.
 
-### 10.5 Council Dashboard — the pre-meeting briefing
-
-The Scorecard (10.4) is the detailed grid you save month over month.
-**Insights → Review → Council Dashboard** is the one screen a council
-chair opens *before* a meeting — a live briefing stitched from the
-surfaces that own each part, storing nothing of its own:
+**The briefing bar & what needs a decision.** Across the top of the
+page sits a live briefing stitched from the surfaces that own each
+part, storing nothing of its own — what a council chair reads *before*
+the meeting starts:
 
 - **The council** — the roster: who sits on the council and in what seat
   (Chair, Vice-chair, Secretary, Member), from the governance group you
-  built in 7.4.
+  built in 7.4, with a *Manage →* link into Groups.
 - **Next meeting** — the next scheduled council meeting, how many days
   away, its cadence, and expected attendees, from the Calendar.
-- **Governance health now** — current coverage / classification / status
-  per division (the live Scorecard derive), so you walk in knowing where
-  things stand without opening the full grid.
-- **Maturity trend** — a sparkline of the overall maturity score plus the
-  latest per-dimension scores (from 10.3), so you can see the direction.
-- **For the council** — what needs a decision this period, each drilling
-  back to where it's fixed.
 
-Open it as **Susan Chen** after seeding the demo: the *Data Governance
-Committee* roster, the Weekly committee calendar event, and the Tidewater
-health numbers all populate it.
+Below the value story, two more panels round out the briefing: a
+**Maturity trend** — a sparkline of the overall maturity score plus the
+latest per-dimension scores (from 10.3), so you can see the direction —
+and **Needs a decision**, the auto-derived escalations for the period
+(each drilling back to where it's fixed) with the editable **Council
+note** beside them. The scorecard grid itself is your "governance
+health now" read — coverage / classification / status per division — so
+you walk in already knowing where things stand.
 
-### 10.6 Audit Log — who changed what, when
+Seed the demo and open the page as **Susan Chen**: the *Data Governance
+Committee* roster, the Weekly committee calendar event, and the
+Tidewater health numbers all populate it. Use the **Print** icon to
+export the whole thing as a branded, landscape council briefing.
+
+### 10.5 Audit Log — who changed what, when
 
 Every mutation you've made in this course — creating orgs, assigning
 owners, saving a scorecard snapshot, waiving an exception — was recorded.
@@ -1429,12 +1432,11 @@ via the **RACI Matrix**.
 | Standing committees | Governance → Groups |
 | Policies + standards | Governance → Documents |
 | Reports + scorecards | Insights → Reports |
-| Council report card (division rollup) | Insights → Review → Council Scorecard |
-| Pre-meeting council briefing | Insights → Review → Council Dashboard |
+| Council report card (division rollup) + pre-meeting briefing | Insights → Review → Council |
 | Who changed what, when (audit trail) | Insights → Review → Audit Log |
 | Policy waivers / exceptions | Governance → Operate → Exceptions |
 | Pivot exploration | Insights → Analysis |
-| Where are the gaps? | Dashboard → Gaps section + Insights → Gap Detection |
+| Where are the gaps? | Insights → Gap Detection |
 | Live source metadata / freshness | Systems → Connections (if Procela can reach the DB) or Settings → On-prem connectors (if it can't) |
 | Help / shortcuts | Top-bar **Help** button (next to Ask AI); press `?` for keyboard shortcuts |
 
