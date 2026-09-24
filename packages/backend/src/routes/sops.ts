@@ -4,9 +4,11 @@ import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { people } from './people';
+import { governancePolicies } from './governance-policies';
 import logger from '../lib/logger';
 import { getSopsRepository } from '../db/sops.repo';
 import { getPeopleRepository } from '../db/people.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { enforceAssignment, ownerOnCreate } from '../lib/assignment';
 
@@ -48,6 +50,9 @@ export interface StoredSop {
   status: Status;
   version: number;
   ownerPersonId: string | null;
+  // The governance document (charter/framework/standard/policy) this procedure
+  // implements. Soft reference — null when the procedure stands alone.
+  governancePolicyId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -61,6 +66,13 @@ const sopsRepo = getSopsRepository(sops);
 // `people` binding at module-init (cycle-safety, matching the 9b conversions).
 let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
 const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+
+// governancePolicies is a foreign store too — same lazy pattern, so the
+// procedure→document link can resolve the document's code/name/type.
+let _policiesRepo: ReturnType<typeof getGovernancePoliciesRepository> | null = null;
+const policiesRepo = () => (_policiesRepo ??= getGovernancePoliciesRepository(governancePolicies));
+
+type PolicyRef = { id: string; orgId: string; code: string; name: string; documentType: string };
 
 // ── Helpers ──
 
@@ -83,11 +95,17 @@ function resolveOwnerName(ownerPersonId: string | null, allPeople: typeof people
   return person?.name || null;
 }
 
-function enrichSop(s: StoredSop, allPeople: typeof people): any {
+function enrichSop(s: StoredSop, allPeople: typeof people, allPolicies: PolicyRef[] = []): any {
+  const doc = s.governancePolicyId
+    ? allPolicies.find((p) => p.id === s.governancePolicyId)
+    : null;
   return {
     ...s,
     ownerName: resolveOwnerName(s.ownerPersonId, allPeople),
     stepCount: Array.isArray(s.steps) ? s.steps.length : 0,
+    // The governance document this procedure implements, resolved for display.
+    // null when unlinked or when the referenced document was deleted.
+    document: doc ? { id: doc.id, code: doc.code, name: doc.name, documentType: doc.documentType } : null,
   };
 }
 
@@ -219,7 +237,7 @@ const router = Router();
 /** GET /api/v1/sops — list with filters */
 router.get('/', async (req: Request, res: Response) => {
   const { category, role, status } = req.query;
-  const [allSops, allPeople] = await Promise.all([sopsRepo.list(), peopleRepo().list()]);
+  const [allSops, allPeople, allPolicies] = await Promise.all([sopsRepo.list(), peopleRepo().list(), policiesRepo().list()]);
   let filtered = scopeListForRequest(req, allSops);
 
   if (category) filtered = filtered.filter((s) => s.category === category);
@@ -230,22 +248,22 @@ router.get('/', async (req: Request, res: Response) => {
     );
   }
 
-  res.json({ success: true, data: filtered.map((s) => enrichSop(s, allPeople)) });
+  res.json({ success: true, data: filtered.map((s) => enrichSop(s, allPeople, allPolicies)) });
 });
 
 /** GET /api/v1/sops/:id — single SOP */
 router.get('/:id', async (req: Request, res: Response) => {
-  const [sop, allPeople] = await Promise.all([sopsRepo.get(String(req.params.id)), peopleRepo().list()]);
+  const [sop, allPeople, allPolicies] = await Promise.all([sopsRepo.get(String(req.params.id)), peopleRepo().list(), policiesRepo().list()]);
   if (!sop) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
   if (!assertOrgAccess(req, res, sop.orgId, 'SOP not found')) return;
-  res.json({ success: true, data: enrichSop(sop, allPeople) });
+  res.json({ success: true, data: enrichSop(sop, allPeople, allPolicies) });
 });
 
 /** POST /api/v1/sops — create */
 router.post('/', async (req: Request, res: Response) => {
   const {
     title, orgId, purpose, category, applicableRoles, triggerEvent,
-    steps, status, ownerPersonId,
+    steps, status, ownerPersonId, governancePolicyId,
   } = req.body;
 
   if (!title) { res.status(400).json({ success: false, error: 'Title is required' }); return; }
@@ -257,6 +275,13 @@ router.post('/', async (req: Request, res: Response) => {
   }
   if (status && !STATUSES.includes(status)) {
     res.status(400).json({ success: false, error: `Invalid status. Must be one of: ${STATUSES.join(', ')}` });
+    return;
+  }
+
+  // A linked document must be a real governance document in the same org.
+  const allPolicies = await policiesRepo().list();
+  if (governancePolicyId != null && !allPolicies.some((p) => p.id === governancePolicyId && p.orgId === orgId)) {
+    res.status(400).json({ success: false, error: 'governancePolicyId does not reference a governance document in this organization' });
     return;
   }
 
@@ -277,6 +302,7 @@ router.post('/', async (req: Request, res: Response) => {
     // Layer-2: a CONTRIBUTOR who doesn't name an owner owns what they
     // create, so they can subsequently edit it.
     ownerPersonId: ownerOnCreate((req as AuthenticatedRequest).user, ownerPersonId),
+    governancePolicyId: governancePolicyId ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -284,7 +310,7 @@ router.post('/', async (req: Request, res: Response) => {
   await sopsRepo.create(sop);
   auditService.log(sop.orgId, null, 'Sop', sop.id, 'CREATE', null, sop);
   logger.info({ sopId: sop.id, code: sop.code, title: sop.title }, 'Created SOP');
-  res.status(201).json({ success: true, data: enrichSop(sop, await peopleRepo().list()) });
+  res.status(201).json({ success: true, data: enrichSop(sop, await peopleRepo().list(), allPolicies) });
 });
 
 /** PUT /api/v1/sops/:id — update. Bumps version when steps change. */
@@ -299,7 +325,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const before = { ...sop, steps: [...sop.steps] };
   const {
     title, purpose, category, applicableRoles, triggerEvent,
-    steps, status, ownerPersonId,
+    steps, status, ownerPersonId, governancePolicyId,
   } = req.body;
 
   if (category !== undefined && !CATEGORIES.includes(category)) {
@@ -311,6 +337,13 @@ router.put('/:id', async (req: Request, res: Response) => {
     return;
   }
 
+  const allPolicies = await policiesRepo().list();
+  if (governancePolicyId !== undefined && governancePolicyId !== null
+      && !allPolicies.some((p) => p.id === governancePolicyId && p.orgId === sop.orgId)) {
+    res.status(400).json({ success: false, error: 'governancePolicyId does not reference a governance document in this organization' });
+    return;
+  }
+
   if (title !== undefined) sop.title = title;
   if (purpose !== undefined) sop.purpose = purpose;
   if (category !== undefined) sop.category = category;
@@ -319,6 +352,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
   if (triggerEvent !== undefined) sop.triggerEvent = triggerEvent;
   if (ownerPersonId !== undefined) sop.ownerPersonId = ownerPersonId;
+  if (governancePolicyId !== undefined) sop.governancePolicyId = governancePolicyId ?? null;
   if (status !== undefined) sop.status = status;
 
   if (steps !== undefined) {
@@ -333,7 +367,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   await sopsRepo.update(sop.id, sop);
   auditService.log(sop.orgId, null, 'Sop', sop.id, 'UPDATE', before, sop);
   logger.info({ sopId: sop.id, code: sop.code, version: sop.version }, 'Updated SOP');
-  res.json({ success: true, data: enrichSop(sop, await peopleRepo().list()) });
+  res.json({ success: true, data: enrichSop(sop, await peopleRepo().list(), allPolicies) });
 });
 
 /** DELETE /api/v1/sops/:id */
@@ -386,6 +420,7 @@ router.post('/seed', async (req: Request, res: Response) => {
       status: 'ACTIVE',
       version: 1,
       ownerPersonId: null,
+      governancePolicyId: null,
       createdAt: now,
       updatedAt: now,
     };

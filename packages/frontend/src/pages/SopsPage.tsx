@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
@@ -48,11 +49,17 @@ interface Sop {
   version: number;
   ownerPersonId: string | null;
   ownerName: string | null;
+  // The governance document this procedure implements (resolved server-side).
+  governancePolicyId: string | null;
+  document: { id: string; code: string; name: string; documentType: string } | null;
   createdAt: string;
   updatedAt: string;
 }
 
 interface Person { id: string; name: string; }
+
+// A governance document (charter/framework/standard/policy) an SOP can implement.
+interface DocOption { id: string; code: string; name: string; documentType: string; }
 
 interface SopForm {
   title: string;
@@ -63,12 +70,17 @@ interface SopForm {
   steps: SopStep[];
   status: string;
   ownerPersonId: string;
+  governancePolicyId: string;
 }
 
 const emptyForm: SopForm = {
   title: '', purpose: '', category: 'OTHER', applicableRoles: [], triggerEvent: '',
   steps: [{ order: 1, title: '', description: '', estimatedMinutes: 15 }],
-  status: 'DRAFT', ownerPersonId: '',
+  status: 'DRAFT', ownerPersonId: '', governancePolicyId: '',
+};
+
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  CHARTER: 'Charter', FRAMEWORK: 'Framework', STANDARD: 'Standard', POLICY: 'Policy',
 };
 
 // ── Styles ──
@@ -115,16 +127,17 @@ const badge = (colors: { bg: string; color: string }): React.CSSProperties => ({
   background: colors.bg, color: colors.color,
 });
 
-type SopColId = 'code' | 'title' | 'category' | 'roles' | 'steps' | 'status' | 'owner' | 'created';
+type SopColId = 'code' | 'title' | 'category' | 'roles' | 'document' | 'steps' | 'status' | 'owner' | 'created';
 const SOP_COLUMN_DEFS: Array<{ id: SopColId; label: string; defaultVisible: boolean }> = [
-  { id: 'code',     label: 'Code',     defaultVisible: true  },
-  { id: 'title',    label: 'Title',    defaultVisible: true  },
-  { id: 'category', label: 'Category', defaultVisible: true  },
-  { id: 'roles',    label: 'Roles',    defaultVisible: false },
-  { id: 'steps',    label: 'Steps',    defaultVisible: true  },
-  { id: 'status',   label: 'Status',   defaultVisible: true  },
-  { id: 'owner',    label: 'Owner',    defaultVisible: true  },
-  { id: 'created',  label: 'Created',  defaultVisible: false },
+  { id: 'code',     label: 'Code',       defaultVisible: true  },
+  { id: 'title',    label: 'Title',      defaultVisible: true  },
+  { id: 'category', label: 'Category',   defaultVisible: true  },
+  { id: 'roles',    label: 'Roles',      defaultVisible: false },
+  { id: 'document', label: 'Implements', defaultVisible: false },
+  { id: 'steps',    label: 'Steps',      defaultVisible: true  },
+  { id: 'status',   label: 'Status',     defaultVisible: true  },
+  { id: 'owner',    label: 'Owner',      defaultVisible: true  },
+  { id: 'created',  label: 'Created',    defaultVisible: false },
 ];
 
 export default function SopsPage({
@@ -138,8 +151,10 @@ export default function SopsPage({
   const { canWrite } = usePermissions();
   const sopCols = useColumnPicker<SopColId>('procela.sops.visibleCols.v1', SOP_COLUMN_DEFS);
   const { addToast } = useToastStore();
+  const navigate = useNavigate();
   const [sops, setSops] = useState<Sop[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [documents, setDocuments] = useState<DocOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -158,12 +173,14 @@ export default function SopsPage({
     try {
       setLoadError(null);
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [sopsRes, peopleRes] = await Promise.all([
+      const [sopsRes, peopleRes, docsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Sop[] }>(`/sops${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
+        apiClient.get<{ success: boolean; data: DocOption[] }>(`/governance-policies${query}`).catch(() => ({ success: true, data: [] as DocOption[] })),
       ]);
       setSops(sopsRes.data || []);
       setPeople(peopleRes.data || []);
+      setDocuments(docsRes.data || []);
     } catch (err) { setLoadError(errorMessage(err, 'Failed to load SOPs.')); }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -188,6 +205,7 @@ export default function SopsPage({
       steps: sop.steps.length > 0 ? sop.steps : [{ order: 1, title: '', description: '', estimatedMinutes: 15 }],
       status: sop.status,
       ownerPersonId: sop.ownerPersonId || '',
+      governancePolicyId: sop.governancePolicyId || '',
     });
     setEditingId(sop.id);
     setShowForm(true);
@@ -199,6 +217,7 @@ export default function SopsPage({
       ...form,
       orgId: activeOrgId,
       ownerPersonId: form.ownerPersonId || null,
+      governancePolicyId: form.governancePolicyId || null,
       steps: form.steps.filter((s) => s.title.trim().length > 0).map((s, i) => ({ ...s, order: i + 1 })),
     };
     try {
@@ -346,6 +365,12 @@ export default function SopsPage({
         </>
       ),
     },
+    sopCols.isVisible('document') && {
+      key: 'document', header: 'Implements', cellStyle: { fontSize: 12 },
+      render: (sop: Sop) => sop.document
+        ? <span title={`${sop.document.code} — ${sop.document.name}`} style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-primary)' }}>{sop.document.code}</span>
+        : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
+    },
     sopCols.isVisible('steps') && {
       key: 'steps', header: 'Steps', sortable: true, align: 'center' as const,
       render: (sop: Sop) => sop.steps?.length || 0,
@@ -391,6 +416,27 @@ export default function SopsPage({
         <div style={{ marginBottom: 12 }}>
           <SectionLabel marginBottom={4}>Trigger</SectionLabel>
           <div style={{ fontSize: 13 }}>{sop.triggerEvent}</div>
+        </div>
+      )}
+      {sop.document && (
+        <div style={{ marginBottom: 12 }}>
+          <SectionLabel marginBottom={4}>Implements document</SectionLabel>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); navigate('/governance-policies'); }}
+            title={`Open ${sop.document.code} on the Documents page`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4,
+              padding: '6px 10px', cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-primary)',
+            }}
+          >
+            <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/governance-policies', { size: 13 })}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{sop.document.code}</span>
+            <span style={{ color: 'var(--color-text)' }}>{sop.document.name}</span>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>({DOCUMENT_TYPE_LABELS[sop.document.documentType] || sop.document.documentType})</span>
+            <span aria-hidden="true">&rarr;</span>
+          </button>
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -551,6 +597,18 @@ export default function SopsPage({
               <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
               </select>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Implements document</label>
+              <select aria-label="Implements document" style={selectStyle} value={form.governancePolicyId} onChange={(e) => setForm({ ...form, governancePolicyId: e.target.value })}>
+                <option value="">-- None (standalone procedure) --</option>
+                {documents.map((d) => (
+                  <option key={d.id} value={d.id}>{d.code} — {d.name} ({DOCUMENT_TYPE_LABELS[d.documentType] || d.documentType})</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                The governance document (charter / framework / standard / policy) this procedure carries out.
+              </div>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Applicable Roles</label>

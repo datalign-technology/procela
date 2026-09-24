@@ -557,6 +557,7 @@ suite('live-db repository round-trips', () => {
       triggerEvent: 'ticket', steps: [{ order: 1, title: 'Verify', description: '', estimatedMinutes: 5 }],
       status: 'ACTIVE', version: 1,
       ownerPersonId: personId,
+      governancePolicyId: null,
       createdAt: now, updatedAt: now,
     });
     const gotSop = await sop.get(sopId);

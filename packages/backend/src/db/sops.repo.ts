@@ -23,6 +23,7 @@ type PrismaSopRow = {
   status: string;
   version: number;
   ownerPersonId: string | null;
+  governancePolicyId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -49,6 +50,7 @@ function fromPrisma(r: PrismaSopRow): StoredSop {
     status: r.status as StoredSop['status'],
     version: r.version,
     ownerPersonId: r.ownerPersonId ?? null,
+    governancePolicyId: r.governancePolicyId ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -68,6 +70,7 @@ function toPrismaData(row: Partial<StoredSop>): Record<string, unknown> {
   if (row.status !== undefined) d.status = row.status;
   if (row.version !== undefined) d.version = row.version;
   if (row.ownerPersonId !== undefined) d.ownerPersonId = row.ownerPersonId ?? null;
+  if (row.governancePolicyId !== undefined) d.governancePolicyId = row.governancePolicyId ?? null;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;
 }
