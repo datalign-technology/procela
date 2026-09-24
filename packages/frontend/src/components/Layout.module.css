@@ -24,6 +24,15 @@
   display: none;
 }
 
+/* Collapsed to a 60px rail, the brand's 24px side padding left only 12px for
+   the 28px icon, so the flex item shrank and the logo looked squished. Drop
+   the side padding and centre the icon in the rail. */
+.sidebarCollapsed .sidebarBrand {
+  padding-left: 0;
+  padding-right: 0;
+  justify-content: center;
+}
+
 .sidebarCollapsed .navGroupLabel {
   display: none;
 }
@@ -68,6 +77,8 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .sidebarNav {
