@@ -57,7 +57,7 @@ node .claude/skills/screenshot-app/shoot.mjs /tmp/shots \
 ```
 
 Common routes: Dashboard `/` · Get Started `/setup` · Reports `/reports` ·
-Council Scorecard `/council-scorecard` · Data Assets `/data-assets` · People
+Council `/council` · Data Assets `/data-assets` · People
 `/people`. Any authenticated route works.
 
 ### 3. Look at the output
