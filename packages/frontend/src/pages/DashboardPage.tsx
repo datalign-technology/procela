@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import { renderNavIcon } from '../components/navIcons';
 import { useAuthStore } from '../stores/authStore';
 import { useAiEnabled } from '../stores/aiConfigStore';
+import { useToastStore } from '../stores/toastStore';
 import { usePolling } from '../hooks/usePolling';
 
 interface DashboardStats {
@@ -133,6 +134,12 @@ function myDashboardUrl(lens: Lens = 'all', orgId: string | null = null): string
 // All / Tasks / Issues filter narrows the same list.
 // ──────────────────────────────────────────────────────────────────────────
 type QueueFilter = 'all' | 'task' | 'issue';
+// A row's action is either a navigation (open the thing elsewhere) or an
+// in-place mutation (advance a task / issue's status without leaving the
+// dashboard). `do` rows PUT `body` to `endpoint`, toast `done`, then refetch.
+type QueueAction =
+  | { mode: 'nav'; label: string; to: string; solid: boolean }
+  | { mode: 'do'; label: string; endpoint: string; body: Record<string, unknown>; done: string; solid: boolean };
 interface QueueItem {
   id: string;
   kind: 'issue' | 'task' | 'review' | 'domain';
@@ -142,12 +149,15 @@ interface QueueItem {
   title: string;
   meta: string;
   due?: { label: string; over: boolean };
-  action: { label: string; to: string; solid: boolean };
+  action: QueueAction;
 }
 
 // Fold the personal work items into one urgency-ranked queue. Scores are hand
 // tuned so the most decision-worthy rows float up: a critical issue first, then
-// at-risk domains and overdue work, then open work by priority.
+// at-risk domains and overdue work, then open work by priority. Task and issue
+// rows carry an in-place action that advances their status one valid step (the
+// completed/resolved item then drops off the queue on the next refetch);
+// reviews and at-risk domains have no single fix, so those stay navigation.
 function buildQueue(data: MyDashboardData): QueueItem[] {
   const tasksTo = '/governance-work?tab=tasks';
   const issuesTo = '/governance-work?tab=issues';
@@ -156,6 +166,12 @@ function buildQueue(data: MyDashboardData): QueueItem[] {
   for (const i of data.myIssues || []) {
     const crit = i.severity === 'CRITICAL';
     const high = i.severity === 'HIGH';
+    const ep = `/governance-issues/${i.id}`;
+    const action: QueueAction = i.status === 'OPEN'
+      ? { mode: 'do', label: 'Start', endpoint: ep, body: { status: 'IN_PROGRESS' }, done: 'Issue moved to In progress.', solid: crit }
+      : i.status === 'IN_PROGRESS'
+        ? { mode: 'do', label: 'Resolve', endpoint: ep, body: { status: 'RESOLVED' }, done: 'Issue resolved.', solid: crit }
+        : { mode: 'nav', label: 'Open', to: issuesTo, solid: crit };
     items.push({
       id: `issue-${i.id}`, kind: 'issue',
       score: crit ? 0 : high ? 2 : 3,
@@ -163,13 +179,20 @@ function buildQueue(data: MyDashboardData): QueueItem[] {
       pill: { label: i.severity, color: priorityColor(i.severity) },
       title: i.title,
       meta: ['Issue', i.domainName].filter(Boolean).join(' · '),
-      action: { label: 'Triage', to: issuesTo, solid: crit },
+      action,
     });
   }
   for (const t of data.myTasks || []) {
     const over = !!t.isOverdue;
     const high = t.priority === 'HIGH' || t.priority === 'CRITICAL';
     const med = t.priority === 'MEDIUM';
+    const ep = `/governance-tasks/${t.id}`;
+    const canComplete = t.status === 'IN_PROGRESS' || t.status === 'PENDING_REVIEW' || t.status === 'PENDING_APPROVAL';
+    const action: QueueAction = t.status === 'OPEN'
+      ? { mode: 'do', label: 'Start', endpoint: ep, body: { status: 'IN_PROGRESS' }, done: 'Task started.', solid: over }
+      : canComplete
+        ? { mode: 'do', label: 'Complete', endpoint: ep, body: { status: 'COMPLETED' }, done: 'Task completed.', solid: over }
+        : { mode: 'nav', label: 'Open', to: tasksTo, solid: over };
     items.push({
       id: `task-${t.id}`, kind: 'task',
       score: over ? 1.5 : high ? 2.5 : med ? 4 : 5,
@@ -179,7 +202,7 @@ function buildQueue(data: MyDashboardData): QueueItem[] {
       due: t.dueDate
         ? { label: over ? 'Overdue' : new Date(t.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), over }
         : undefined,
-      action: { label: 'Open', to: tasksTo, solid: over },
+      action,
     });
   }
   for (const r of (data.pendingReviews || []).filter((rv) => rv.isOverdue)) {
@@ -187,7 +210,7 @@ function buildQueue(data: MyDashboardData): QueueItem[] {
       id: `review-${r.id}`, kind: 'review', score: 1.8, dot: '#dc2626',
       pill: { label: 'REVIEW', color: '#dc2626' },
       title: r.name, meta: 'Policy review · overdue',
-      action: { label: 'Review', to: '/governance-policies', solid: false },
+      action: { mode: 'nav', label: 'Review', to: '/governance-policies', solid: false },
     });
   }
   for (const d of (data.myDomains || []).filter((dm) => dm.totalAssets > 0 && dm.healthyAssets / dm.totalAssets < 0.8)) {
@@ -196,10 +219,22 @@ function buildQueue(data: MyDashboardData): QueueItem[] {
       id: `domain-${d.id}`, kind: 'domain', score: 1, dot: '#dc2626',
       pill: { label: 'AT RISK', color: '#dc2626' },
       title: d.name, meta: `Domain you ${d.relation === 'owner' ? 'own' : 'steward'} · ${pct}% healthy`,
-      action: { label: 'Open', to: '/data-domains', solid: false },
+      action: { mode: 'nav', label: 'Open', to: '/data-domains', solid: false },
     });
   }
   return items.sort((a, b) => a.score - b.score);
+}
+
+// Shared style for a queue row's trailing action affordance (a link or a
+// button), so the nav and mutate variants look identical.
+function actionStyle(solid: boolean): React.CSSProperties {
+  return {
+    fontSize: 11, fontWeight: 600, borderRadius: 7, padding: '4px 10px', flexShrink: 0,
+    textDecoration: 'none', whiteSpace: 'nowrap', lineHeight: 1.4,
+    border: '1px solid var(--color-primary)',
+    background: solid ? 'var(--color-primary)' : 'transparent',
+    color: solid ? '#fff' : 'var(--color-primary)',
+  };
 }
 
 const QUEUE_MAX = 8;
@@ -207,20 +242,39 @@ const QUEUE_MAX = 8;
 // The dashboard's left pane: the ranked action queue (Concept B / "Today").
 function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
   const { user } = useAuthStore();
+  const addToast = useToastStore((s) => s.addToast);
   const [data, setData] = useState<MyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<QueueFilter>('all');
+  const [busyId, setBusyId] = useState<string | null>(null);
   const trend = useMyTrends();
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!user?.email) { setLoading(false); return; }
-    (async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
-        setData(res.data);
-      } catch { /* */ } finally { setLoading(false); }
-    })();
+    try {
+      const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl(lens, orgId));
+      setData(res.data);
+    } catch { /* */ } finally { setLoading(false); }
   }, [user?.email, lens, orgId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Run a row's in-place action (advance a task / issue's status), then
+  // refetch so the row updates or drops off. Errors surface as a toast; the
+  // row stays put so the user can retry.
+  const runAction = async (it: QueueItem) => {
+    if (it.action.mode !== 'do' || busyId) return;
+    setBusyId(it.id);
+    try {
+      await apiClient.put(it.action.endpoint, it.action.body);
+      addToast('success', it.action.done);
+      await load();
+    } catch (e) {
+      addToast('error', errorMessage(e, 'Could not update this item.'));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
@@ -301,16 +355,17 @@ function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
                 columns across every row — including rows with no due date. */}
             <span style={{ display: 'inline-block', boxSizing: 'border-box', width: 66, textAlign: 'center', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: it.pill.color + '18', color: it.pill.color, flexShrink: 0, whiteSpace: 'nowrap' }}>{it.pill.label}</span>
             <span style={{ width: 52, textAlign: 'left', flexShrink: 0, fontSize: 10, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: it.due?.over ? 'var(--color-error)' : 'var(--color-text-muted)', fontWeight: it.due?.over ? 600 : 400 }}>{it.due ? it.due.label : ''}</span>
-            <Link
-              to={it.action.to}
-              style={{
-                fontSize: 11, fontWeight: 600, borderRadius: 7, padding: '4px 10px', flexShrink: 0,
-                textDecoration: 'none', whiteSpace: 'nowrap',
-                border: '1px solid var(--color-primary)',
-                background: it.action.solid ? 'var(--color-primary)' : 'transparent',
-                color: it.action.solid ? '#fff' : 'var(--color-primary)',
-              }}
-            >{it.action.label}</Link>
+            {it.action.mode === 'nav' ? (
+              <Link to={it.action.to} style={actionStyle(it.action.solid)}>{it.action.label}</Link>
+            ) : (
+              <button
+                type="button"
+                disabled={busyId === it.id}
+                onClick={() => runAction(it)}
+                title={`${it.action.label} — ${it.title}`}
+                style={{ ...actionStyle(it.action.solid), cursor: busyId === it.id ? 'default' : 'pointer', opacity: busyId && busyId !== it.id ? 0.5 : 1, minWidth: 62, textAlign: 'center' }}
+              >{busyId === it.id ? '…' : it.action.label}</button>
+            )}
           </div>
         ))}
         {filtered.length > top.length && (
