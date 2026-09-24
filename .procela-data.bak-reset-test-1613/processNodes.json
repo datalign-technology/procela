@@ -1,0 +1,36 @@
+[
+  {
+    "id": "n1",
+    "parentId": null,
+    "level": "ACTIVITY",
+    "name": "Outage triage",
+    "description": "",
+    "activityId": "ACT-0001",
+    "status": "DRAFT",
+    "orderIndex": 0,
+    "orgId": "o1",
+    "orgIds": [
+      "o1"
+    ],
+    "ownerId": null,
+    "version": 1,
+    "domain": "OPERATIONAL",
+    "createdAt": "2026-07-15T00:00:00.000Z",
+    "updatedAt": "2026-07-15T00:00:00.000Z",
+    "complianceTags": [
+      "NERC-CIP-007",
+      "SOC2"
+    ],
+    "controlIds": [
+      "c-1",
+      "c-2"
+    ],
+    "requiredSkillIds": [
+      "s-1"
+    ],
+    "systemIds": [
+      "sys-1",
+      "sys-2"
+    ]
+  }
+]

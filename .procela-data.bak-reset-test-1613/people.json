@@ -1,0 +1,31 @@
+[
+  {
+    "id": "p1",
+    "orgIds": [
+      "o1"
+    ],
+    "accessibleOrgIds": [],
+    "name": "Test Person",
+    "email": "t-s3uqob@example.com",
+    "role": "VIEWER",
+    "title": "",
+    "skillIds": [],
+    "createdAt": "2026-07-15T00:00:00.000Z",
+    "updatedAt": "2026-07-15T00:00:00.000Z",
+    "mfaBackupCodes": [
+      "hash1",
+      "hash2",
+      "hash3"
+    ],
+    "webauthnCredentials": [
+      {
+        "id": "wa-1",
+        "credentialID": "credid",
+        "publicKey": "pk",
+        "counter": 0,
+        "label": "YubiKey",
+        "createdAt": "2026-07-15T00:00:00.000Z"
+      }
+    ]
+  }
+]
