@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
@@ -49,6 +50,10 @@ interface Control {
 }
 
 interface Person { id: string; name: string; }
+
+// The procedures (SOPs) that implement a document — the reverse of the
+// procedure→document link authored on the Procedures page.
+interface SopRef { id: string; code: string; title: string; governancePolicyId: string | null; }
 
 interface PolicyForm {
   name: string; description: string; category: string; status: string;
@@ -151,11 +156,13 @@ export default function GovernancePoliciesPage() {
   const { canWrite, isAdmin } = usePermissions();
   const deps = useDependencyChecks();
   const { addToast } = useToastStore();
+  const navigate = useNavigate();
 
   const policyCols = useColumnPicker<PolicyColId>('procela.governancePolicies.visibleCols.v1', POLICY_COLUMN_DEFS);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [controls, setControls] = useState<Control[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [sops, setSops] = useState<SopRef[]>([]);
   // Agent-promotion provenance — for any policy promoted from an agent
   // draft, the matching execution carries the back-link. We join by
   // execution.promotedDocumentId === policy.id at render time so neither
@@ -199,15 +206,17 @@ export default function GovernancePoliciesPage() {
       // Shape we need from /agent-executions for the join. The endpoint
       // already returns these fields; we only consume a subset.
       type ExecRow = { id: string; agentName: string; activityId: string; activityName: string; reviewedBy: string | null; reviewedAt: string | null; promotedDocumentId?: string | null };
-      const [polRes, ctlRes, pplRes, execRes] = await Promise.all([
+      const [polRes, ctlRes, pplRes, execRes, sopRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Policy[] }>(`/governance-policies${query}`),
         apiClient.get<{ success: boolean; data: Control[] }>(`/governance-controls${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
         apiClient.get<{ success: boolean; data: ExecRow[] }>(`/agent-executions${query}`).catch(() => ({ data: [] as ExecRow[] })),
+        apiClient.get<{ success: boolean; data: SopRef[] }>(`/sops${query}`).catch(() => ({ data: [] as SopRef[] })),
       ]);
       setPolicies(polRes.data || []);
       setControls(ctlRes.data || []);
       setPeople(pplRes.data || []);
+      setSops(sopRes.data || []);
       // Build the promotedDocumentId → execution-summary lookup. Multiple
       // executions could theoretically map to the same doc (re-promotes are
       // rejected by the backend, but a manual reset could clear the
@@ -325,6 +334,7 @@ export default function GovernancePoliciesPage() {
   };
 
   const controlsForPolicy = (policyId: string) => controls.filter((c) => c.policyId === policyId);
+  const proceduresForPolicy = (policyId: string) => sops.filter((s) => s.governancePolicyId === policyId);
 
   // The rows the table actually renders (type filter + agent-promoted
   // filter). Selection is built over THIS list so select-all matches the
@@ -550,6 +560,46 @@ export default function GovernancePoliciesPage() {
             )}
           </div>
         )}
+
+        {/* Procedures implementing this — the reverse of the procedure→document
+            link. Lists the SOPs that carry out this document, each linking to
+            the Procedures page. Shown for every document type. */}
+        {(() => {
+          const procs = proceduresForPolicy(pol.id);
+          return (
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Procedures implementing this</h3>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
+                Step-by-step procedures that carry out this document. Link one from a procedure&rsquo;s <em>Implements document</em> field on the Procedures page.
+              </p>
+              {procs.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>No procedures implement this document yet.</p>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {procs.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); navigate('/documentation?tab=procedures'); }}
+                        title={`Open ${s.code} on the Procedures page`}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, width: '100%', maxWidth: 480,
+                          background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4,
+                          padding: '6px 10px', cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-primary)',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/documentation', { size: 13 })}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flexShrink: 0 }}>{s.code}</span>
+                        <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
+                        <span aria-hidden="true" style={{ marginLeft: 'auto', flexShrink: 0 }}>&rarr;</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Linked documents — point this governance document at the real file
             wherever it lives (SharePoint, a web page, a file server) or upload
