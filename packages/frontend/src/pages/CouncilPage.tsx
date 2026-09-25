@@ -114,6 +114,10 @@ const tileSub: React.CSSProperties = { fontSize: 10.5, color: 'var(--color-text-
 // Right-aligned badge used in the ROI section headings.
 const roiBadge: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
 const roiBadgeMuted: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
+// Inner-band header inside the combined "Governance value" card: a small
+// uppercase label on the left, the band's status badge on the right.
+const bandRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 };
+const bandLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)' };
 
 // Each measure links to the page where you act on it — like the dashboard
 // tiles and Gap Detection rows, the number is a hyperlink to its source.
@@ -625,79 +629,94 @@ export default function CouncilPage() {
         </div>
       </Card>
 
-      {/* Governance value drivers — ROI Phase 1: leading indicators, not
-          dollars. Respects the active lens; a CFO's $ model multiplies these. */}
-      {derived.valueDrivers && (() => {
-        const v = derived.valueDrivers;
-        const tiles: Array<{ label: string; value: string; sub: string; tone?: 'good' | 'risk' }> = [
-          { label: 'Ownership coverage', value: `${v.ownership.pct}%`, sub: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good' },
-          { label: 'Value at risk', value: `${v.openRisk}`, sub: 'Past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk' },
-          { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, sub: 'Governance issues moved to a terminal status', tone: 'good' },
-          { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, sub: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues' },
-        ];
-        return (
-          <>
-          <SectionHeading title="Governance value drivers" as="h3" right={<span style={roiBadge}>Leading indicators</span>} />
-          <Card padding={18} marginBottom={16}>
-            <div style={tileGrid}>
-              {tiles.map((t) => (
-                <div key={t.label} style={statTile}>
-                  <div style={tileLabel}>{t.label}</div>
-                  <div style={{ ...tileNumber, color: t.tone === 'risk' && v.openRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
-                  <div style={tileSub}>{t.sub}</div>
+      {/* Governance value — one section telling the whole ROI story: the
+          leading-indicator value drivers (measured signals, no assumed dollars)
+          and, in the same card, those same drivers monetized with the tenant's
+          OWN dollar model (a configure prompt when unset — Procela invents no
+          figures). Both respect the active lens. */}
+      {(derived.valueDrivers || derived.roi) && (
+        <>
+        <SectionHeading title="Governance value" as="h3" />
+        <Card padding={18} marginBottom={16}>
+          {/* Value drivers — leading indicators, not dollars. */}
+          {derived.valueDrivers && (() => {
+            const v = derived.valueDrivers;
+            const tiles: Array<{ label: string; value: string; sub: string; tone?: 'good' | 'risk' }> = [
+              { label: 'Ownership coverage', value: `${v.ownership.pct}%`, sub: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good' },
+              { label: 'Value at risk', value: `${v.openRisk}`, sub: 'Past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk' },
+              { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, sub: 'Governance issues moved to a terminal status', tone: 'good' },
+              { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, sub: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues' },
+            ];
+            return (
+              <>
+                <div style={bandRow}>
+                  <span style={bandLabel}>Value drivers</span>
+                  <span style={roiBadge}>Leading indicators</span>
                 </div>
-              ))}
-            </div>
-          </Card>
-          </>
-        );
-      })()}
+                <div style={tileGrid}>
+                  {tiles.map((t) => (
+                    <div key={t.label} style={statTile}>
+                      <div style={tileLabel}>{t.label}</div>
+                      <div style={{ ...tileNumber, color: t.tone === 'risk' && v.openRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
+                      <div style={tileSub}>{t.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
 
-      {/* Estimated governance value — ROI Phase 2: the drivers above monetized
-          with the tenant's OWN dollar model. When no model is set we show a
-          configure prompt, never a fabricated figure. */}
-      {derived.roi && (() => {
-        const roi = derived.roi;
-        if (!roi.configured) {
-          return (
-            <>
-            <SectionHeading title="Estimated governance value" as="h3" right={<span style={roiBadgeMuted}>Not configured</span>} />
-            <Card padding={18} marginBottom={16}>
-              <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                Turn the drivers above into a dollar figure by setting your organization&rsquo;s value model — what an owned entity, a resolved issue, and an open-risk item are worth to you. Procela invents no figures.{' '}
-                <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Set your value model →</Link>
-              </div>
-            </Card>
-            </>
-          );
-        }
-        const cur = roi.currency;
-        const tiles: Array<{ label: string; value: string; sub: string; tone?: 'good' | 'risk' }> = [
-          { label: 'Estimated annual value', value: fmtMoney(roi.annualValue, cur), sub: 'Ownership value + annualized resolution value', tone: 'good' },
-          { label: 'Ownership value', value: fmtMoney(roi.ownershipValue, cur), sub: 'Owned domains & assets × your value per owned entity' },
-          { label: 'Resolution value (annualized)', value: fmtMoney(roi.resolutionValueAnnualized, cur), sub: `${fmtMoney(roi.resolutionValueMonthly, cur)}/mo run-rate × 12` },
-          { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), sub: 'Open-risk items × your exposure per item — drive down', tone: 'risk' },
-        ];
-        return (
-          <>
-          <SectionHeading title="Estimated governance value" as="h3" right={<span style={roiBadge}>Your assumptions</span>} />
-          <Card padding={18} marginBottom={16}>
-            <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-              The value drivers monetized with your model — {fmtMoney(roi.model.ownershipValuePerEntity, cur)}/owned entity, {fmtMoney(roi.model.resolutionValuePerIssue, cur)}/issue resolved, {fmtMoney(roi.model.riskCostPerItem, cur)}/open-risk item. An estimate, only as good as those assumptions. {derived.scope?.applied ? 'Scoped to the governed set.' : 'Across the whole org tree.'}{' '}
-              <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Edit model →</Link>
-            </div>
-            <div style={tileGrid}>
-              {tiles.map((t) => (
-                <div key={t.label} style={statTile}>
-                  <div style={tileLabel}>{t.label}</div>
-                  <div style={{ ...tileNumber, color: t.tone === 'risk' && roi.valueAtRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
-                  <div style={tileSub}>{t.sub}</div>
+          {/* Estimated value — the drivers above monetized with the tenant's OWN
+              dollar model. When no model is set we show a configure prompt,
+              never a fabricated figure. Divided from the drivers band above. */}
+          {derived.roi && (() => {
+            const roi = derived.roi;
+            const bandStyle: React.CSSProperties = derived.valueDrivers
+              ? { marginTop: 18, borderTop: '1px solid var(--color-border)', paddingTop: 16 }
+              : {};
+            if (!roi.configured) {
+              return (
+                <div style={bandStyle}>
+                  <div style={bandRow}>
+                    <span style={bandLabel}>Estimated value</span>
+                    <span style={roiBadgeMuted}>Not configured</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                    Turn the drivers above into a dollar figure by setting your organization&rsquo;s value model — what an owned entity, a resolved issue, and an open-risk item are worth to you. Procela invents no figures.{' '}
+                    <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Set your value model →</Link>
+                  </div>
                 </div>
-              ))}
-            </div>
-            {/* ROI Phase 3 — per-value-stream attribution. Which streams' data
-                is banking value vs. carrying risk. */}
-            {roi.byValueStream && roi.byValueStream.length > 0 && (() => {
+              );
+            }
+            const cur = roi.currency;
+            const tiles: Array<{ label: string; value: string; sub: string; tone?: 'good' | 'risk' }> = [
+              { label: 'Estimated annual value', value: fmtMoney(roi.annualValue, cur), sub: 'Ownership value + annualized resolution value', tone: 'good' },
+              { label: 'Ownership value', value: fmtMoney(roi.ownershipValue, cur), sub: 'Owned domains & assets × your value per owned entity' },
+              { label: 'Resolution value (annualized)', value: fmtMoney(roi.resolutionValueAnnualized, cur), sub: `${fmtMoney(roi.resolutionValueMonthly, cur)}/mo run-rate × 12` },
+              { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), sub: 'Open-risk items × your exposure per item — drive down', tone: 'risk' },
+            ];
+            return (
+              <div style={bandStyle}>
+                <div style={bandRow}>
+                  <span style={bandLabel}>Estimated value</span>
+                  <span style={roiBadge}>Your assumptions</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+                  The value drivers monetized with your model — {fmtMoney(roi.model.ownershipValuePerEntity, cur)}/owned entity, {fmtMoney(roi.model.resolutionValuePerIssue, cur)}/issue resolved, {fmtMoney(roi.model.riskCostPerItem, cur)}/open-risk item. An estimate, only as good as those assumptions. {derived.scope?.applied ? 'Scoped to the governed set.' : 'Across the whole org tree.'}{' '}
+                  <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Edit model →</Link>
+                </div>
+                <div style={tileGrid}>
+                  {tiles.map((t) => (
+                    <div key={t.label} style={statTile}>
+                      <div style={tileLabel}>{t.label}</div>
+                      <div style={{ ...tileNumber, color: t.tone === 'risk' && roi.valueAtRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
+                      <div style={tileSub}>{t.sub}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* ROI Phase 3 — per-value-stream attribution. Which streams' data
+                    is banking value vs. carrying risk. */}
+                {roi.byValueStream && roi.byValueStream.length > 0 && (() => {
               const rows = roi.byValueStream!;
               const shown = rows.slice(0, 8);
               return (
@@ -734,10 +753,12 @@ export default function CouncilPage() {
                 </div>
               );
             })()}
-          </Card>
-          </>
-        );
-      })()}
+              </div>
+            );
+          })()}
+        </Card>
+        </>
+      )}
 
       {/* ── Maturity trend + escalations — are we improving, and what needs a call ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginBottom: 16 }}>
