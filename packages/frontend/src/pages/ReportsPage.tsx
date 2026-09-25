@@ -31,7 +31,7 @@ interface UserReportSummary {
   lastRunAt: string | null;
   lastRunRowCount: number | null;
   runCount: number;
-  scheduleFrequency: 'off' | 'weekly';
+  scheduleFrequency: 'off' | 'daily' | 'weekly' | 'monthly';
   updatedAt: string;
 }
 
@@ -303,7 +303,7 @@ function UserReportsTab() {
           {r.lastRunAt
             ? <>{timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
             : <span style={{ color: 'var(--color-text-muted)' }}>Never run</span>}
-          {r.scheduleFrequency === 'weekly' && <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>WEEKLY</span>}
+          {r.scheduleFrequency !== 'off' && <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>{r.scheduleFrequency.toUpperCase()}</span>}
         </span>
       ),
     },

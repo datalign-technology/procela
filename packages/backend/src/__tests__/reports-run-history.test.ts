@@ -115,6 +115,29 @@ describe('reports — run history + schedule', () => {
   it('normalizeSchedule returns null for an empty/off schedule', () => {
     assert.strictEqual(normalizeSchedule({ frequency: 'off', recipients: [] }), null);
     assert.strictEqual(normalizeSchedule(null), null);
-    assert.deepStrictEqual(normalizeSchedule({ frequency: 'weekly', recipients: ['a@x.com'] }), { frequency: 'weekly', recipients: ['a@x.com'] });
+    // The active frequency's day/hour fields are populated with defaults so the
+    // stored schedule is self-describing (weekly ⇒ Sunday 23:00 UTC).
+    assert.deepStrictEqual(
+      normalizeSchedule({ frequency: 'weekly', recipients: ['a@x.com'] }),
+      { frequency: 'weekly', recipients: ['a@x.com'], dayOfWeek: 0, hour: 23 },
+    );
+  });
+
+  it('normalizeSchedule clamps day/hour per cadence and drops irrelevant fields', () => {
+    // Daily: only hour is relevant; a wild hour clamps into range.
+    assert.deepStrictEqual(
+      normalizeSchedule({ frequency: 'daily', hour: 99, dayOfWeek: 3, recipients: ['a@x.com'] }),
+      { frequency: 'daily', recipients: ['a@x.com'], hour: 23 },
+    );
+    // Weekly: dayOfWeek clamps 0–6, hour 0–23.
+    assert.deepStrictEqual(
+      normalizeSchedule({ frequency: 'weekly', dayOfWeek: 9, hour: 8, recipients: ['a@x.com'] }),
+      { frequency: 'weekly', recipients: ['a@x.com'], dayOfWeek: 6, hour: 8 },
+    );
+    // Monthly: dayOfMonth clamps 1–28 (so it exists every month).
+    assert.deepStrictEqual(
+      normalizeSchedule({ frequency: 'monthly', dayOfMonth: 31, hour: 6, recipients: ['a@x.com'] }),
+      { frequency: 'monthly', recipients: ['a@x.com'], dayOfMonth: 28, hour: 6 },
+    );
   });
 });

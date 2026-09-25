@@ -1,15 +1,19 @@
 // Scheduled report delivery.
 //
-// A saved report can carry a schedule ({ frequency: 'weekly', recipients }).
-// The scheduler's weekly sweep calls deliverScheduledReports(), which runs
-// each scheduled report against the live catalog and emails the rendered
-// rows (CSV attachment + summary) to its recipients, reusing the shared mail
-// sender. Runs are recorded in the report's run log with kind 'scheduled'.
+// A saved report can carry a schedule ({ frequency, dayOfWeek?, dayOfMonth?,
+// hour?, recipients }). The scheduler's hourly sweep calls
+// deliverScheduledReports(), which delivers every report whose schedule is
+// *due* — i.e. the clock has passed its most recent daily/weekly/monthly fire
+// moment and it hasn't already been delivered for that period. Each due report
+// is run against the live catalog and its rendered rows emailed (CSV
+// attachment + summary) to the recipients, reusing the shared mail sender.
+// Runs are recorded in the report's run log with kind 'scheduled', and
+// scheduleLastDeliveredAt is stamped so the next period gates correctly.
 //
 // A no-op when SMTP is unconfigured; best-effort per report so one failure
 // never blocks the rest of the sweep.
 
-import { reports, appendRun, type ReportRun } from '../routes/reports';
+import { reports, appendRun, isScheduleDue, type ReportRun } from '../routes/reports';
 import { getReportsRepository } from '../db/reports.repo';
 import { executeReport } from './report-engine';
 import { isConfigured as isMailConfigured, sendReportEmail } from './mail.service';
@@ -30,12 +34,13 @@ export async function deliverScheduledReports(): Promise<{ delivered: number; co
 
   const all = await reportsRepo.list();
   const orgs = getCachedOrgList();
+  const now = new Date();
   let delivered = 0;
   let considered = 0;
 
   for (const report of all) {
     const sched = report.schedule;
-    if (!sched || sched.frequency !== 'weekly' || sched.recipients.length === 0) continue;
+    if (!sched || !isScheduleDue(sched, now, report.scheduleLastDeliveredAt)) continue;
     considered += 1;
     try {
       const result = await executeReport(report.definition, report.orgId);
@@ -52,13 +57,11 @@ export async function deliverScheduledReports(): Promise<{ delivered: number; co
       });
       if (ok) {
         delivered += 1;
-        const run: ReportRun = {
-          ranAt: new Date().toISOString(),
-          rowCount: result.totalMatched,
-          byUserId: null,
-          kind: 'scheduled',
-        };
-        try { await reportsRepo.update(report.id, appendRun(report, run)); }
+        const ranAt = new Date().toISOString();
+        const run: ReportRun = { ranAt, rowCount: result.totalMatched, byUserId: null, kind: 'scheduled' };
+        // Stamp scheduleLastDeliveredAt alongside the run so the next sweep
+        // gates this report until its following fire moment.
+        try { await reportsRepo.update(report.id, { ...appendRun(report, run), scheduleLastDeliveredAt: ranAt }); }
         catch { /* run history is non-critical */ }
       }
     } catch (err) {

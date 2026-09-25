@@ -35,6 +35,11 @@ import { isSchedulerLeader } from '../lib/scheduler-leadership';
 //     an org has >= 2 real snapshots, /dashboard/trends returns them
 //     instead of the synthesized (illustrative) fallback series.
 //
+//   * Scheduled report delivery — every tick. deliverScheduledReports()
+//     delivers each saved report whose per-report cadence (daily / weekly /
+//     monthly + day + send hour) has come due since it was last delivered.
+//     A no-op when SMTP is unconfigured.
+//
 // The scheduler holds a single Node interval. Callers should invoke
 // startScheduler() during boot and stopScheduler() during graceful
 // shutdown. The intervals are wrapped in try/catch so a
@@ -162,16 +167,18 @@ async function tick(): Promise<void> {
     } catch (err) {
       logger.error({ err }, 'Scheduler: weekly digest failed');
     }
+  }
 
-    // Scheduled report delivery rides the same weekly boundary (and the same
-    // leader gate). Best-effort and a no-op when SMTP is unconfigured, so it's
-    // safe to run unconditionally here.
-    try {
-      const { delivered } = await deliverScheduledReports();
-      if (delivered > 0) logger.info({ delivered }, 'Scheduler: scheduled reports delivered');
-    } catch (err) {
-      logger.error({ err }, 'Scheduler: scheduled report delivery failed');
-    }
+  // Scheduled report delivery runs every tick (behind the same leader gate):
+  // each report carries its own daily/weekly/monthly cadence + send hour, and
+  // deliverScheduledReports() delivers only the reports whose next fire moment
+  // has passed. Best-effort and a no-op when SMTP is unconfigured, so it's safe
+  // to run unconditionally on every sweep.
+  try {
+    const { delivered } = await deliverScheduledReports();
+    if (delivered > 0) logger.info({ delivered }, 'Scheduler: scheduled reports delivered');
+  } catch (err) {
+    logger.error({ err }, 'Scheduler: scheduled report delivery failed');
   }
 
   // Daily stats-snapshot capture — once per UTC calendar day, record each
