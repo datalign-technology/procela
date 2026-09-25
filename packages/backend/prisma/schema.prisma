@@ -1197,6 +1197,10 @@ model Sop {
   status          String   @default("DRAFT")
   version         Int      @default(1)
   ownerPersonId   String?  @db.Uuid
+  // The governance document (GovernancePolicy: charter/framework/standard/
+  // policy) this procedure implements. Soft reference — nullable, no FK — so
+  // deleting the document leaves the SOP intact (the link just resolves empty).
+  governancePolicyId String? @db.Uuid
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

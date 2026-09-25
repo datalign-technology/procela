@@ -21,6 +21,8 @@ const { sops } = require('../routes/sops');
 const opsRouter = require('../routes/operations-manuals').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { operationsManuals } = require('../routes/operations-manuals');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governancePolicies } = require('../routes/governance-policies');
 
 type User = { sub: string; role: string };
 
@@ -102,7 +104,15 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
     };
     sweep(sops);
     sweep(operationsManuals);
+    sweep(governancePolicies);
     const now = new Date().toISOString();
+    // A governance document the procedures can implement.
+    governancePolicies.push({
+      id: PREFIX + 'doc-std', orgId, code: 'STD-1', name: 'Data Quality Standard',
+      description: '', documentType: 'STANDARD', status: 'ACTIVE', ownerAssignmentId: null,
+      category: 'DATA_QUALITY', reviewFrequency: 'ANNUAL', nextReviewDate: null,
+      effectiveDate: null, content: '', createdAt: now, updatedAt: now,
+    });
     // A SOP owned by someone other than our test contributor…
     sops.push({
       id: PREFIX + 's-owned', orgId, code: 'SOP-900', title: 'Owned SOP',
@@ -160,6 +170,43 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
   it('sops: EDITOR may edit any SOP (org-wide write, exempt from layer 2)', async () => {
     const res = await request(port, 'PUT', `/sops/${PREFIX}s-owned`, { title: 'edited' }, EDITOR);
     assert.strictEqual(res.status, 200);
+  });
+
+  // ── sops: procedure→document link ──
+
+  it('sops: create links to a governance document and resolves it', async () => {
+    const res = await request(port, 'POST', '/sops', { orgId, title: 'Implements STD-1', governancePolicyId: PREFIX + 'doc-std' }, EDITOR);
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.data.governancePolicyId, PREFIX + 'doc-std');
+    assert.strictEqual(res.body.data.document.code, 'STD-1');
+    assert.strictEqual(res.body.data.document.documentType, 'STANDARD');
+  });
+
+  it('sops: create with no document link leaves it null', async () => {
+    const res = await request(port, 'POST', '/sops', { orgId, title: 'Standalone' }, EDITOR);
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.data.governancePolicyId, null);
+    assert.strictEqual(res.body.data.document, null);
+  });
+
+  it('sops: create rejects an unknown document id with 400', async () => {
+    const res = await request(port, 'POST', '/sops', { orgId, title: 'Bad link', governancePolicyId: PREFIX + 'nope' }, EDITOR);
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('sops: PUT can set and then clear the document link', async () => {
+    const set = await request(port, 'PUT', `/sops/${PREFIX}s-mine`, { governancePolicyId: PREFIX + 'doc-std' }, CONTRIB);
+    assert.strictEqual(set.status, 200);
+    assert.strictEqual(set.body.data.document.code, 'STD-1');
+    const clear = await request(port, 'PUT', `/sops/${PREFIX}s-mine`, { governancePolicyId: null }, CONTRIB);
+    assert.strictEqual(clear.status, 200);
+    assert.strictEqual(clear.body.data.governancePolicyId, null);
+    assert.strictEqual(clear.body.data.document, null);
+  });
+
+  it('sops: PUT rejects an unknown document id with 400', async () => {
+    const res = await request(port, 'PUT', `/sops/${PREFIX}s-mine`, { governancePolicyId: PREFIX + 'nope' }, CONTRIB);
+    assert.strictEqual(res.status, 400);
   });
 
   // ── operations-manuals ──
