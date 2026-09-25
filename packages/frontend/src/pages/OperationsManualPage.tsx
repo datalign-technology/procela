@@ -126,7 +126,14 @@ export default function OperationsManualPage({
     updateManual(manual.id, { [section]: manual[section].filter((_, i) => i !== idx) });
   };
 
-  const startEditHeader = (m: OperationsManual) => { setHeaderForm({ label: m.label, purpose: m.purpose, roleType: m.roleType || CUSTOM_ROLE }); setEditingHeader(m.id); };
+  const startEditHeader = (m: OperationsManual) => {
+    setHeaderForm({ label: m.label, purpose: m.purpose, roleType: m.roleType || CUSTOM_ROLE });
+    setEditingHeader(m.id);
+    // The header-edit form lives inside the expanded card body, so a collapsed
+    // card must expand for the editor to be visible (otherwise Edit header
+    // silently does nothing).
+    setExpandedCards((prev) => new Set(prev).add(m.id));
+  };
   const saveHeader = async (id: string) => {
     if (!headerForm.label.trim()) return;
     await updateManual(id, { label: headerForm.label, purpose: headerForm.purpose, roleType: headerForm.roleType });
