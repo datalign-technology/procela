@@ -1,6 +1,7 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import logger from '../lib/logger';
 import { resolveEnvSecretSync } from './crypto.service';
+import { serializeReport, type ReportFormat } from './report-serializers';
 
 // ──────────────────────────────────────────────────────────────────────────
 // mail.service — SMTP delivery of transactional email.
@@ -373,9 +374,11 @@ export async function sendCalendarInviteEmail(args: {
   }
 }
 
-/** Deliver a rendered report by email with a CSV attachment. Used by the
- *  scheduled-report sweep. Returns true on successful send, false otherwise
- *  (not configured, no recipients, or a delivery error). */
+/** Deliver a rendered report by email in the requested format. Used by the
+ *  scheduled-report sweep. The attachment formats (csv/xlsx/pdf) ship the
+ *  result set as a file; the 'html' format embeds the table in the email body
+ *  instead. Returns true on successful send, false otherwise (not configured,
+ *  no recipients, or a delivery error). */
 export async function sendReportEmail(args: {
   to: string[];
   reportName: string;
@@ -383,40 +386,58 @@ export async function sendReportEmail(args: {
   headers: string[];
   rows: Array<Array<string | number | boolean | null | undefined>>;
   totalMatched: number;
+  /** Output format; defaults to CSV for back-compatibility. */
+  format?: ReportFormat;
 }): Promise<boolean> {
   if (!isConfigured() || !transporter || !config || args.to.length === 0) return false;
 
-  const cell = (c: unknown): string => (c === null || c === undefined) ? '' : String(c);
-  const csvEscape = (c: unknown): string => `"${cell(c).replace(/"/g, '""')}"`;
-  const csv = [
-    args.headers.map(csvEscape).join(','),
-    ...args.rows.map((r) => r.map(csvEscape).join(',')),
-  ].join('\r\n');
-
-  const base = (args.reportName || 'report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'report';
+  const format: ReportFormat = args.format || 'csv';
   const capped = args.totalMatched > args.rows.length;
+  const generated = new Date().toLocaleString();
+  const rowCountLabel = `${args.rows.length}${capped ? ` (of ${args.totalMatched} matched — capped)` : ''}`;
   const subject = `Procela report — ${args.reportName} (${args.rows.length} row${args.rows.length === 1 ? '' : 's'})`;
 
+  let serialized;
+  try {
+    serialized = await serializeReport(format, args.headers, args.rows, {
+      reportName: args.reportName, orgName: args.orgName, totalMatched: args.totalMatched,
+    });
+  } catch (err) {
+    logger.warn({ err, format, report: args.reportName }, 'Failed to serialize scheduled report');
+    return false;
+  }
+
+  // The body's delivery line + the email's attachments depend on the format:
+  // an attachment format names the file; the inline HTML format renders the
+  // table directly under the summary.
+  const attachment = serialized.attachment;
+  const deliveryLineText = attachment
+    ? `The full result set is attached as ${attachment.filename}.`
+    : `The report is shown below.`;
+  const deliveryLineHtml = attachment
+    ? `<p style="font-size: 13px; color: #64748b;">The full result set is attached as ${escapeHtml(attachment.filename)}.</p>`
+    : `<div style="margin: 12px 0; overflow-x: auto;">${serialized.inlineHtml || ''}</div>`;
+
   const text = [
-    `Your scheduled Procela report "${args.reportName}" for ${args.orgName} is attached.`,
+    `Your scheduled Procela report "${args.reportName}" for ${args.orgName}${attachment ? ' is attached' : ' is below'}.`,
     '',
-    `Rows: ${args.rows.length}${capped ? ` (of ${args.totalMatched} matched — capped)` : ''}`,
-    `Generated: ${new Date().toLocaleString()}`,
+    `Rows: ${rowCountLabel}`,
+    `Generated: ${generated}`,
     '',
-    `The full result set is attached as ${base}.csv.`,
+    deliveryLineText,
     '',
     '— Procela',
   ].join('\n');
 
   const html = `
-    <div style="font-family: -apple-system, system-ui, sans-serif; color: #1e293b; max-width: 520px;">
+    <div style="font-family: -apple-system, system-ui, sans-serif; color: #1e293b; max-width: ${attachment ? '520px' : '900px'};">
       <p>Your scheduled Procela report <strong>${escapeHtml(args.reportName)}</strong> for
-         <strong>${escapeHtml(args.orgName)}</strong> is attached.</p>
+         <strong>${escapeHtml(args.orgName)}</strong>${attachment ? ' is attached' : ' is below'}.</p>
       <table style="font-size: 13px; color: #334155; border-collapse: collapse;">
         <tr><td style="padding: 2px 12px 2px 0; color: #64748b;">Rows</td><td>${args.rows.length}${capped ? ` <span style="color:#94a3b8;">(of ${args.totalMatched} matched — capped)</span>` : ''}</td></tr>
-        <tr><td style="padding: 2px 12px 2px 0; color: #64748b;">Generated</td><td>${escapeHtml(new Date().toLocaleString())}</td></tr>
+        <tr><td style="padding: 2px 12px 2px 0; color: #64748b;">Generated</td><td>${escapeHtml(generated)}</td></tr>
       </table>
-      <p style="font-size: 13px; color: #64748b;">The full result set is attached as ${escapeHtml(base)}.csv.</p>
+      ${deliveryLineHtml}
       <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">— Procela</p>
     </div>
   `;
@@ -428,7 +449,7 @@ export async function sendReportEmail(args: {
       subject,
       text,
       html,
-      attachments: [{ filename: `${base}.csv`, content: csv, contentType: 'text/csv; charset=utf-8' }],
+      ...(attachment ? { attachments: [{ filename: attachment.filename, content: attachment.content, contentType: attachment.contentType }] } : {}),
     });
     return true;
   } catch (err) {

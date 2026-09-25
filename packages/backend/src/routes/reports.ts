@@ -39,6 +39,11 @@ export type ScheduleFrequency = 'off' | 'daily' | 'weekly' | 'monthly';
 /** Optional scheduled delivery for a saved report. Day/hour are stored in UTC.
  *  Legacy schedules (weekly with no dayOfWeek/hour) fall back to the historical
  *  Sunday-23:00 boundary via the defaults below. */
+/** Delivery format for a scheduled report. csv/xlsx/pdf attach a file; html
+ *  embeds the table in the email body. Kept in sync with the serializer's
+ *  ReportFormat (report-serializers.ts). */
+export type ReportDeliveryFormat = 'csv' | 'xlsx' | 'pdf' | 'html';
+
 export interface ReportSchedule {
   frequency: ScheduleFrequency;
   /** Day of week for a weekly schedule: 0 = Sunday … 6 = Saturday. */
@@ -48,6 +53,8 @@ export interface ReportSchedule {
   dayOfMonth?: number;
   /** UTC hour of day to send at, 0–23. */
   hour?: number;
+  /** Output format for the delivered report. Defaults to csv. */
+  format?: ReportDeliveryFormat;
   /** Email addresses the rendered report is delivered to on each run. */
   recipients: string[];
 }
@@ -112,17 +119,19 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
  *  self-describing and round-trips through the builder. Returns null to clear. */
 export function normalizeSchedule(input: unknown): ReportSchedule | null {
   if (!input || typeof input !== 'object') return null;
-  const s = input as { frequency?: unknown; dayOfWeek?: unknown; dayOfMonth?: unknown; hour?: unknown; recipients?: unknown };
+  const s = input as { frequency?: unknown; dayOfWeek?: unknown; dayOfMonth?: unknown; hour?: unknown; format?: unknown; recipients?: unknown };
   const frequency: ScheduleFrequency =
     s.frequency === 'daily' || s.frequency === 'weekly' || s.frequency === 'monthly' ? s.frequency : 'off';
   const recipients = Array.isArray(s.recipients)
     ? s.recipients.filter((r): r is string => typeof r === 'string' && r.trim().length > 0).map((r) => r.trim())
     : [];
   if (frequency === 'off' && recipients.length === 0) return null;
+  const format: ReportDeliveryFormat =
+    s.format === 'xlsx' || s.format === 'pdf' || s.format === 'html' ? s.format : 'csv';
   const out: ReportSchedule = { frequency, recipients };
   if (frequency === 'weekly')  out.dayOfWeek  = clampInt(s.dayOfWeek,  0, 6,  DEFAULT_SCHEDULE_DOW);
   if (frequency === 'monthly') out.dayOfMonth = clampInt(s.dayOfMonth, 1, 28, DEFAULT_SCHEDULE_DOM);
-  if (frequency !== 'off')     out.hour       = clampInt(s.hour,       0, 23, DEFAULT_SCHEDULE_HOUR);
+  if (frequency !== 'off')    { out.hour = clampInt(s.hour, 0, 23, DEFAULT_SCHEDULE_HOUR); out.format = format; }
   return out;
 }
 
@@ -402,6 +411,7 @@ function stripDefinitionForList(r: StoredReport) {
     lastRunRowCount: runLog[0]?.rowCount ?? null,
     runCount: runLog.length,
     scheduleFrequency: r.schedule?.frequency ?? 'off',
+    scheduleFormat: r.schedule?.format ?? 'csv',
     scheduleRecipientCount: r.schedule?.recipients?.length ?? 0,
     createdAt: r.createdAt, updatedAt: r.updatedAt,
   };

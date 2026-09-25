@@ -54,6 +54,7 @@ export async function deliverScheduledReports(): Promise<{ delivered: number; co
         headers,
         rows,
         totalMatched: result.totalMatched,
+        format: sched.format,
       });
       if (ok) {
         delivered += 1;

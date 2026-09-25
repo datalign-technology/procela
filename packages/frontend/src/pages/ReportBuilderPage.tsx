@@ -70,14 +70,23 @@ interface ReportDefinition {
 }
 
 type ScheduleFrequency = 'off' | 'daily' | 'weekly' | 'monthly';
+type ScheduleFormat = 'csv' | 'xlsx' | 'pdf' | 'html';
 
 interface ReportSchedule {
   frequency: ScheduleFrequency;
   dayOfWeek?: number;
   dayOfMonth?: number;
   hour?: number;
+  format?: ScheduleFormat;
   recipients: string[];
 }
+
+const SCHEDULE_FORMAT_OPTIONS: Array<{ value: ScheduleFormat; label: string }> = [
+  { value: 'csv',  label: 'CSV attachment' },
+  { value: 'xlsx', label: 'Excel attachment' },
+  { value: 'pdf',  label: 'PDF attachment' },
+  { value: 'html', label: 'Table in email body' },
+];
 
 interface StoredReport {
   id: string; orgId: string; name: string; description: string;
@@ -173,6 +182,7 @@ export default function ReportBuilderPage() {
   const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState(0);   // Sunday
   const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState(1); // 1st
   const [scheduleHour, setScheduleHour] = useState(23);            // 23:00 UTC
+  const [scheduleFormat, setScheduleFormat] = useState<ScheduleFormat>('csv');
   const [scheduleRecipients, setScheduleRecipients] = useState('');
 
   // Load LDM up front.
@@ -215,6 +225,7 @@ export default function ReportBuilderPage() {
           setScheduleDayOfWeek(src.schedule?.dayOfWeek ?? 0);
           setScheduleDayOfMonth(src.schedule?.dayOfMonth ?? 1);
           setScheduleHour(src.schedule?.hour ?? 23);
+          setScheduleFormat(src.schedule?.format ?? 'csv');
           setScheduleRecipients((src.schedule?.recipients || []).join(', '));
         } else {
           setName(`Copy of ${src.name}`);
@@ -310,7 +321,7 @@ export default function ReportBuilderPage() {
         const schedule: ReportSchedule = { frequency: scheduleFreq, recipients };
         if (scheduleFreq === 'weekly')  schedule.dayOfWeek  = scheduleDayOfWeek;
         if (scheduleFreq === 'monthly') schedule.dayOfMonth = scheduleDayOfMonth;
-        if (scheduleFreq !== 'off')     schedule.hour       = scheduleHour;
+        if (scheduleFreq !== 'off')   { schedule.hour = scheduleHour; schedule.format = scheduleFormat; }
         const res = await apiClient.put<{ success: boolean; data: StoredReport }>(`/reports/${reportId}`, {
           name: name.trim(), description: description.trim(), folderId: folderId || null, definition: def, schedule,
         });
@@ -328,7 +339,7 @@ export default function ReportBuilderPage() {
     } finally {
       setSaving(false);
     }
-  }, [canSave, activeOrgId, reportId, name, description, folderId, def, scheduleFreq, scheduleDayOfWeek, scheduleDayOfMonth, scheduleHour, scheduleRecipients, addToast, navigate]);
+  }, [canSave, activeOrgId, reportId, name, description, folderId, def, scheduleFreq, scheduleDayOfWeek, scheduleDayOfMonth, scheduleHour, scheduleFormat, scheduleRecipients, addToast, navigate]);
 
   // ── Export ───────────────────────────────────────────────────────────────
   // The on-screen preview is capped at 50 rows; an export must carry the whole
@@ -500,6 +511,19 @@ export default function ReportBuilderPage() {
             </div>
           ) : (
             <div style={{ marginTop: 10 }}>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Format</label>
+                <select
+                  aria-label="Schedule format"
+                  value={scheduleFormat}
+                  onChange={(e) => setScheduleFormat(e.target.value as ScheduleFormat)}
+                  style={inputStyle}
+                >
+                  {SCHEDULE_FORMAT_OPTIONS.map((f) => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </select>
+              </div>
               <label style={labelStyle}>Recipients</label>
               <textarea
                 aria-label="Schedule recipients"
@@ -510,7 +534,9 @@ export default function ReportBuilderPage() {
                 style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
               />
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                Comma- or newline-separated email addresses. Delivered as a CSV attachment; requires email to be configured for the deployment.
+                Comma- or newline-separated email addresses. {scheduleFormat === 'html'
+                  ? 'The report table is rendered in the email body.'
+                  : `Delivered as ${scheduleFormat === 'csv' ? 'a CSV' : scheduleFormat === 'xlsx' ? 'an Excel' : 'a PDF'} attachment.`} Requires email to be configured for the deployment.
               </div>
             </div>
           )}
