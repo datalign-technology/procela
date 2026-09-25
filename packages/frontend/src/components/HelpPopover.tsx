@@ -42,7 +42,6 @@ const VIEWPORT_MARGIN = 8;
 
 export default function HelpPopover({ id, title, children, showInitially = false }: HelpPopoverProps) {
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState<boolean>(true);  // assume dismissed until we read storage
   const buttonRef = useRef<HTMLButtonElement>(null);
   // Fixed-positioned popover coords. Computed from the button's
   // getBoundingClientRect so we can clamp to the viewport — otherwise the
@@ -53,7 +52,6 @@ export default function HelpPopover({ id, title, children, showInitially = false
   useEffect(() => {
     const set = readDismissed();
     const isDismissed = set.has(id);
-    setDismissed(isDismissed);
     if (showInitially && !isDismissed) setOpen(true);
   }, [id, showInitially]);
 
@@ -93,7 +91,6 @@ export default function HelpPopover({ id, title, children, showInitially = false
     const set = readDismissed();
     set.add(id);
     persistDismissed(set);
-    setDismissed(true);
     setOpen(false);
   };
 
@@ -105,12 +102,17 @@ export default function HelpPopover({ id, title, children, showInitially = false
         onClick={() => setOpen((o) => !o)}
         aria-label={`Help: ${title || id}`}
         style={{
+          // Neutral, consistent styling that matches InfoTip's `?` everywhere
+          // in the app. The undismissed state used to render in the primary
+          // colour, which made the same control look different from page to
+          // page depending on whether its intro had been dismissed; the
+          // auto-open (showInitially) is the first-run cue, not the colour.
           width: 16, height: 16, borderRadius: '50%',
-          border: `1px solid ${dismissed ? 'var(--color-text-muted)' : 'var(--color-primary)'}`,
+          border: '1px solid var(--color-text-muted)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 10, fontWeight: 600,
-          color: dismissed ? 'var(--color-text-muted)' : 'var(--color-primary)',
-          background: dismissed ? 'transparent' : 'var(--color-primary-light)',
+          color: 'var(--color-text-muted)',
+          background: 'transparent',
           cursor: 'pointer', flexShrink: 0,
         }}
       >
