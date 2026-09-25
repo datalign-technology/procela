@@ -639,9 +639,6 @@ export default function CouncilPage() {
           <>
           <SectionHeading title="Governance value drivers" as="h3" right={<span style={roiBadge}>Leading indicators</span>} />
           <Card padding={18} marginBottom={16}>
-            <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-              The un-fakeable signals that governance is paying off — measured from your catalog, no assumed dollar figures. {derived.scope?.applied ? 'Scoped to the governed set.' : 'Across the whole org tree.'}
-            </div>
             <div style={tileGrid}>
               {tiles.map((t) => (
                 <div key={t.label} style={statTile}>
