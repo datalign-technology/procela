@@ -32,12 +32,32 @@ export interface ReportRun {
   kind: 'manual' | 'scheduled';
 }
 
-/** Optional scheduled delivery for a saved report. */
+/** How often a scheduled report is delivered. 'off' keeps the recipient list
+ *  but pauses delivery. */
+export type ScheduleFrequency = 'off' | 'daily' | 'weekly' | 'monthly';
+
+/** Optional scheduled delivery for a saved report. Day/hour are stored in UTC.
+ *  Legacy schedules (weekly with no dayOfWeek/hour) fall back to the historical
+ *  Sunday-23:00 boundary via the defaults below. */
 export interface ReportSchedule {
-  frequency: 'off' | 'weekly';
+  frequency: ScheduleFrequency;
+  /** Day of week for a weekly schedule: 0 = Sunday … 6 = Saturday. */
+  dayOfWeek?: number;
+  /** Day of month for a monthly schedule, 1–28 (clamped so it exists every
+   *  month, February included). */
+  dayOfMonth?: number;
+  /** UTC hour of day to send at, 0–23. */
+  hour?: number;
   /** Email addresses the rendered report is delivered to on each run. */
   recipients: string[];
 }
+
+/** Defaults applied when a schedule omits the day/hour fields — chosen to
+ *  reproduce the historical "Sunday night" weekly delivery for schedules
+ *  saved before day/time control existed. */
+export const DEFAULT_SCHEDULE_HOUR = 23;   // 23:00 UTC
+export const DEFAULT_SCHEDULE_DOW = 0;     // Sunday
+export const DEFAULT_SCHEDULE_DOM = 1;     // 1st of the month
 
 /** How many runs to retain per report — enough to show recent history in
  *  the catalog without unbounded growth on a frequently-run report. */
@@ -63,6 +83,10 @@ export interface StoredReport {
   runLog?: ReportRun[];
   /** Scheduled delivery config, absent when the report isn't scheduled. */
   schedule?: ReportSchedule | null;
+  /** Timestamp of the most recent *scheduled* delivery, used to gate the next
+   *  one so a report is delivered once per period. Set only by the delivery
+   *  sweep; the user-editable schedule config never touches it. */
+  scheduleLastDeliveredAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -74,17 +98,75 @@ export function appendRun(report: StoredReport, run: ReportRun): Partial<StoredR
   return { runLog, lastRunAt: run.ranAt };
 }
 
+/** Clamp an arbitrary value to an integer in [min, max], falling back to a
+ *  default when it isn't a finite number. */
+function clampInt(v: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 /** Coerce an arbitrary schedule payload to the stored shape (drops junk,
- *  clamps frequency, keeps only string recipients). Returns null to clear. */
+ *  clamps frequency + day/hour, keeps only string recipients). The active
+ *  frequency's day/hour fields are always populated so the stored schedule is
+ *  self-describing and round-trips through the builder. Returns null to clear. */
 export function normalizeSchedule(input: unknown): ReportSchedule | null {
   if (!input || typeof input !== 'object') return null;
-  const s = input as { frequency?: unknown; recipients?: unknown };
-  const frequency: ReportSchedule['frequency'] = s.frequency === 'weekly' ? 'weekly' : 'off';
+  const s = input as { frequency?: unknown; dayOfWeek?: unknown; dayOfMonth?: unknown; hour?: unknown; recipients?: unknown };
+  const frequency: ScheduleFrequency =
+    s.frequency === 'daily' || s.frequency === 'weekly' || s.frequency === 'monthly' ? s.frequency : 'off';
   const recipients = Array.isArray(s.recipients)
     ? s.recipients.filter((r): r is string => typeof r === 'string' && r.trim().length > 0).map((r) => r.trim())
     : [];
   if (frequency === 'off' && recipients.length === 0) return null;
-  return { frequency, recipients };
+  const out: ReportSchedule = { frequency, recipients };
+  if (frequency === 'weekly')  out.dayOfWeek  = clampInt(s.dayOfWeek,  0, 6,  DEFAULT_SCHEDULE_DOW);
+  if (frequency === 'monthly') out.dayOfMonth = clampInt(s.dayOfMonth, 1, 28, DEFAULT_SCHEDULE_DOM);
+  if (frequency !== 'off')     out.hour       = clampInt(s.hour,       0, 23, DEFAULT_SCHEDULE_HOUR);
+  return out;
+}
+
+/** The most recent UTC instant at which a schedule should have fired, at or
+ *  before `now`. Pure over the schedule + clock so it's unit-testable. */
+export function mostRecentFireMoment(schedule: ReportSchedule, now: Date): Date {
+  const hour = schedule.hour ?? DEFAULT_SCHEDULE_HOUR;
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const d = now.getUTCDate();
+  if (schedule.frequency === 'monthly') {
+    const dom = schedule.dayOfMonth ?? DEFAULT_SCHEDULE_DOM;
+    const fire = new Date(Date.UTC(y, m, dom, hour, 0, 0, 0));
+    if (fire.getTime() > now.getTime()) fire.setUTCMonth(fire.getUTCMonth() - 1);
+    return fire;
+  }
+  if (schedule.frequency === 'weekly') {
+    const dow = schedule.dayOfWeek ?? DEFAULT_SCHEDULE_DOW;
+    const fire = new Date(Date.UTC(y, m, d, hour, 0, 0, 0));
+    const back = (fire.getUTCDay() - dow + 7) % 7;
+    fire.setUTCDate(fire.getUTCDate() - back);
+    if (fire.getTime() > now.getTime()) fire.setUTCDate(fire.getUTCDate() - 7);
+    return fire;
+  }
+  // daily (and any other non-off value defensively)
+  const fire = new Date(Date.UTC(y, m, d, hour, 0, 0, 0));
+  if (fire.getTime() > now.getTime()) fire.setUTCDate(fire.getUTCDate() - 1);
+  return fire;
+}
+
+/** Whether a scheduled report is due to be delivered at `now`, given when it
+ *  was last delivered. Due when the clock has passed the schedule's most recent
+ *  fire moment and no delivery has happened since that moment — so delivery
+ *  fires exactly once per period regardless of how often the sweep ticks. */
+export function isScheduleDue(
+  schedule: ReportSchedule | null | undefined,
+  now: Date,
+  lastDeliveredAt: string | null | undefined,
+): boolean {
+  if (!schedule || schedule.frequency === 'off' || schedule.recipients.length === 0) return false;
+  const fire = mostRecentFireMoment(schedule, now);
+  if (now.getTime() < fire.getTime()) return false;
+  if (!lastDeliveredAt) return true;
+  return new Date(lastDeliveredAt).getTime() < fire.getTime();
 }
 
 export const reports: StoredReport[] = loadStore<StoredReport>('reports');
@@ -209,6 +291,7 @@ router.post('/', async (req: Request, res: Response) => {
     folderId: resolved.folderId,
     visibility: resolved.visibility,
     definition,
+    schedule: normalizeSchedule(req.body?.schedule),
     createdAt: now,
     updatedAt: now,
   };
@@ -319,6 +402,7 @@ function stripDefinitionForList(r: StoredReport) {
     lastRunRowCount: runLog[0]?.rowCount ?? null,
     runCount: runLog.length,
     scheduleFrequency: r.schedule?.frequency ?? 'off',
+    scheduleRecipientCount: r.schedule?.recipients?.length ?? 0,
     createdAt: r.createdAt, updatedAt: r.updatedAt,
   };
 }

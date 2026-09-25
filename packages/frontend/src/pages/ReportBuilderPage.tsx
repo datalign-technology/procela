@@ -69,8 +69,13 @@ interface ReportDefinition {
   limit?: number;
 }
 
+type ScheduleFrequency = 'off' | 'daily' | 'weekly' | 'monthly';
+
 interface ReportSchedule {
-  frequency: 'off' | 'weekly';
+  frequency: ScheduleFrequency;
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  hour?: number;
   recipients: string[];
 }
 
@@ -108,6 +113,15 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   background: 'var(--color-surface)',
 };
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** 1 → "1st", 2 → "2nd", 21 → "21st", etc. — for the day-of-month picker. */
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 const FILTER_OPS: Array<{ value: FilterOp; label: string; takesValue: boolean }> = [
   { value: 'eq',         label: 'equals',          takesValue: true },
@@ -152,9 +166,13 @@ export default function ReportBuilderPage() {
   const [saving, setSaving] = useState(false);
 
   // Scheduled email delivery (edit mode only — an unsaved report can't be
-  // scheduled). `scheduleOn` toggles frequency weekly/off; recipients is a
-  // comma/newline-separated textarea parsed on save.
-  const [scheduleOn, setScheduleOn] = useState(false);
+  // scheduled). `scheduleFreq` picks the cadence (off / daily / weekly /
+  // monthly); the day + send-hour pickers below refine it. Recipients is a
+  // comma/newline-separated textarea parsed on save. Day/hour are UTC.
+  const [scheduleFreq, setScheduleFreq] = useState<ScheduleFrequency>('off');
+  const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState(0);   // Sunday
+  const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState(1); // 1st
+  const [scheduleHour, setScheduleHour] = useState(23);            // 23:00 UTC
   const [scheduleRecipients, setScheduleRecipients] = useState('');
 
   // Load LDM up front.
@@ -193,7 +211,10 @@ export default function ReportBuilderPage() {
           setName(src.name);
           setDescription(src.description);
           setFolderId(src.folderId ?? '');
-          setScheduleOn(src.schedule?.frequency === 'weekly');
+          setScheduleFreq(src.schedule?.frequency ?? 'off');
+          setScheduleDayOfWeek(src.schedule?.dayOfWeek ?? 0);
+          setScheduleDayOfMonth(src.schedule?.dayOfMonth ?? 1);
+          setScheduleHour(src.schedule?.hour ?? 23);
           setScheduleRecipients((src.schedule?.recipients || []).join(', '));
         } else {
           setName(`Copy of ${src.name}`);
@@ -286,9 +307,10 @@ export default function ReportBuilderPage() {
     try {
       if (reportId) {
         const recipients = scheduleRecipients.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
-        const schedule = scheduleOn
-          ? { frequency: 'weekly', recipients }
-          : { frequency: 'off', recipients };
+        const schedule: ReportSchedule = { frequency: scheduleFreq, recipients };
+        if (scheduleFreq === 'weekly')  schedule.dayOfWeek  = scheduleDayOfWeek;
+        if (scheduleFreq === 'monthly') schedule.dayOfMonth = scheduleDayOfMonth;
+        if (scheduleFreq !== 'off')     schedule.hour       = scheduleHour;
         const res = await apiClient.put<{ success: boolean; data: StoredReport }>(`/reports/${reportId}`, {
           name: name.trim(), description: description.trim(), folderId: folderId || null, definition: def, schedule,
         });
@@ -306,7 +328,7 @@ export default function ReportBuilderPage() {
     } finally {
       setSaving(false);
     }
-  }, [canSave, activeOrgId, reportId, name, description, folderId, def, scheduleOn, scheduleRecipients, addToast, navigate]);
+  }, [canSave, activeOrgId, reportId, name, description, folderId, def, scheduleFreq, scheduleDayOfWeek, scheduleDayOfMonth, scheduleHour, scheduleRecipients, addToast, navigate]);
 
   // ── Export ───────────────────────────────────────────────────────────────
   // The on-screen preview is capped at 50 rows; an export must carry the whole
@@ -409,22 +431,75 @@ export default function ReportBuilderPage() {
 
       {/* Scheduled delivery — edit mode only (an unsaved report can't be
           scheduled). Emails the rendered report (CSV attachment) to the
-          listed recipients on the weekly sweep. */}
+          listed recipients on the chosen cadence. All times are UTC. */}
       {reportId && (
         <div style={cardStyle}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={scheduleOn}
-              onChange={(e) => setScheduleOn(e.target.checked)}
-            />
-            Email this report weekly
-          </label>
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '4px 0 0 24px' }}>
-            Delivered on the weekly sweep as a CSV attachment. Requires email to be configured for the deployment.
+          <label style={labelStyle}>Email delivery</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 2 }}>Frequency</div>
+              <select
+                aria-label="Schedule frequency"
+                value={scheduleFreq}
+                onChange={(e) => setScheduleFreq(e.target.value as ScheduleFrequency)}
+                style={inputStyle}
+              >
+                <option value="off">Off — don't email</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            {scheduleFreq === 'weekly' && (
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 2 }}>Day of week</div>
+                <select
+                  aria-label="Schedule day of week"
+                  value={scheduleDayOfWeek}
+                  onChange={(e) => setScheduleDayOfWeek(Number(e.target.value))}
+                  style={inputStyle}
+                >
+                  {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                </select>
+              </div>
+            )}
+            {scheduleFreq === 'monthly' && (
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 2 }}>Day of month</div>
+                <select
+                  aria-label="Schedule day of month"
+                  value={scheduleDayOfMonth}
+                  onChange={(e) => setScheduleDayOfMonth(Number(e.target.value))}
+                  style={inputStyle}
+                >
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                    <option key={d} value={d}>{ordinal(d)}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {scheduleFreq !== 'off' && (
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 2 }}>Send at (UTC)</div>
+                <select
+                  aria-label="Schedule send hour"
+                  value={scheduleHour}
+                  onChange={(e) => setScheduleHour(Number(e.target.value))}
+                  style={inputStyle}
+                >
+                  {Array.from({ length: 24 }, (_, h) => h).map((h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
-          {scheduleOn && (
-            <div style={{ marginTop: 10, marginLeft: 24 }}>
+          {scheduleFreq === 'off' ? (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
+              Delivered as a CSV attachment on the chosen cadence. Requires email to be configured for the deployment.
+            </div>
+          ) : (
+            <div style={{ marginTop: 10 }}>
               <label style={labelStyle}>Recipients</label>
               <textarea
                 aria-label="Schedule recipients"
@@ -435,7 +510,7 @@ export default function ReportBuilderPage() {
                 style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
               />
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                Comma- or newline-separated email addresses.
+                Comma- or newline-separated email addresses. Delivered as a CSV attachment; requires email to be configured for the deployment.
               </div>
             </div>
           )}
