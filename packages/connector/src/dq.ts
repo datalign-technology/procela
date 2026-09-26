@@ -24,7 +24,7 @@ import type { ConnectorConfig, Source, DqPlanEntry, DqResult } from './types';
 import { buildMssqlConfig } from './sqlserver';
 import { parseOracleConnectionString } from './oracle';
 import { resolveSourceSecrets, type SecretResolvers } from './secrets';
-import { fetchDqPlan, pushDqResults } from './api';
+import { fetchDqPlan, pushDqResults, reportEvent } from './api';
 
 export type Dialect = 'postgres' | 'mysql' | 'sqlserver' | 'oracle';
 
@@ -182,6 +182,8 @@ export interface DqDeps {
   fetchPlan: (cfg: ConnectorConfig) => Promise<DqPlanEntry[]>;
   pushResults: (cfg: ConnectorConfig, results: DqResult[]) => Promise<void>;
   exec: (source: Source, sql: string, params: unknown[]) => Promise<{ total: number; passes: number }>;
+  /** Record a task-failure event. Injected so tests can observe it. */
+  reportEvent?: (cfg: ConnectorConfig, type: 'DQ_FAILED', data: Record<string, unknown>) => Promise<unknown>;
 }
 
 const defaultDeps: DqDeps = {
@@ -191,6 +193,7 @@ const defaultDeps: DqDeps = {
   },
   pushResults: async (cfg, results) => { await pushDqResults(cfg, results); },
   exec: execAggregate,
+  reportEvent: (cfg, type, data) => reportEvent(cfg, type, data),
 };
 
 /**
@@ -221,10 +224,16 @@ export async function runDqRules(
   }
 
   const results: DqResult[] = [];
+  const failures: string[] = []; // error messages from rules that couldn't be measured
   for (const [rawSource, entries] of bySource) {
     let source: Source;
     try { source = resolveSourceSecrets(rawSource, resolvers); }
-    catch (err) { log('dq: secret resolve failed — skipping source', { source: rawSource.name, err: (err as Error)?.message || String(err) }); continue; }
+    catch (err) {
+      const msg = (err as Error)?.message || String(err);
+      log('dq: secret resolve failed — skipping source', { source: rawSource.name, err: msg });
+      failures.push(msg);
+      continue;
+    }
     const dialect = dialectFor(source.type);
     if (!dialect) continue;
 
@@ -235,9 +244,18 @@ export async function runDqRules(
         const { total, passes } = await deps.exec(source, built.sql, built.params);
         results.push({ ruleId: entry.ruleId, totalRows: total, passCount: passes });
       } catch (err) {
-        log('dq: rule execution failed — skipping', { ruleId: entry.ruleId, err: (err as Error)?.message || String(err) });
+        const msg = (err as Error)?.message || String(err);
+        log('dq: rule execution failed — skipping', { ruleId: entry.ruleId, err: msg });
+        failures.push(msg);
       }
     }
+  }
+
+  // Surface DQ checks that couldn't be measured (bad column, permission, dead
+  // source) into the connector's activity feed — one aggregated event, not one
+  // per rule — so a broken check isn't invisible just because other rules passed.
+  if (failures.length > 0 && deps.reportEvent) {
+    await deps.reportEvent(cfg, 'DQ_FAILED', { failed: failures.length, error: failures[0] });
   }
 
   if (!results.length) return;

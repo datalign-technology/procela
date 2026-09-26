@@ -160,4 +160,40 @@ describe('runDqRules (injected deps)', () => {
     });
     assert.deepStrictEqual(pushed, [{ ruleId: 'ok', totalRows: 50, passCount: 50 }]);
   });
+
+  it('reports one aggregated DQ_FAILED event when rules fail to run', async () => {
+    const events: Array<{ type: string; data: any }> = [];
+    let pushed: any[] = [];
+    await runDqRules(cfg, noop, resolvers, {
+      fetchPlan: async () => [
+        entry({ ruleId: 'ok', column: 'email' }),
+        entry({ ruleId: 'boom1', column: 'phone' }),
+        entry({ ruleId: 'boom2', column: 'zip' }),
+      ],
+      exec: async (_s, sql) => {
+        if (sql.includes('"phone"') || sql.includes('"zip"')) throw new Error('perm denied');
+        return { total: 50, passes: 50 };
+      },
+      pushResults: async (_c, r) => { pushed = r; },
+      reportEvent: async (_c, type, data) => { events.push({ type, data }); },
+    });
+    // The good rule still pushes.
+    assert.deepStrictEqual(pushed, [{ ruleId: 'ok', totalRows: 50, passCount: 50 }]);
+    // Exactly one aggregated failure event, counting both broken rules.
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, 'DQ_FAILED');
+    assert.strictEqual(events[0].data.failed, 2);
+    assert.strictEqual(events[0].data.error, 'perm denied');
+  });
+
+  it('does not report a DQ_FAILED event when every rule runs', async () => {
+    const events: any[] = [];
+    await runDqRules(cfg, noop, resolvers, {
+      fetchPlan: async () => [entry({ ruleId: 'ok', column: 'email' })],
+      exec: async () => ({ total: 10, passes: 10 }),
+      pushResults: async () => {},
+      reportEvent: async (_c, type, data) => { events.push({ type, data }); },
+    });
+    assert.strictEqual(events.length, 0);
+  });
 });

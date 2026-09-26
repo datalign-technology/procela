@@ -90,7 +90,7 @@ export interface StoredConnectorEvent {
   id: string;
   connectorId: string;
   orgId: string;
-  type: 'PAIRED' | 'HEARTBEAT' | 'SCAN_STARTED' | 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'ASSETS_REPORTED' | 'SYNC_JOBS_FETCHED' | 'SYNC_PUSHED' | 'DQ_RULES_FETCHED' | 'DQ_RESULTS_APPLIED';
+  type: 'PAIRED' | 'HEARTBEAT' | 'SCAN_STARTED' | 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'ASSETS_REPORTED' | 'SYNC_JOBS_FETCHED' | 'SYNC_PUSHED' | 'SYNC_FAILED' | 'DQ_RULES_FETCHED' | 'DQ_RESULTS_APPLIED' | 'DQ_FAILED';
   ts: string;
   /** Optional payload — counts, durations, error text. Keep small. */
   data: Record<string, any>;
@@ -555,6 +555,46 @@ router.post('/report', requireConnectorToken, asyncHandler(async (req: Request, 
     data: { incoming: incoming.length, created, updated, columnsCreated, columnsUpdated, rowCount: incoming.length },
   });
   res.json({ success: true, data: { created, updated, columnsCreated, columnsUpdated, total: incoming.length } });
+}));
+
+/** Failure event types the agent is allowed to report. The agent may record
+ *  that a task failed, but not fabricate success events (ASSETS_REPORTED etc.),
+ *  so the allowlist is narrow. */
+const AGENT_FAILURE_EVENTS = new Set<StoredConnectorEvent['type']>(['SCAN_FAILED', 'SYNC_FAILED', 'DQ_FAILED']);
+const EVENT_DETAIL_MAX = 500;
+
+/** POST /connectors/events — the agent records that a task failed (a source
+ *  scan, a sync job, or a DQ check) into the per-connector activity feed. A
+ *  failed task doesn't change the connector's ONLINE/OFFLINE status — this is a
+ *  live contact, so it refreshes the heartbeat clock — it just surfaces the
+ *  failure instead of it being silently dropped to the agent's stdout. Body:
+ *  { type: 'SCAN_FAILED'|'SYNC_FAILED'|'DQ_FAILED', data?: { … small payload } }. */
+router.post('/events', requireConnectorToken, asyncHandler(async (req: Request, res: Response) => {
+  const row = (req as any).connector as StoredConnector;
+  const type = String(req.body?.type || '') as StoredConnectorEvent['type'];
+  if (!AGENT_FAILURE_EVENTS.has(type)) {
+    res.status(400).json({ success: false, error: 'type must be one of SCAN_FAILED, SYNC_FAILED, DQ_FAILED' });
+    return;
+  }
+  // Extract only the known fields (never copy arbitrary caller-controlled
+  // property names into the object — that's a property-injection / prototype-
+  // pollution vector). Strings are capped; the rest are coerced to shape.
+  const raw = (req.body?.data && typeof req.body.data === 'object') ? req.body.data as Record<string, unknown> : {};
+  const capStr = (v: unknown): string | undefined => (typeof v === 'string' ? v.slice(0, EVENT_DETAIL_MAX) : undefined);
+  const data: Record<string, unknown> = {};
+  if (typeof raw.failed === 'number' && Number.isFinite(raw.failed)) data.failed = raw.failed;
+  const err = capStr(raw.error); if (err !== undefined) data.error = err;
+  const job = capStr(raw.job); if (job !== undefined) data.job = job;
+  if (Array.isArray(raw.sources)) {
+    data.sources = raw.sources
+      .filter((s): s is string => typeof s === 'string')
+      .slice(0, 20)
+      .map((s) => s.slice(0, EVENT_DETAIL_MAX));
+  }
+  await recordConnectorEvent(row.id, row.orgId, type, data);
+  // A failure report is still a sign of life — keep the freshness clock warm.
+  await connectorsRepo.update(row.id, { lastHeartbeatAt: nowIso(), updatedAt: nowIso() });
+  res.json({ success: true });
 }));
 
 /** Internal helper used by the scheduled-offline scan (next file).
