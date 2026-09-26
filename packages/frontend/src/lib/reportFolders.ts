@@ -20,6 +20,8 @@ export interface ReportFolder {
   kind: 'system' | 'user';
   /** Reports in a shared folder are org-visible. Always true for Public. */
   shared: boolean;
+  /** Manual rail order among user folders (drag-to-reorder). */
+  orderIndex?: number;
   createdAt: string;
   updatedAt: string;
 }

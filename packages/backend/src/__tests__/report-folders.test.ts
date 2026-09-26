@@ -175,4 +175,35 @@ describe('report folders + folder-driven sharing', () => {
     const put = await request(port, 'PUT', '/reports/rf-owned2', { name: 'hax' });
     assert.strictEqual(put.status, 403);
   });
+
+  it('orders user folders by orderIndex (Public pinned first); a reorder PATCH re-sorts them', async () => {
+    await request(port, 'POST', '/report-folders', { orgId: ORG, name: 'Alpha' });
+    await request(port, 'POST', '/report-folders', { orgId: ORG, name: 'Bravo' });
+    await request(port, 'POST', '/report-folders', { orgId: ORG, name: 'Charlie' });
+
+    const names = async () => (await request(port, 'GET', `/report-folders?orgId=${ORG}`)).body.data.map((f: any) => f.name);
+    // Created in order ⇒ appended: Public first, then Alpha, Bravo, Charlie.
+    assert.deepStrictEqual(await names(), ['Public', 'Alpha', 'Bravo', 'Charlie']);
+
+    // Move Charlie to the front of the user folders (orderIndex 0), Alpha/Bravo after.
+    const list = (await request(port, 'GET', `/report-folders?orgId=${ORG}`)).body.data.filter((f: any) => f.kind === 'user');
+    const byName = (n: string) => list.find((f: any) => f.name === n).id;
+    await request(port, 'PATCH', `/report-folders/${byName('Charlie')}`, { orderIndex: 0 });
+    await request(port, 'PATCH', `/report-folders/${byName('Alpha')}`, { orderIndex: 1 });
+    await request(port, 'PATCH', `/report-folders/${byName('Bravo')}`, { orderIndex: 2 });
+    assert.deepStrictEqual(await names(), ['Public', 'Charlie', 'Alpha', 'Bravo']);
+  });
+
+  it('lets a non-owner reorder (orderIndex) but not rename another user\'s folder', async () => {
+    const created = await request(port, 'POST', '/report-folders', { orgId: ORG, name: 'Owned', shared: true });
+    const id = created.body.data.id;
+    actingUser = { sub: 'someone-else' };
+    // Reorder is positional — allowed for anyone who can see the folder.
+    const reorder = await request(port, 'PATCH', `/report-folders/${id}`, { orderIndex: 9 });
+    assert.strictEqual(reorder.status, 200);
+    assert.strictEqual(reorder.body.data.orderIndex, 9);
+    // Content edits stay owner-only.
+    const rename = await request(port, 'PATCH', `/report-folders/${id}`, { name: 'Hijacked' });
+    assert.strictEqual(rename.status, 403);
+  });
 });
