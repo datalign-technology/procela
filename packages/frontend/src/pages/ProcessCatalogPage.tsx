@@ -1052,6 +1052,51 @@ export default function ProcessCatalogPage() {
     }
   };
 
+  // Drag-to-reorder: move `draggedId` to before/after `targetId` among their
+  // shared siblings. Renumbers the sibling list to 0..n-1 and PUTs only the
+  // nodes whose orderIndex changed — the same audited PUT the arrow buttons use
+  // (optimistic-locked with each node's version).
+  const moveNode = async (draggedId: string, targetId: string, position: 'before' | 'after') => {
+    if (draggedId === targetId) return;
+    function findSiblings(nodes: ProcessNode[]): ProcessNode[] | null {
+      for (const n of nodes) {
+        if (n.id === draggedId) return nodes;
+        if (n.children) { const f = findSiblings(n.children); if (f) return f; }
+      }
+      return null;
+    }
+    const siblings = findSiblings(tree);
+    if (!siblings) return;
+    const fromIdx = siblings.findIndex((n) => n.id === draggedId);
+    if (fromIdx < 0 || !siblings.some((n) => n.id === targetId)) return; // target must be a sibling
+    const arr = siblings.slice();
+    const [moved] = arr.splice(fromIdx, 1);
+    let insertAt = arr.findIndex((n) => n.id === targetId);
+    if (position === 'after') insertAt += 1;
+    arr.splice(insertAt, 0, moved);
+    // PUT only the siblings whose position (and thus orderIndex) changed.
+    const updates = arr
+      .map((n, i) => ({ n, i }))
+      .filter(({ n, i }) => n.orderIndex !== i)
+      .map(({ n, i }) => apiClient.put(`/process-catalog/nodes/${n.id}`, {
+        orderIndex: i,
+        ...(n.version !== undefined ? { version: n.version } : {}),
+      }));
+    if (updates.length === 0) return;
+    try {
+      await Promise.all(updates);
+      fetchData();
+    } catch (err) {
+      const e = err as { response?: { status?: number } };
+      if (e?.response?.status === 409) {
+        alert('This item was modified by another user. The page will refresh.');
+        fetchData();
+      } else {
+        addToast('error', 'Reorder failed');
+      }
+    }
+  };
+
   const showHistory = (nodeId: string) => { setHistoryNodeId(nodeId); };
 
   const addTag = async (nodeId: string, tag: string) => {
@@ -1607,7 +1652,7 @@ export default function ProcessCatalogPage() {
           </div>
         ) : (
           visibleTree.map((node, idx) => (
-            <TreeNode key={node.id} node={node} depth={0}
+            <TreeNode key={node.id} node={node} depth={0} parentId={null}
               nodeInScope={scope.applied ? (id) => scope.has('node', id) : undefined}
               onUpdate={updateNode} onDelete={deleteNode} onClone={cloneNode}
               onAddChild={(parentId) => setAddingTo(parentId)}
@@ -1617,7 +1662,7 @@ export default function ProcessCatalogPage() {
               activitiesFlat={activitiesFlat}
               valueStreamName={node.level === 'VALUE_STREAM' ? node.name : ''}
               controlsList={controlsList}
-              siblingIndex={idx} siblingCount={visibleTree.length} onReorder={reorderNode}
+              siblingIndex={idx} siblingCount={visibleTree.length} onReorder={reorderNode} onMoveNode={moveNode}
               onShowHistory={showHistory}
               allTags={allTags}
               onAddTag={addTag}

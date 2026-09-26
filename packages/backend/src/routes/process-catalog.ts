@@ -986,10 +986,14 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     node.parentId = parentId;
   }
 
-  // Block field edits when the node is in a locked status.
-  // Status-only updates are still allowed (handled below).
+  // Block *content* edits when the node is in a locked status (ACTIVE, etc.).
+  // Status-only updates are still allowed (handled below). Positional changes
+  // are deliberately exempt: reordering siblings (orderIndex) and re-parenting
+  // (parentId, handled above) rearrange the catalog without altering the
+  // node's approved content, so they stay available on a locked node — you can
+  // reorder your active processes without first dropping them to Draft.
   const hasFieldEdits = name !== undefined || description !== undefined
-    || orderIndex !== undefined || orgIds !== undefined || ownerId !== undefined
+    || orgIds !== undefined || ownerId !== undefined
     || purpose !== undefined || businessOutcome !== undefined || stakeholders !== undefined
     || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined
     || frequency !== undefined || riskLevel !== undefined || automationLevel !== undefined || estimatedDuration !== undefined

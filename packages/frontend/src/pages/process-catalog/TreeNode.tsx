@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bot, Paperclip, Lock } from 'lucide-react';
+import { Bot, Paperclip, Lock, GripVertical } from 'lucide-react';
 import { clickable } from '../../lib/a11y';
 import StatusBadge from '../../components/StatusBadge';
 import ScopeBadge from '../../components/ScopeBadge';
@@ -30,10 +30,27 @@ import {
 } from '../ProcessCatalogPage';
 import { useComplianceFrameworks } from '../../stores/complianceStore';
 
+// ── Drag-to-reorder (prototype) ──────────────────────────────────────────────
+// Native HTML5 drag-and-drop for reordering siblings within one parent. A
+// module-level tracker holds the in-flight drag payload: dataTransfer.getData()
+// is unreadable during `dragover` (only on `drop`), so we can't consult it to
+// decide whether a row is a valid target while hovering — this lets every row
+// check "same parent, different node" and show its drop indicator live. Drag is
+// a single global pointer gesture, so one shared value is safe.
+//
+// This is the mouse affordance only. The up/down arrow buttons remain the
+// keyboard-accessible path (native DnD isn't keyboard-operable); a production
+// build would layer dnd-kit on top for keyboard dragging + richer touch.
+let activeDrag: { id: string; parentId: string | null } | null = null;
+
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope }: {
+function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onMoveNode, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope }: {
   node: ProcessNode; depth: number;
+  /** The parent node's id, or null for a root (value-stream) row. Drag-to-
+   *  reorder is constrained to siblings — a drop is only honoured when the
+   *  dragged and target rows share this parent. */
+  parentId: string | null;
   /** Governance-scope membership test for the "in scope / not governed"
    *  badge, or absent when no scope is defined (⇒ no badge). Rendered at the
    *  value-stream row only — the anchor granularity: a scoped value stream's
@@ -80,6 +97,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   siblingIndex: number;
   siblingCount: number;
   onReorder: (nodeId: string, direction: 'up' | 'down') => void;
+  /** Move `draggedId` to before/after `targetId` among their shared siblings
+   *  (drag-to-reorder). Persists new orderIndex values via the same audited
+   *  PUT the arrow buttons use. */
+  onMoveNode: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
   onShowHistory: (nodeId: string) => void;
   allTags: TagEntry[];
   onAddTag: (nodeId: string, tag: string) => void;
@@ -130,6 +151,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   const complianceFrameworks = useComplianceFrameworks();
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
+  // Drag-to-reorder: which edge of this row a valid sibling drag is hovering
+  // over (drop indicator), and whether this row is the one being dragged.
+  const [dropEdge, setDropEdge] = useState<'top' | 'bottom' | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const canReorder = siblingCount > 1;
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [reviewCommentDraft, setReviewCommentDraft] = useState('');
   // Attachments live behind the "Attach" button in the action row (the
@@ -245,10 +271,57 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
         borderBottom: '1px solid var(--color-border)',
         background: isSelected ? '#f0f9ff' : (completeness && !completeness.complete ? '#fffbeb' : undefined),
         transition: 'background 0.1s',
+        opacity: dragging ? 0.4 : 1,
+        // Drop indicator: an accent line inset on the hovered edge, so no
+        // layout shift while dragging over rows.
+        boxShadow: dropEdge === 'top' ? 'inset 0 2px 0 0 var(--color-primary)'
+          : dropEdge === 'bottom' ? 'inset 0 -2px 0 0 var(--color-primary)' : undefined,
       }}
         onMouseEnter={(e) => { if (!isSelected && (!completeness || completeness.complete)) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = completeness && !completeness.complete ? '#fffbeb' : ''; }}
+        onDragOver={(e) => {
+          // Only a same-parent, different-node drag is a valid drop target.
+          if (!activeDrag || activeDrag.parentId !== parentId || activeDrag.id === node.id) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          const r = e.currentTarget.getBoundingClientRect();
+          setDropEdge(e.clientY < r.top + r.height / 2 ? 'top' : 'bottom');
+        }}
+        onDragLeave={(e) => {
+          // Ignore leave events fired when crossing into a child element.
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDropEdge(null);
+        }}
+        onDrop={(e) => {
+          if (!activeDrag || activeDrag.parentId !== parentId || activeDrag.id === node.id) { setDropEdge(null); return; }
+          e.preventDefault();
+          onMoveNode(activeDrag.id, node.id, dropEdge === 'top' ? 'before' : 'after');
+          setDropEdge(null);
+        }}
       >
+        {/* Drag-to-reorder handle — mouse affordance only; the up/down arrows
+            at the row's end remain the keyboard path. Shown when the row has a
+            sibling to reorder against. */}
+        {canReorder ? (
+          <span
+            draggable
+            onDragStart={(e) => {
+              activeDrag = { id: node.id, parentId };
+              setDragging(true);
+              e.dataTransfer.effectAllowed = 'move';
+              // A payload for completeness; the module tracker is what we read.
+              e.dataTransfer.setData('text/plain', node.id);
+            }}
+            onDragEnd={() => { activeDrag = null; setDragging(false); setDropEdge(null); }}
+            title="Drag to reorder"
+            aria-hidden="true"
+            style={{ flexShrink: 0, marginTop: 3, cursor: 'grab', color: 'var(--color-text-muted)', display: 'inline-flex', lineHeight: 1 }}
+          >
+            <GripVertical size={14} />
+          </span>
+        ) : (
+          <span style={{ flexShrink: 0, width: 14 }} />
+        )}
         {/* Selection checkbox */}
         <input
           type="checkbox"
@@ -1146,7 +1219,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
 
       {/* Children */}
       {isExpanded && (node.children || []).map((child, idx, arr) => (
-        <TreeNode key={child.id} node={child} depth={depth + 1}
+        <TreeNode key={child.id} node={child} depth={depth + 1} parentId={node.id}
           nodeInScope={nodeInScope}
           onUpdate={onUpdate} onDelete={onDelete} onClone={onClone} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand}
@@ -1155,7 +1228,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           activitiesFlat={activitiesFlat}
           valueStreamName={node.level === 'VALUE_STREAM' ? node.name : valueStreamName}
           controlsList={controlsList}
-          siblingIndex={idx} siblingCount={arr.length} onReorder={onReorder}
+          siblingIndex={idx} siblingCount={arr.length} onReorder={onReorder} onMoveNode={onMoveNode}
           onShowHistory={onShowHistory}
           allTags={allTags}
           onAddTag={onAddTag}
