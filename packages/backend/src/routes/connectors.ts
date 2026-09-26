@@ -576,11 +576,20 @@ router.post('/events', requireConnectorToken, asyncHandler(async (req: Request, 
     res.status(400).json({ success: false, error: 'type must be one of SCAN_FAILED, SYNC_FAILED, DQ_FAILED' });
     return;
   }
-  // Keep the stored payload small: cap the error text and any string fields.
+  // Extract only the known fields (never copy arbitrary caller-controlled
+  // property names into the object — that's a property-injection / prototype-
+  // pollution vector). Strings are capped; the rest are coerced to shape.
   const raw = (req.body?.data && typeof req.body.data === 'object') ? req.body.data as Record<string, unknown> : {};
+  const capStr = (v: unknown): string | undefined => (typeof v === 'string' ? v.slice(0, EVENT_DETAIL_MAX) : undefined);
   const data: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    data[k] = typeof v === 'string' ? v.slice(0, EVENT_DETAIL_MAX) : v;
+  if (typeof raw.failed === 'number' && Number.isFinite(raw.failed)) data.failed = raw.failed;
+  const err = capStr(raw.error); if (err !== undefined) data.error = err;
+  const job = capStr(raw.job); if (job !== undefined) data.job = job;
+  if (Array.isArray(raw.sources)) {
+    data.sources = raw.sources
+      .filter((s): s is string => typeof s === 'string')
+      .slice(0, 20)
+      .map((s) => s.slice(0, EVENT_DETAIL_MAX));
   }
   await recordConnectorEvent(row.id, row.orgId, type, data);
   // A failure report is still a sign of life — keep the freshness clock warm.

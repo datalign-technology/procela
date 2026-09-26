@@ -404,6 +404,18 @@ describe('connector routes', () => {
       const ev = connectorEvents.filter((e: any) => e.connectorId === connectorId && e.type === 'DQ_FAILED').pop();
       assert.ok(ev && ev.data.error.length <= 500, 'error text is capped');
     });
+
+    it('POST /events ignores unknown / unsafe payload keys (no property injection)', async () => {
+      await request(port, 'POST', '/connectors/events', {
+        body: { type: 'SYNC_FAILED', data: { job: 'nightly', evil: 'x', __proto__: { polluted: true } } },
+        bearer: token,
+      });
+      const ev = connectorEvents.filter((e: any) => e.connectorId === connectorId && e.type === 'SYNC_FAILED').pop();
+      assert.ok(ev, 'a SYNC_FAILED event is recorded');
+      assert.strictEqual(ev.data.job, 'nightly', 'known keys are kept');
+      assert.ok(!('evil' in ev.data), 'unknown keys are dropped');
+      assert.strictEqual(({} as any).polluted, undefined, 'Object.prototype is not polluted');
+    });
   });
 
   describe('scanForOfflineConnectors', () => {
