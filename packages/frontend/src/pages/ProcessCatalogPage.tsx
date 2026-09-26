@@ -1052,34 +1052,53 @@ export default function ProcessCatalogPage() {
     }
   };
 
-  // Drag-to-reorder: move `draggedId` to before/after `targetId` among their
-  // shared siblings. Renumbers the sibling list to 0..n-1 and PUTs only the
-  // nodes whose orderIndex changed — the same audited PUT the arrow buttons use
-  // (optimistic-locked with each node's version).
-  const moveNode = async (draggedId: string, targetId: string, position: 'before' | 'after') => {
+  // Drag-to-reorder / re-parent. 'before'/'after' place the dragged node in the
+  // target's sibling list at that position; 'inside' re-parents it in as the
+  // last child of the target. The destination list is renumbered to 0..n-1 and
+  // only the changed nodes are PUT — plus the dragged node's parentId when it
+  // moved — via the same optimistic-locked, audited PUT the arrow buttons use.
+  const moveNode = async (draggedId: string, targetId: string, mode: 'before' | 'after' | 'inside') => {
     if (draggedId === targetId) return;
-    function findSiblings(nodes: ProcessNode[]): ProcessNode[] | null {
+    // Locate a node with its parent id + containing sibling list.
+    function findCtx(
+      nodes: ProcessNode[], id: string, parent: string | null,
+    ): { node: ProcessNode; parentId: string | null; siblings: ProcessNode[] } | null {
       for (const n of nodes) {
-        if (n.id === draggedId) return nodes;
-        if (n.children) { const f = findSiblings(n.children); if (f) return f; }
+        if (n.id === id) return { node: n, parentId: parent, siblings: nodes };
+        if (n.children) { const r = findCtx(n.children, id, n.id); if (r) return r; }
       }
       return null;
     }
-    const siblings = findSiblings(tree);
-    if (!siblings) return;
-    const fromIdx = siblings.findIndex((n) => n.id === draggedId);
-    if (fromIdx < 0 || !siblings.some((n) => n.id === targetId)) return; // target must be a sibling
-    const arr = siblings.slice();
-    const [moved] = arr.splice(fromIdx, 1);
-    let insertAt = arr.findIndex((n) => n.id === targetId);
-    if (position === 'after') insertAt += 1;
-    arr.splice(insertAt, 0, moved);
-    // PUT only the siblings whose position (and thus orderIndex) changed.
-    const updates = arr
+    const src = findCtx(tree, draggedId, null);
+    const tgt = findCtx(tree, targetId, null);
+    if (!src || !tgt) return;
+
+    const newParentId = mode === 'inside' ? targetId : tgt.parentId;
+    // Refuse to drop a node into its own subtree (the backend guards this too).
+    const inSubtree = (n: ProcessNode): boolean =>
+      n.id === newParentId || (n.children || []).some(inSubtree);
+    if (newParentId && inSubtree(src.node)) return;
+
+    // Build the destination sibling order with the dragged node placed.
+    const destList = mode === 'inside' ? (tgt.node.children || []) : tgt.siblings;
+    const dest = destList.filter((n) => n.id !== draggedId);
+    if (mode === 'inside') {
+      dest.push(src.node);
+    } else {
+      const ti = dest.findIndex((n) => n.id === targetId);
+      if (ti < 0) return;
+      dest.splice(mode === 'after' ? ti + 1 : ti, 0, src.node);
+    }
+
+    const reparented = src.parentId !== newParentId;
+    // PUT the dragged node (orderIndex + new parentId when moved) and any other
+    // destination sibling whose orderIndex shifted.
+    const updates = dest
       .map((n, i) => ({ n, i }))
-      .filter(({ n, i }) => n.orderIndex !== i)
+      .filter(({ n, i }) => n.orderIndex !== i || (n.id === draggedId && reparented))
       .map(({ n, i }) => apiClient.put(`/process-catalog/nodes/${n.id}`, {
         orderIndex: i,
+        ...(n.id === draggedId && reparented ? { parentId: newParentId } : {}),
         ...(n.version !== undefined ? { version: n.version } : {}),
       }));
     if (updates.length === 0) return;
@@ -1087,12 +1106,13 @@ export default function ProcessCatalogPage() {
       await Promise.all(updates);
       fetchData();
     } catch (err) {
-      const e = err as { response?: { status?: number } };
+      const e = err as { response?: { status?: number; data?: { error?: string } } };
       if (e?.response?.status === 409) {
         alert('This item was modified by another user. The page will refresh.');
         fetchData();
       } else {
-        addToast('error', 'Reorder failed');
+        addToast('error', e?.response?.data?.error || (reparented ? 'Move failed' : 'Reorder failed'));
+        fetchData();
       }
     }
   };
