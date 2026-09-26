@@ -10,6 +10,7 @@ import Spinner from '../components/Spinner';
 import TruncatedText from '../components/TruncatedText';
 import SectionHeading from '../components/SectionHeading';
 import Meter from '../components/Meter';
+import InfoTip from '../components/InfoTip';
 import { renderNavIcon } from '../components/navIcons';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -110,7 +111,10 @@ const statTile: React.CSSProperties = {
 };
 const tileLabel: React.CSSProperties = { fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 };
 const tileNumber: React.CSSProperties = { fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: 'tabular-nums' };
-const tileSub: React.CSSProperties = { fontSize: 10.5, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 };
+// The metric caption now lives behind a `?` InfoTip sitting right after the
+// label, so the tiles stay compact (label + number) instead of carrying a
+// standing sub-line.
+const tileLabelText: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5 };
 // Right-aligned badge used in the ROI section headings.
 const roiBadge: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
 const roiBadgeMuted: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
@@ -641,11 +645,11 @@ export default function CouncilPage() {
           {/* Value drivers — leading indicators, not dollars. */}
           {derived.valueDrivers && (() => {
             const v = derived.valueDrivers;
-            const tiles: Array<{ label: string; value: string; sub: string; tone?: 'good' | 'risk' }> = [
-              { label: 'Ownership coverage', value: `${v.ownership.pct}%`, sub: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good' },
-              { label: 'Value at risk', value: `${v.openRisk}`, sub: 'Past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk' },
-              { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, sub: 'Governance issues moved to a terminal status', tone: 'good' },
-              { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, sub: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues' },
+            const tiles: Array<{ label: string; value: string; tip: string; tone?: 'good' | 'risk' }> = [
+              { label: 'Ownership coverage', value: `${v.ownership.pct}%`, tip: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good' },
+              { label: 'Value at risk', value: `${v.openRisk}`, tip: 'Past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk' },
+              { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, tip: 'Governance issues moved to a terminal status', tone: 'good' },
+              { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, tip: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues' },
             ];
             return (
               <>
@@ -656,9 +660,10 @@ export default function CouncilPage() {
                 <div style={tileGrid}>
                   {tiles.map((t) => (
                     <div key={t.label} style={statTile}>
-                      <div style={tileLabel}>{t.label}</div>
+                      <div style={tileLabel}>
+                        <span style={tileLabelText}>{t.label}<InfoTip term={t.label} text={t.tip} /></span>
+                      </div>
                       <div style={{ ...tileNumber, color: t.tone === 'risk' && v.openRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
-                      <div style={tileSub}>{t.sub}</div>
                     </div>
                   ))}
                 </div>
@@ -689,11 +694,11 @@ export default function CouncilPage() {
               );
             }
             const cur = roi.currency;
-            const tiles: Array<{ label: string; value: string; sub: string; tone?: 'good' | 'risk' }> = [
-              { label: 'Estimated annual value', value: fmtMoney(roi.annualValue, cur), sub: 'Ownership value + annualized resolution value', tone: 'good' },
-              { label: 'Ownership value', value: fmtMoney(roi.ownershipValue, cur), sub: 'Owned domains & assets × your value per owned entity' },
-              { label: 'Resolution value (annualized)', value: fmtMoney(roi.resolutionValueAnnualized, cur), sub: `${fmtMoney(roi.resolutionValueMonthly, cur)}/mo run-rate × 12` },
-              { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), sub: 'Open-risk items × your exposure per item — drive down', tone: 'risk' },
+            const tiles: Array<{ label: string; value: string; tip: string; tone?: 'good' | 'risk' }> = [
+              { label: 'Estimated annual value', value: fmtMoney(roi.annualValue, cur), tip: 'Ownership value + annualized resolution value', tone: 'good' },
+              { label: 'Ownership value', value: fmtMoney(roi.ownershipValue, cur), tip: 'Owned domains & assets × your value per owned entity' },
+              { label: 'Resolution value (annualized)', value: fmtMoney(roi.resolutionValueAnnualized, cur), tip: `${fmtMoney(roi.resolutionValueMonthly, cur)}/mo run-rate × 12` },
+              { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), tip: 'Open-risk items × your exposure per item — drive down', tone: 'risk' },
             ];
             return (
               <div style={bandStyle}>
@@ -708,9 +713,10 @@ export default function CouncilPage() {
                 <div style={tileGrid}>
                   {tiles.map((t) => (
                     <div key={t.label} style={statTile}>
-                      <div style={tileLabel}>{t.label}</div>
+                      <div style={tileLabel}>
+                        <span style={tileLabelText}>{t.label}<InfoTip term={t.label} text={t.tip} /></span>
+                      </div>
                       <div style={{ ...tileNumber, color: t.tone === 'risk' && roi.valueAtRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
-                      <div style={tileSub}>{t.sub}</div>
                     </div>
                   ))}
                 </div>
