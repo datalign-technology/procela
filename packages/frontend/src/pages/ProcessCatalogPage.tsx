@@ -390,7 +390,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 export default function ProcessCatalogPage() {
   const navigate = useNavigate();
-  const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams, setActiveOrg } = useOrgContext();
+  const { activeOrgId, activeOrgType, canCreateValueStreams } = useOrgContext();
   // Governance-scope membership for the value-stream "in scope / not governed"
   // badge — only surfaces when the org's program has a defined scope.
   const scope = useScopeMembership(activeOrgId);
@@ -401,7 +401,7 @@ export default function ProcessCatalogPage() {
   // guard via the "+ Add value stream" header button or the empty
   // state. Read-only surfaces (Visualize, Compare, Export) stay
   // available.
-  const { divisions: subtreeDivisions, companyWithDivisions } = useValueStreamScope();
+  const { companyWithDivisions } = useValueStreamScope();
   const canCreateHere = canCreateValueStreams && !companyWithDivisions;
   // Governance value streams are exempt from the multi-division
   // block — corporate governance (policies, decision rights, the
@@ -1337,6 +1337,16 @@ export default function ProcessCatalogPage() {
           levels (Domain, Capability, Sub-Process, Task) sit between for
           detail when you need it. A Value Stream can't go ACTIVE until at
           least one Process and one Activity exist underneath.
+          <p style={{ margin: '8px 0 0' }}>
+            <strong>Where value streams live.</strong> In an organization with
+            divisions, <strong>operational</strong> value streams almost always
+            live at the division level, so each division keeps its own process
+            catalog — switch to a division in the "Working in" dropdown above to
+            build one. <strong>Governance</strong> processes are the exception:
+            they stay corporate (one enterprise-wide program), so the{' '}
+            <em>Generate governance processes</em> wand still works at the
+            company level.
+          </p>
         </HelpPopover>
       </PageHeader>
 
@@ -1347,30 +1357,6 @@ export default function ProcessCatalogPage() {
         </div>
       )}
       {activeOrgId && !canCreateValueStreams && <CreateScopeNotice noun="value streams" />}
-      {activeOrgId && canCreateValueStreams && companyWithDivisions && (
-        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
-          <div>
-            <strong>{activeOrgName}</strong> has {subtreeDivisions.length === 1 ? 'a division' : `${subtreeDivisions.length} divisions`}. <strong>Operational</strong> value streams almost always live at the division level so each division gets its own process catalog. <strong>Governance</strong> processes are the exception — they stay corporate (one enterprise-wide program), so the <em>Generate governance processes</em> wand still works here.
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-            <span style={{ fontSize: 12, alignSelf: 'center', marginRight: 2 }}>Switch to:</span>
-            {subtreeDivisions.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => setActiveOrg(d.id, d.name, 'division')}
-                style={{
-                  padding: '4px 10px', fontSize: 12, fontWeight: 500,
-                  background: '#fff', color: '#92400e',
-                  border: '1px solid #f59e0b', borderRadius: 999, cursor: 'pointer',
-                }}
-              >
-                {d.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Legend */}
       {totalNodes > 0 && (
