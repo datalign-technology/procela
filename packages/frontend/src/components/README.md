@@ -380,6 +380,48 @@ without this the bar keeps counting a row that no longer exists.
 
 ---
 
+### `useSortable` + `<DragHandle>`
+
+Drag-to-reorder / re-parent mechanics for a list or tree. Compose it instead
+of hand-rolling `draggable` + `onDragStart/Over/Leave/Drop` per list — that
+duplication drifts (the drop-zone maths, the leave-into-child guard, the
+indicator, the dragging fade) and native HTML5 DnD has real footguns
+(`dataTransfer` is unreadable during `dragover`; a manually-built `DragEvent`
+carries no working `dataTransfer`). The hook owns the **mechanics** — a shared
+in-flight drag tracker, three-zone hit-testing (top/bottom edges reorder,
+middle re-parents), the drop indicator, the dragging state — and takes the
+**policy** from the call site: `group` (what "the same list" means), the drag
+`data` payload, `canDropInside` (is a re-parent valid?), and `onMove` (persist
+it). It's a mouse affordance — keep a keyboard path (e.g. up/down buttons)
+alongside, since native DnD isn't keyboard-operable.
+
+```tsx
+import { useSortable, DragHandle, sortableIndicatorStyle } from '@/components/Sortable';
+
+const { dragging, dropMode, handleProps, rowProps } = useSortable<{ level: string }>({
+  id: item.id,
+  group: item.parentId,                 // rows sharing this reorder against each other
+  data: { level: item.level },          // read back by a hovered row in canDropInside
+  draggable: canDrag,
+  canDropInside: (drag) => accepts(item.level, drag.data.level),  // omit ⇒ reorder-only (flat list)
+  onMove: (draggedId, targetId, mode) => persist(draggedId, targetId, mode),
+});
+
+<div {...rowProps} style={{ ...rowStyle, ...sortableIndicatorStyle(dropMode, dragging) }}>
+  {canDrag && <DragHandle {...handleProps} />}
+  … row …
+</div>
+```
+
+`onMove`'s `mode` is `'before' | 'after' | 'inside'` relative to the target
+row; the call site turns that into its own persistence (e.g. renumber the
+destination list + write the new parent). First composed by the Process
+Catalog tree (`pages/process-catalog/TreeNode.tsx`) for sibling reorder +
+re-parent. Swapping the native engine for dnd-kit (keyboard drag, touch) is a
+change inside `Sortable.tsx`, not at the call sites.
+
+---
+
 ## Badges & indicators
 
 Small display primitives for the recurring "value that should read as a

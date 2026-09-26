@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Bot, Paperclip, Lock, GripVertical } from 'lucide-react';
+import { Bot, Paperclip, Lock } from 'lucide-react';
+import { useSortable, DragHandle, sortableIndicatorStyle } from '../../components/Sortable';
 import { clickable } from '../../lib/a11y';
 import StatusBadge from '../../components/StatusBadge';
 import ScopeBadge from '../../components/ScopeBadge';
@@ -30,28 +31,18 @@ import {
 } from '../ProcessCatalogPage';
 import { useComplianceFrameworks } from '../../stores/complianceStore';
 
-// ── Drag-to-reorder / re-parent (prototype) ──────────────────────────────────
-// Native HTML5 drag-and-drop for the Process Catalog tree: reorder siblings
-// within one parent, or re-parent a node by dropping it onto a valid new parent.
-// A module-level tracker holds the in-flight drag payload — dataTransfer is
-// unreadable during `dragover` (only on `drop`), so every row consults this to
-// decide, live, whether it's a valid target and which drop it would be. Drag is
-// a single global pointer gesture, so one shared value is safe.
+// ── Drag-to-reorder / re-parent ──────────────────────────────────────────────
+// The drag mechanics live in the shared `useSortable` primitive
+// (components/Sortable.tsx); this file supplies the tree policy — the payload a
+// dragged row carries (its level + subtree ids) and the validity rule for an
+// inside (re-parent) drop. The up/down arrows remain the keyboard path.
 //
-// Three drop zones per row: the top / bottom edges reorder within the target's
-// sibling list (same parent only), and the middle re-parents the dragged node
-// in as a child of the target — offered only when the target's level accepts
-// the dragged node's level and the target isn't the dragged node or one of its
-// descendants (which would make a cycle).
-//
-// Mouse affordance only. The up/down arrows remain the keyboard-accessible path
-// (native DnD isn't keyboard-operable); a production build would layer dnd-kit
-// on top for keyboard dragging + richer touch.
-type DropMode = 'before' | 'after' | 'inside';
-let activeDrag: { id: string; parentId: string | null; level: string; descendantIds: Set<string> } | null = null;
+// Each row's payload for the drag: the dragged node's level (does the hovered
+// row's level accept it?) and its whole subtree (refuse to re-parent into a
+// descendant, which would make a cycle).
+interface TreeDragData { level: string; descendantIds: Set<string> }
 
-/** Collect the ids of a node's whole subtree (excluding the node itself) so a
- *  drag can refuse to re-parent a node into its own descendant. */
+/** Collect the ids of a node's whole subtree (excluding the node itself). */
 function collectDescendantIds(node: ProcessNode, out: Set<string> = new Set()): Set<string> {
   for (const c of node.children || []) { out.add(c.id); collectDescendantIds(c, out); }
   return out;
@@ -166,31 +157,24 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
   const complianceFrameworks = useComplianceFrameworks();
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
-  // Drag-to-reorder / re-parent: which drop a valid drag is hovering this row
-  // for (before/after edge = reorder, inside = re-parent), and whether this row
-  // is the one being dragged.
-  const [dropMode, setDropMode] = useState<DropMode | null>(null);
-  const [dragging, setDragging] = useState(false);
   // A node is draggable if it can be reordered (has a sibling) or re-parented
   // (isn't a root value stream). A lone root has nowhere to go, so no handle.
   const canDrag = siblingCount > 1 || parentId !== null;
 
-  // Which drop this row would accept for the in-flight drag, from the cursor's
-  // vertical position: a reorder on the edges (same sibling list only) or an
-  // inside re-parent in the middle (when this node's level accepts the dragged
-  // level and this row isn't the dragged node or one of its descendants).
-  const dropModeFor = (clientY: number, r: DOMRect): DropMode | null => {
-    if (!activeDrag || activeDrag.id === node.id) return null;
-    const canReorder = activeDrag.parentId === parentId; // same sibling list
-    const canInside = (validChildrenMap[node.level] || []).includes(activeDrag.level)
-      && !activeDrag.descendantIds.has(node.id);
-    if (!canReorder && !canInside) return null;
-    const y = clientY - r.top;
-    const h = r.height || 1;
-    if (canInside && y > h * 0.3 && y < h * 0.7) return 'inside';
-    if (canReorder) return y < h / 2 ? 'before' : 'after';
-    return canInside ? 'inside' : null;
-  };
+  // Wire the shared drag primitive with the tree's policy: same-parent rows
+  // reorder (group = parentId); a middle drop re-parents when this row's level
+  // accepts the dragged node and this row isn't the dragged node or one of its
+  // descendants.
+  const { dragging, dropMode, handleProps, rowProps } = useSortable<TreeDragData>({
+    id: node.id,
+    group: parentId,
+    data: { level: node.level, descendantIds: collectDescendantIds(node) },
+    draggable: canDrag,
+    canDropInside: (drag) =>
+      (validChildrenMap[node.level] || []).includes(drag.data.level)
+      && !drag.data.descendantIds.has(node.id),
+    onMove: onMoveNode,
+  });
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [reviewCommentDraft, setReviewCommentDraft] = useState('');
   // Attachments live behind the "Attach" button in the action row (the
@@ -306,56 +290,19 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
         borderBottom: '1px solid var(--color-border)',
         background: isSelected ? '#f0f9ff' : (completeness && !completeness.complete ? '#fffbeb' : undefined),
         transition: 'background 0.1s',
-        opacity: dragging ? 0.4 : 1,
-        // Drop indicator: an inset accent line on the hovered edge for a
-        // reorder (before/after), or a full ring for an inside re-parent — no
-        // layout shift either way.
-        boxShadow: dropMode === 'before' ? 'inset 0 2px 0 0 var(--color-primary)'
-          : dropMode === 'after' ? 'inset 0 -2px 0 0 var(--color-primary)'
-          : dropMode === 'inside' ? 'inset 0 0 0 2px var(--color-primary)' : undefined,
+        // Dragging fade + drop indicator (edge line for reorder, ring for an
+        // inside re-parent), from the shared sortable primitive.
+        ...sortableIndicatorStyle(dropMode, dragging),
       }}
         onMouseEnter={(e) => { if (!isSelected && (!completeness || completeness.complete)) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = completeness && !completeness.complete ? '#fffbeb' : ''; }}
-        onDragOver={(e) => {
-          const mode = dropModeFor(e.clientY, e.currentTarget.getBoundingClientRect());
-          if (!mode) { if (dropMode) setDropMode(null); return; }
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          setDropMode(mode);
-        }}
-        onDragLeave={(e) => {
-          // Ignore leave events fired when crossing into a child element.
-          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-          setDropMode(null);
-        }}
-        onDrop={(e) => {
-          const mode = dropModeFor(e.clientY, e.currentTarget.getBoundingClientRect());
-          setDropMode(null);
-          if (!mode) return;
-          e.preventDefault();
-          onMoveNode(activeDrag!.id, node.id, mode);
-        }}
+        {...rowProps}
       >
         {/* Drag handle — mouse affordance only; the up/down arrows at the row's
             end remain the keyboard path. Drag onto a sibling edge to reorder, or
             onto a valid parent row to re-parent. */}
         {canDrag ? (
-          <span
-            draggable
-            onDragStart={(e) => {
-              activeDrag = { id: node.id, parentId, level: node.level, descendantIds: collectDescendantIds(node) };
-              setDragging(true);
-              e.dataTransfer.effectAllowed = 'move';
-              // A payload for completeness; the module tracker is what we read.
-              e.dataTransfer.setData('text/plain', node.id);
-            }}
-            onDragEnd={() => { activeDrag = null; setDragging(false); setDropMode(null); }}
-            title="Drag to reorder, or onto another row to re-parent"
-            aria-hidden="true"
-            style={{ flexShrink: 0, marginTop: 3, cursor: 'grab', color: 'var(--color-text-muted)', display: 'inline-flex', lineHeight: 1 }}
-          >
-            <GripVertical size={14} />
-          </span>
+          <DragHandle {...handleProps} title="Drag to reorder, or onto another row to re-parent" style={{ marginTop: 3 }} />
         ) : (
           <span style={{ flexShrink: 0, width: 14 }} />
         )}
