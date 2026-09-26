@@ -115,6 +115,15 @@ const tileNumber: React.CSSProperties = { fontSize: 22, fontWeight: 700, marginT
 // label, so the tiles stay compact (label + number) instead of carrying a
 // standing sub-line.
 const tileLabelText: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5 };
+// Tile number colour by tone. A "good" metric is coloured success only when it
+// actually has a positive value — a zero count (e.g. "Resolved (30 days): 0")
+// reads as neutral, not a win; a "risk" metric warns only when there's risk to
+// drive down. Everything else is plain text.
+function toneColor(tone: 'good' | 'risk' | undefined, num: number): string {
+  if (tone === 'risk') return num > 0 ? 'var(--color-warning)' : 'var(--color-text)';
+  if (tone === 'good') return num > 0 ? 'var(--color-success)' : 'var(--color-text)';
+  return 'var(--color-text)';
+}
 // Right-aligned badge used in the ROI section headings.
 const roiBadge: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
 const roiBadgeMuted: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
@@ -595,7 +604,10 @@ export default function CouncilPage() {
       </Card>
 
       {/* ── Scorecard — the enterprise verdict + division-by-division grid ── */}
-      <SectionHeading title="Scorecard" as="h3" right={statusPill(resolvedStatus(derived.enterprise))} />
+      {/* No status pill on the heading — the enterprise verdict already shows
+          in the STATUS column of the highlighted rollup row below, so a header
+          pill would just repeat it. */}
+      <SectionHeading title="Scorecard" as="h3" />
       <Card padding={0} marginBottom={16}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
@@ -645,11 +657,11 @@ export default function CouncilPage() {
           {/* Value drivers — leading indicators, not dollars. */}
           {derived.valueDrivers && (() => {
             const v = derived.valueDrivers;
-            const tiles: Array<{ label: string; value: string; tip: string; tone?: 'good' | 'risk' }> = [
-              { label: 'Ownership coverage', value: `${v.ownership.pct}%`, tip: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good' },
-              { label: 'Value at risk', value: `${v.openRisk}`, tip: 'Past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk' },
-              { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, tip: 'Governance issues moved to a terminal status', tone: 'good' },
-              { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, tip: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues' },
+            const tiles: Array<{ label: string; value: string; tip: string; tone?: 'good' | 'risk'; num: number }> = [
+              { label: 'Ownership coverage', value: `${v.ownership.pct}%`, tip: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good', num: v.ownership.pct },
+              { label: 'Value at risk', value: `${v.openRisk}`, tip: 'Past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk', num: v.openRisk },
+              { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, tip: 'Governance issues moved to a terminal status', tone: 'good', num: v.resolvedLast30 },
+              { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, tip: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues', num: v.avgResolutionDays ?? 0 },
             ];
             return (
               <>
@@ -663,7 +675,7 @@ export default function CouncilPage() {
                       <div style={tileLabel}>
                         <span style={tileLabelText}>{t.label}<InfoTip term={t.label} text={t.tip} /></span>
                       </div>
-                      <div style={{ ...tileNumber, color: t.tone === 'risk' && v.openRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
+                      <div style={{ ...tileNumber, color: toneColor(t.tone, t.num) }}>{t.value}</div>
                     </div>
                   ))}
                 </div>
@@ -688,17 +700,17 @@ export default function CouncilPage() {
                   </div>
                   <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
                     Turn the drivers above into a dollar figure by setting your organization&rsquo;s value model — what an owned entity, a resolved issue, and an open-risk item are worth to you. Procela invents no figures.{' '}
-                    <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Set your value model →</Link>
+                    <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600, whiteSpace: 'nowrap' }}>Set your value model →</Link>
                   </div>
                 </div>
               );
             }
             const cur = roi.currency;
-            const tiles: Array<{ label: string; value: string; tip: string; tone?: 'good' | 'risk' }> = [
-              { label: 'Estimated annual value', value: fmtMoney(roi.annualValue, cur), tip: 'Ownership value + annualized resolution value', tone: 'good' },
-              { label: 'Ownership value', value: fmtMoney(roi.ownershipValue, cur), tip: 'Owned domains & assets × your value per owned entity' },
-              { label: 'Resolution value (annualized)', value: fmtMoney(roi.resolutionValueAnnualized, cur), tip: `${fmtMoney(roi.resolutionValueMonthly, cur)}/mo run-rate × 12` },
-              { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), tip: 'Open-risk items × your exposure per item — drive down', tone: 'risk' },
+            const tiles: Array<{ label: string; value: string; tip: string; tone?: 'good' | 'risk'; num: number }> = [
+              { label: 'Estimated annual value', value: fmtMoney(roi.annualValue, cur), tip: 'Ownership value + annualized resolution value', tone: 'good', num: roi.annualValue },
+              { label: 'Ownership value', value: fmtMoney(roi.ownershipValue, cur), tip: 'Owned domains & assets × your value per owned entity', num: roi.ownershipValue },
+              { label: 'Resolution value (annualized)', value: fmtMoney(roi.resolutionValueAnnualized, cur), tip: `${fmtMoney(roi.resolutionValueMonthly, cur)}/mo run-rate × 12`, num: roi.resolutionValueAnnualized },
+              { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), tip: 'Open-risk items × your exposure per item — drive down', tone: 'risk', num: roi.valueAtRisk },
             ];
             return (
               <div style={bandStyle}>
@@ -708,7 +720,7 @@ export default function CouncilPage() {
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginBottom: 12 }}>
                   The value drivers monetized with your model — {fmtMoney(roi.model.ownershipValuePerEntity, cur)}/owned entity, {fmtMoney(roi.model.resolutionValuePerIssue, cur)}/issue resolved, {fmtMoney(roi.model.riskCostPerItem, cur)}/open-risk item. An estimate, only as good as those assumptions. {derived.scope?.applied ? 'Scoped to the governed set.' : 'Across the whole org tree.'}{' '}
-                  <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Edit model →</Link>
+                  <Link to="/governance/foundation?tab=value" style={{ color: 'var(--color-primary)', fontWeight: 600, whiteSpace: 'nowrap' }}>Edit model →</Link>
                 </div>
                 <div style={tileGrid}>
                   {tiles.map((t) => (
@@ -716,7 +728,7 @@ export default function CouncilPage() {
                       <div style={tileLabel}>
                         <span style={tileLabelText}>{t.label}<InfoTip term={t.label} text={t.tip} /></span>
                       </div>
-                      <div style={{ ...tileNumber, color: t.tone === 'risk' && roi.valueAtRisk > 0 ? 'var(--color-warning)' : t.tone === 'good' ? 'var(--color-success)' : 'var(--color-text)' }}>{t.value}</div>
+                      <div style={{ ...tileNumber, color: toneColor(t.tone, t.num) }}>{t.value}</div>
                     </div>
                   ))}
                 </div>
@@ -778,8 +790,11 @@ export default function CouncilPage() {
           <SectionHeading title="Maturity trend" as="h3" />
           <Card padding={16} style={{ flex: 1 }}>
             {overallNow != null ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+              // Fill the card height so the dimension breakdown spreads into the
+              // slack instead of leaving a void at the bottom when this card is
+              // shorter than "Needs a decision" beside it.
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12, flexShrink: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
                     <span style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{overallNow.toFixed(1)}</span>
                     <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>/ 5 overall</span>
@@ -791,7 +806,7 @@ export default function CouncilPage() {
                   </div>
                   {maturity.length >= 2 && <Sparkline points={maturity.map((s) => s.overall)} color="var(--color-primary)" />}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: 20, rowGap: 8 }}>
+                <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: 20, rowGap: 8, alignContent: 'space-between' }}>
                   {dims.map((d) => (
                     <div key={d.name} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 34px', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
@@ -800,7 +815,7 @@ export default function CouncilPage() {
                     </div>
                   ))}
                 </div>
-              </>
+              </div>
             ) : (
               <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
                 No maturity snapshots recorded yet. Maturity trend builds as assessments are captured over time.
