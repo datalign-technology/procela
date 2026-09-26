@@ -290,6 +290,17 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       const row = processNodes.find((n: any) => n.id === lockActId);
       assert.strictEqual(row.name, 'Locked process');
     });
+
+    it('allows a pure reorder (orderIndex) on an ACTIVE node — positional, not a content edit', async () => {
+      const before = processNodes.find((n: any) => n.id === lockActId);
+      assert.notStrictEqual(before.orderIndex, 9);
+      const res = await request(port, 'PUT', `/process-catalog/nodes/${lockActId}`, { orderIndex: 9 });
+      assert.strictEqual(res.status, 200);
+      const row = processNodes.find((n: any) => n.id === lockActId);
+      assert.strictEqual(row.orderIndex, 9);
+      // The lock still holds for content: name is untouched.
+      assert.strictEqual(row.name, 'Locked process');
+    });
   });
 });
 
