@@ -768,22 +768,30 @@ export default function CouncilPage() {
 
       {/* ── Maturity trend + escalations — are we improving, and what needs a call ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginBottom: 16 }}>
-        <div>
+        {/* Maturity trend — reorganized to sit at the same height as the
+            "Needs a decision" card beside it: the sparkline shares the headline
+            row (wrapping just under it on a narrow card) and the five dimension
+            bars flow in a two-column grid, so the card stays compact without
+            shrinking any of the labels — only the big overall number steps down
+            from 30 to 24. Both cards flex to equal height within the grid row. */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
           <SectionHeading title="Maturity trend" as="h3" />
-          <Card padding={16}>
+          <Card padding={16} style={{ flex: 1 }}>
             {overallNow != null ? (
               <>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
-                  <span style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{overallNow.toFixed(1)}</span>
-                  <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>/ 5 overall</span>
-                  {overallDelta != null && overallDelta !== 0 && (
-                    <span style={{ fontSize: 12, fontWeight: 600, color: overallDelta > 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
-                      {overallDelta > 0 ? '▲' : '▼'} {Math.abs(overallDelta).toFixed(1)} since first snapshot
-                    </span>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{overallNow.toFixed(1)}</span>
+                    <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>/ 5 overall</span>
+                    {overallDelta != null && overallDelta !== 0 && (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: overallDelta > 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
+                        {overallDelta > 0 ? '▲' : '▼'} {Math.abs(overallDelta).toFixed(1)} since first snapshot
+                      </span>
+                    )}
+                  </div>
+                  {maturity.length >= 2 && <Sparkline points={maturity.map((s) => s.overall)} color="var(--color-primary)" />}
                 </div>
-                {maturity.length >= 2 && <Sparkline points={maturity.map((s) => s.overall)} color="var(--color-primary)" />}
-                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: 20, rowGap: 8 }}>
                   {dims.map((d) => (
                     <div key={d.name} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 34px', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
@@ -801,9 +809,9 @@ export default function CouncilPage() {
           </Card>
         </div>
 
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
           <SectionHeading title="Needs a decision" as="h3" />
-          <Card padding={16}>
+          <Card padding={16} style={{ flex: 1 }}>
             {escalations.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {escalations.map((m) => (
