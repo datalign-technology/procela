@@ -29,7 +29,7 @@ import type { ConnectorConfig, ReportedAsset } from './types';
 import { normalizeConfig, LIVENESS_FILE_DEFAULT } from './config';
 import { resolveSourceSecrets, defaultResolvers } from './secrets';
 import { writeLiveness, checkLiveness } from './liveness';
-import { pairClaim, heartbeat, report } from './api';
+import { pairClaim, heartbeat, report, reportEvent } from './api';
 import { scanPostgres } from './postgres';
 import { scanSqlServer } from './sqlserver';
 import { scanMysql } from './mysql';
@@ -103,6 +103,7 @@ async function pairOnce(cfg: ConnectorConfig, path: string): Promise<string | nu
 async function runScan(cfg: ConnectorConfig): Promise<void> {
   let total = 0;
   const all: ReportedAsset[] = [];
+  const failures: Array<{ source: string; error: string }> = [];
   for (const rawSource of cfg.sources) {
     log('scanning source', { name: rawSource.name, type: rawSource.type });
     try {
@@ -141,8 +142,20 @@ async function runScan(cfg: ConnectorConfig): Promise<void> {
       all.push(...assets);
       total += assets.length;
     } catch (err: any) {
-      log('scan failed for source', { source: rawSource.name, error: err?.message || String(err) });
+      const error = err?.message || String(err);
+      log('scan failed for source', { source: rawSource.name, error });
+      failures.push({ source: String(rawSource.name), error });
     }
+  }
+  // Surface any per-source scan failures into the connector's activity feed —
+  // otherwise a persistently unreachable source is only visible in stdout while
+  // its assets silently go stale. Reported even when nothing was discovered.
+  if (failures.length > 0) {
+    await reportEvent(cfg, 'SCAN_FAILED', {
+      failed: failures.length,
+      sources: failures.map((f) => f.source).slice(0, 20),
+      error: failures[0].error,
+    });
   }
   if (all.length === 0) {
     log('no assets discovered — nothing to report');

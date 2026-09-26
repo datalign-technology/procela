@@ -174,6 +174,13 @@ npm run lint -w packages/connector
   brief backend blip doesn't cost a whole scan interval. A heartbeat
   miss self-heals on the next beat. A *rejected* report (bad token,
   validation) is not retried.
+- A **task** that fails while the agent is otherwise healthy — a source
+  that can't be scanned, a sync job that errors, a DQ check that can't be
+  measured — doesn't change the connector's ONLINE/OFFLINE status, but it
+  is now reported to Procela as a `SCAN_FAILED` / `SYNC_FAILED` /
+  `DQ_FAILED` activity event (best-effort `POST /connectors/events`) and
+  shown, tinted, in the connector's activity feed — instead of only being
+  logged to the agent's stdout while the affected assets silently go stale.
 - Multiple connectors per org are supported. Procela tags each
   reported asset with the connector that observed it.
 - Freshness states in the Procela UI: **ONLINE** (heartbeat in

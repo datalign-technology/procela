@@ -11,7 +11,7 @@ import mysql from 'mysql2/promise';
 import mssql from 'mssql';
 import oracledb from 'oracledb';
 import type { ConnectorConfig, Source, AgentSyncJob } from './types';
-import { getSyncJobs, pushSyncRows } from './api';
+import { getSyncJobs, pushSyncRows, reportEvent } from './api';
 import { resolveSourceSecrets, type SecretResolvers } from './secrets';
 import { withRetry } from './retry';
 import { buildSelectSql, normalizeRow, type SyncEngine } from './sync-query';
@@ -147,11 +147,14 @@ export async function runSyncJobs(cfg: ConnectorConfig, log: LogFn, resolvers: S
       });
       if (!res.success) {
         log('sync push rejected', { job: job.name, error: res.error || 'unknown' });
+        await reportEvent(cfg, 'SYNC_FAILED', { job: job.name, error: res.error || 'push rejected' });
       } else {
         log('sync push accepted', { job: job.name, rows: rows.length, ...res.data });
       }
     } catch (err: any) {
-      log('sync job failed', { job: job.name, error: err?.message || String(err) });
+      const error = err?.message || String(err);
+      log('sync job failed', { job: job.name, error });
+      await reportEvent(cfg, 'SYNC_FAILED', { job: job.name, error });
     }
   }
 }

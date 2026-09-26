@@ -372,6 +372,38 @@ describe('connector routes', () => {
         assert.ok(res.body.data[i - 1].ts >= res.body.data[i].ts);
       }
     });
+
+    it('POST /events records a task-failure event and refreshes the heartbeat', async () => {
+      const res = await request(port, 'POST', '/connectors/events', {
+        body: { type: 'SCAN_FAILED', data: { failed: 2, sources: ['warehouse'], error: 'connection refused' } },
+        bearer: token,
+      });
+      assert.strictEqual(res.status, 200);
+      const ev = connectorEvents.find((e: any) => e.connectorId === connectorId && e.type === 'SCAN_FAILED');
+      assert.ok(ev, 'a SCAN_FAILED event is recorded');
+      assert.strictEqual(ev.data.failed, 2);
+      assert.strictEqual(ev.data.error, 'connection refused');
+      // A failure report is still a sign of life — status stays fresh.
+      const list = await request(port, 'GET', `/connectors?orgId=${orgId}`, { bearer: adminJwt });
+      const row = list.body.data.find((r: any) => r.id === connectorId);
+      assert.strictEqual(row.status, 'ONLINE');
+    });
+
+    it('POST /events rejects a non-failure event type with 400', async () => {
+      const res = await request(port, 'POST', '/connectors/events', {
+        body: { type: 'ASSETS_REPORTED', data: {} }, bearer: token,
+      });
+      assert.strictEqual(res.status, 400);
+    });
+
+    it('POST /events caps a long error string', async () => {
+      const long = 'x'.repeat(2000);
+      await request(port, 'POST', '/connectors/events', {
+        body: { type: 'DQ_FAILED', data: { error: long } }, bearer: token,
+      });
+      const ev = connectorEvents.filter((e: any) => e.connectorId === connectorId && e.type === 'DQ_FAILED').pop();
+      assert.ok(ev && ev.data.error.length <= 500, 'error text is capped');
+    });
   });
 
   describe('scanForOfflineConnectors', () => {

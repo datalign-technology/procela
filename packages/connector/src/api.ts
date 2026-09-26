@@ -58,6 +58,28 @@ export async function report(cfg: ConnectorConfig, assets: ReportedAsset[]): Pro
   return res.json();
 }
 
+/** Record a task-failure event into the connector's activity feed. Best-effort
+ *  and swallowed — reporting a failure must never itself throw and derail the
+ *  loop. `data` is a small payload (an error message, counts); the backend caps
+ *  its size. Returns true when the backend accepted the event. */
+export async function reportEvent(
+  cfg: ConnectorConfig,
+  type: 'SCAN_FAILED' | 'SYNC_FAILED' | 'DQ_FAILED',
+  data: Record<string, unknown> = {},
+): Promise<boolean> {
+  if (!cfg.token) return false;
+  try {
+    const res = await fetch(url(cfg, '/connectors/events'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+      body: JSON.stringify({ type, data }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Fetch the AGENT-mode syncs this connector is due to run. Returns the
  *  jobs the backend deems due now (schedule-driven, server-side). */
 export async function getSyncJobs(cfg: ConnectorConfig): Promise<SyncJobsResponse> {

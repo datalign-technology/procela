@@ -35,7 +35,8 @@ interface SystemRef {
 
 interface ConnectorEvent {
   id: string;
-  type: 'PAIRED' | 'HEARTBEAT' | 'SCAN_STARTED' | 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'ASSETS_REPORTED';
+  type: 'PAIRED' | 'HEARTBEAT' | 'SCAN_STARTED' | 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'ASSETS_REPORTED'
+    | 'SYNC_JOBS_FETCHED' | 'SYNC_PUSHED' | 'SYNC_FAILED' | 'DQ_RULES_FETCHED' | 'DQ_RESULTS_APPLIED' | 'DQ_FAILED';
   ts: string;
   data: Record<string, any>;
 }
@@ -89,13 +90,23 @@ function relativeTime(iso: string | null): string {
 }
 
 const EVENT_LABEL: Record<ConnectorEvent['type'], string> = {
-  PAIRED:           'Paired',
-  HEARTBEAT:        'Heartbeat',
-  SCAN_STARTED:     'Scan started',
-  SCAN_COMPLETED:   'Scan completed',
-  SCAN_FAILED:      'Scan failed',
-  ASSETS_REPORTED:  'Assets reported',
+  PAIRED:            'Paired',
+  HEARTBEAT:         'Heartbeat',
+  SCAN_STARTED:      'Scan started',
+  SCAN_COMPLETED:    'Scan completed',
+  SCAN_FAILED:       'Scan failed',
+  ASSETS_REPORTED:   'Assets reported',
+  SYNC_JOBS_FETCHED: 'Sync jobs fetched',
+  SYNC_PUSHED:       'Sync pushed',
+  SYNC_FAILED:       'Sync job failed',
+  DQ_RULES_FETCHED:  'DQ rules fetched',
+  DQ_RESULTS_APPLIED:'DQ results applied',
+  DQ_FAILED:         'DQ check failed',
 };
+
+// Failure events are tinted red in the activity feed so a task that couldn't
+// run stands out from the routine scan/sync chatter.
+const FAILURE_EVENTS = new Set<ConnectorEvent['type']>(['SCAN_FAILED', 'SYNC_FAILED', 'DQ_FAILED']);
 
 // Systems multi-picker — small enough that inline checkboxes beat a
 // full dropdown component. Used in both the Add modal and the
@@ -552,7 +563,7 @@ function ConnectorDetailDrawer({ row, systems, onClose, onSaved }: {
             {events.map((e) => (
               <li key={e.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontWeight: 500 }}>{EVENT_LABEL[e.type] || e.type}</span>
+                  <span style={{ fontWeight: 500, color: FAILURE_EVENTS.has(e.type) ? 'var(--color-error)' : undefined }}>{EVENT_LABEL[e.type] || e.type}</span>
                   <span style={{ color: 'var(--color-text-muted)' }} title={new Date(e.ts).toLocaleString()}>{relativeTime(e.ts)}</span>
                 </div>
                 {Object.keys(e.data || {}).length > 0 && (
