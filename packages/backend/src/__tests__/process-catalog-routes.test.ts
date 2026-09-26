@@ -301,6 +301,23 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       // The lock still holds for content: name is untouched.
       assert.strictEqual(row.name, 'Locked process');
     });
+
+    it('allows re-parenting an ACTIVE node to a valid new parent (drag re-parent)', async () => {
+      // lockActId is an ACTIVE PROCESS; a VALUE_STREAM accepts a PROCESS child.
+      const res = await request(port, 'PUT', `/process-catalog/nodes/${lockActId}`, { parentId: versionVsId, orderIndex: 0 });
+      assert.strictEqual(res.status, 200);
+      const row = processNodes.find((n: any) => n.id === lockActId);
+      assert.strictEqual(row.parentId, versionVsId);
+      // Still locked for content.
+      assert.strictEqual(row.name, 'Locked process');
+    });
+
+    it('rejects a re-parent under a level that cannot hold the child with 400', async () => {
+      // A PROCESS cannot live under an ACTIVITY.
+      const res = await request(port, 'PUT', `/process-catalog/nodes/${lockActId}`, { parentId: versionActId });
+      assert.strictEqual(res.status, 400);
+      assert.match(res.body.error, /Cannot move/);
+    });
   });
 });
 
