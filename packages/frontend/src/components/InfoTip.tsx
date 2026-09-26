@@ -6,6 +6,11 @@ import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 // Usage:
 //   <InfoTip term="Data Asset" />
 //   <InfoTip term="Governance Tier" inline />
+//   <InfoTip term="Ownership coverage" text="10/15 domains & assets have an owner" />
+//
+// `term` names the tooltip and, by default, looks its body up in the
+// GLOSSARY. Pass `text` to supply the body directly for a one-off label
+// that isn't a glossary term (e.g. a dashboard metric caption).
 //
 // The GLOSSARY is also exported so other components can read definitions
 // without rendering a tooltip (e.g. for search, onboarding wizards).
@@ -51,10 +56,11 @@ export const GLOSSARY: Record<string, string> = {
 interface InfoTipProps {
   term: string;
   inline?: boolean;
+  text?: string; // custom body; overrides the GLOSSARY lookup for one-off labels
 }
 
-export default function InfoTip({ term, inline }: InfoTipProps) {
-  const explanation = GLOSSARY[term];
+export default function InfoTip({ term, inline, text }: InfoTipProps) {
+  const explanation = text ?? GLOSSARY[term];
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLSpanElement>(null);
