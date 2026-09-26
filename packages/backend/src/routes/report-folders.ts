@@ -40,6 +40,10 @@ export interface StoredReportFolder {
   kind: 'system' | 'user';
   /** Reports in a shared folder are org-visible. Always true for Public. */
   shared: boolean;
+  /** Manual rail order among the org's user folders (drag-to-reorder). The
+   *  system Public folder is always pinned first regardless. Absent on folders
+   *  created before ordering existed; they sort by name until first reordered. */
+  orderIndex?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -120,7 +124,15 @@ router.get('/', async (req: Request, res: Response) => {
   const admin = isAdmin(req);
   const data = (await reportFoldersRepo.list({ orgId }))
     .filter((f) => f.kind === 'system' || f.shared || admin || (uid && f.ownerId === uid))
-    .sort((a, b) => (a.kind === 'system' ? -1 : b.kind === 'system' ? 1 : a.name.localeCompare(b.name)));
+    // System Public pinned first; then user folders by their manual rail order
+    // (orderIndex), falling back to name for folders not yet reordered.
+    .sort((a, b) => {
+      if (a.kind === 'system') return -1;
+      if (b.kind === 'system') return 1;
+      const ao = a.orderIndex ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.orderIndex ?? Number.MAX_SAFE_INTEGER;
+      return ao - bo || a.name.localeCompare(b.name);
+    });
   res.json({ success: true, data });
 });
 
@@ -130,9 +142,12 @@ router.post('/', async (req: Request, res: Response) => {
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!name || !String(name).trim()) { res.status(400).json({ success: false, error: 'name is required' }); return; }
   const now = new Date().toISOString();
+  // Append after the org's existing user folders in the manual rail order.
+  const userFolders = (await reportFoldersRepo.list({ orgId })).filter((f) => f.kind === 'user');
+  const nextOrder = userFolders.reduce((max, f) => Math.max(max, (f.orderIndex ?? -1) + 1), userFolders.length);
   const folder: StoredReportFolder = {
     id: uuid(), orgId, name: String(name).trim(), ownerId: userId(req),
-    kind: 'user', shared: shared === true, createdAt: now, updatedAt: now,
+    kind: 'user', shared: shared === true, orderIndex: nextOrder, createdAt: now, updatedAt: now,
   };
   const created = await reportFoldersRepo.create(folder);
   auditService.log(orgId, userId(req), 'ReportFolder', folder.id, 'CREATE', null, created);
@@ -146,7 +161,11 @@ router.patch('/:id', async (req: Request, res: Response) => {
   if (!folder) { res.status(404).json({ success: false, error: 'Folder not found' }); return; }
   if (folder.kind === 'system') { res.status(403).json({ success: false, error: 'The Public folder cannot be modified' }); return; }
   const uid = userId(req);
-  if (folder.ownerId && uid && folder.ownerId !== uid && !isAdmin(req)) {
+  // Content edits (rename / share) are owner-only. Reordering (orderIndex) is a
+  // positional change to the shared rail — like the process catalog, it's not
+  // owner-gated, so anyone who can see the folder can slot it in the rail.
+  const wantsContentEdit = req.body?.name !== undefined || req.body?.shared !== undefined;
+  if (wantsContentEdit && folder.ownerId && uid && folder.ownerId !== uid && !isAdmin(req)) {
     res.status(403).json({ success: false, error: 'Only the folder owner can modify it' });
     return;
   }
@@ -157,6 +176,11 @@ router.patch('/:id', async (req: Request, res: Response) => {
     patch.name = name;
   }
   if (req.body?.shared !== undefined) patch.shared = req.body.shared === true;
+  if (req.body?.orderIndex !== undefined) {
+    const oi = Number(req.body.orderIndex);
+    if (!Number.isFinite(oi)) { res.status(400).json({ success: false, error: 'orderIndex must be a number' }); return; }
+    patch.orderIndex = oi;
+  }
   const updated = await reportFoldersRepo.update(folder.id, patch);
   auditService.log(folder.orgId, uid, 'ReportFolder', folder.id, 'UPDATE', folder, updated);
   res.json({ success: true, data: updated });

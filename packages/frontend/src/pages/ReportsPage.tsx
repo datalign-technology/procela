@@ -14,6 +14,7 @@ import { useSortedList } from '../hooks/useSortedList';
 import type { Cell, ExportPayload } from '../lib/export';
 import { exportData } from '../lib/export';
 import { fetchReportFolders, NO_FOLDER, type ReportFolder } from '../lib/reportFolders';
+import { useSortable, DragHandle, sortableIndicatorStyle, type DropMode } from '../components/Sortable';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -93,6 +94,66 @@ const badgeStyle = (bg: string, color: string): React.CSSProperties => ({
   marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: bg, color, whiteSpace: 'nowrap',
 });
 
+// A folder row in the rail. A module-level component (not an inline render
+// function) so its useSortable state survives a parent re-render mid-drag.
+// User folders get a drag handle and are reorder targets; the system Public
+// folder is pinned first — a spacer keeps its label aligned, but it can't be
+// dragged or dropped onto.
+function FolderRailRow({ folder, active, count, onSelect, onEdit, onReorder }: {
+  folder: ReportFolder;
+  active: boolean;
+  count: number;
+  onSelect: () => void;
+  onEdit: () => void;
+  onReorder: (draggedId: string, targetId: string, mode: DropMode) => void;
+}) {
+  const isUser = folder.kind === 'user';
+  // Reorder-only: no canDropInside, so the middle zone is never offered.
+  const { dragging, dropMode, handleProps, rowProps } = useSortable<Record<string, never>>({
+    id: folder.id, group: 'report-folders', data: {}, draggable: isUser, onMove: onReorder,
+  });
+  return (
+    <div
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+      {...(isUser ? rowProps : {})}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+        fontWeight: active ? 600 : 400,
+        background: active ? 'var(--color-primary-light)' : 'transparent',
+        color: active ? 'var(--color-primary)' : 'var(--color-text)',
+        ...(isUser ? sortableIndicatorStyle(dropMode, dragging) : {}),
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+    >
+      {isUser
+        ? <DragHandle {...handleProps} size={12} title={`Drag to reorder ${folder.name}`} onClick={(e) => e.stopPropagation()} />
+        : <span style={{ width: 12, flexShrink: 0 }} />}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{folder.name}</span>
+        {folder.shared && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', letterSpacing: '0.04em', flexShrink: 0 }}>SHARED</span>}
+      </span>
+      {isUser && (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={`Edit folder ${folder.name}`}
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onEdit(); } }}
+          style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+        >
+          <Icon name="edit" size={12} />
+        </span>
+      )}
+      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+    </div>
+  );
+}
+
 // ── User Reports — saved Report Builder definitions ────────────────────────
 
 function UserReportsTab() {
@@ -147,6 +208,41 @@ function UserReportsTab() {
     if (key === 'all') return reports.length;
     if (key === NO_FOLDER) return reports.filter((r) => !r.folderId).length;
     return reports.filter((r) => r.folderId === key).length;
+  };
+
+  // Drag-to-reorder the user folders in the rail. Splices the dragged folder to
+  // its new position, renumbers the user folders 0..n-1, and PATCHes only the
+  // ones that moved (orderIndex is a positional change, not owner-gated). The
+  // system Public folder stays pinned first regardless.
+  const reorderFolder = async (draggedId: string, targetId: string, mode: DropMode) => {
+    if (!activeOrgId || draggedId === targetId || mode === 'inside') return;
+    const list = folders.filter((f) => f.kind === 'user');
+    const dragged = list.find((f) => f.id === draggedId);
+    if (!dragged || !list.some((f) => f.id === targetId)) return;
+    const arr = list.filter((f) => f.id !== draggedId);
+    let insertAt = arr.findIndex((f) => f.id === targetId);
+    if (insertAt < 0) return;
+    if (mode === 'after') insertAt += 1;
+    arr.splice(insertAt, 0, dragged);
+    const updates = arr
+      .map((f, i) => ({ f, i }))
+      .filter(({ f, i }) => f.orderIndex !== i)
+      .map(({ f, i }) => apiClient.patch(`/report-folders/${f.id}`, { orderIndex: i }));
+    if (!updates.length) return;
+    // Optimistic: show the new order immediately, then reconcile from the server.
+    const rank = new Map(arr.map((f, i) => [f.id, i]));
+    setFolders((prev) => [...prev].sort((a, b) => {
+      if (a.kind === 'system') return -1;
+      if (b.kind === 'system') return 1;
+      return (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0);
+    }));
+    try {
+      await Promise.all(updates);
+    } catch {
+      addToast('error', 'Reorder failed');
+    } finally {
+      fetchReportFolders(activeOrgId).then(setFolders).catch(() => {});
+    }
   };
 
   // Reports narrowed to the selected folder (the rail filter).
@@ -351,6 +447,8 @@ function UserReportsTab() {
         onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
       >
+        {/* Aligns the label with the folder rows' drag handle (12px). */}
+        <span style={{ width: 12, flexShrink: 0 }} />
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
           {folder?.shared && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', letterSpacing: '0.04em', flexShrink: 0 }}>SHARED</span>}
@@ -389,7 +487,17 @@ function UserReportsTab() {
         </span>
       </div>
       {railRow('all', 'All reports')}
-      {folders.map((f) => railRow(f.id, f.name, { folder: f }))}
+      {folders.map((f) => (
+        <FolderRailRow
+          key={f.id}
+          folder={f}
+          active={selectedFolder === f.id}
+          count={countFor(f.id)}
+          onSelect={() => setSelectedFolder(f.id)}
+          onEdit={() => setFolderModal({ mode: 'edit', id: f.id, name: f.name, shared: f.shared })}
+          onReorder={reorderFolder}
+        />
+      ))}
       {/* Only surface the uncategorized bucket when something's actually in it. */}
       {countFor(NO_FOLDER) > 0 && railRow(NO_FOLDER, 'No folder')}
     </Card>
