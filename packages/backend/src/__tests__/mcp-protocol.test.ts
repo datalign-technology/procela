@@ -12,6 +12,7 @@ function server() {
     name: 'echo',
     description: 'Echo the message back.',
     inputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+    annotations: { readOnlyHint: true },
     handler: (args) => textResult(String(args.message ?? '')),
   });
   s.registerTool({
@@ -58,6 +59,9 @@ describe('McpServer.handle', () => {
     assert.deepStrictEqual(names, ['boom', 'echo']);
     const echo = tools.find((t) => t.name === 'echo');
     assert.strictEqual(echo.inputSchema.required[0], 'message');
+    // Annotations are emitted when present, omitted otherwise.
+    assert.strictEqual(echo.annotations.readOnlyHint, true);
+    assert.strictEqual(tools.find((t) => t.name === 'boom').annotations, undefined);
   });
 
   it('tools/call runs the handler and returns text content', async () => {

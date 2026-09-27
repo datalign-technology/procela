@@ -9,7 +9,10 @@ import { McpServer } from './protocol';
 import { createSession } from './identity';
 import type { Session } from './identity';
 import { buildTools } from './tools';
+import { buildWriteTools } from './write-tools';
 import { loadOrgCatalog, resolveOrgScope } from './catalog';
+import { updateEntityOwner, updateNodeStatus, createGovernanceTask, statusModeOf } from './mutations';
+import config from '../config';
 
 export const SERVER_INFO = { name: 'procela-governance', version: '1.0.0' };
 
@@ -26,8 +29,25 @@ export function buildMcpServer(token: string): McpServer {
 export function buildMcpServerForSession(session: Session): McpServer {
   const server = new McpServer(SERVER_INFO);
 
+  // Read tools — tagged read-only so a client never prompts for confirmation.
   for (const tool of buildTools({ session, loadCatalog: loadOrgCatalog, resolveScope: resolveOrgScope })) {
-    server.registerTool(tool);
+    server.registerTool({ ...tool, annotations: { ...tool.annotations, readOnlyHint: true } });
+  }
+
+  // Write tools — registered only when the extra MCP_WRITE_ENABLED gate is on
+  // (on top of the server's two switches). Each already carries its own
+  // destructive / idempotent annotations for the client's human-in-the-loop.
+  if (config.mcpWriteEnabled) {
+    for (const tool of buildWriteTools({
+      session,
+      loadCatalog: loadOrgCatalog,
+      updateEntityOwner,
+      updateNodeStatus,
+      createTask: createGovernanceTask,
+      statusModeOf,
+    })) {
+      server.registerTool(tool);
+    }
   }
 
   server.registerResource({

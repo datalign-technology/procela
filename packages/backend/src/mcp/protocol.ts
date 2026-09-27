@@ -50,10 +50,26 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+/** MCP tool annotations (2024-11-05): behavioural hints a client uses to decide
+ *  how to present a tool — chiefly whether to ask the human before calling it.
+ *  This is the protocol-level human-in-the-loop signal for write tools. */
+export interface ToolAnnotations {
+  /** The call only reads; no environment change. */
+  readOnlyHint?: boolean;
+  /** The call may overwrite / remove existing state (a destructive update). */
+  destructiveHint?: boolean;
+  /** Repeating the call with the same args has no additional effect. */
+  idempotentHint?: boolean;
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  /** Optional behavioural hints (read-only, destructive, idempotent) surfaced
+   *  to clients in tools/list so they can gate write calls behind a human
+   *  confirmation. Advisory — the server still enforces RBAC regardless. */
+  annotations?: ToolAnnotations;
   /** Handler receives the raw `arguments` object; returns text content. Throwing
    *  an McpError yields a tool-level error result (isError), not a transport
    *  error, so an agent sees the message. */
@@ -131,6 +147,7 @@ export class McpServer {
                 name: t.name,
                 description: t.description,
                 inputSchema: t.inputSchema,
+                ...(t.annotations ? { annotations: t.annotations } : {}),
               })),
             },
           });

@@ -12,13 +12,19 @@ It is the first slice of the design in
 
 ## What it is (and isn't)
 
-- **Read-only.** No tools mutate anything. No row-level source data is ever
-  exposed — only business metadata and context (the same thing the in-app AI
-  assistant sees).
+- **Read-first; writes are opt-in and gated separately.** The read tools mutate
+  nothing. A small set of **write tools** (assign owner, set process status,
+  create governance task) exists but is registered **only when
+  `MCP_WRITE_ENABLED=true`** — a third gate on top of the two below. No
+  row-level source data is ever exposed — only business metadata and context
+  (the same thing the in-app AI assistant sees).
 - **Just another authenticated consumer.** It reuses the backend's own
   identity (`jwt-signer`), tenant isolation (`enforceOrgScope` / org-tree
-  scoping), RBAC floor (`lib/permissions`), and the hash-chained audit log. It
-  can never see more than a **Viewer** on the caller's org(s) could see in-app.
+  scoping), RBAC floor (`lib/permissions`), and the hash-chained audit log. A
+  read can never see more than a **Viewer** on the caller's org(s) could see
+  in-app, and a write requires the same `*:write` permission the REST API
+  requires — an agent inherits the acting user's role and is never an
+  escalation path.
 - **Two transports, one core.** The protocol layer is transport-agnostic; both
   transports build the identical tool set + resource:
   - **stdio** — a local process a desktop/agent client spawns (like the edge
@@ -32,13 +38,15 @@ It is the first slice of the design in
 | Control | How |
 | --- | --- |
 | **Two kill switches** | Starts only when `MCP_SERVER_ENABLED=true` **and** `AI_FEATURES_ENABLED != false`. An on-prem / FedRAMP "no external AI" deployment keeps it off via either. |
+| **Third switch for writes** | The write tools register only when `MCP_WRITE_ENABLED=true` as well. Read-only exposure needs no write grant. |
 | **Identity** | Authenticates a Procela bearer token (`PROCELA_MCP_TOKEN`), verified with the same `jwt-signer` the REST API uses. |
 | **Tenant isolation** | Every tool resolves + authorizes its target org against the token user's accessible-org set; a cross-tenant / unknown org reads as **not-found** (never revealing another tenant's existence). |
-| **RBAC floor** | Every tool asserts the caller's role carries the relevant `*:read` permission before returning data. |
-| **Audit** | Every tool call is written to the hash-chained audit log (`entityType: McpTool`, `action: MCP_QUERY`) with actor + org + tool + args, before data is returned. Non-bypassable. |
-| **Least privilege** | Point it at a dedicated **Viewer**, org-restricted service token — never a shared admin token. Rotate it like any credential. |
+| **RBAC floor** | A read tool asserts the caller's role carries the relevant `*:read` permission; a write tool asserts the matching `*:write`. |
+| **Audit** | Every read is written to the hash-chained audit log (`entityType: McpTool`, `action: MCP_QUERY`); every **write** is logged with the **real** entity type/id and before/after state under an `MCP_*` action, before returning. Non-bypassable. |
+| **Human-in-the-loop** | Write tools carry MCP annotations (`readOnlyHint: false`, `destructiveHint`, `idempotentHint`) so a client asks the operator to confirm before calling. |
+| **Least privilege** | For read-only use, point it at a dedicated **Viewer**, org-restricted service token — never a shared admin token. A token used for writes carries exactly the `*:write` its role grants, nothing more. Rotate it like any credential. |
 
-## Tools (v1)
+## Read tools
 
 | Tool | Returns |
 | --- | --- |
@@ -51,6 +59,18 @@ It is the first slice of the design in
 | `search_catalog` | Name search across processes, assets, systems, and domains. |
 
 Plus a `procela://<orgId>/catalog-summary` resource (entity counts).
+
+## Write tools (opt-in — `MCP_WRITE_ENABLED=true`)
+
+Off unless the third switch is set. Each requires the acting role's `*:write`
+permission, validates the change against the same rules the REST API enforces,
+persists through the same repositories, and writes a before/after audit entry.
+
+| Tool | Does | Permission |
+| --- | --- | --- |
+| `assign_owner` | Set the accountable owner of a process / asset / system / domain (owner must be a person in the org). | `process:write` / `data-asset:write` / `system:write` |
+| `set_status` | Move a process node between the plain lifecycle states **Draft / Active / Deprecated**, honouring the org's status workflow. Review-workflow transitions (pending review, under review, approved) stay in the app. | `process:write` |
+| `create_task` | Create a governance task (stewardship / review / remediation / …), optionally assigned and linked to a catalog object. Opens `OPEN`. | `governance:write` |
 
 ## Run it
 
@@ -125,10 +145,12 @@ rate-limited **per principal** (the token subject; IP fallback) — see
 | `PROCELA_MCP_TOKEN` | The bearer token the **stdio** server authenticates as. (The HTTP transport takes a per-request bearer instead.) |
 | `MCP_RATE_LIMIT_MAX` | Max `POST /mcp` requests per principal per window (default 120). HTTP transport only. |
 | `MCP_RATE_LIMIT_WINDOW_MS` | The rate-limit window in ms (default 60000). HTTP transport only. |
+| `MCP_WRITE_ENABLED` | `true` also registers the write tools (assign owner, set status, create task). Default off — the read tools work without it. |
 
-## Not in v1 (planned follow-ups)
+## Not yet (planned follow-ups)
 
 - **Server-initiated SSE streaming** on the HTTP transport (`GET /mcp`). Every
-  v1 tool is request/response, so v1 answers `GET` with `405`.
-- **Write tools** (ownership assignment, etc.) — a separately-hardened later
-  phase with per-tool RBAC and human-in-the-loop confirmation.
+  tool is request/response today, so `GET` answers `405`.
+- **More write tools** — the current set covers ownership, process status, and
+  task creation. Mapping edits, tier changes, and richer status workflows are
+  future additions, each behind the same `*:write` RBAC + audit + confirmation.

@@ -11,7 +11,7 @@ import logger from '../lib/logger';
 import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
 import { getPeopleRepository } from '../db/people.repo';
 
-const TASK_TYPES = [
+export const TASK_TYPES = [
   'STEWARDSHIP',
   'REVIEW',
   'APPROVAL',
@@ -32,7 +32,7 @@ const TASK_STATUSES = [
   'CANCELLED',
 ] as const;
 
-const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+export const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 
 const AUTOMATION_MODES = ['HUMAN', 'AGENT', 'HYBRID'] as const;
 
