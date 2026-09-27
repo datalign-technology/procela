@@ -46,11 +46,16 @@ export interface HttpDispatchResult {
 }
 
 /** Pull a bearer token out of an Authorization header. Returns null when the
- *  header is missing or not a well-formed `Bearer <token>`. */
+ *  header is missing or not a well-formed `Bearer <token>`. Parsed by slicing
+ *  the scheme rather than a regex: the header is uncontrolled input, and a
+ *  `\s`/`.`-overlapping pattern backtracks polynomially on adversarial
+ *  whitespace (js/polynomial-redos). This scan is linear. */
 export function bearerToken(authorization?: string): string | null {
   if (!authorization) return null;
-  const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
-  const token = match?.[1]?.trim();
+  const trimmed = authorization.trim();
+  // Scheme is case-insensitive and must be followed by at least one space.
+  if (trimmed.length < 7 || trimmed.slice(0, 7).toLowerCase() !== 'bearer ') return null;
+  const token = trimmed.slice(7).trim();
   return token ? token : null;
 }
 
