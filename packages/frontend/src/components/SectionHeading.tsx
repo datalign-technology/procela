@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { activateOnKey } from '../lib/a11y';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SectionHeading — the one section title used across dashboards and reports.
@@ -25,6 +27,12 @@ interface SectionHeadingProps {
   right?: ReactNode;
   as?: 'h2' | 'h3';
   marginBottom?: number | string;
+  /** Turn the heading into a disclosure toggle: a chevron precedes the title
+   *  and the title row becomes a keyboard-operable button. Requires `open`
+   *  and `onToggle`. Omit for a plain heading (unchanged behaviour). */
+  collapsible?: boolean;
+  open?: boolean;
+  onToggle?: () => void;
 }
 
 export default function SectionHeading({
@@ -34,7 +42,29 @@ export default function SectionHeading({
   right,
   as: Tag = 'h2',
   marginBottom = 12,
+  collapsible,
+  open,
+  onToggle,
 }: SectionHeadingProps) {
+  const titleGroup = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      {collapsible && (
+        <span aria-hidden style={{ color: 'var(--color-text-muted)', display: 'inline-flex', flexShrink: 0 }}>
+          {open ? <ChevronDown size={16} strokeWidth={2.2} /> : <ChevronRight size={16} strokeWidth={2.2} />}
+        </span>
+      )}
+      <div style={{ minWidth: 0 }}>
+        {eyebrow != null && (
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: 3 }}>
+            {eyebrow}
+          </div>
+        )}
+        <Tag style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--color-text)', lineHeight: 1.2 }}>
+          {title}
+        </Tag>
+      </div>
+    </div>
+  );
   return (
     <div
       style={{
@@ -46,16 +76,18 @@ export default function SectionHeading({
         ...(underline ? { borderBottom: '2px solid var(--color-primary)', paddingBottom: 6 } : null),
       }}
     >
-      <div>
-        {eyebrow != null && (
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: 3 }}>
-            {eyebrow}
-          </div>
-        )}
-        <Tag style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--color-text)', lineHeight: 1.2 }}>
-          {title}
-        </Tag>
-      </div>
+      {collapsible ? (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          onClick={onToggle}
+          onKeyDown={onToggle ? activateOnKey(onToggle) : undefined}
+          style={{ cursor: 'pointer', minWidth: 0 }}
+        >
+          {titleGroup}
+        </div>
+      ) : titleGroup}
       {right != null && <div style={{ flexShrink: 0 }}>{right}</div>}
     </div>
   );
