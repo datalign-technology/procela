@@ -1,157 +1,32 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
+import InfoTip from './InfoTip';
 
 // ──────────────────────────────────────────────────────────────────────────
-// HelpPopover — small `?` chip with a popover. Used inline next to a
-// feature to explain it on the spot, instead of sending users to a
-// separate /help page. Persists "dismissed" state per `id` in
-// localStorage so users only see the first-run hint once.
+// HelpPopover — the inline "?" help chip next to a title, field label, or
+// section. It now renders through <InfoTip> so every "?" across the app looks
+// and behaves identically to the ones on the Council page: a small circle that
+// reveals a compact dark tooltip on hover / focus / tap, with no "Got it" /
+// "Don't show again" buttons and no persisted dismissal.
 //
-//   <HelpPopover id="dq-templates" title="Out-of-the-box rules">
-//     Pick from common quality checks (uniqueness, regex, range, ...) and
-//     run them against the column you select.
+//   <HelpPopover id="asset-tier" title="Governance Tiers">
+//     Uncertified = catalogued but not yet governed. …
 //   </HelpPopover>
+//
+// The `id` and `showInitially` props are accepted for backward compatibility
+// with existing call sites but no longer drive first-run auto-open or
+// dismissal — a hover tooltip needs neither. `title` is the bold heading of
+// the tooltip; `children` is its body.
 // ──────────────────────────────────────────────────────────────────────────
 
 interface HelpPopoverProps {
-  id: string;             // dismissal key in localStorage
+  /** Retained for API compatibility; no longer used (was the dismissal key). */
+  id?: string;
   title?: string;
-  children: React.ReactNode;
-  showInitially?: boolean;  // if true and not dismissed yet, auto-open on mount
+  children: ReactNode;
+  /** Retained for API compatibility; no longer auto-opens. */
+  showInitially?: boolean;
 }
 
-const STORAGE_KEY = 'procela:help-dismissed';
-
-function readDismissed(): Set<string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set();
-    return new Set(JSON.parse(raw));
-  } catch {
-    return new Set();
-  }
-}
-
-function persistDismissed(set: Set<string>) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(set)));
-  } catch { /* */ }
-}
-
-const POPOVER_WIDTH = 280;
-const VIEWPORT_MARGIN = 8;
-
-export default function HelpPopover({ id, title, children, showInitially = false }: HelpPopoverProps) {
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  // Fixed-positioned popover coords. Computed from the button's
-  // getBoundingClientRect so we can clamp to the viewport — otherwise the
-  // popover gets clipped by the sidebar when the trigger sits near the
-  // left edge of the content area.
-  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-
-  useEffect(() => {
-    const set = readDismissed();
-    const isDismissed = set.has(id);
-    if (showInitially && !isDismissed) setOpen(true);
-  }, [id, showInitially]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
-
-  // Recompute position whenever the popover opens or the viewport
-  // resizes. useLayoutEffect so the popover paints in the right place on
-  // the first frame, not after a flicker.
-  useLayoutEffect(() => {
-    if (!open) return;
-    function place() {
-      const btn = buttonRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      const desiredLeft = rect.left + rect.width / 2 - POPOVER_WIDTH / 2;
-      const maxLeft = window.innerWidth - POPOVER_WIDTH - VIEWPORT_MARGIN;
-      const clampedLeft = Math.max(VIEWPORT_MARGIN, Math.min(desiredLeft, maxLeft));
-      setPos({ top: rect.bottom + 6, left: clampedLeft });
-    }
-    place();
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
-    return () => {
-      window.removeEventListener('resize', place);
-      window.removeEventListener('scroll', place, true);
-    };
-  }, [open]);
-
-  const dismiss = () => {
-    const set = readDismissed();
-    set.add(id);
-    persistDismissed(set);
-    setOpen(false);
-  };
-
-  return (
-    <span style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={`Help: ${title || id}`}
-        style={{
-          // Neutral, consistent styling that matches InfoTip's `?` everywhere
-          // in the app. The undismissed state used to render in the primary
-          // colour, which made the same control look different from page to
-          // page depending on whether its intro had been dismissed; the
-          // auto-open (showInitially) is the first-run cue, not the colour.
-          width: 16, height: 16, borderRadius: '50%',
-          border: '1px solid var(--color-text-muted)',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 10, fontWeight: 600,
-          color: 'var(--color-text-muted)',
-          background: 'transparent',
-          cursor: 'pointer', flexShrink: 0,
-        }}
-      >
-        ?
-      </button>
-      {open && (
-        <div
-          role="tooltip"
-          style={{
-            position: 'fixed', top: pos.top, left: pos.left,
-            width: POPOVER_WIDTH, zIndex: 950,
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-            padding: 12,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {title && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{title}</div>}
-          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-            {children}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-            <button
-              onClick={dismiss}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-text-muted)', padding: 0 }}
-            >
-              Don't show again
-            </button>
-            <button
-              onClick={() => setOpen(false)}
-              style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 4 }}
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
-    </span>
-  );
+export default function HelpPopover({ title, children }: HelpPopoverProps) {
+  return <InfoTip term={title || 'Help'}>{children}</InfoTip>;
 }

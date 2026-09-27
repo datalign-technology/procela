@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import type { ReactNode } from 'react';
 
 // ──────────────────────────────────────────────────────────────────────────
 // InfoTip — dictionary-driven "?" tooltip for key Procela terms.
@@ -56,11 +57,12 @@ export const GLOSSARY: Record<string, string> = {
 interface InfoTipProps {
   term: string;
   inline?: boolean;
-  text?: string; // custom body; overrides the GLOSSARY lookup for one-off labels
+  text?: string; // custom body string; overrides the GLOSSARY lookup for one-off labels
+  children?: ReactNode; // custom body as JSX; wins over `text` and the GLOSSARY
 }
 
-export default function InfoTip({ term, inline, text }: InfoTipProps) {
-  const explanation = text ?? GLOSSARY[term];
+export default function InfoTip({ term, inline, text, children }: InfoTipProps) {
+  const explanation: ReactNode = children ?? text ?? GLOSSARY[term];
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLSpanElement>(null);
