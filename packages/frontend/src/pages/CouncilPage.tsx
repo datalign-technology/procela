@@ -102,12 +102,12 @@ type Overrides = Record<string, number | string>;
 // card, ~22px number, uniform min-height so a tile with a meter doesn't stand
 // taller than a number-only one).
 const TILE_MIN = 180;               // grid column min width
-const TILE_GAP = 12;
+const TILE_GAP = 10;
 const tileGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${TILE_MIN}px, 1fr))`, gap: TILE_GAP };
 const statTile: React.CSSProperties = {
   display: 'flex', flexDirection: 'column',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-  padding: '12px 14px', background: 'var(--color-bg)', minHeight: 84,
+  padding: '10px 12px', background: 'var(--color-bg)', minHeight: 68,
 };
 const tileLabel: React.CSSProperties = { fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 };
 const tileNumber: React.CSSProperties = { fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: 'tabular-nums' };
@@ -129,7 +129,7 @@ const roiBadge: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'v
 const roiBadgeMuted: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' };
 // Inner-band header inside the combined "Governance value" card: a small
 // uppercase label on the left, the band's status badge on the right.
-const bandRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 };
+const bandRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 };
 const bandLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)' };
 
 // Each measure links to the page where you act on it — like the dashboard
@@ -248,6 +248,43 @@ export default function CouncilPage() {
   const [lens, setLens] = useState<'all' | 'governed'>('all');
   // Saved-versions dropdown in the header (next to Save snapshot).
   const [versionsOpen, setVersionsOpen] = useState(false);
+  // Collapsible sections — each section can be folded away to keep the page to
+  // one screen; the choice is remembered per viewer. "What moved this month"
+  // (the retrospective) starts collapsed; everything else starts open.
+  const COLLAPSE_KEY = 'procela:council-collapsed';
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(COLLAPSE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return { whatMoved: true };
+  });
+  useEffect(() => {
+    try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); } catch { /* ignore */ }
+  }, [collapsed]);
+  // A collapsed section is unmounted, so it would drop out of the printed
+  // briefing (and "What moved" starts collapsed). Force every section open while
+  // printing so the PDF stays complete regardless of the on-screen view.
+  const [printExpand, setPrintExpand] = useState(false);
+  useEffect(() => {
+    const before = () => setPrintExpand(true);
+    const after = () => setPrintExpand(false);
+    window.addEventListener('beforeprint', before);
+    window.addEventListener('afterprint', after);
+    return () => { window.removeEventListener('beforeprint', before); window.removeEventListener('afterprint', after); };
+  }, []);
+  const printBriefing = () => {
+    setPrintExpand(true);
+    // Let React paint the expanded sections before the (blocking) print dialog.
+    setTimeout(() => { window.print(); setPrintExpand(false); }, 60);
+  };
+  const shown = (key: string) => printExpand || !collapsed[key];
+  // Props for a collapsible SectionHeading: chevron + toggle, open unless folded.
+  const sec = (key: string) => ({
+    collapsible: true as const,
+    open: !collapsed[key],
+    onToggle: () => setCollapsed((p) => ({ ...p, [key]: !p[key] })),
+  });
   const versionsRef = useRef<HTMLDivElement>(null);
   // Set when a save collides with an existing snapshot for the same period —
   // holds the replace target so the prompt can offer Replace vs. Save-as-new.
@@ -476,7 +513,7 @@ export default function CouncilPage() {
           // global print stylesheet strips the app chrome; this strips the
           // page's own action bar).
           <div className="no-print" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <IconButton icon="printer" label="Print briefing" onClick={() => window.print()} />
+            <IconButton icon="printer" label="Print briefing" onClick={printBriefing} />
             {!viewingVersionId && !editing && (
               <div role="group" aria-label="Measure lens" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
                 {([['all', 'All'], ['governed', 'Governed']] as const).map(([mode, label]) => (
@@ -607,7 +644,8 @@ export default function CouncilPage() {
       {/* No status pill on the heading — the enterprise verdict already shows
           in the STATUS column of the highlighted rollup row below, so a header
           pill would just repeat it. */}
-      <SectionHeading title="Scorecard" as="h3" />
+      <SectionHeading title="Scorecard" as="h3" marginBottom={8} {...sec('scorecard')} />
+      {shown('scorecard') && (
       <Card padding={0} marginBottom={16}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
@@ -644,6 +682,7 @@ export default function CouncilPage() {
           </table>
         </div>
       </Card>
+      )}
 
       {/* Governance value — one section telling the whole ROI story: the
           leading-indicator value drivers (measured signals, no assumed dollars)
@@ -652,8 +691,9 @@ export default function CouncilPage() {
           figures). Both respect the active lens. */}
       {(derived.valueDrivers || derived.roi) && (
         <>
-        <SectionHeading title="Governance value" as="h3" />
-        <Card padding={18} marginBottom={16}>
+        <SectionHeading title="Governance value" as="h3" marginBottom={8} {...sec('govValue')} />
+        {shown('govValue') && (
+        <Card padding={14} marginBottom={16}>
           {/* Value drivers — leading indicators, not dollars. */}
           {derived.valueDrivers && (() => {
             const v = derived.valueDrivers;
@@ -775,6 +815,7 @@ export default function CouncilPage() {
             );
           })()}
         </Card>
+        )}
         </>
       )}
 
@@ -787,7 +828,8 @@ export default function CouncilPage() {
             shrinking any of the labels — only the big overall number steps down
             from 30 to 24. Both cards flex to equal height within the grid row. */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <SectionHeading title="Maturity trend" as="h3" />
+          <SectionHeading title="Maturity trend" as="h3" marginBottom={8} {...sec('maturity')} />
+          {shown('maturity') && (
           <Card padding={16} style={{ flex: 1 }}>
             {overallNow != null ? (
               // Fill the card height so the dimension breakdown spreads into the
@@ -822,10 +864,12 @@ export default function CouncilPage() {
               </div>
             )}
           </Card>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <SectionHeading title="Needs a decision" as="h3" />
+          <SectionHeading title="Needs a decision" as="h3" marginBottom={8} {...sec('needsDecision')} />
+          {shown('needsDecision') && (
           <Card padding={16} style={{ flex: 1 }}>
             {escalations.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -865,6 +909,7 @@ export default function CouncilPage() {
             </div>
             <div style={{ marginTop: 12 }}><Link to="/gap-detection" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>Review all gaps →</Link></div>
           </Card>
+          )}
         </div>
       </div>
 
@@ -872,27 +917,34 @@ export default function CouncilPage() {
           "Needs a decision" card, so this is just the month's changes. */}
       <div style={{ marginBottom: 16 }}>
         {([['whatMoved', 'What moved this month']] as const).map(([key, label]) => (
-          <Card key={key} padding={18}>
-            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-              {label}
-              {narrative[`${key}Auto` as 'whatMovedAuto' | 'forCouncilAuto'] && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '1px 6px', borderRadius: 999 }}>AUTO-DERIVED</span>}
-            </div>
-            {editing && canEdit ? (
-              <textarea
-                value={narrative[key] || ''}
-                onChange={(e) => setNarrative((p) => ({ ...p, [key]: e.target.value, [`${key}Auto`]: false }))}
-                rows={4}
-                style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 6, padding: 10, fontSize: 13.5, background: 'var(--color-surface)', color: 'var(--color-text)', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-              />
-            ) : (
-              <>
-                <div style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{narrative[key] || '—'}</div>
-                <div style={{ marginTop: 12 }}>
-                  <ActionLink to={NARRATIVE_LINK[key].to} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)' }}>{NARRATIVE_LINK[key].label} →</ActionLink>
-                </div>
-              </>
+          <div key={key}>
+            <SectionHeading
+              title={label}
+              as="h3"
+              marginBottom={8}
+              {...sec(key)}
+              right={narrative[`${key}Auto` as 'whatMovedAuto' | 'forCouncilAuto'] ? <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '1px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.04em' }}>Auto-derived</span> : undefined}
+            />
+            {shown(key) && (
+            <Card padding={14}>
+              {editing && canEdit ? (
+                <textarea
+                  value={narrative[key] || ''}
+                  onChange={(e) => setNarrative((p) => ({ ...p, [key]: e.target.value, [`${key}Auto`]: false }))}
+                  rows={4}
+                  style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 6, padding: 10, fontSize: 13.5, background: 'var(--color-surface)', color: 'var(--color-text)', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                />
+              ) : (
+                <>
+                  <div style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{narrative[key] || '—'}</div>
+                  <div style={{ marginTop: 12 }}>
+                    <ActionLink to={NARRATIVE_LINK[key].to} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)' }}>{NARRATIVE_LINK[key].label} →</ActionLink>
+                  </div>
+                </>
+              )}
+            </Card>
             )}
-          </Card>
+          </div>
         ))}
       </div>
 
@@ -928,10 +980,10 @@ export default function CouncilPage() {
 }
 
 // ── table styles ──
-const thBase: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '.04em', textTransform: 'uppercase', padding: '10px 12px', borderBottom: '1.5px solid var(--color-border)', verticalAlign: 'bottom' };
+const thBase: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '.04em', textTransform: 'uppercase', padding: '7px 12px', borderBottom: '1.5px solid var(--color-border)', verticalAlign: 'bottom' };
 const thL: React.CSSProperties = { ...thBase, textAlign: 'left' };
 const thR: React.CSSProperties = { ...thBase, textAlign: 'right' };
 const thSub: React.CSSProperties = { fontWeight: 500, textTransform: 'none', letterSpacing: 0, fontSize: 10, marginTop: 3, color: 'var(--color-text-muted)' };
-const tdBase: React.CSSProperties = { padding: '12px', borderBottom: '1px solid var(--color-border)', fontSize: 14 };
+const tdBase: React.CSSProperties = { padding: '7px 12px', borderBottom: '1px solid var(--color-border)', fontSize: 13.5 };
 const tdL: React.CSSProperties = { ...tdBase, textAlign: 'left' };
 const tdR: React.CSSProperties = { ...tdBase, textAlign: 'right' };
