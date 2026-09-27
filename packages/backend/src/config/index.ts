@@ -53,6 +53,13 @@ export const config = {
   // UI. For deployments (on-prem / FedRAMP) that must not call an
   // external model, this is the single knob.
   aiFeaturesEnabled: process.env.AI_FEATURES_ENABLED !== 'false',
+  // Read-only MCP (Model Context Protocol) server — exposes the governed
+  // catalog to external AI agents. Independent, OFF by default: the server
+  // refuses to start unless MCP_SERVER_ENABLED=true. It ALSO honours
+  // aiFeaturesEnabled, so an AI-off deployment (on-prem / FedRAMP) keeps the
+  // MCP surface off even if this flag is flipped — both gates must pass.
+  // See docs/MCP_SERVER_DESIGN.md.
+  mcpServerEnabled: process.env.MCP_SERVER_ENABLED === 'true',
   // Anthropic model used for every server-side Claude call (process
   // template generation, data-domain suggestions, asset suggestions,
   // governance activity runs, chat). Override with ANTHROPIC_MODEL
