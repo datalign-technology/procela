@@ -48,6 +48,7 @@ import scimRouter from './routes/scim';
 import aiRouter from './routes/ai';
 import { enforceAiBudget } from './middleware/ai-budget';
 import { requireAiEnabled } from './middleware/ai-enabled';
+import { mcpHttpRouter, unverifiedPrincipal } from './mcp/http';
 import processCatalogRouter from './routes/process-catalog';
 import systemsRouter from './routes/systems';
 import dataAssetsRouter from './routes/data-assets';
@@ -347,6 +348,28 @@ app.use('/api/v1/backup', authenticateToken, requireResource('backup'), backupRo
 app.use('/api/v1/dashboard', authenticateToken, dashboardRouter);
 app.use('/api/v1/ai', authenticateToken, requireAiEnabled, enforceAiBudget, aiRouter);
 app.use('/api/v1/chat', authenticateToken, requireAiEnabled, enforceAiBudget, chatRouter);
+
+// ── Read-only MCP server — Streamable-HTTP transport ────────────────────────
+// The hosted, multi-tenant surface (docs/MCP_SERVER_DESIGN.md §5.2). Mounted
+// OUTSIDE /api/v1 (so it skips the per-IP api limiter) and gated by the SAME
+// two switches as the stdio transport: MCP_SERVER_ENABLED and the AI kill
+// switch. Auth is per-request (Authorization: Bearer) inside the router, not
+// via authenticateToken — an MCP client isn't a browser session. A per-
+// principal rate limiter keys off the caller's token subject (falling back to
+// IP for an unauthenticated hit) so one agent can't exhaust the endpoint for
+// the rest.
+if (config.mcpServerEnabled && config.aiFeaturesEnabled) {
+  const mcpRateLimitMax = parseInt(process.env.MCP_RATE_LIMIT_MAX || '120', 10);
+  const mcpRateLimitWindowMs = parseInt(process.env.MCP_RATE_LIMIT_WINDOW_MS || '60000', 10);
+  const mcpLimiter = rateLimit({
+    windowMs: mcpRateLimitWindowMs,
+    max: mcpRateLimitMax,
+    keyBy: (req) => unverifiedPrincipal(req.header('authorization')) || req.ip || 'unknown',
+    label: 'mcp',
+  });
+  app.use('/mcp', mcpLimiter, mcpHttpRouter());
+  logger.info({ max: mcpRateLimitMax, windowMs: mcpRateLimitWindowMs }, 'MCP Streamable-HTTP transport mounted at /mcp');
+}
 app.use('/api/v1/digest', authenticateToken, digestRouter);
 app.use('/api/v1/search', authenticateToken, searchRouter);
 app.use('/api/v1/notifications', authenticateToken, notificationsRouter);

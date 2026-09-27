@@ -19,9 +19,13 @@ It is the first slice of the design in
   identity (`jwt-signer`), tenant isolation (`enforceOrgScope` / org-tree
   scoping), RBAC floor (`lib/permissions`), and the hash-chained audit log. It
   can never see more than a **Viewer** on the caller's org(s) could see in-app.
-- **Transport:** stdio (a local process a desktop/agent client spawns, like the
-  edge connector). A hosted Streamable-HTTP transport for multi-tenant SaaS is a
-  planned follow-up.
+- **Two transports, one core.** The protocol layer is transport-agnostic; both
+  transports build the identical tool set + resource:
+  - **stdio** — a local process a desktop/agent client spawns (like the edge
+    connector), authenticated once per process via `PROCELA_MCP_TOKEN`.
+  - **Streamable-HTTP** — the hosted, multi-tenant surface: a single `POST /mcp`
+    endpoint that authenticates **per request** via `Authorization: Bearer`, so
+    one endpoint serves every tenant with no shared server-side state.
 
 ## Security model
 
@@ -79,19 +83,52 @@ The process speaks JSON-RPC over stdin/stdout; diagnostics go to stderr and
 never corrupt the channel. On a disabled flag or missing/invalid token it logs
 the reason and exits (78 = misconfigured, 77 = auth failed).
 
+## Run it (hosted Streamable-HTTP transport)
+
+The main backend mounts `POST /mcp` automatically when **both** gates pass
+(`MCP_SERVER_ENABLED=true` and `AI_FEATURES_ENABLED != false`) — no separate
+process. Point an MCP HTTP client at it and pass a per-caller Procela access
+token as a bearer:
+
+```jsonc
+{
+  "mcpServers": {
+    "procela": {
+      "url": "https://api.procela.io/mcp",
+      "headers": { "Authorization": "Bearer <a Viewer-scoped Procela access token>" }
+    }
+  }
+}
+```
+
+Wire behaviour:
+
+| Request | Response |
+| --- | --- |
+| `POST /mcp` with a JSON-RPC message (has `id`) | `200 application/json` with the JSON-RPC response. A batch (array) request returns an array. |
+| `POST /mcp` with only notifications (no `id`) | `202 Accepted`, empty body. |
+| `POST /mcp` with a missing / malformed / invalid bearer token | `401` + `WWW-Authenticate: Bearer` (the reason is not leaked). |
+| `GET /mcp` | `405` + `Allow: POST` — v1 has no server-initiated SSE stream. |
+| `DELETE /mcp` | `204` — the transport is stateless (no `Mcp-Session-Id`), so teardown is a no-op. |
+
+Each request is authenticated and authorized on its own (identity, tenant
+isolation, RBAC floor, audit — all identical to stdio). The endpoint is
+rate-limited **per principal** (the token subject; IP fallback) — see
+`MCP_RATE_LIMIT_MAX` / `MCP_RATE_LIMIT_WINDOW_MS`.
+
 ## Environment variables
 
 | Var | Meaning |
 | --- | --- |
 | `MCP_SERVER_ENABLED` | `true` to allow the server to start. Default off. |
 | `AI_FEATURES_ENABLED` | `false` disables every external AI surface (MCP included), regardless of the above. |
-| `PROCELA_MCP_TOKEN` | The bearer token the server authenticates as. |
+| `PROCELA_MCP_TOKEN` | The bearer token the **stdio** server authenticates as. (The HTTP transport takes a per-request bearer instead.) |
+| `MCP_RATE_LIMIT_MAX` | Max `POST /mcp` requests per principal per window (default 120). HTTP transport only. |
+| `MCP_RATE_LIMIT_WINDOW_MS` | The rate-limit window in ms (default 60000). HTTP transport only. |
 
 ## Not in v1 (planned follow-ups)
 
-- **Streamable-HTTP transport** for the hosted multi-tenant surface (per-request
-  auth behind the gateway). v1 is stdio.
-- **Per-principal rate limiting / quotas** (more relevant to the HTTP transport;
-  a local stdio process is single-session).
+- **Server-initiated SSE streaming** on the HTTP transport (`GET /mcp`). Every
+  v1 tool is request/response, so v1 answers `GET` with `405`.
 - **Write tools** (ownership assignment, etc.) — a separately-hardened later
   phase with per-tool RBAC and human-in-the-loop confirmation.
