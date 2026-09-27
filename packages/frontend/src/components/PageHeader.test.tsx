@@ -22,12 +22,13 @@ describe('PageHeader', () => {
     expect(screen.getByText('POLICY · POL-007')).toBeInTheDocument();
   });
 
-  it('moves a section-page subtitle behind the title help "?" (revealed on click)', () => {
+  it('moves a section-page subtitle behind the title help "?" (revealed on tap)', () => {
     render(<PageHeader title="X" subtitle="Sub" />);
     // No longer a visible line...
     expect(screen.queryByText('Sub')).not.toBeInTheDocument();
-    // ...but reachable via the "?" next to the title.
-    const help = screen.getByRole('button', { name: /Help: X/ });
+    // ...but reachable via the "?" next to the title (an InfoTip: hover/tap
+    // to reveal, labelled "Info: <title>").
+    const help = screen.getByRole('button', { name: /Info: X/ });
     fireEvent.click(help);
     expect(screen.getByText('Sub')).toBeInTheDocument();
   });
@@ -35,7 +36,7 @@ describe('PageHeader', () => {
   it('keeps the subtitle inline on a detail header (kicker present)', () => {
     render(<PageHeader kicker="Person" title="Ada" subtitle="Data Steward" />);
     expect(screen.getByText('Data Steward')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Help: Ada/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Info: Ada/ })).not.toBeInTheDocument();
   });
 
   it('renders meta and actions in distinct slots', () => {
