@@ -182,6 +182,12 @@ export default function InfoTip({ term, inline, text }: InfoTipProps) {
             pointerEvents: 'none',
             whiteSpace: 'normal',
             textAlign: 'left',
+            // Reset inherited text styling so the tooltip reads the same no
+            // matter what it's placed inside — e.g. an uppercase / letter-spaced
+            // section label would otherwise shout the explanation in all-caps.
+            textTransform: 'none',
+            letterSpacing: 'normal',
+            fontWeight: 400,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           }}
         >
