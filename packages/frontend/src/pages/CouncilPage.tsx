@@ -739,9 +739,9 @@ export default function CouncilPage() {
               const shown = rows.slice(0, 8);
               return (
                 <div style={{ marginTop: 16, borderTop: '1px solid var(--color-border)', paddingTop: 14 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 4 }}>By value stream</div>
-                  <div style={{ fontSize: 10.5, color: 'var(--color-text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
-                    Value attributed through each stream&rsquo;s process&#8594;data mappings. An asset supporting several streams counts in each, and org-level exceptions and unmapped data aren&rsquo;t attributed — so rows don&rsquo;t sum to the totals above.
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    By value stream
+                    <InfoTip term="By value stream" text="Value attributed through each stream’s process→data mappings. An asset supporting several streams counts in each, and org-level exceptions and unmapped data aren’t attributed — so rows don’t sum to the totals above." />
                   </div>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
