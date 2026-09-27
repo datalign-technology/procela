@@ -288,6 +288,31 @@ export function pruneHiddenLevels(nodes: ProcessNode[], hidden: Set<NodeLevel>):
   return out;
 }
 
+/** Value streams and processes carry ownership; sub-levels don't. A node is
+ *  "ownerless" when it's one of those two levels and has no owner assigned. */
+function isOwnerless(n: ProcessNode): boolean {
+  return !n.ownerId && (n.level === 'VALUE_STREAM' || n.level === 'PROCESS');
+}
+
+/** Count of ownerless value streams / processes across the whole tree. */
+export function countOwnerless(nodes: ProcessNode[]): number {
+  return nodes.reduce((s, n) => s + (isOwnerless(n) ? 1 : 0) + countOwnerless(n.children || []), 0);
+}
+
+/** Prune the tree to just the branches that reach an ownerless value stream or
+ *  process: an ownerless node is kept with its subtree intact; an owned node is
+ *  kept only if some descendant is ownerless (pruned to those paths), so the
+ *  offending rows stay reachable in context. Ids are preserved. */
+export function pruneToOwnerless(nodes: ProcessNode[]): ProcessNode[] {
+  const out: ProcessNode[] = [];
+  for (const n of nodes) {
+    if (isOwnerless(n)) { out.push(n); continue; }
+    const kids = pruneToOwnerless(n.children || []);
+    if (kids.length > 0) out.push({ ...n, children: kids });
+  }
+  return out;
+}
+
 export function hasRequiredPath(node: ProcessNode): { complete: boolean; missing: string[]; hasProcess: boolean; hasActivity: boolean } {
   if (node.level !== 'VALUE_STREAM') return { complete: true, missing: [], hasProcess: true, hasActivity: true };
   const missing: string[] = [];
@@ -1162,9 +1187,26 @@ export default function ProcessCatalogPage() {
     next.has(level) ? next.delete(level) : next.add(level);
     return next;
   });
+  // Ownership-gap count + a legend chip that filters the tree to just the
+  // ownerless value streams / processes (replaces the old full-width banner).
+  const ownerless = useMemo(() => countOwnerless(tree), [tree]);
+  const [showOwnerlessOnly, setShowOwnerlessOnly] = useState(false);
+  // The filter self-clears once nothing is ownerless (e.g. after assigning the
+  // last owner) so the tree doesn't get stuck showing an empty filtered view.
+  useEffect(() => { if (ownerless === 0 && showOwnerlessOnly) setShowOwnerlessOnly(false); }, [ownerless, showOwnerlessOnly]);
+  // Turning the filter on expands the branches it keeps, so the ownerless rows
+  // are actually revealed (an ownerless PROCESS otherwise sits collapsed under
+  // its owned value stream).
+  useEffect(() => {
+    if (!showOwnerlessOnly) return;
+    const ids: string[] = [];
+    const collect = (nodes: ProcessNode[]) => nodes.forEach((n) => { ids.push(n.id); collect(n.children || []); });
+    collect(pruneToOwnerless(lensedTree));
+    setExpanded((prev) => new Set([...prev, ...ids]));
+  }, [showOwnerlessOnly, lensedTree]);
   const visibleTree = useMemo(
-    () => pruneHiddenLevels(lensedTree, hiddenLevels),
-    [lensedTree, hiddenLevels],
+    () => pruneHiddenLevels(showOwnerlessOnly ? pruneToOwnerless(lensedTree) : lensedTree, hiddenLevels),
+    [lensedTree, hiddenLevels, showOwnerlessOnly],
   );
 
   // Build the role-eligibility maps. Activity.responsibleRole is stored
@@ -1395,6 +1437,26 @@ export default function ProcessCatalogPage() {
               </button>
             );
           })}
+          {ownerless > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowOwnerlessOnly((v) => !v)}
+              aria-pressed={showOwnerlessOnly}
+              title={showOwnerlessOnly
+                ? 'Showing only value streams & processes with no owner — click to show all'
+                : 'Value streams & processes with no owner assigned — click to show only these'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: showOwnerlessOnly ? '#dc2626' : '#fef2f2',
+                color: showOwnerlessOnly ? '#fff' : '#991b1b',
+                border: '1px solid #fca5a5',
+                borderRadius: 4, padding: '3px 8px', fontSize: 11, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              ⚠ {ownerless} unowned{showOwnerlessOnly ? ' ✕' : ''}
+            </button>
+          )}
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 4 }}>* = required · click a level to show / hide it</span>
           <button
             onClick={() => setShowLevelGuide(!showLevelGuide)}
@@ -1557,19 +1619,6 @@ export default function ProcessCatalogPage() {
           )}
         </div>
       )}
-
-      {/* Ownership gap warning */}
-      {tree.length > 0 && (() => {
-        const countAll = (nodes: ProcessNode[]): number => nodes.reduce((s: number, n) => s + 1 + countAll(n.children || []), 0);
-        const countOwnerless = (nodes: ProcessNode[]): number => nodes.reduce((s: number, n) => s + (!n.ownerId && ['VALUE_STREAM', 'PROCESS'].includes(n.level) ? 1 : 0) + countOwnerless(n.children || []), 0);
-        const ownerless = countOwnerless(tree);
-        if (ownerless === 0) return null;
-        return (
-          <div style={{ padding: '8px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#991b1b' }}>
-            <span style={{ fontWeight: 700 }}>{ownerless}</span> value stream{ownerless !== 1 ? 's' : ''} or process{ownerless !== 1 ? 'es have' : ' has'} no owner assigned
-          </div>
-        );
-      })()}
 
       <DomainLensActiveBanner pageKey="process-catalog" entityLabel="value streams" />
 
