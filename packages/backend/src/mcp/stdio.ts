@@ -6,10 +6,10 @@
 // an `McpServer`, and writes each non-null response back. Logging goes to
 // stderr so it never corrupts the stdout JSON-RPC channel.
 //
-// v1 uses stdio (a local process a desktop/agent client spawns, matching how
-// the edge connector is deployed on-prem). A Streamable-HTTP transport for the
-// hosted multi-tenant surface is a planned follow-up (see
-// docs/MCP_SERVER_DESIGN.md §5.2); the `McpServer` core is transport-agnostic.
+// This is the stdio transport (a local process a desktop/agent client spawns,
+// matching how the edge connector is deployed on-prem). The hosted multi-tenant
+// surface uses the Streamable-HTTP transport (`http.ts`); both build the same
+// `McpServer` core, which is transport-agnostic.
 // ──────────────────────────────────────────────────────────────────────────
 
 import { createInterface } from 'node:readline';

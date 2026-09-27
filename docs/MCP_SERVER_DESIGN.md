@@ -103,7 +103,11 @@ server share one code path (and one test surface).
   same ALB/gateway as the API (e.g. `/mcp`), so it inherits TLS, WAF, and
   network policy. **stdio transport is not used for multi-tenant SaaS** — it
   implies a local, single-user process and has no place in a shared hosted
-  surface.
+  surface. **Status (shipped):** `POST /mcp` is live (`mcp/http.ts`,
+  `dispatchHttp` + `mcpHttpRouter`), mounted in `index.ts` behind the two
+  kill-switches with a per-principal rate limiter, authenticating a bearer
+  token per request. `GET` (server-initiated SSE) returns `405` — every v1 tool
+  is request/response. See `docs/MCP_SERVER.md`.
 - **On-prem:** the same server in the same container image, pointed at the
   customer's own IdP and network — consistent with Procela's
   deployment-flexibility principle. A single-tenant on-prem install *may*

@@ -4,8 +4,8 @@
 // This implements the read-only subset of MCP that Procela's server needs —
 // `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`,
 // `ping` — as plain JSON-RPC 2.0 message handling with no I/O and no external
-// SDK. The transport (stdio today; a Streamable-HTTP transport later) feeds
-// parsed request objects to `handle()` and ships the returned responses; the
+// SDK. Each transport (stdio and Streamable-HTTP) feeds parsed request objects
+// to `handle()` and ships the returned responses; the
 // tool/resource handlers never touch the wire. Keeping the protocol layer
 // dependency-free and pure keeps it fully unit-testable and lets the official
 // `@modelcontextprotocol/sdk` be dropped in later without touching the tools.

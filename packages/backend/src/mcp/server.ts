@@ -7,15 +7,23 @@
 
 import { McpServer } from './protocol';
 import { createSession } from './identity';
+import type { Session } from './identity';
 import { buildTools } from './tools';
 import { loadOrgCatalog, resolveOrgScope } from './catalog';
 
 export const SERVER_INFO = { name: 'procela-governance', version: '1.0.0' };
 
 /** Build a fully-wired MCP server for a bearer token. Throws if the token is
- *  invalid (surfaced by the caller as an auth failure). */
+ *  invalid (surfaced by the caller as an auth failure). Used by the stdio
+ *  transport, which authenticates once per process. */
 export function buildMcpServer(token: string): McpServer {
-  const session = createSession(token);
+  return buildMcpServerForSession(createSession(token));
+}
+
+/** Build a fully-wired MCP server for an already-authenticated session. The
+ *  Streamable-HTTP transport authenticates per request and reuses this so the
+ *  wiring (tools + catalog-summary resource) is identical across transports. */
+export function buildMcpServerForSession(session: Session): McpServer {
   const server = new McpServer(SERVER_INFO);
 
   for (const tool of buildTools({ session, loadCatalog: loadOrgCatalog, resolveScope: resolveOrgScope })) {
