@@ -6,12 +6,8 @@ import {
   ROUTE_GROUPS,
   openHelpWindow,
   navSections,
-  GET_STARTED_ITEM,
   type NavItem,
-  type NavSection,
 } from './navConfig';
-import { useOrgContext } from '@/stores/orgContext';
-import { useSetupStore } from '@/stores/setupStore';
 import { usePermissions } from '@/hooks/usePermissions';
 
 // Full-screen mobile navigation drawer. Opened from the "Menu" button
@@ -19,22 +15,15 @@ import { usePermissions } from '@/hooks/usePermissions';
 // headings preserved, so a phone user can find any page without
 // sideways-scrolling a 30-icon strip.
 //
-// Computes its own visible-section list (Get Started + admin filter)
-// so the host shell doesn't have to re-derive the same thing the
-// Sidebar already does.
+// Computes its own visible-section list (admin filter) so the host
+// shell doesn't have to re-derive the same thing the Sidebar already does.
 export default function MobileNavDrawer({ bottomItems, pathname, onClose }: {
   bottomItems: NavItem[];
   pathname: string;
   onClose: () => void;
 }) {
-  const { activeOrgId } = useOrgContext();
   const { isAdmin } = usePermissions();
-  const setupProgress = useSetupStore((s) => (activeOrgId ? s.progressByOrg[activeOrgId] : undefined));
-  const showSetup = !!activeOrgId && (setupProgress === undefined || setupProgress < 100);
-  const baseSections = showSetup
-    ? [{ label: null, items: [GET_STARTED_ITEM] } as NavSection, ...navSections]
-    : navSections;
-  const sections = baseSections
+  const sections = navSections
     .filter((s) => !s.adminOnly || isAdmin)
     .map((s) => (isAdmin || !s.items.some((i) => i.adminOnly)
       ? s

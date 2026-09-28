@@ -6,47 +6,26 @@ Procela is a DAMA-aligned governance operating platform that helps organizations
 
 ## 1. Getting Started
 
-The fastest way in is the Get Started hub (titled **Set up Procela**) — a resumable, data-driven journey from an empty org to a running governance program. It sits at the top of the sidebar and at /setup. Onboarding the org and standing up the program are **one spine**, not two separate tracks: onboarding is simply the first half of standing the program up.
+Setup is not a separate mode — you build Procela by working the left nav directly, in roughly this order. Each step fills in the Dashboard and unlocks the next; nothing has to be done all at once.
 
-### The four stages
+1. **Create your organization** — set up your company / division / team tree under Organizations, and add your people.
+2. **Map your processes** — in the Process Catalog, define your value streams, processes, sub-processes and activities. This is the spine everything else hangs off, so it's the best first move; a brand-new org's Dashboard points you straight here.
+3. **Register systems and data** — add the systems that hold data and the data assets themselves (in business terms), and organize assets into data domains.
+4. **Connect and assign** — link data assets to the process activities that use them, and give every process, system, domain, and asset a clear owner. Gap Detection surfaces what's still unmapped or ownerless.
+5. **Define your governance foundation** — on Governance → Foundation, set the program's scope (the systems / domains / value streams it governs), guiding principles, and operating model.
 
-- ① Capture — tell Procela about your business: organization structure, people, processes, systems, and data assets.
-- ② Assign — give every process, system, data domain, and data asset a clear owner. Each ownable type is its own board item (Process / System / Domain / Data-asset ownership), and each deep-links to that type's own page — the Process Catalog, Systems, Data Domains, and Data Assets — where you assign owners in context. A row ticks once that type has no ownerless items.
-- ③ Govern — connect data to processes, tier and grade assets, and define your governance foundation (scope, principles, operating model).
-- ④ Operate — stand up the governance structure and roles & policies, then launch and run the program.
-
-### The lifecycle bar
-
-Across the top, the governance program's lifecycle — Planning → Active → Paused → Completed — governs the whole arc. The valid next transitions (Launch, Pause, Complete, Reopen) are buttons right here on the lifecycle bar; they're role-gated (admin / program owner) and audited, with a reason prompt and an early-launch confirmation when phases are still incomplete. Launch stays disabled until Foundation (Phase 1) is complete — the one hard prerequisite — and once the program goes live the actual Launched date is recorded and shown next to the status.
-
-### How progress is shown
-
-- No overall %. A single number mixing "have I added my systems" with "is the program launched" is meaningless and oscillates — so each stage carries its own count instead. A stage line names the current stage and reads "Stage X of 4 · <name> — n of m done".
-- Derived from live data, not checkboxes. Add five systems and the Systems item flips automatically — there's no separate to-do list to keep in sync. Statuses come from dashboard stats (operationally scoped) plus the governance-program status.
-- HERE / AUTO source badges. Each board item is tagged Here (you define it in Procela — e.g. adding systems, mapping data, editing the Foundation) or Auto (derived from your catalog — e.g. ownership coverage, program launch). Every row deep-links to the page where the work happens.
-- Operationally scoped. Process-side counts (value streams, steps, ownership gaps, coverage) reflect only your business processes, so the canned Data Governance Management scaffold never masquerades as business-process progress.
-- Sidebar progress ring. The ring next to the Get Started link now spans all four stages; in the default Auto mode the link auto-hides once the whole journey reaches 100% — i.e. once the program is actually stood up and running, not merely when the org is onboarded. You can override this under Settings → Get Started guide with an Auto / Always / Hidden control — Always pins the entry even after setup completes, Hidden removes it entirely. This preference is global per user: it follows you across every organization you work in, rather than being set per org.
-
-### Reading the board
-
-- Below the stage line, a four-column board (one column per stage) shows each item as a checklist row with its source badge and a segmented progress bar. Every row's deep-link hands off to the same destination the left nav exposes, so the move from journey to workspace is seamless. Operate reads strictly top-to-bottom: "Program launched" only ticks once the structure and roles & policies it depends on are in place.
-- The hub is for setup and check-ins; the left nav is your persistent workspace once you know the app.
-
-### The governance program lives here
-
-There is no separate Governance Program page — it was folded into this journey. The Govern and Operate stages, the lifecycle bar, and Next Actions together are the program's four-phase tracker (Foundation → Structure → People → Operations) and its governed lifecycle. Authoring the foundation itself — scope, guiding principles, operating model — happens on Governance → Foundation, and the individual pieces (domains, groups, roles, policies) live on their own Governance pages, which each board item and Next Action deep-links to. (The old /governance-program URL now redirects here.)
+There is no launch step and no program lifecycle to manage: a governance program is simply **live once its Foundation is defined**. Authoring the foundation happens on Governance → Foundation; the individual pieces (domains, groups, roles, policies) live on their own Governance pages. (The old `/governance-program` URL redirects to Foundation.)
 
 ## 2. Navigation
 
-The sidebar opens with Get Started for first-run onboarding (it auto-hides at 100%), then the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.
+The sidebar leads with the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.
 
-- Get Started — Resumable setup hub: **one journey** (Capture → Assign → Govern → Operate) from an empty org to a running governance program, with the program lifecycle (Planning → Active → Paused → Completed) across the top and HERE/AUTO board items deep-linking to each workspace. No overall %; each stage carries its own count. The progress ring and auto-hide track all four stages. See Section 1 for the mechanics.
 - Dashboard — Personalized home with your tasks, issues, domains, and KPIs.
 - Organizations — Accordion covering the "who" of the platform: Structure (your company / division / team tree), People (the humans on your team), Agents (AI agents that hold governance roles and run automation), and Skills (the competencies your roles need).
 - Processes — the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings is the Table view of Insights → Process ↔ Data Map.)
 - Data — Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.
 - Systems — Systems and Connections (databases, APIs, files).
-- Governance — grouped into Set up (Foundation, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and Operate (Documentation with Manual + Procedures tabs, Calendar, Tasks & Issues, Exceptions). The sub-labels are visual dividers in the expanded section — every item still navigates directly. (The program's tracker lives on Get Started now, and its lifecycle controls on Governance → Foundation, not a separate Program page.)
+- Governance — grouped into Set up (Foundation, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and Operate (Documentation with Manual + Procedures tabs, Calendar, Tasks & Issues, Exceptions). The sub-labels are visual dividers in the expanded section — every item still navigates directly. (There is no separate Program page; the program's scope, principles, and operating model live on Foundation.)
 - Insights — grouped into Explore (Enterprise View, Analysis, Process ↔ Data Map) and Review (Reports, Council, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance — promoted out of Governance so they're easier to find. (The former Council Dashboard and Council Scorecard are now a single **Council** page; the old `/council-dashboard` and `/council-scorecard` links redirect there.)
 
 Settings sits at the bottom of the sidebar. Help lives only in the top bar (next to Ask AI) — it opens the guide in a separate popup window so you keep whatever page you're on. The Training Guide follows the same pattern, and a **Status &amp; roadmap ↗** button on the Help guide's header opens the live status &amp; roadmap doc — rendered from `docs/STATUS.md`, the single source of truth — in its own window. The `/help` and `/roadmap` URLs still work if you have deep links saved (e.g. `/help#connectors`).
@@ -302,13 +281,11 @@ Skills drive four cross-page workflows:
 
 ## 8. Governance
 
-### Governance Program (tracker on Get Started, lifecycle on Foundation)
+### Governance Program (Foundation)
 
-- The program has **no page of its own** — its four-phase tracker and Next Actions live on the **Get Started** hub (Section 1), as the **Govern** and **Operate** stages, while its **governed lifecycle controls** (launch / pause / resume / reopen) live on **Governance → Foundation**, next to the foundation a launch depends on. Every check reflects work done elsewhere and deep-links there; the stage you're on is named by the stage line (Stage X of 4) and each carries a plain **"n / m done" count**, not a percentage. (The old /governance-program URL redirects to Foundation.)
-- **No single overall percentage.** A live roll-up of all the checks could move *down* when your catalog changed (e.g. adding an unowned domain), which read like a regression. Get Started shows honest axes instead: a **read-only lifecycle status** (a badge + a Planning → Active → Paused → Completed strip that links to Foundation to change it) and each stage's own count.
-- **Foundation authoring lives on its own page.** Scope, guiding principles, and operating model are edited on **Governance → Foundation**; the Govern stage's *Governance foundation* item deep-links there. On the **Scope** tab you pick the catalogued entities the program governs — systems, data domains, value streams — plus include/exclude overrides for the edges; a coverage read-out and a "connected, not governed" backlog show how governed the in-scope assets are, and a version pill records when the scope last changed. (Legacy free-text In/Out of Scope still counts for programs authored before the picker.) The Govern stage also shows a **Scope defined** item that ticks once you've chosen governed entities. Two more tabs tune the Council Scorecard: **Targets** (the per-tenant measure thresholds) and **Value model** (your dollar assumptions for the ROI estimate — see Council Scorecard, below).
+- The program has **no page of its own and no lifecycle to manage** — it is simply **live once its Foundation is defined**. There is no launch / pause / complete step: governance is a continuous discipline, not a project with a start and end button. (The old `/governance-program` URL redirects to Foundation.)
+- **Foundation authoring.** Scope, guiding principles, and operating model are edited on **Governance → Foundation**. On the **Scope** tab you pick the catalogued entities the program governs — systems, data domains, value streams — plus include/exclude overrides for the edges; a coverage read-out and a "connected, not governed" backlog show how governed the in-scope assets are, and a version pill records when the scope last changed. (Legacy free-text In/Out of Scope still counts for programs authored before the picker.) Two more tabs tune the Council Scorecard: **Targets** (the per-tenant measure thresholds) and **Value model** (your dollar assumptions for the ROI estimate — see Council Scorecard, below).
 - **Governance scope is the "governed vs connected" boundary.** Connecting systems, data, and people is one thing; *scoping* what the program governs is another. The scope you set on Foundation resolves to the concrete governed entity set and is used as a lens across the app: an **All / In-scope** toggle on Gap Detection, an **All / Governed** lens on the Council Scorecard and Dashboard, per-row **"in scope / not governed"** badges on Data Assets / Systems / Data Domains / the Process Catalog, and as context for the AI assistant. It's an advisory view/coverage lens, not access control; with no scope defined, everything is governed by default.
-- Governed lifecycle: the program status (Planning → Active ↔ Paused → Completed, with explicit Reopen) is changed from the **lifecycle bar on Governance → Foundation** — its steady-state home, since a launch depends on the Foundation authored right there. It can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active — the Launch button is disabled until it is — and launching with Phases 2–4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch. Get Started shows the same status read-only and links here. The actual go-live is captured as a Launched date (set the first time it goes Active, kept through pause/resume) and shown next to the status. A program marked **Completed** still counts as launched, so completing it never drops the tracker back below done.
 
 ### Governance Groups
 
@@ -656,13 +633,11 @@ Procela connects your business processes to the data and systems that support th
 
 ### Where did the Governance Program page go?
 
-It was split. The 4-phase approach (Foundation, Structural Design, People & Processes, Operationalization) is now the
-**Govern** and **Operate** stages of the **Get Started** journey (`/setup`), with Next Actions right there; the
-**governed lifecycle bar** (Planning → Active → Paused → Completed) lives on **Governance → Foundation**, next to the
-foundation a launch depends on. The old `/governance-program` URL now redirects to Foundation.
-Progress is tracked automatically from your actual data as a per-stage "n / m done" count — there's no
-single overall percentage, because that number could move backward as your catalog changed. Phase 1 groundwork
-(scope, guiding principles, operating model) is authored on the **Governance → Foundation** page.
+There is no separate program page, and no program lifecycle or phase tracker any more. A governance program is
+simply **live once its Foundation is defined** — its scope, guiding principles, and operating model are authored on
+**Governance → Foundation**. The old `/governance-program` URL redirects there. Progress against the program is read
+directly from your catalog on the Dashboard, the Council Scorecard, and Gap Detection, rather than a launch flag or a
+phase checklist.
 
 ### How do SOPs work?
 

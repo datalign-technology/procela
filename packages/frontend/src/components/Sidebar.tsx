@@ -2,21 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import styles from './Layout.module.css';
-import ProgressRing from './ProgressRing';
 import { navIconNode, NavChevron, NAV_MENU_ICON } from './navIcons';
 import {
   navSections,
   bottomNavItems,
   MOBILE_PRIMARY,
-  GET_STARTED_ITEM,
   ROUTE_GROUPS,
   openHelpWindow,
   type NavItem,
-  type NavSection,
 } from './navConfig';
 import { useBrandingStore } from '@/stores/brandingStore';
-import { useOrgContext } from '@/stores/orgContext';
-import { useSetupStore, shouldShowGetStarted } from '@/stores/setupStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 
@@ -60,26 +55,13 @@ interface SidebarProps {
 export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarProps) {
   const location = useLocation();
   const { branding } = useBrandingStore();
-  const { activeOrgId } = useOrgContext();
   const { isAdmin } = usePermissions();
   const isMobile = useIsMobile();
 
-  // "Get Started" Setup Hub visibility. Progress is computed by the Hub page
-  // and persisted in setupStore; an undefined value (never visited) keeps the
-  // entry visible as a nudge. The user's explicit choice (Hide button / the
-  // Settings control) overrides: 'hidden' removes it, 'shown' pins it, 'auto'
-  // (default) hides it once the org hits 100%.
-  const setupProgress = useSetupStore((s) => (activeOrgId ? s.progressByOrg[activeOrgId] : undefined));
-  const setupVisibility = useSetupStore((s) => s.visibility);
-  const showSetup = !!activeOrgId && shouldShowGetStarted(setupVisibility, setupProgress);
-
-  const baseSections = showSetup
-    ? [{ label: null, items: [GET_STARTED_ITEM] } as NavSection, ...navSections]
-    : navSections;
   // Hide whole admin-only sections, and admin-only items within an otherwise
   // shared section (e.g. Agents / Audit Log, whose pages require admin-only
   // backend reads), for non-admins.
-  const visibleSections = baseSections
+  const visibleSections = navSections
     .filter((s) => !s.adminOnly || isAdmin)
     .map((s) => (isAdmin || !s.items.some((i) => i.adminOnly)
       ? s
@@ -328,9 +310,7 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
                     title={sidebarCollapsed ? item.label : undefined}
                   >
                     <span className={styles.navIcon}>
-                      {item.to === '/setup' && setupProgress !== undefined
-                        ? <ProgressRing percent={setupProgress} />
-                        : navIconNode(item)}
+                      {navIconNode(item)}
                     </span>
                     {!sidebarCollapsed && item.label}
                   </NavLink>

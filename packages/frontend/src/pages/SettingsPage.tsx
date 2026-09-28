@@ -126,10 +126,6 @@ export default function SettingsPage() {
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [confirmLifecycle, setConfirmLifecycle] = useState<'simple' | 'review' | 'advanced' | null>(null);
   const [lifecycleMigrationMsg, setLifecycleMigrationMsg] = useState<string | null>(null);
-  // "Get Started" guide visibility is a per-user display preference — it now
-  // lives in the top-right user menu (Display preferences), next to Terminology
-  // and Density, via <GetStartedVisibilityToggle/>. Kept off this admin,
-  // org-scoped Settings page.
   useEffect(() => {
     if (!activeOrgId) return;
     apiClient

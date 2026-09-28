@@ -783,11 +783,10 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// EmptyDashboardWelcome — the Dashboard's own empty-org state. Deliberately
-// NOT the setup checklist (that lives only on the Get Started guide, /setup);
-// a second copy of it here made the Dashboard and Setup pages mirror each
-// other. This is a minimal welcome that hands off to the guide, plus the
-// personal Today queue so the page still carries real content.
+// EmptyDashboardWelcome — the Dashboard's own empty-org state: a minimal
+// welcome that points at the first thing worth building (the process
+// catalog), plus the personal Today queue so the page still carries real
+// content.
 // ──────────────────────────────────────────────────────────────────────────
 function EmptyDashboardWelcome() {
   return (
@@ -795,10 +794,10 @@ function EmptyDashboardWelcome() {
       <Card padding={24} marginBottom={24}>
         <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Welcome to Procela</h2>
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '6px 0 16px', lineHeight: 1.5, maxWidth: 560 }}>
-          Your organization is ready, but there’s nothing to report on yet. The dashboard fills in as you add processes, systems, data assets, and owners — the Get Started guide walks you through it step by step.
+          Your organization is ready, but there’s nothing to report on yet. The dashboard fills in as you add processes, systems, data assets, and owners. Start by mapping your processes.
         </p>
         <Link
-          to="/setup"
+          to="/processes"
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '8px 16px', fontSize: 13, fontWeight: 600,
@@ -806,7 +805,7 @@ function EmptyDashboardWelcome() {
             borderRadius: 'var(--radius-md)', textDecoration: 'none',
           }}
         >
-          Finish setup in Get Started &rarr;
+          Build your process catalog &rarr;
         </Link>
       </Card>
       <TodayQueue />
@@ -912,10 +911,9 @@ export default function DashboardPage() {
   }
 
 
-  // Brand-new orgs see a minimal welcome that hands off to the Get Started
-  // guide (/setup) — deliberately NOT the setup checklist, which lives only on
-  // that guide. A second copy of the checklist here made the two pages mirror
-  // each other. Once anything's been added, the regular dashboard takes over.
+  // Brand-new orgs see a minimal welcome that points at the process catalog
+  // (the first thing worth building). Once anything's been added, the regular
+  // dashboard takes over.
   const isEmptyOrg = stats.processes === 0
     && stats.dataAssets === 0
     && stats.systems === 0

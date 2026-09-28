@@ -48,11 +48,10 @@ in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-19.*
   catalogued*. That boundary is load-bearing end to end: it drives gap
   detection, a coverage metric, the "connected, not governed" backlog, and a
   **scope version** for apples-to-apples trend comparison — and it surfaces as
-  a governed lens on the **Council Scorecard** and **Dashboard**, a "Scope
-  defined" step on **Get Started**, per-row **"in scope / not governed"**
-  badges across Data Assets / Systems / Data Domains / Process Catalog, and in
-  the **AI assistant's** answers. One resolver, one version stamp, every
-  surface.
+  a governed lens on the **Council Scorecard** and **Dashboard**, per-row
+  **"in scope / not governed"** badges across Data Assets / Systems / Data
+  Domains / Process Catalog, and in the **AI assistant's** answers. One
+  resolver, one version stamp, every surface.
 - **Governance ROI now ships on the Council Scorecard, in three honest layers.**
   *Value drivers* — leading indicators measured from the catalog with no assumed
   dollars (ownership coverage, a value-at-risk count, remediation velocity).

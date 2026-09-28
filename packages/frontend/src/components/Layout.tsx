@@ -21,7 +21,6 @@ import { MessageGlyph, FlagGlyph, SearchGlyph } from './UiGlyphs';
 import {
   navSections,
   bottomNavItems,
-  GET_STARTED_ITEM,
   openHelpWindow,
   type NavItem,
 } from './navConfig';
@@ -126,7 +125,6 @@ export default function Layout() {
   useEffect(() => {
     const path = location.pathname;
     const allItems: NavItem[] = [
-      GET_STARTED_ITEM,
       ...navSections.flatMap((s) => s.items),
       ...bottomNavItems,
     ];
@@ -585,7 +583,7 @@ export default function Layout() {
         </header>
         <main id="main-content" className={styles.content}>
           <Breadcrumbs />
-          {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' && location.pathname !== '/setup' ? (
+          {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' ? (
             <div style={{
               textAlign: 'center', padding: '4rem 2rem',
               background: 'var(--color-surface)', border: '1px solid var(--color-border)',
@@ -629,7 +627,7 @@ export default function Layout() {
         <RoleDetailDrawer />
         <ShortcutsHint onOpenShortcuts={() => setShortcutsOpen(true)} />
         {!activeOrgId && !localStorage.getItem('procela:onboarding-complete') && (
-          <OnboardingWizard onComplete={() => { triggerRefresh(); navigate('/setup'); }} />
+          <OnboardingWizard onComplete={() => { triggerRefresh(); navigate('/'); }} />
         )}
         {tourOpen && (
           <OnboardingWizard mode="tour-only" onComplete={() => setTourOpen(false)} />
