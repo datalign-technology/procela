@@ -16,8 +16,6 @@ const make = (over: Partial<StoredGovernanceProgram> = {}): StoredGovernanceProg
   principles: { vision: '', principles: [], decisionRights: '', operatingModel: '' },
   targetStartDate: null,
   targetLaunchDate: null,
-  status: 'PLANNING',
-  launchedAt: null,
   createdAt: '2026-07-15T00:00:00.000Z',
   updatedAt: '2026-07-15T00:00:00.000Z',
   ...over,
@@ -65,7 +63,7 @@ describe('prismaGovernanceProgramsRepository', () => {
         id: 'a1', orgId: 'o1', name: 'Prog',
         scope: { inScope: 'A', outOfScope: 'B', boundaries: 'C', constraints: 'D' },
         principles: { vision: 'V', principles: ['x'], decisionRights: 'R', operatingModel: 'CENTRALIZED' },
-        targetStartDate: null, targetLaunchDate: null, status: 'ACTIVE', launchedAt: null,
+        targetStartDate: null, targetLaunchDate: null,
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),
       }],
@@ -74,7 +72,6 @@ describe('prismaGovernanceProgramsRepository', () => {
     const rows = await repo.list();
     assert.strictEqual(rows[0].scope.inScope, 'A');
     assert.deepStrictEqual(rows[0].principles.principles, ['x']);
-    assert.strictEqual(rows[0].status, 'ACTIVE');
   });
 
   it('update returns null on P2025', async () => {

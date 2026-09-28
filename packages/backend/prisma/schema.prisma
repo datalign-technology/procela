@@ -1294,8 +1294,6 @@ model GovernanceProgram {
   principles       Json      @default("{}")
   targetStartDate  String?
   targetLaunchDate String?
-  status           String    @default("PLANNING")
-  launchedAt       DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
