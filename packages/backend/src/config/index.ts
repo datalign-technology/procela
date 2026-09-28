@@ -60,6 +60,12 @@ export const config = {
   // MCP surface off even if this flag is flipped — both gates must pass.
   // See docs/MCP_SERVER_DESIGN.md.
   mcpServerEnabled: process.env.MCP_SERVER_ENABLED === 'true',
+  // MCP write tools (assign owner, set status, create task) — the separately
+  // hardened phase (docs/MCP_SERVER_DESIGN.md §4). OFF by default and gated on
+  // its OWN flag *in addition* to mcpServerEnabled: a tenant can expose the
+  // read-only surface without ever enabling agent-driven mutations. Every write
+  // still requires the acting role's *:write permission and is audited.
+  mcpWriteEnabled: process.env.MCP_WRITE_ENABLED === 'true',
   // Anthropic model used for every server-side Claude call (process
   // template generation, data-domain suggestions, asset suggestions,
   // governance activity runs, chat). Override with ANTHROPIC_MODEL

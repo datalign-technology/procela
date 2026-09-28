@@ -23,7 +23,9 @@ function makeSession() {
       return o;
     },
     assertRead(p) { if (denyPerm && p === denyPerm) throw new McpError('denied', RPC.INVALID_REQUEST); },
+    assertWrite(p) { if (denyPerm && p === denyPerm) throw new McpError('denied', RPC.INVALID_REQUEST); },
     audit(orgId, tool) { audited.push({ orgId, tool }); },
+    auditWrite(orgId, _entityType, _entityId, action) { audited.push({ orgId, tool: action }); },
   };
   return { session, audited, denyOrgFn: (o: string) => { denyOrg = o; }, denyPermFn: (p: string) => { denyPerm = p; } };
 }

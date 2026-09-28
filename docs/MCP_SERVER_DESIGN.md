@@ -80,7 +80,7 @@ prompt.
 | Phase | Contents | Gate to ship |
 | --- | --- | --- |
 | **v1 (this design)** | Read-only tools + resources; per-tenant opt-in; full auth/isolation/audit; rate limits; on-prem packaging | Security review of this doc + threat model sign-off |
-| **v2** | Write tools (ownership assignment, status changes, task creation) with per-tool RBAC and mandatory audit; human-in-the-loop confirmation semantics | Separate authorization design + pen test |
+| **v2** | Write tools (ownership assignment, status changes, task creation) with per-tool RBAC and mandatory audit; human-in-the-loop confirmation semantics. **Status (shipped):** `assign_owner`, `set_status`, `create_task` in `mcp/write-tools.ts`, gated on a third switch `MCP_WRITE_ENABLED`, each requiring the acting role's `*:write`, validated against the REST rules, persisted through the same repos, and audited before/after. MCP annotations (`destructiveHint` etc.) carry the human-in-the-loop signal. See `docs/MCP_SERVER.md`. | Separate authorization design + pen test |
 | **v3** | Procela as MCP **consumer** (assistant reaches customer tools) | Separate design; not covered here |
 
 Everything below is **v1** unless stated.
