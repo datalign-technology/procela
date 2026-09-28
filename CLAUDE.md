@@ -135,6 +135,14 @@ This boundary is a control plane, load-bearing across the app rather than a one-
 
 Scope is **advisory** (a view/coverage lens), not access enforcement. Authoring the scope lives on **Governance → Foundation** (the Scope tab: anchor pickers, coverage read-out, backlog, override fine-tuning, version pill).
 
+### 11. MCP Server — Agent Access (shipped)
+Procela is a **governance-context provider for a customer's AI agent fleet** over the [Model Context Protocol](https://modelcontextprotocol.io). Any MCP-capable client (Claude Desktop, IDE assistants, internal copilots) can query the governed catalog — and, where explicitly allowed, make audited changes — with no bespoke integration. It is **just another authenticated consumer**: it reuses the backend's own identity (`jwt-signer`), tenant isolation, RBAC floor (`lib/permissions`), governance-scope engine, and the hash-chained audit log — never a new privileged path, and never row-level source data (only business metadata + context, the same the in-app assistant sees). Full guide: `docs/MCP_SERVER.md`; design + threat model: `docs/MCP_SERVER_DESIGN.md`.
+
+- **Read tools** (`packages/backend/src/mcp/tools.ts`) — `list_value_streams`, `find_processes_using_asset`, `get_owner`, `list_gaps`, `asset_health`, `governance_scope`, `search_catalog` + a `catalog-summary` resource.
+- **Write tools** (`write-tools.ts`, opt-in via `MCP_WRITE_ENABLED`) — `assign_owner`, `set_status`, `create_task`: per-tool `*:write` RBAC, validated like the REST API, persisted through the same repos, audited before/after, with MCP human-in-the-loop annotations.
+- **Transports** — hosted **Streamable-HTTP** (`POST /mcp`, per-request bearer, multi-tenant) and local **stdio** (`npm run mcp`, on-prem/desktop). One transport-agnostic core (`protocol.ts`), so both build the identical surface.
+- **Off by default, gated at three layers**: deployment (`MCP_SERVER_ENABLED` + `AI_FEATURES_ENABLED`, plus `MCP_WRITE_ENABLED` for writes) → **per-tenant opt-in** (`mcpEnabled` on the org, resolved up the tree; Settings → Integrations → Agent access) → **service-principal tokens** (revocable, org-scoped, Viewer/Editor-capped bearers an admin mints in-app, one per agent). A service principal is scoped explicitly to its grant org's subtree — never through the human email→person path — and its grant is checked (and revocable) on every call.
+
 ---
 
 ## Identity & Access Management
@@ -419,6 +427,19 @@ BEDROCK_MODEL=anthropic.claude-3-5-sonnet-20240620-v1:0
 # endpoints and the frontend hides their UI. The single knob for on-prem /
 # FedRAMP deployments that must not call an external model.
 AI_FEATURES_ENABLED=true
+
+# MCP (Model Context Protocol) server — agent access to the governed catalog.
+# Off by default; gated on MCP_SERVER_ENABLED AND AI_FEATURES_ENABLED. Writes
+# need MCP_WRITE_ENABLED too. Per-tenant opt-in (mcpEnabled) and service tokens
+# are configured in-app, not here. PROCELA_MCP_TOKEN is the stdio transport's
+# bearer; the hosted /mcp transport takes a per-request service token instead.
+# See docs/MCP_SERVER.md.
+MCP_SERVER_ENABLED=false
+MCP_WRITE_ENABLED=false
+PROCELA_MCP_TOKEN=
+MCP_SERVICE_TOKEN_TTL=365d
+MCP_RATE_LIMIT_MAX=120
+MCP_RATE_LIMIT_WINDOW_MS=60000
 
 # Storage
 STORAGE_PROVIDER=s3|local|minio

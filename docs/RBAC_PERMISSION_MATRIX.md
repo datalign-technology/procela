@@ -82,7 +82,8 @@ where every write is scoped to the caller's own records:
 `support` (self-applies auth + rate limit), `connectors` (accepts
 either a user JWT or a `pct_…` connector token), `branding` (public
 GET for the login theme; writes self-check auth), `scim` (static
-bearer token).
+bearer token), `/mcp` (per-request `Authorization: Bearer`, verified
+inside the router — see **MCP surface** below).
 
 ## Enforcement — layer 1 (this change)
 
@@ -161,6 +162,32 @@ The shared predicate now recognises `ownerPersonId` / `userId` /
 `uploadedBy` alongside `ownerId` / `stewardId` / `assigneeId` /
 `responsiblePersonId` / `createdBy`. With collaboration covered, every
 `CONTRIBUTOR`-writable surface is layer-2 scoped.
+
+## MCP surface (agent access)
+
+The MCP server (`docs/MCP_SERVER.md`) reuses this exact model — it adds
+no new permissions and no new privileged path.
+
+- **Token-issuance API** — `/api/v1/service-principals` (mint / list /
+  revoke) is a normal protected route, gated **per handler** with
+  `requirePermission('org:write')` (so ORG_ADMIN+; EDITOR lacks `org:*`)
+  plus an org-access check. Minting is audited (`ServicePrincipal` /
+  `CREATE` · `REVOKE`).
+- **The `/mcp` tools** don't go through `requireResource`; instead the
+  MCP session (`mcp/identity.ts`) enforces the same floor per call:
+  a read tool asserts the relevant `*:read`, a write tool the matching
+  `*:write`, via the same `hasPermission`. So an agent can never do
+  what its role couldn't do in-app.
+- **Service principals** are capped to **VIEWER** or **EDITOR** at mint
+  time — never an admin role — and the role is read from the **grant
+  row**, not a (forgeable) token claim. They are scoped explicitly to
+  the grant org's subtree (a synthetic identity must not use the
+  email→person visibility path, which treats an unknown email as
+  unrestricted). The grant is checked, and can be revoked, on every call.
+- **Write tools** additionally require the deployment flag
+  `MCP_WRITE_ENABLED`; every read is audited (`McpTool` / `MCP_QUERY`)
+  and every write with the real entity + before/after under an `MCP_*`
+  action.
 
 ## Tests
 

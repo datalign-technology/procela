@@ -496,6 +496,10 @@ A Person can hold a different role in different orgs — Process Owner in Operat
 
 Procela exposes SCIM 2.0 endpoints under /scim/v2/ so Microsoft Entra, Okta, and other identity providers can push user lifecycle events automatically — create on hire, deactivate on offboard, role updates as people move teams. The IdP authenticates with a long-lived bearer token configured via SCIM_BEARER_TOKEN; paste the same value into both Procela and the IdP's provisioning config. Supported resources are /Users and /Groups with full filter / PATCH / soft-delete semantics. When the token isn't set, every SCIM request returns 401.
 
+### Agent access — MCP (admins)
+
+Procela can expose your governed catalog to external AI agents (Claude Desktop, IDE assistants, internal copilots) over the Model Context Protocol, so an agent can answer "what process depends on this data, who owns it, is it governed?" — and, where you allow it, make audited changes — without a custom integration. It's off until you turn it on, at three layers. First your deployment operator enables the surface (an environment switch); the Settings → Integrations → **Agent access (MCP)** panel tells you when that switch is still off, so a toggle you set has no effect yet. Second, you flip **Enable MCP access** for your organization — nothing is reachable until you do. Third, you mint a **service token** for each agent: give it a label and a role (Viewer for read-only, or Editor to also allow the write tools where the deployment permits), then copy the token — it's shown once and never stored. An agent authenticating with that token sees only your org (and its divisions) and only what its role allows; every call is written to the audit log. Revoke any token from the same panel and it stops working immediately. Agents never see raw source-system rows — only the business metadata and context the in-app assistant sees.
+
 ### Reset everything — start over (super admins)
 
 Below the Backup & Restore card on the Settings page, super admins

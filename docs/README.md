@@ -47,6 +47,13 @@ Standalone documents that don't belong in the app or the code.
 | [`DATA_OWNERSHIP.md`](./DATA_OWNERSHIP.md) | Which tables and columns are written by the interactive UI / REST API versus the on-prem edge agent (`@procela/connector`) — the four co-managed tables, their column-level split, the audit-only write stance, and how the connector (Option 2) maps onto a direct Connection (Option 1) as the metadata-only subset of the same catalog. |
 | [`RBAC_PERMISSION_MATRIX.md`](./RBAC_PERMISSION_MATRIX.md) | Authoritative reference for role-based authorization. `packages/backend/src/lib/permissions.ts` is the source of truth; this explains it. |
 
+### Integrations & agents
+
+| File | Purpose |
+|---|---|
+| [`MCP_SERVER.md`](./MCP_SERVER.md) | Operator + integrator guide to the **MCP (Model Context Protocol) server** — the surface that exposes Procela's governed catalog to external AI agents. Covers the read + write tools, the hosted (Streamable-HTTP) and stdio transports, per-tenant enablement, service-principal token issuance, the security model, and every env var. |
+| [`MCP_SERVER_DESIGN.md`](./MCP_SERVER_DESIGN.md) | The MCP server's design decision doc + threat model — goals/non-goals, phasing, the reuse map (no new privileged paths), the tenant-isolation and auth model, and the threat table. Read this before changing the MCP surface. |
+
 For in-app help see `packages/backend/src/docs/HELP.md` (the Help page). The GA
 tightening audit (§A–G, now closed) is summarised in `STATUS.md` § GA tightening
 audit.
