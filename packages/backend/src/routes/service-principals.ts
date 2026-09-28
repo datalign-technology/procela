@@ -15,6 +15,7 @@
 import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
+import type { SignOptions } from 'jsonwebtoken';
 import { sign } from '../services/jwt-signer';
 import { auditService } from '../services/audit.service';
 import { loadStore, registerStore } from '../lib/persistence';
@@ -22,6 +23,7 @@ import { assertOrgAccess } from '../lib/tenant-scope';
 import { requirePermission } from '../lib/permissions';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { getServicePrincipalsRepository } from '../db/service-principals.repo';
+import config from '../config';
 import logger from '../lib/logger';
 
 // A service principal is capped to non-admin roles — an agent is never an
@@ -30,9 +32,16 @@ import logger from '../lib/logger';
 export const SERVICE_PRINCIPAL_ROLES = ['VIEWER', 'EDITOR'] as const;
 export type ServicePrincipalRole = typeof SERVICE_PRINCIPAL_ROLES[number];
 
-// Long but finite: a leaked token eventually expires even if its grant row is
-// lost, while day-to-day revocation is immediate via the grant's revokedAt.
-const SERVICE_TOKEN_TTL = '365d';
+// Long but finite by default: a leaked token eventually expires even if its
+// grant row is lost, while day-to-day revocation is immediate via revokedAt.
+// Configurable per deployment via MCP_SERVICE_TOKEN_TTL (config.mcpServiceTokenTtl).
+// A bare-number string is coerced to a Number so jsonwebtoken reads it as
+// seconds (a numeric *string* would be parsed as milliseconds by `ms`); a
+// duration string like '90d' passes through unchanged.
+function serviceTokenTtl(): SignOptions['expiresIn'] {
+  const raw = config.mcpServiceTokenTtl;
+  return (/^\d+$/.test(raw) ? Number(raw) : raw) as SignOptions['expiresIn'];
+}
 
 export interface StoredServicePrincipal {
   id: string;
@@ -78,7 +87,7 @@ function serviceEmail(id: string): string {
 export function mintServiceToken(grant: StoredServicePrincipal): string {
   return sign(
     { sub: grant.id, email: serviceEmail(grant.id), orgId: grant.orgId, role: grant.role, type: 'service' },
-    { expiresIn: SERVICE_TOKEN_TTL },
+    { expiresIn: serviceTokenTtl() },
   );
 }
 
