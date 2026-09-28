@@ -13,6 +13,7 @@ import SectionLabel from '../components/SectionLabel';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
+import McpAccessPanel from '../components/McpAccessPanel';
 import { useAiEnabled } from '../stores/aiConfigStore';
 import { useRegimeStore } from '../stores/regimeStore';
 import { useComplianceStore, BUILTIN_COMPLIANCE_FRAMEWORKS } from '../stores/complianceStore';
@@ -895,6 +896,14 @@ export default function SettingsPage() {
       <div style={{ height: '1.5rem' }} />
 
       <ConnectorsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
+
+      {/* Spacer */}
+      <div style={{ height: '1.5rem' }} />
+
+      {/* Agent access (MCP) — per-tenant opt-in for the Model Context Protocol
+          surface. Gated on top of the deployment kill switches; the panel says
+          when the deployment hasn't enabled it. */}
+      <McpAccessPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
 
       </div>{/* ══ /Integrations ══ */}
 

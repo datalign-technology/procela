@@ -89,6 +89,7 @@ export function buildWriteTools(deps: WriteDeps): ToolDefinition[] {
         const meta = OWNER_META[entityType];
         session.assertWrite(meta.permission);
         const orgId = session.resolveOrg(args.orgId);
+        session.assertMcpEnabled(orgId);
         const cat = await deps.loadCatalog(orgId);
 
         const pool = entityType === 'process' ? cat.nodes
@@ -140,6 +141,7 @@ export function buildWriteTools(deps: WriteDeps): ToolDefinition[] {
           throw new McpError('status must be one of DRAFT, ACTIVE, DEPRECATED. Review-workflow states are set in the app.', RPC.INVALID_PARAMS);
         }
         const orgId = session.resolveOrg(args.orgId);
+        session.assertMcpEnabled(orgId);
         const cat = await deps.loadCatalog(orgId);
         const node = cat.nodes.find((n) => n.id === nodeId);
         if (!node) throw new McpError('No such process node in this organization.', RPC.INVALID_PARAMS);
@@ -197,6 +199,7 @@ export function buildWriteTools(deps: WriteDeps): ToolDefinition[] {
           throw new McpError(`priority must be one of: ${TASK_PRIORITIES.join(', ')}.`, RPC.INVALID_PARAMS);
         }
         const orgId = session.resolveOrg(args.orgId);
+        session.assertMcpEnabled(orgId);
         const cat = await deps.loadCatalog(orgId);
 
         const assigneeId = str(args.assigneeId) ?? null;

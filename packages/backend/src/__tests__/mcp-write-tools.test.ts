@@ -17,6 +17,7 @@ function makeSession() {
   const audited: AuditRow[] = [];
   let denyPerm: string | null = null;
   let denyOrg: string | null = null;
+  let mcpDisabled = false;
   const session: Session = {
     user: { sub: 'u1', email: 'a@b.c', orgId: 'org1', role: 'EDITOR' } as Session['user'],
     defaultOrgId: 'org1',
@@ -25,12 +26,13 @@ function makeSession() {
       if (denyOrg && o === denyOrg) throw new McpError('Not found.', RPC.INVALID_PARAMS);
       return o;
     },
+    assertMcpEnabled() { if (mcpDisabled) throw new McpError('MCP not enabled for this organization.', RPC.INVALID_REQUEST); },
     assertRead() { /* not used by write tools */ },
     assertWrite(p) { if (denyPerm && p === denyPerm) throw new McpError(`cannot modify ${p.split(':')[0]}`, RPC.INVALID_REQUEST); },
     audit() { /* reads only */ },
     auditWrite(orgId, entityType, entityId, action, before, after) { audited.push({ orgId, entityType, entityId, action, before, after }); },
   };
-  return { session, audited, denyPermFn: (p: string) => { denyPerm = p; }, denyOrgFn: (o: string) => { denyOrg = o; } };
+  return { session, audited, denyPermFn: (p: string) => { denyPerm = p; }, denyOrgFn: (o: string) => { denyOrg = o; }, disableMcpFn: () => { mcpDisabled = true; } };
 }
 
 function fakeCatalog(): OrgCatalog {
@@ -53,7 +55,7 @@ function fakeCatalog(): OrgCatalog {
 }
 
 function tools(over: Partial<Parameters<typeof buildWriteTools>[0]> = {}, mode: OrgStatusMode = 'simple') {
-  const { session, audited, denyPermFn, denyOrgFn } = makeSession();
+  const { session, audited, denyPermFn, denyOrgFn, disableMcpFn } = makeSession();
   const owned: Record<string, string | null> = {};
   const statuses: Record<string, string> = {};
   const created: unknown[] = [];
@@ -71,7 +73,7 @@ function tools(over: Partial<Parameters<typeof buildWriteTools>[0]> = {}, mode: 
     const res = await byName[name].handler(args);
     return { res, data: JSON.parse(res.content[0].text) };
   };
-  return { byName, call, audited, owned, statuses, created, denyPermFn, denyOrgFn };
+  return { byName, call, audited, owned, statuses, created, denyPermFn, denyOrgFn, disableMcpFn };
 }
 
 describe('write MCP tools — registration & annotations', () => {
@@ -198,5 +200,14 @@ describe('create_task', () => {
     const t = tools();
     t.denyPermFn('governance:write');
     await assert.rejects(() => t.call('create_task', { title: 'x' }), /cannot modify/);
+  });
+});
+
+describe('write tools — per-tenant enablement', () => {
+  it('a write is refused (and not audited) when the org has not enabled MCP', async () => {
+    const t = tools();
+    t.disableMcpFn();
+    await assert.rejects(() => t.call('assign_owner', { entityType: 'process', entityId: 'p1', ownerId: 'newOwner' }), /not enabled/);
+    assert.strictEqual(t.audited.length, 0);
   });
 });

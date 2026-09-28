@@ -40,6 +40,7 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
   async function begin(tool: string, permission: string, args: Record<string, unknown>): Promise<OrgCatalog> {
     session.assertRead(permission);
     const orgId = session.resolveOrg(args.orgId);
+    session.assertMcpEnabled(orgId);
     session.audit(orgId, tool, args);
     return deps.loadCatalog(orgId);
   }
@@ -219,6 +220,7 @@ export function buildTools(deps: ToolDeps): ToolDefinition[] {
         session.assertRead('process:read');
         session.assertRead('data-asset:read');
         const orgId = session.resolveOrg(args.orgId);
+        session.assertMcpEnabled(orgId);
         session.audit(orgId, 'search_catalog', args);
         const cat = await deps.loadCatalog(orgId);
         const q = str(args.query)?.toLowerCase();

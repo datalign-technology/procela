@@ -14,6 +14,7 @@ function makeSession() {
   const audited: Array<{ orgId: string; tool: string }> = [];
   let denyOrg: string | null = null;
   let denyPerm: string | null = null;
+  let mcpDisabled = false;
   const session: Session = {
     user: { sub: 'u1', email: 'a@b.c', orgId: 'org1', role: 'VIEWER' } as Session['user'],
     defaultOrgId: 'org1',
@@ -22,12 +23,13 @@ function makeSession() {
       if (denyOrg && o === denyOrg) throw new McpError('Not found.', RPC.INVALID_PARAMS);
       return o;
     },
+    assertMcpEnabled() { if (mcpDisabled) throw new McpError('MCP not enabled for this organization.', RPC.INVALID_REQUEST); },
     assertRead(p) { if (denyPerm && p === denyPerm) throw new McpError('denied', RPC.INVALID_REQUEST); },
     assertWrite(p) { if (denyPerm && p === denyPerm) throw new McpError('denied', RPC.INVALID_REQUEST); },
     audit(orgId, tool) { audited.push({ orgId, tool }); },
     auditWrite(orgId, _entityType, _entityId, action) { audited.push({ orgId, tool: action }); },
   };
-  return { session, audited, denyOrgFn: (o: string) => { denyOrg = o; }, denyPermFn: (p: string) => { denyPerm = p; } };
+  return { session, audited, denyOrgFn: (o: string) => { denyOrg = o; }, denyPermFn: (p: string) => { denyPerm = p; }, disableMcpFn: () => { mcpDisabled = true; } };
 }
 
 function fakeCatalog(): OrgCatalog {
@@ -54,14 +56,14 @@ function fakeCatalog(): OrgCatalog {
 }
 
 function tools(scope: ResolvedScopeLike | null = null) {
-  const { session, audited, denyOrgFn, denyPermFn } = makeSession();
+  const { session, audited, denyOrgFn, denyPermFn, disableMcpFn } = makeSession();
   const list = buildTools({ session, loadCatalog: async () => fakeCatalog(), resolveScope: async () => scope });
   const byName = Object.fromEntries(list.map((t) => [t.name, t]));
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const res = await byName[name].handler(args);
     return { res, data: JSON.parse(res.content[0].text) };
   };
-  return { byName, call, audited, denyOrgFn, denyPermFn };
+  return { byName, call, audited, denyOrgFn, denyPermFn, disableMcpFn };
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -158,5 +160,13 @@ describe('read-only MCP tools', () => {
     const t = tools();
     t.denyPermFn('process:read');
     await assert.rejects(() => t.call('list_value_streams'), /cannot|denied/);
+  });
+
+  it('a tool is refused when the org has not enabled MCP (per-tenant opt-in)', async () => {
+    const t = tools();
+    t.disableMcpFn();
+    await assert.rejects(() => t.call('list_value_streams'), /not enabled/);
+    // The gate runs before the audit, so nothing is recorded.
+    assert.strictEqual(t.audited.length, 0);
   });
 });
