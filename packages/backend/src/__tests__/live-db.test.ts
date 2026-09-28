@@ -612,7 +612,7 @@ suite('live-db repository round-trips', () => {
       id: randomUUID(), orgId, name: 'Enterprise DG',
       scope: { inScope: 'utilities', outOfScope: '', boundaries: '', constraints: '' },
       principles: { vision: 'v', principles: ['p1'], decisionRights: '', operatingModel: 'HYBRID' },
-      targetStartDate: null, targetLaunchDate: null, status: 'PLANNING', launchedAt: null,
+      targetStartDate: null, targetLaunchDate: null,
       createdAt: now, updatedAt: now,
     });
     await dr.create({
@@ -1428,40 +1428,20 @@ suite('live-db business flows', () => {
     assert.strictEqual(await repo.get('never-set'), null);
   });
 
-  it('governance-program route: GET + status read the seeded program from Postgres, not an empty default', async () => {
-    const { orgId, personId } = await seedFixture();
+  it('governance-program route: GET reads the seeded program from Postgres, not an empty default', async () => {
+    const { orgId } = await seedFixture();
     const now = new Date().toISOString();
 
-    // A rich program plus the Phase 1/2 prerequisites, all via the Prisma
-    // repos — this mirrors what the demo seeder writes to Postgres.
     const programs = prismaRepo(prismaGovernanceProgramsRepository);
     const programId = randomUUID();
     await programs.create({
       id: programId, orgId, name: 'Seeded Program',
       scope: { inScope: 'Everything in the catalog', outOfScope: '', boundaries: '', constraints: '' },
       principles: { vision: 'Trusted data', principles: ['P1', 'P2'], decisionRights: '', operatingModel: 'FEDERATED' },
-      targetStartDate: null, targetLaunchDate: null,
-      status: 'ACTIVE', launchedAt: null, createdAt: now, updatedAt: now,
+      targetStartDate: null, targetLaunchDate: null, createdAt: now, updatedAt: now,
     });
-    const domains = prismaRepo(prismaDataDomainsRepository);
-    await domains.create({
-      id: randomUUID(), orgId, name: 'Customer', description: '', ownerId: personId,
-      stewardIds: [], dataAssetIds: [], status: 'ACTIVE', createdAt: now, updatedAt: now,
-    });
-    const groups = prismaRepo(prismaGovernanceGroupsRepository);
-    await groups.create({
-      id: randomUUID(), orgId, name: 'Council', type: 'COUNCIL', parentId: null,
-      description: '', charter: '', status: 'ACTIVE', members: [], createdAt: now, updatedAt: now,
-    });
-    const dama = prismaRepo(prismaDamaRolesRepository);
-    for (const roleType of ['CDO', 'DATA_GOVERNANCE_LEAD']) {
-      await dama.create({
-        id: randomUUID(), personId, agentId: null, agentName: null,
-        roleType, scopeType: 'ORG', scopeId: orgId, since: now, createdAt: now,
-      });
-    }
 
-    // Drive the ACTUAL route handlers over HTTP against Postgres.
+    // Drive the ACTUAL route handler over HTTP against Postgres.
     const app = express();
     app.use(express.json());
     app.use('/governance-program', govProgramRouter);
@@ -1474,16 +1454,7 @@ suite('live-db business flows', () => {
       // The seeded program is returned — NOT a freshly-created empty default.
       assert.strictEqual(prog.data.id, programId);
       assert.strictEqual(prog.data.name, 'Seeded Program');
-      assert.strictEqual(prog.data.status, 'ACTIVE');
       assert.deepStrictEqual(prog.data.principles.principles, ['P1', 'P2']);
-
-      const st = (await (await fetch(`${base}/${programId}/status`)).json()) as any;
-      // Phase computation read the seeded siblings from Postgres, not the
-      // empty in-memory arrays — so Phase 1 is complete and Phase 2 has
-      // real progress from the domain, council, and leadership roles.
-      assert.strictEqual(st.data.phases.phase1.completed, true);
-      assert.ok(st.data.phases.phase2.progress > 0);
-      assert.ok(st.data.overallProgress > 0);
     } finally {
       await new Promise((r) => server.close(() => r(null)));
     }
