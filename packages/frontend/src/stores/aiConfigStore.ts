@@ -63,7 +63,11 @@ export function useAiEnabled(): boolean {
   return useAiConfigStore((s) => s.aiEnabled);
 }
 
-/** Deployment-level MCP surface state (server enabled, write tools enabled). */
+/** Deployment-level MCP surface state (server enabled, write tools enabled).
+ *  Selects each field separately — a selector returning a fresh object would
+ *  trip React's useSyncExternalStore infinite-loop guard. */
 export function useMcpDeployment(): { serverEnabled: boolean; writeEnabled: boolean } {
-  return useAiConfigStore((s) => ({ serverEnabled: s.mcpServerEnabled, writeEnabled: s.mcpWriteEnabled }));
+  const serverEnabled = useAiConfigStore((s) => s.mcpServerEnabled);
+  const writeEnabled = useAiConfigStore((s) => s.mcpWriteEnabled);
+  return { serverEnabled, writeEnabled };
 }
