@@ -129,6 +129,30 @@ Two paths (see `docs/` + `packages/connector/README.md`):
 
 ---
 
+## 9. (Optional) Enable agent access (MCP)
+
+If the customer wants their own AI agents (Claude Desktop, IDE assistants,
+internal copilots) to query the governed catalog over the Model Context
+Protocol, turn it on. Three gates, all off by default (full guide:
+`docs/MCP_SERVER.md`):
+
+1. **Deployment** — set `MCP_SERVER_ENABLED=true` (with `AI_FEATURES_ENABLED`
+   already on); add `MCP_WRITE_ENABLED=true` only if agents should make audited
+   changes as well as read. Optionally tune `MCP_SERVICE_TOKEN_TTL` (default
+   `365d`) and the rate-limit envs.
+2. **Per-tenant opt-in** — an org admin flips *Enable MCP access* on
+   **Settings → Integrations → Agent access (MCP)**.
+3. **Per-agent token** — in the same panel, mint a service token per agent
+   (label + Viewer/Editor role); the secret is shown once. Point the client at
+   `https://<host>/mcp` with `Authorization: Bearer <token>`. Revoke from the
+   panel at any time.
+
+Agents see only business metadata and governance context (never raw
+source-system rows), scoped to the token's org and role, and every call is
+audited.
+
+---
+
 ## Verification checklist
 
 - [ ] `terraform output migrate_run_task_command` ran; `prisma migrate deploy`
@@ -142,6 +166,8 @@ Two paths (see `docs/` + `packages/connector/README.md`):
 - [ ] A first data sync runs (direct-connect or via a paired connector).
 - [ ] `AUTH_PROVIDER` is not `dev`; RS256 JWT keys set; `REDIS_URL` set (so
       rate-limiting is shared across tasks).
+- [ ] (If agent access requested) `MCP_SERVER_ENABLED` set, the tenant opted in,
+      and a first service token authenticates against `/mcp`.
 
 ## Known non-goals (as of this release)
 

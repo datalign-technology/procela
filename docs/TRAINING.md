@@ -1405,6 +1405,69 @@ per replica.
 
 ---
 
+## Module 13 — Agent access (MCP) (5 min)
+
+*Admin module.* Procela can expose the governed catalog you've built to
+external AI agents (Claude Desktop, IDE assistants, internal copilots) over
+the **Model Context Protocol** — so an agent can answer *"what process
+depends on this data, who owns it, is it governed?"* and, where you allow it,
+make audited changes. An agent sees only the business metadata and context
+this guide has been building (never raw source-system rows), scoped to its
+org and its role, with every call written to the audit log. Full reference:
+`docs/MCP_SERVER.md`.
+
+### 13.1 Find the panel
+
+Go to **Settings → Integrations → Agent access (MCP)**. (Settings is
+admins-only.) The Tidewater demo fixture ships with MCP **already enabled**,
+so the *Enable MCP access* toggle is on. In a fresh tenant it's off — an org
+admin flips it here to opt the tenant in. The panel also tells you when the
+surface is turned off for the whole deployment (an operator sets
+`MCP_SERVER_ENABLED`); until then the toggle is saved but inert.
+
+> **Three gates, all off by default.** Deployment (`MCP_SERVER_ENABLED` +
+> `AI_FEATURES_ENABLED`, plus `MCP_WRITE_ENABLED` for writes) → per-tenant
+> opt-in (this toggle) → a per-agent token (next). Any one being off closes
+> the surface.
+
+### 13.2 Mint a service token
+
+In the **Service tokens** section, enter a label (e.g. *Claude Desktop —
+Analytics*), pick a role — **Viewer** (read-only) or **Editor** (also allows
+the write tools, when the deployment permits) — and click **Generate token**.
+The token is shown **once**; copy it now. Give each agent its own token.
+
+### 13.3 Point a client at it
+
+Hand the token to any MCP client as a bearer against the hosted endpoint:
+
+```jsonc
+{
+  "mcpServers": {
+    "procela": {
+      "url": "https://<your-host>/mcp",
+      "headers": { "Authorization": "Bearer <the token you just copied>" }
+    }
+  }
+}
+```
+
+The agent can now call read tools — the process hierarchy, reverse
+lookups ("what depends on this asset"), owners, gaps, asset health, and
+governance scope — plus search. With an Editor token on a write-enabled
+deployment it can also assign owners, change a process status, and open a
+governance task, each gated by the same permission and audited exactly like
+an in-app edit.
+
+### 13.4 Revoke
+
+Back in the panel, every token lists its label, role, and last-used date.
+Click **Revoke** on any one and it stops authenticating immediately (the
+grant is checked on every call). Revocation is the day-to-day control; tokens
+also expire on their own (default 365 days, `MCP_SERVICE_TOKEN_TTL`).
+
+---
+
 ## Quick reference
 
 ### The Procela model in one paragraph
@@ -1438,6 +1501,7 @@ via the **RACI Matrix**.
 | Pivot exploration | Insights → Analysis |
 | Where are the gaps? | Insights → Gap Detection |
 | Live source metadata / freshness | Systems → Connections (if Procela can reach the DB) or Settings → On-prem connectors (if it can't) |
+| Expose the catalog to AI agents (MCP) | Settings → Integrations → Agent access (MCP) — enable + mint per-agent tokens |
 | Help / shortcuts | Top-bar **Help** button (next to Ask AI); press `?` for keyboard shortcuts |
 
 ### Keyboard shortcuts to know
