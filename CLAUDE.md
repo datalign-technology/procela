@@ -129,7 +129,6 @@ This boundary is a control plane, load-bearing across the app rather than a one-
 - **Scope coverage** — mapped / governed / owned share of the in-scope assets, plus a "connected, not governed" backlog (the on-ramp to expanding scope).
 - **Scope versioning** — a `scopeVersion` bumped only when the structured scope changes, so coverage/scorecard snapshots are comparable apples-to-apples.
 - **Council Scorecard & Dashboard** — an All / Governed **lens** that narrows the measures to the governed set (scorecard snapshots record the scope version they were taken under).
-- **Get Started** — a "Scope defined" step on the board.
 - **Entity lists** — per-row "in scope / not governed" badges on Data Assets, Systems, Data Domains, and the Process Catalog.
 - **AI Assistant** — a Governance Scope section in its context so it answers within the boundary.
 
