@@ -67,6 +67,7 @@ type PrismaOrgRow = {
   activeComplianceFrameworks?: string[] | null;
   scorecardTargets?: unknown | null;
   roiModel?: unknown | null;
+  mcpEnabled?: boolean | null;
   syncConnectionId?: string | null;
   syncStatus?: string | null;
   createdAt: Date;
@@ -95,6 +96,9 @@ function fromPrisma(r: PrismaOrgRow): StoredOrg {
     ...(r.activeComplianceFrameworks ? { activeComplianceFrameworks: r.activeComplianceFrameworks } : {}),
     ...(r.scorecardTargets ? { scorecardTargets: r.scorecardTargets as StoredOrg['scorecardTargets'] } : {}),
     ...(r.roiModel ? { roiModel: r.roiModel as StoredOrg['roiModel'] } : {}),
+    // Only surface a boolean when the column is set — null means "inherit",
+    // which the resolver represents as the field being absent.
+    ...(typeof r.mcpEnabled === 'boolean' ? { mcpEnabled: r.mcpEnabled } : {}),
     syncConnectionId: r.syncConnectionId ?? null,
     syncStatus: r.syncStatus ?? null,
     createdAt: r.createdAt.toISOString(),
@@ -135,6 +139,7 @@ function toPrismaData(row: StoredOrg): Record<string, unknown> {
     ...(row.activeComplianceFrameworks !== undefined ? { activeComplianceFrameworks: row.activeComplianceFrameworks ?? [] } : {}),
     ...(row.scorecardTargets !== undefined ? { scorecardTargets: row.scorecardTargets ?? null } : {}),
     ...(row.roiModel !== undefined ? { roiModel: row.roiModel ?? null } : {}),
+    ...(row.mcpEnabled !== undefined ? { mcpEnabled: row.mcpEnabled } : {}),
     // Data-sync tracking — presence-guarded so a partial update that doesn't
     // mention them preserves the stored value (only the sync engine sets them).
     ...(row.syncConnectionId !== undefined ? { syncConnectionId: row.syncConnectionId } : {}),

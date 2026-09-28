@@ -188,12 +188,17 @@ suite('live-db repository round-trips', () => {
     await repo.create({
       id, parentId: null, name: 'Tidewater Utilities', type: 'company',
       industry: 'utilities', description: '', headCount: 0,
+      mcpEnabled: true,
       createdAt: now, updatedAt: now,
     });
     const fetched = await repo.get(id);
     assert.strictEqual(fetched?.name, 'Tidewater Utilities');
+    // Per-tenant MCP enablement must round-trip through the live column
+    // (the nullable Boolean added for the agent surface).
+    assert.strictEqual(fetched?.mcpEnabled, true);
     const updated = await repo.update(id, { industry: 'water utilities' });
     assert.strictEqual(updated?.industry, 'water utilities');
+    assert.strictEqual(updated?.mcpEnabled, true, 'mcpEnabled preserved across an unrelated update');
     assert.strictEqual(await repo.delete(id), true);
     assert.strictEqual(await repo.get(id), null);
   });

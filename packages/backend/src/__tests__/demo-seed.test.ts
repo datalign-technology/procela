@@ -274,6 +274,18 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(calendarEvents), 1, 'calendar events');
   });
 
+  it('enables the full demo feature surface on the root company (MCP + ROI value model)', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const root = organizations.find((o: any) => o.id === demoId('org-tidewater'));
+    assert.ok(root, 'root company seeded');
+    // Agent access (MCP) is on so the Settings → Integrations panel demos live.
+    assert.strictEqual(root.mcpEnabled, true, 'demo tenant opts into MCP');
+    // A value model so the Council ROI shows a monetized estimate, not a
+    // "configure your assumptions" prompt.
+    assert.ok(root.roiModel && typeof root.roiModel === 'object', 'demo tenant carries an ROI value model');
+    assert.ok(root.roiModel.ownershipValuePerEntity > 0, 'value model has non-zero assumptions');
+  });
+
   it('is idempotent — second call replaces the first, no row compounding', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
