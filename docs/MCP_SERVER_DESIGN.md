@@ -219,7 +219,12 @@ audit-query filters for reviewers.
 - **Off by default.** The MCP surface is disabled unless explicitly enabled.
 - **Per-tenant opt-in.** An **Org Admin** enables it for their org (a Settings
   toggle + a generated service-principal grant), so it's a **sold,
-  configurable feature**, not a global switch.
+  configurable feature**, not a global switch. **Status (shipped):** the toggle
+  is live — `mcpEnabled` on the org (resolved up the org tree like
+  `scorecardTargets`, off by default), authored at **Settings → Integrations →
+  Agent access (MCP)**, and enforced on every tool call and the resource via
+  `Session.assertMcpEnabled` (`mcp/enablement.ts`). The generated
+  service-principal grant / token-issuance UX is the remaining follow-up.
 - **Deployment kill switches.** Honors `AI_FEATURES_ENABLED=false` (the
   `requireAiEnabled` gate) and a new deployment flag
   `MCP_SERVER_ENABLED=false` — so a FedRAMP / air-gapped / "no external AI

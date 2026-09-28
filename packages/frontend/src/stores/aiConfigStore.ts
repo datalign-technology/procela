@@ -17,23 +17,39 @@ import { apiClient } from '@/api/client';
 interface HealthConfig {
   aiConfigured: boolean;
   aiFeaturesEnabled: boolean;
+  mcpServerEnabled?: boolean;
+  mcpWriteEnabled?: boolean;
 }
 
 interface AiConfigState {
   /** True when AI integration features are available in this deployment. */
   aiEnabled: boolean;
+  /** True when the MCP surface is enabled at the deployment level (the
+   *  per-tenant toggle only takes effect on top of this). */
+  mcpServerEnabled: boolean;
+  /** True when the MCP write tools are enabled at the deployment level. */
+  mcpWriteEnabled: boolean;
   loaded: boolean;
   fetch: () => Promise<void>;
 }
 
 export const useAiConfigStore = create<AiConfigState>()((set) => ({
   aiEnabled: true,
+  // MCP is off by default at the deployment level (opt-in), so — unlike AI —
+  // default these to false until the config fetch confirms otherwise.
+  mcpServerEnabled: false,
+  mcpWriteEnabled: false,
   loaded: false,
 
   fetch: async () => {
     try {
       const res = await apiClient.get<HealthConfig>('/health/config');
-      set({ aiEnabled: res.aiFeaturesEnabled !== false, loaded: true });
+      set({
+        aiEnabled: res.aiFeaturesEnabled !== false,
+        mcpServerEnabled: res.mcpServerEnabled === true,
+        mcpWriteEnabled: res.mcpWriteEnabled === true,
+        loaded: true,
+      });
     } catch {
       // Leave the default (enabled) on failure so a config hiccup never
       // hides AI for a deployment that actually has it on.
@@ -45,4 +61,9 @@ export const useAiConfigStore = create<AiConfigState>()((set) => ({
 /** Convenience hook: whether AI integration features are on. */
 export function useAiEnabled(): boolean {
   return useAiConfigStore((s) => s.aiEnabled);
+}
+
+/** Deployment-level MCP surface state (server enabled, write tools enabled). */
+export function useMcpDeployment(): { serverEnabled: boolean; writeEnabled: boolean } {
+  return useAiConfigStore((s) => ({ serverEnabled: s.mcpServerEnabled, writeEnabled: s.mcpWriteEnabled }));
 }

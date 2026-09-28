@@ -12,6 +12,7 @@ import { verify } from '../services/jwt-signer';
 import { canAccessOrg } from '../routes/people';
 import { hasPermission } from '../lib/permissions';
 import { auditService } from '../services/audit.service';
+import { isMcpEnabledForOrg } from './enablement';
 import type { TokenPayload } from '../types';
 import { McpError, RPC } from './protocol';
 
@@ -22,6 +23,11 @@ export interface Session {
    *  asserting the caller can access it. A cross-tenant / unknown org reads as
    *  "not found" — never revealing that another tenant's org exists. */
   resolveOrg(orgIdArg: unknown): string;
+  /** Assert the target org has opted the MCP surface on (per-tenant
+   *  enablement, docs/MCP_SERVER_DESIGN.md §9). Throws when the org (or its
+   *  ancestors) has not enabled MCP. Called after resolveOrg, so the org is
+   *  already one the caller can access — the message is safe to be explicit. */
+  assertMcpEnabled(orgId: string): void;
   /** Assert the caller's role carries a read permission (e.g. 'process:read');
    *  throws otherwise. Read-only server, so only `*:read` is ever requested. */
   assertRead(permission: string): void;
@@ -60,6 +66,11 @@ export function createSession(token: string): Session {
         throw new McpError('Not found.', RPC.INVALID_PARAMS);
       }
       return orgId;
+    },
+    assertMcpEnabled(orgId) {
+      if (!isMcpEnabledForOrg(orgId)) {
+        throw new McpError('The MCP surface is not enabled for this organization. An org admin can enable it in Settings → Integrations.', RPC.INVALID_REQUEST);
+      }
     },
     assertRead(permission) {
       if (!hasPermission(user.role, permission)) {

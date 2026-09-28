@@ -34,6 +34,12 @@ router.get('/config', (_req: Request, res: Response) => {
     // Master switch for AI integration features. When false the frontend
     // hides every AI surface and the backend refuses the AI endpoints.
     aiFeaturesEnabled: config.aiFeaturesEnabled,
+    // Deployment-level MCP surface state. Both must be true (with AI features
+    // on) for the per-tenant MCP toggle to actually take effect; the Settings
+    // panel uses these to tell an admin when their opt-in is still gated by the
+    // deployment. mcpWriteEnabled additionally gates the write tools.
+    mcpServerEnabled: config.mcpServerEnabled,
+    mcpWriteEnabled: config.mcpWriteEnabled,
   });
 });
 

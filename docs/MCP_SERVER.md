@@ -39,6 +39,7 @@ It is the first slice of the design in
 | --- | --- |
 | **Two kill switches** | Starts only when `MCP_SERVER_ENABLED=true` **and** `AI_FEATURES_ENABLED != false`. An on-prem / FedRAMP "no external AI" deployment keeps it off via either. |
 | **Third switch for writes** | The write tools register only when `MCP_WRITE_ENABLED=true` as well. Read-only exposure needs no write grant. |
+| **Per-tenant opt-in** | On top of the deployment switches, an org must set `mcpEnabled` before its governed context is reachable — resolved up the org tree, **off by default**. An org admin toggles it in **Settings → Integrations → Agent access (MCP)**. Every tool call asserts it after resolving the org; a tenant that hasn't opted in gets a clear "not enabled" error. |
 | **Identity** | Authenticates a Procela bearer token (`PROCELA_MCP_TOKEN`), verified with the same `jwt-signer` the REST API uses. |
 | **Tenant isolation** | Every tool resolves + authorizes its target org against the token user's accessible-org set; a cross-tenant / unknown org reads as **not-found** (never revealing another tenant's existence). |
 | **RBAC floor** | A read tool asserts the caller's role carries the relevant `*:read` permission; a write tool asserts the matching `*:write`. |

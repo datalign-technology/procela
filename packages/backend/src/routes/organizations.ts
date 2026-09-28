@@ -77,6 +77,13 @@ export interface StoredOrg {
    *  figures). Resolved by walking up to the first ancestor that sets it, so a
    *  company can set the value model for its divisions. */
   roiModel?: { currency: string; riskCostPerItem: number; resolutionValuePerIssue: number; ownershipValuePerEntity: number } | null;
+  /** Per-tenant opt-in for the read-only + write MCP surface (docs/
+   *  MCP_SERVER_DESIGN.md §9). Undefined/false = the org's governed context is
+   *  NOT reachable over MCP even when the deployment has the surface enabled;
+   *  true = an org admin has opted this tenant in. Resolved by walking up to
+   *  the first ancestor that sets it, so a company can enable it for all its
+   *  divisions. This is on top of the deployment kill switches — both must pass. */
+  mcpEnabled?: boolean;
   // Data-sync tracking — set by the sync engine when this row was created or
   // updated from a SyncConnection source. Soft reference; absent when unsynced.
   syncConnectionId?: string | null;
@@ -125,6 +132,7 @@ const organizationRowSchema = z.object({
   brandGlyph: z.string().optional(),
   ssoButtonLabel: z.string().optional(),
   brandPrimaryColor: z.string().optional(),
+  mcpEnabled: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   // `unknown` for the input type so `z.string().default('')` (which
@@ -538,6 +546,19 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       };
     } else {
       res.status(400).json({ success: false, error: 'roiModel must be an object of value-model numbers, or null.' });
+      return;
+    }
+  }
+  // Per-tenant MCP enablement (opt the org into the agent surface). Boolean;
+  // null/undefined clears back to inherit-from-ancestor (default off).
+  if (req.body?.mcpEnabled !== undefined) {
+    const raw = req.body.mcpEnabled;
+    if (raw === null) {
+      org.mcpEnabled = undefined;
+    } else if (typeof raw === 'boolean') {
+      org.mcpEnabled = raw;
+    } else {
+      res.status(400).json({ success: false, error: 'mcpEnabled must be a boolean, or null to inherit.' });
       return;
     }
   }

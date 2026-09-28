@@ -56,6 +56,7 @@ export function buildMcpServerForSession(session: Session): McpServer {
     description: 'Counts of value streams, processes, activities, data assets, systems and domains for your organization.',
     mimeType: 'application/json',
     read: async () => {
+      session.assertMcpEnabled(session.defaultOrgId);
       const cat = await loadOrgCatalog(session.defaultOrgId);
       session.audit(session.defaultOrgId, 'resource:catalog-summary', {});
       const count = (lvl: string) => cat.nodes.filter((n) => n.level === lvl).length;
