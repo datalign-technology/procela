@@ -126,6 +126,11 @@ model Organization {
   // prompts the tenant to configure their own dollar assumptions. Same
   // read-as-one-object rationale as scorecardTargets, so it's a JSON blob.
   roiModel                 Json?
+  // Per-tenant MCP enablement (opt-in for the agent surface). Nullable, not a
+  // defaulted boolean: null = "not set → inherit from an ancestor" (the
+  // resolver walks up the org tree), which a NOT NULL default would break by
+  // stopping the walk at every row. true / false = explicit opt-in / opt-out.
+  mcpEnabled               Boolean?
   createdAt                DateTime   @default(now())
   updatedAt                DateTime   @updatedAt
 
