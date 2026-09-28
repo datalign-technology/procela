@@ -6,9 +6,6 @@
   "workspaces": [
     "packages/*"
   ],
-  "prisma": {
-    "schema": "packages/backend/prisma/schema.prisma"
-  },
   "scripts": {
     "dev": "concurrently --names backend,frontend -c blue,green \"npm run dev -w packages/backend\" \"npm run dev -w packages/frontend\"",
     "build": "npm run build -w packages/backend && npm run build -w packages/frontend",
