@@ -4,7 +4,6 @@ import {
   ROUTE_GROUPS,
   bottomNavItems,
   MOBILE_PRIMARY,
-  GET_STARTED_ITEM,
 } from './navConfig';
 
 describe('navConfig', () => {
@@ -32,7 +31,6 @@ describe('navConfig', () => {
     // here. What we DO want to catch is a stale entry pointing at a
     // route that was renamed or removed.
     const knownTos = new Set<string>([
-      GET_STARTED_ITEM.to,
       ...navSections.flatMap((s) => s.items.map((i) => i.to)),
       ...bottomNavItems.map((i) => i.to),
     ]);

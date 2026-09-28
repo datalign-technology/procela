@@ -226,49 +226,31 @@ Electric**. You should see the electric-division roster only. Try:
   because activities don't have required-skill data yet. We'll come
   back to this in Module 6.
 
-### 2.5 The Get Started page
+### 2.5 Where to start
 
-Open **Get Started** in the sidebar (the page is titled **Set up
-Procela**). It's a resumable, data-driven journey from an empty org
-to a running governance program, in **one spine** of four stages:
-**Capture → Assign → Govern → Operate**. Onboarding the org (Capture,
-Assign) and standing up the program (Govern, Operate) are the same
-path, not two separate tracks.
+There's no separate setup wizard or "Get Started" page — you build
+Procela by working the left nav directly, in roughly this order:
 
-Across the top, the program's **lifecycle** — Planning → Active →
-Paused → Completed — governs the whole arc. Its valid next transitions
-(*Launch*, *Pause*, *Complete*, *Reopen*) are buttons right there,
-role-gated and audited; **Launch stays disabled until Foundation
-(Phase 1) is complete**, and once the program goes live its actual
-**Launched** date shows next to the status. A one-line **stage summary**
-("Stage X of 4 · <name>") names where you are; there's deliberately
-**no overall %** (one number mixing "added my systems" with "program
-launched" just oscillates). A **four-column board** then lists each
-stage's items with **HERE / AUTO** source badges — *Here* = you define
-it in Procela, *Auto* = derived from your catalog — and every row
-deep-links to where the work happens. *Operate* reads strictly
-top-to-bottom: *Program launched* only ticks once the structure and
-roles & policies it depends on are in place. Below the board,
-**Next Actions** lists the board's still-unchecked items in stage order
-(HIGH for the current stage, NEXT for later ones).
+1. **Organizations** — set up your company / division / team tree and
+   add your people.
+2. **Processes** — map your value streams, processes, sub-processes and
+   activities in the Process Catalog. This is the spine everything else
+   hangs off, so it's the natural first move; a brand-new org's
+   Dashboard points you straight here.
+3. **Systems & Data** — register the systems that hold data and the
+   data assets themselves, and organize assets into data domains.
+4. **Connect & assign** — link data assets to the activities that use
+   them, and give everything an owner. Gap Detection surfaces what's
+   still unmapped or ownerless.
+5. **Governance → Foundation** — define the program's scope, guiding
+   principles, and operating model.
 
-There is no separate Governance Program page — the four-phase program
-tracker (Foundation → Structure → People → Operations) and Next Actions
-live here on Get Started, while its **governed lifecycle controls** and the
-scope, principles, and operating model live on **Governance → Foundation**.
-Get Started shows the lifecycle status read-only and links there. (The old
-`/governance-program` URL redirects to Foundation.)
-
-By default (the **Auto** setting) the sidebar entry auto-hides once you
-reach 100% across **all four stages** — i.e. once the program is stood
-up and running, not merely when the org is onboarded. You can change
-this under **Settings → Get Started guide** with an
-**Auto / Always / Hidden** control — *Always* keeps the entry pinned
-even after you finish, *Hidden* removes it entirely. That choice is a
-global, per-user preference: it follows you across every organization
-rather than being set per org. Nothing else on the platform is gated by
-finishing the stages — you can drive straight to the Process Catalog
-from a fresh org — but the hub makes it obvious what's still missing.
+There is **no program lifecycle to manage** — a governance program is
+simply *live* once its Foundation is defined. There's no launch, pause,
+or complete step, and no separate Governance Program page (the old
+`/governance-program` URL redirects to Foundation). Nothing is gated by
+a setup checklist; each step just fills in more of the Dashboard,
+Scorecard, and Gap Detection.
 
 ### 2.6 Where's Help?
 
@@ -1061,36 +1043,18 @@ you need to touch the enterprise governance program.
    control has a type (Preventive / Detective / Corrective) and an
    automation mode (Human / Agent / Hybrid).
 
-### 10.3 Governance Program Maturity
+### 10.3 Governance Foundation
 
-The governance program's four-phase tracker lives on **Get Started**
-(Module 2.5) — the **Govern** and **Operate** stages — not a page of its
-own. Each stage shows a plain **"n / m done"** count, and **Next Actions**
-lists the highest-priority pending items with deep-links. There's
-deliberately no single overall percentage: that number rolled up every check
-and could slide *down* as your catalog changed, which looked like a
-regression. Get Started shows the **lifecycle status** (Planning → Active →
-Paused → Completed) read-only, with a link to change it. (The old
+The governance program has **no page of its own and no lifecycle to
+manage** — it is simply *live* once its Foundation is defined. There's no
+launch, pause, or complete step, and no phase tracker: governance is a
+continuous discipline, not a project with a start and end button. (The old
 `/governance-program` URL redirects to **Governance → Foundation**.)
 
-**Phase 1** is Foundation Definition; its scope, guiding principles, and
-operating model are authored on **Governance → Foundation** (the Govern
-stage links to it). Because a launch depends on that foundation, the
-**governed lifecycle controls** (launch / pause / resume / reopen) live on
-the Foundation page too — its steady-state home — from the lifecycle bar at
-the top. The program can't launch until Phase 1 is complete: the **Launch
-button stays disabled** (with a tooltip) until Foundation is done. Launching
-with the later phases (2–4) still incomplete pops a confirmation listing
-exactly what's missing and records the reason in the audit log (an audited
-"early launch").
-
-When the program first goes Active, Procela stamps an actual **Launched**
-date — set once and kept through any later pause/resume/reopen — and shows it
-next to the lifecycle status on both Get Started and the Foundation page.
-
-(The Foundation page holds scope, guiding principles, and the operating model
-only. The old *Target Start / Target Launch* date fields were removed — they
-were never surfaced anywhere; the actual Launched date above replaces them.)
+Its scope, guiding principles, and operating model are authored on
+**Governance → Foundation**. Progress against the program is read directly
+from your catalog — on the Dashboard, the Council Scorecard (10.4), and Gap
+Detection (9.1) — rather than a launch flag or a phase checklist.
 
 **Scope is the "governed vs connected" boundary — and it's load-bearing.**
 On the Foundation **Scope** tab you don't just write prose: you pick the

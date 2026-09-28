@@ -9,8 +9,6 @@
 //                    accordion in the desktop sidebar.
 //   ROUTE_GROUPS     route-prefix aliases used to decide which item is
 //                    "active" so /report → /reports highlights Reports.
-//   GET_STARTED_ITEM the conditional "Get Started" entry pinned at the
-//                    top of the rail while setup is incomplete.
 //   bottomNavItems   the Settings cluster pinned to the bottom.
 //                    Help was retired in favour of the top-bar Help
 //                    button (openHelpWindow) so the guide opens in a
@@ -171,11 +169,6 @@ export const navSections: NavSection[] = [
   },
 ];
 
-// "Get Started" — the Setup Hub entry. Lives in its own unlabelled section
-// at the very top (above Dashboard) while setup is incomplete, and is hidden
-// once the active org reaches 100% so it doesn't clutter the rail forever.
-export const GET_STARTED_ITEM: NavItem = { to: '/setup', label: 'Get Started' };
-
 export const bottomNavItems: NavItem[] = [
   // Help was retired from the rail in favour of the top-bar Help
   // button (openHelpWindow above), which opens the same guide in
@@ -200,7 +193,6 @@ export const MOBILE_PRIMARY: NavItem[] = [
 ];
 
 export const ROUTE_GROUPS: Record<string, string[]> = {
-  '/setup': ['/setup'],
   '/processes': ['/processes'],
   '/data-assets': ['/data-assets', '/data-quality'],
   '/systems': ['/systems', '/connections'],

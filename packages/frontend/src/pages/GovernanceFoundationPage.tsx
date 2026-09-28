@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
@@ -8,24 +8,17 @@ import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import ScorecardTargetsPanel from '../components/ScorecardTargetsPanel';
 import RoiModelPanel from '../components/RoiModelPanel';
-import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
-import ProgramLifecycleBar from '../components/ProgramLifecycleBar';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
-import { usePermissions } from '../hooks/usePermissions';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceFoundationPage — "Governance → Foundation".
 //
 // The program's foundation artifacts (scope, guiding principles, operating
-// model, target dates) are authored on this page — and, since a launch depends
-// on that foundation, the program's governed lifecycle (launch / pause /
-// resume / reopen) is controlled here too, via <ProgramLifecycleBar>. This is
-// the program's steady-state home; the Get Started hub (/setup) shows the same
-// status read-only and links here. The phase tracker still lives on Get
-// Started, whose Govern-stage "Governance foundation" item deep-links here.
-// Same `PUT /governance-program/:id` API throughout — no data change.
+// model) are authored on this page. There is no program lifecycle to manage —
+// a program is simply live once its Foundation is defined — and no separate
+// Governance Program page; the old /governance-program URL redirects here.
 // ──────────────────────────────────────────────────────────────────────────
 
 interface Program {
@@ -61,15 +54,6 @@ const inputStyle: React.CSSProperties = {
 };
 const textareaStyle: React.CSSProperties = { ...inputStyle, minHeight: 80, fontFamily: 'inherit', resize: 'vertical' };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-
-// Program status → header pill styling/label. Drives the single status pill
-// that replaced the per-tab launch banner.
-const STATUS_META: Record<Program['status'], { label: string; variant: StatusBadgeVariant }> = {
-  PLANNING: { label: 'Planning', variant: 'warning' },
-  ACTIVE: { label: 'Active', variant: 'success' },
-  PAUSED: { label: 'Paused', variant: 'warning' },
-  COMPLETED: { label: 'Completed', variant: 'info' },
-};
 
 // ScopeSelector — one catalog's in-scope picker: a coverage read-out, the
 // selected entities as removable chips, and an "add" dropdown of what's left.
@@ -165,9 +149,6 @@ function OverridePicker({ label, hint, items, selectedIds, onChange, tone }: {
 export default function GovernanceFoundationPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
-  const { isAdmin } = usePermissions();
-  const navigate = useNavigate();
-
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -176,23 +157,6 @@ export default function GovernanceFoundationPage() {
   const [searchParams] = useSearchParams();
   const initialTab = (['scope', 'principles', 'targets', 'value'] as const).find((t) => t === searchParams.get('tab')) ?? 'scope';
   const [activeTab, setActiveTab] = useState<'scope' | 'principles' | 'targets' | 'value'>(initialTab);
-  // Foundation (Phase 1) is complete when the *saved* program has scope,
-  // at least one principle, and an operating model — the same three checks the
-  // backend uses. Computed off the saved program so it matches what the server
-  // will accept (unsaved edits don't count until saved). "Scope defined" now
-  // means at least one governed entity is selected (legacy free-text still
-  // counts for programs authored before the structured picker).
-  const foundationComplete = !!(
-    program
-    && (
-      (program.scope?.systemIds?.length || 0) > 0
-      || (program.scope?.domainIds?.length || 0) > 0
-      || (program.scope?.valueStreamIds?.length || 0) > 0
-      || (program.scope?.inScope || '').trim().length > 0
-    )
-    && (program.principles?.principles || []).length > 0
-    && (program.principles?.operatingModel || '') !== ''
-  );
 
   const [inScope, setInScope] = useState('');
   const [outOfScope, setOutOfScope] = useState('');
@@ -329,43 +293,8 @@ export default function GovernanceFoundationPage() {
     <div>
       <PageHeader
         title="Foundation"
-        subtitle="Define your governance program's scope, guiding principles, and operating model — the Phase 1 groundwork the rest of the program builds on."
-        actions={program ? (
-          // Compact at-a-glance badge; the full lifecycle controls render in
-          // the <ProgramLifecycleBar> below the header.
-          <StatusBadge
-            variant={STATUS_META[program.status].variant}
-            size="md"
-            title={program.launchedAt && program.status !== 'PLANNING'
-              ? `Launched ${new Date(program.launchedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
-              : undefined}
-          >{STATUS_META[program.status].label}</StatusBadge>
-        ) : (
-          <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>&larr; Set up Procela</Link>
-        )}
+        subtitle="Define your governance program's scope, guiding principles, and operating model — the groundwork the rest of the program builds on."
       />
-      {!loading && program && (
-        // Governed lifecycle controls — this page is the program's steady-state
-        // home. Launch is gated on Foundation (Phase 1) being complete, which
-        // the bar reflects via phase1Complete.
-        <div style={{ marginBottom: 16 }}>
-          <ProgramLifecycleBar
-            program={program}
-            activeOrgId={activeOrgId}
-            isAdmin={isAdmin}
-            phase1Complete={foundationComplete}
-            onChanged={(u) => {
-              setProgram((prev) => (prev ? { ...prev, status: u.status, launchedAt: u.launchedAt ?? prev.launchedAt } : prev));
-              fetchScopeCoverage();
-            }}
-          />
-        </div>
-      )}
-      {program && program.status === 'PLANNING' && !foundationComplete && (
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 12, lineHeight: 1.4 }}>
-          Complete the Foundation below — pick at least one governed entity, add a guiding principle, and select an operating model — then launch the program with the controls above.
-        </div>
-      )}
 
       {loading && <Card padding={24} shadow="none"><Spinner center label="Loading…" /></Card>}
 
@@ -588,7 +517,6 @@ export default function GovernanceFoundationPage() {
 
           {activeTab !== 'targets' && activeTab !== 'value' && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
-              <Button variant="secondary" onClick={() => navigate('/setup')}>Back to Get Started</Button>
               <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
             </div>
           )}

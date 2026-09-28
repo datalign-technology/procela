@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import TerminologyToggle from './TerminologyToggle';
 import DensityToggle from './DensityToggle';
-import GetStartedVisibilityToggle from './GetStartedVisibilityToggle';
 import styles from './Layout.module.css';
 
 interface UserMenuProps {
@@ -136,13 +135,6 @@ export default function UserMenu({ onSignOut }: UserMenuProps) {
                   <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Cozy or compact row spacing</div>
                 </div>
                 <DensityToggle />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>Get Started guide</div>
-                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Show, always pin, or hide the sidebar entry</div>
-                </div>
-                <GetStartedVisibilityToggle />
               </div>
             </div>
           </div>

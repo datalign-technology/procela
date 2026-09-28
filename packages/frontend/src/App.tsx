@@ -13,7 +13,6 @@ import LoginPage from '@/pages/LoginPage';
 
 const OidcCompletePage           = lazy(() => import('@/pages/OidcCompletePage'));
 const DashboardPage              = lazy(() => import('@/pages/DashboardPage'));
-const SetupHubPage               = lazy(() => import('@/pages/SetupHubPage'));
 const ProcessCatalogPage         = lazy(() => import('@/pages/ProcessCatalogPage'));
 const ValueStreamWizard          = lazy(() => import('@/pages/ValueStreamWizard'));
 const ProcessVisualizationPage   = lazy(() => import('@/pages/ProcessVisualizationPage'));
@@ -73,7 +72,8 @@ export default function App() {
         <Route path="/oidc-complete" element={<OidcCompletePage />} />
         <Route element={<BreadcrumbProvider><Layout /></BreadcrumbProvider>}>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/setup" element={<SetupHubPage />} />
+          {/* Get Started was removed; keep the old /setup link working. */}
+          <Route path="/setup" element={<Navigate to="/" replace />} />
           <Route path="/processes" element={<ProcessCatalogPage />} />
           <Route path="/processes/wizard" element={<ValueStreamWizard />} />
           <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />
@@ -133,10 +133,9 @@ export default function App() {
           <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
           <Route path="/decision-rights" element={<DecisionRightsPage />} />
           <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
-          {/* The Governance Program page was folded into Get Started (/setup)
-              for per-phase progress + Next Actions; its governed lifecycle
-              controls (launch / pause / resume / reopen) and scope/principles
-              live on Governance → Foundation, so redirect there. */}
+          {/* The program has no page of its own — its scope, principles, and
+              operating model live on Governance → Foundation. (The former
+              phase tracker / lifecycle were retired with Get Started.) */}
           <Route path="/governance-program" element={<Navigate to="/governance/foundation" replace />} />
           <Route path="/governance/foundation" element={<GovernanceFoundationPage />} />
           <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
