@@ -8,11 +8,13 @@ import express from 'express';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
 
+import jwt from 'jsonwebtoken';
 import { sign } from '../services/jwt-signer';
 import { authenticateToken } from '../middleware/auth';
-import servicePrincipalsRouter from '../routes/service-principals';
+import servicePrincipalsRouter, { mintServiceToken, type StoredServicePrincipal } from '../routes/service-principals';
 import { servicePrincipals } from '../routes/service-principals';
 import { createSession } from '../mcp/identity';
+import config from '../config';
 
 const ORG = 'sp-routes-org';
 const adminTok = sign({ sub: 'admin-1', email: 'admin@sp.test', orgId: ORG, role: 'ORG_ADMIN', type: 'access' }, { expiresIn: '5m' });
@@ -107,5 +109,35 @@ describe('service-principals API', () => {
     const created = await parse(await api('/api/v1/service-principals', 'POST', adminTok, { orgId: ORG, label: 'guarded' }));
     const res = await api(`/api/v1/service-principals/${created.data.id}`, 'DELETE', viewerTok);
     assert.strictEqual(res.status, 403);
+  });
+});
+
+describe('service token TTL is configurable (MCP_SERVICE_TOKEN_TTL)', () => {
+  const mutable = config as { mcpServiceTokenTtl: string };
+  const original = mutable.mcpServiceTokenTtl;
+  const grant: StoredServicePrincipal = {
+    id: 'ttl-grant', orgId: ORG, label: 'ttl', role: 'VIEWER', createdBy: null,
+    tokenPrefix: null, lastUsedAt: null, revokedAt: null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  const lifetimeSeconds = (token: string): number => {
+    const d = jwt.decode(token) as { iat: number; exp: number };
+    return d.exp - d.iat;
+  };
+  after(() => { mutable.mcpServiceTokenTtl = original; });
+
+  it('defaults to 365 days', () => {
+    mutable.mcpServiceTokenTtl = '365d';
+    assert.strictEqual(lifetimeSeconds(mintServiceToken(grant)), 365 * 24 * 60 * 60);
+  });
+
+  it('honours a duration-string override', () => {
+    mutable.mcpServiceTokenTtl = '30d';
+    assert.strictEqual(lifetimeSeconds(mintServiceToken(grant)), 30 * 24 * 60 * 60);
+  });
+
+  it('reads a bare-number override as SECONDS (not milliseconds)', () => {
+    mutable.mcpServiceTokenTtl = '3600';
+    assert.strictEqual(lifetimeSeconds(mintServiceToken(grant)), 3600);
   });
 });

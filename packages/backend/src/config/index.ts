@@ -66,6 +66,11 @@ export const config = {
   // read-only surface without ever enabling agent-driven mutations. Every write
   // still requires the acting role's *:write permission and is audited.
   mcpWriteEnabled: process.env.MCP_WRITE_ENABLED === 'true',
+  // Lifetime of a minted MCP service-principal token (routes/service-principals).
+  // Anything jsonwebtoken's `expiresIn` accepts — a duration string ('365d',
+  // '90d', '12h') or a bare number of seconds. Default 365d; day-to-day
+  // rotation is the grant's revokedAt, this just bounds a leaked/lost token.
+  mcpServiceTokenTtl: process.env.MCP_SERVICE_TOKEN_TTL || '365d',
   // Anthropic model used for every server-side Claude call (process
   // template generation, data-domain suggestions, asset suggestions,
   // governance activity runs, chat). Override with ANTHROPIC_MODEL
