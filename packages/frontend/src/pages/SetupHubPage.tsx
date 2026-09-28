@@ -4,11 +4,10 @@ import { apiClient } from '@/api/client';
 import { useOrgContext } from '@/stores/orgContext';
 import { useSetupStore } from '@/stores/setupStore';
 import { useToastStore } from '@/stores/toastStore';
-import { usePermissions } from '@/hooks/usePermissions';
 import Page from '@/components/Page';
 import PageHeader from '@/components/PageHeader';
 import Spinner from '@/components/Spinner';
-import ConfirmDialog from '@/components/ConfirmDialog';
+import { LIFECYCLE, STATUS_PILL, programStatusLabel } from '@/components/ProgramLifecycleBar';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SetupHubPage — "Set up Procela". A single four-stage journey from an empty
@@ -19,8 +18,12 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 // Onboarding the organization (Capture, Assign) and standing up the
 // governance program (Govern, Operate) are one spine, not two tracks:
 // onboarding IS the first half of standing up governance. The program's
-// lifecycle (Planning → Active → Paused → Completed) lives at the top and
-// governs the whole arc.
+// lifecycle (Planning → Active → Paused → Completed) is shown here read-only
+// as an at-a-glance strip; the actual governed controls (launch / pause /
+// resume / reopen) live on Governance → Foundation — its steady-state home,
+// next to the foundation a launch depends on — so this page stays the
+// onboarding/adoption board rather than a program console. The strip links
+// there, and the "Program launched" board row deep-links there too.
 //
 // There is deliberately NO overall percentage — a single number that mixes
 // "have I added my systems" with "is the program launched" is meaningless and
@@ -62,29 +65,6 @@ interface ProgStatus {
 }
 type ProgramStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
 interface Prog { id: string; status: ProgramStatus; launchedAt?: string | null }
-interface IncompletePhase { phase: number; name: string; missing: string[] }
-
-// Client mirror of the backend lifecycle state machine — the backend is
-// authoritative; this only decides which transition buttons to show. Ported
-// from the (removed) Governance Program page, whose governed lifecycle
-// transitions now live on the Get Started lifecycle bar.
-// "Complete program" is intentionally NOT offered: data governance is a
-// continuous discipline, not a project that finishes — ACTIVE ⇄ PAUSED
-// models the real lifecycle. COMPLETED remains a valid backend state (and
-// can still be reopened here) only so any program a prior version marked
-// complete isn't stranded.
-const VALID_TRANSITIONS: Record<ProgramStatus, ProgramStatus[]> = {
-  PLANNING: ['ACTIVE'],
-  ACTIVE: ['PAUSED'],
-  PAUSED: ['ACTIVE'],
-  COMPLETED: ['ACTIVE'],
-};
-const STATUS_ACTION_LABEL: Record<string, string> = {
-  'PLANNING>ACTIVE': 'Launch program',
-  'PAUSED>ACTIVE': 'Resume program',
-  'COMPLETED>ACTIVE': 'Reopen program',
-  'ACTIVE>PAUSED': 'Pause program',
-};
 // Next Actions priority palette. Board-derived: items in the current stage
 // are HIGH (do these now), items in later stages are NEXT.
 const PRIORITY_PALETTE = {
@@ -108,24 +88,10 @@ interface Stage { num: number; name: string; color: string; blurb: string; items
 // Assign = brand teal, Govern = success green, Operate = warning amber.
 const STAGE_COLOR = ['var(--color-info)', 'var(--color-primary)', 'var(--color-success)', 'var(--color-warning)'];
 
-const LIFECYCLE: Array<{ key: Prog['status']; label: string }> = [
-  { key: 'PLANNING', label: 'Planning' },
-  { key: 'ACTIVE', label: 'Active' },
-  { key: 'PAUSED', label: 'Paused' },
-  { key: 'COMPLETED', label: 'Completed' },
-];
-const STATUS_PILL: Record<Prog['status'], { bg: string; fg: string }> = {
-  PLANNING: { bg: '#e0edff', fg: '#1d4ed8' },
-  ACTIVE: { bg: '#dcfce7', fg: '#15803d' },
-  PAUSED: { bg: '#fef3c7', fg: '#b45309' },
-  COMPLETED: { bg: '#ede9fe', fg: '#6d28d9' },
-};
-
 export default function SetupHubPage() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName, orgs, refreshKey } = useOrgContext();
   const { setProgress, setVisibility } = useSetupStore();
-  const { isAdmin } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const hideGuide = () => {
     setVisibility('hidden');
@@ -136,17 +102,9 @@ export default function SetupHubPage() {
   const [prog, setProg] = useState<Prog | null>(null);
   const [status, setStatus] = useState<ProgStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  // Locally bump to re-run the loader after a governed lifecycle transition.
-  const [reload, setReload] = useState(0);
   // Next Actions collapses the later-stage (NEXT) items behind a "show more"
   // so the current-stage (HIGH) work leads; this toggles the full list.
   const [showAllLater, setShowAllLater] = useState(false);
-
-  // Governed status-transition dialog state (ported from the Program page).
-  const [statusTarget, setStatusTarget] = useState<ProgramStatus | null>(null);
-  const [statusReason, setStatusReason] = useState('');
-  const [earlyLaunchInfo, setEarlyLaunchInfo] = useState<IncompletePhase[] | null>(null);
-  const [statusBusy, setStatusBusy] = useState(false);
 
   useEffect(() => {
     if (!activeOrgId) { setLoading(false); return; }
@@ -172,50 +130,7 @@ export default function SetupHubPage() {
       }
     }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [activeOrgId, refreshKey, reload]);
-
-  // Governed status change. The backend enforces role, valid transitions, the
-  // Phase-1 hard prerequisite, and the early-launch soft gate:
-  //   400 blockingPhase   → hard-blocked, show what's missing
-  //   409 requiresConfirm → open the early-launch confirm, retry with force
-  const changeStatus = async (to: ProgramStatus, opts: { force?: boolean; reason?: string } = {}) => {
-    if (!prog) return;
-    setStatusBusy(true);
-    try {
-      const res = await apiClient.put<{ success: boolean; data: Prog }>(
-        `/governance-program/${prog.id}`,
-        { status: to, ...(opts.force ? { force: true } : {}), ...(opts.reason ? { reason: opts.reason } : {}) },
-      );
-      if (res.data) setProg(res.data);
-      addToast('success', `Program ${to.toLowerCase()}.`);
-      setStatusTarget(null);
-      setStatusReason('');
-      setEarlyLaunchInfo(null);
-      setReload((n) => n + 1);
-    } catch (e: any) {
-      const body = (e && typeof e === 'object' && 'body' in e ? e.body : null) || {};
-      if (body?.requiresConfirmation && Array.isArray(body.incompletePhases)) {
-        setEarlyLaunchInfo(body.incompletePhases);
-        setStatusTarget(to);
-      } else if (body?.blockingPhase) {
-        addToast('error', `${body.error} Missing: ${(body.missing || []).join(', ')}`);
-        setStatusTarget(null);
-      } else {
-        addToast('error', body?.error || e?.message || 'Status change failed');
-        setStatusTarget(null);
-      }
-    } finally {
-      setStatusBusy(false);
-    }
-  };
-
-  const startTransition = (to: ProgramStatus) => {
-    if (!activeOrgId || !prog) { addToast('error', 'Select an organization first.'); return; }
-    setStatusReason('');
-    setEarlyLaunchInfo(null);
-    if (to === 'ACTIVE' && prog.status === 'PLANNING') changeStatus('ACTIVE');
-    else setStatusTarget(to);
-  };
+  }, [activeOrgId, refreshKey]);
 
   const orgCount = orgs.length;
 
@@ -275,9 +190,10 @@ export default function SetupHubPage() {
         detail: ph ? `Structure ${ph.phase2.progress}% complete` : 'Create governance groups' },
       { label: 'Roles & policies', done: rolesPoliciesDone, to: '/dama-roles', src: 'auto', cta: 'Set up',
         detail: 'Assign DAMA roles & publish policies' },
-      // Launch happens on this page's lifecycle bar — empty `to` scrolls there.
-      { label: 'Program launched', done: launched && structureDone && rolesPoliciesDone, to: '', src: 'auto', cta: 'Launch',
-        detail: 'Finish the steps above, then launch' },
+      // Launch is a governed lifecycle action — it lives on Governance →
+      // Foundation now, so this row deep-links there rather than scrolling.
+      { label: 'Program launched', done: launched && structureDone && rolesPoliciesDone, to: '/governance/foundation', src: 'auto', cta: 'Launch',
+        detail: 'Finish the steps above, then launch from Foundation' },
     ];
 
     return [
@@ -360,7 +276,7 @@ export default function SetupHubPage() {
             </button>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 20, background: pill.bg, color: pill.fg }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: pill.fg }} />
-              {LIFECYCLE.find((l) => l.key === progStatus)?.label}
+              {programStatusLabel(progStatus)}
             </span>
           </div>
         }
@@ -370,7 +286,10 @@ export default function SetupHubPage() {
         <Spinner center label="Loading your setup status…" />
       ) : (
         <>
-          {/* Lifecycle strip — the program status the whole arc drives toward. */}
+          {/* Program status — read-only here. The governed lifecycle
+              (launch / pause / resume / reopen) is managed on Governance →
+              Foundation, its steady-state home, next to the foundation a launch
+              depends on. This strip is the at-a-glance status + a link there. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
             {LIFECYCLE.map((l, i) => (
               <span key={l.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -392,44 +311,9 @@ export default function SetupHubPage() {
                 Launched <strong style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{launchedLabel}</strong>
               </span>
             )}
-            {!prog ? (
-              <button onClick={() => navigate('/governance/foundation')} style={{ ...primaryBtn, marginLeft: 'auto' }}>Set up program &rarr;</button>
-            ) : (
-              // Governed lifecycle transitions (role-gated + audited), moved here
-              // from the removed Governance Program page.
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {(VALID_TRANSITIONS[progStatus] || []).map((to) => {
-                  const label = STATUS_ACTION_LABEL[`${progStatus}>${to}`] || `Set ${to}`;
-                  const isPrimary = to === 'ACTIVE';
-                  const isDanger = to === 'COMPLETED';
-                  // Foundation (Phase 1) is a hard prerequisite for going ACTIVE
-                  // — the backend rejects it, so disable the button rather than
-                  // let it fail. Later phases stay allowed (audited early launch).
-                  const needsFoundation = to === 'ACTIVE' && !status?.phases.phase1.completed;
-                  const disabled = !isAdmin || statusBusy || needsFoundation;
-                  const title = !isAdmin ? 'Only an admin / program owner can change the program status'
-                    : needsFoundation ? 'Complete the Foundation (Phase 1) — scope, principles, and operating model — before launching.'
-                    : undefined;
-                  return (
-                    <button
-                      key={to}
-                      disabled={disabled}
-                      title={title}
-                      onClick={() => startTransition(to)}
-                      style={{
-                        ...primaryBtn,
-                        background: disabled ? 'var(--color-border)' : isDanger ? '#b91c1c' : isPrimary ? 'var(--color-primary)' : 'var(--color-surface)',
-                        color: disabled ? 'var(--color-text-muted)' : (isPrimary || isDanger) ? '#fff' : 'var(--color-text)',
-                        border: isPrimary || isDanger ? 'none' : '1px solid var(--color-border)',
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <button onClick={() => navigate('/governance/foundation')} style={{ ...primaryBtn, marginLeft: 'auto' }}>
+              {!prog ? 'Set up program' : progStatus === 'PLANNING' ? 'Launch on Foundation' : 'Manage lifecycle'} &rarr;
+            </button>
           </div>
 
           {/* Stage line — the single honest summary, no overall %. The board
@@ -575,72 +459,6 @@ export default function SetupHubPage() {
           </div>
         </>
       )}
-
-      {/* Early-launch confirmation — phases incomplete; backend returned the
-          list, admin confirms to force it. Ported from the Program page. */}
-      <ConfirmDialog
-        open={!!earlyLaunchInfo}
-        title="Launch with incomplete phases?"
-        message="The program isn't fully set up. Launching now marks it active in the scorecard and dashboards with these gaps:"
-        confirmLabel="Launch anyway"
-        variant="danger"
-        onConfirm={() => statusTarget && changeStatus(statusTarget, { force: true, reason: statusReason })}
-        onCancel={() => { setEarlyLaunchInfo(null); setStatusTarget(null); setStatusReason(''); }}
-      >
-        <div style={{ marginTop: 8, marginBottom: 12 }}>
-          {(earlyLaunchInfo || []).map((p) => (
-            <div key={p.phase} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>Phase {p.phase} — {p.name}</div>
-              <ul style={{ margin: '2px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                {p.missing.map((m) => <li key={m}>{m}</li>)}
-              </ul>
-            </div>
-          ))}
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginTop: 8, marginBottom: 4 }}>Reason (recorded in the audit log)</label>
-          <input
-            aria-label="Reason (recorded in the audit log)"
-            value={statusReason}
-            onChange={(e) => setStatusReason(e.target.value)}
-            placeholder="e.g. running a 30-day pilot ahead of full rollout"
-            style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 6, boxSizing: 'border-box' }}
-          />
-        </div>
-      </ConfirmDialog>
-
-      {/* Plain transition confirmation — Pause / Resume / Complete / Reopen.
-          (Launch from PLANNING goes direct; the backend may bounce it into the
-          early-launch dialog above.) */}
-      <ConfirmDialog
-        open={statusTarget !== null && !earlyLaunchInfo}
-        title={
-          statusTarget === 'COMPLETED' ? 'Complete this program?'
-          : statusTarget === 'PAUSED' ? 'Pause this program?'
-          : statusTarget === 'ACTIVE' && prog?.status === 'COMPLETED' ? 'Reopen this completed program?'
-          : statusTarget === 'ACTIVE' ? 'Resume this program?'
-          : 'Change program status?'
-        }
-        message={
-          statusTarget === 'COMPLETED' ? 'Completed marks the program as closed out. Reopening later is possible but is an explicit, audited action.'
-          : statusTarget === 'PAUSED' ? 'Pausing keeps all configuration but signals the program is not actively operating (e.g. a reorg or budget freeze).'
-          : statusTarget === 'ACTIVE' && prog?.status === 'COMPLETED' ? 'This moves a closed program back to active. The reopen is recorded in the audit log.'
-          : 'This resumes active operations.'
-        }
-        confirmLabel={statusTarget ? (STATUS_ACTION_LABEL[`${prog?.status}>${statusTarget}`] || `Set ${statusTarget}`) : 'Confirm'}
-        variant={statusTarget === 'COMPLETED' ? 'danger' : 'primary'}
-        onConfirm={() => statusTarget && changeStatus(statusTarget, { reason: statusReason })}
-        onCancel={() => { setStatusTarget(null); setStatusReason(''); }}
-      >
-        <div style={{ marginTop: 8 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Reason (optional — recorded in the audit log)</label>
-          <input
-            aria-label="Reason (optional — recorded in the audit log)"
-            value={statusReason}
-            onChange={(e) => setStatusReason(e.target.value)}
-            placeholder="Why is the status changing?"
-            style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 6, boxSizing: 'border-box' }}
-          />
-        </div>
-      </ConfirmDialog>
     </Page>
   );
 }

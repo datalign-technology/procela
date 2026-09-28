@@ -133,10 +133,11 @@ export default function App() {
           <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
           <Route path="/decision-rights" element={<DecisionRightsPage />} />
           <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
-          {/* The Governance Program page was folded into Get Started (/setup):
-              its lifecycle transitions, per-phase progress, and Next Actions
-              now live there, with scope/principles on Governance → Foundation. */}
-          <Route path="/governance-program" element={<Navigate to="/setup" replace />} />
+          {/* The Governance Program page was folded into Get Started (/setup)
+              for per-phase progress + Next Actions; its governed lifecycle
+              controls (launch / pause / resume / reopen) and scope/principles
+              live on Governance → Foundation, so redirect there. */}
+          <Route path="/governance-program" element={<Navigate to="/governance/foundation" replace />} />
           <Route path="/governance/foundation" element={<GovernanceFoundationPage />} />
           <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />

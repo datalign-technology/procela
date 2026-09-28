@@ -9,19 +9,23 @@ import Button from '../components/Button';
 import ScorecardTargetsPanel from '../components/ScorecardTargetsPanel';
 import RoiModelPanel from '../components/RoiModelPanel';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
+import ProgramLifecycleBar from '../components/ProgramLifecycleBar';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceFoundationPage — "Governance → Foundation".
 //
 // The program's foundation artifacts (scope, guiding principles, operating
-// model, target dates) are authored on this page. The program's phase tracker
-// and governed lifecycle live on the Get Started hub (/setup) — there is no
-// separate Governance Program page — and its Govern-stage "Governance
-// foundation" item deep-links here. Same `PUT /governance-program/:id` API —
-// no data change — so it stays in sync with the phase status.
+// model, target dates) are authored on this page — and, since a launch depends
+// on that foundation, the program's governed lifecycle (launch / pause /
+// resume / reopen) is controlled here too, via <ProgramLifecycleBar>. This is
+// the program's steady-state home; the Get Started hub (/setup) shows the same
+// status read-only and links here. The phase tracker still lives on Get
+// Started, whose Govern-stage "Governance foundation" item deep-links here.
+// Same `PUT /governance-program/:id` API throughout — no data change.
 // ──────────────────────────────────────────────────────────────────────────
 
 interface Program {
@@ -161,6 +165,7 @@ function OverridePicker({ label, hint, items, selectedIds, onChange, tone }: {
 export default function GovernanceFoundationPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
+  const { isAdmin } = usePermissions();
   const navigate = useNavigate();
 
   const [program, setProgram] = useState<Program | null>(null);
@@ -326,28 +331,39 @@ export default function GovernanceFoundationPage() {
         title="Foundation"
         subtitle="Define your governance program's scope, guiding principles, and operating model — the Phase 1 groundwork the rest of the program builds on."
         actions={program ? (
-          <>
-            <StatusBadge
-              variant={STATUS_META[program.status].variant}
-              size="md"
-              title={program.launchedAt && program.status !== 'PLANNING'
-                ? `Launched ${new Date(program.launchedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
-                : undefined}
-            >{STATUS_META[program.status].label}</StatusBadge>
-            {/* Foundation shows the program status read-only. Every lifecycle
-                control (launch / pause / resume) lives on the Get Started hub,
-                so there's a single home for changing program state. */}
-            <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>
-              {program.status === 'PLANNING' ? 'Launch on Get Started' : 'Manage lifecycle'} &rarr;
-            </Link>
-          </>
+          // Compact at-a-glance badge; the full lifecycle controls render in
+          // the <ProgramLifecycleBar> below the header.
+          <StatusBadge
+            variant={STATUS_META[program.status].variant}
+            size="md"
+            title={program.launchedAt && program.status !== 'PLANNING'
+              ? `Launched ${new Date(program.launchedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
+              : undefined}
+          >{STATUS_META[program.status].label}</StatusBadge>
         ) : (
           <Link to="/setup" style={{ fontSize: 13, color: 'var(--color-primary)', fontWeight: 500 }}>&larr; Set up Procela</Link>
         )}
       />
+      {!loading && program && (
+        // Governed lifecycle controls — this page is the program's steady-state
+        // home. Launch is gated on Foundation (Phase 1) being complete, which
+        // the bar reflects via phase1Complete.
+        <div style={{ marginBottom: 16 }}>
+          <ProgramLifecycleBar
+            program={program}
+            activeOrgId={activeOrgId}
+            isAdmin={isAdmin}
+            phase1Complete={foundationComplete}
+            onChanged={(u) => {
+              setProgram((prev) => (prev ? { ...prev, status: u.status, launchedAt: u.launchedAt ?? prev.launchedAt } : prev));
+              fetchScopeCoverage();
+            }}
+          />
+        </div>
+      )}
       {program && program.status === 'PLANNING' && !foundationComplete && (
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 12, lineHeight: 1.4 }}>
-          Complete the Foundation below — pick at least one governed entity, add a guiding principle, and select an operating model — then launch the program from Get Started.
+          Complete the Foundation below — pick at least one governed entity, add a guiding principle, and select an operating model — then launch the program with the controls above.
         </div>
       )}
 
@@ -572,7 +588,7 @@ export default function GovernanceFoundationPage() {
 
           {activeTab !== 'targets' && activeTab !== 'value' && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
-              <Button variant="secondary" onClick={() => navigate('/setup')}>Back to Setup</Button>
+              <Button variant="secondary" onClick={() => navigate('/setup')}>Back to Get Started</Button>
               <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
             </div>
           )}

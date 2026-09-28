@@ -253,10 +253,11 @@ roles & policies it depends on are in place. Below the board,
 (HIGH for the current stage, NEXT for later ones).
 
 There is no separate Governance Program page — the four-phase program
-tracker (Foundation → Structure → People → Operations), its lifecycle,
-and Next Actions all live here on Get Started, with **Governance →
-Foundation** for scope, principles, and operating model. (The old
-`/governance-program` URL redirects to `/setup`.)
+tracker (Foundation → Structure → People → Operations) and Next Actions
+live here on Get Started, while its **governed lifecycle controls** and the
+scope, principles, and operating model live on **Governance → Foundation**.
+Get Started shows the lifecycle status read-only and links there. (The old
+`/governance-program` URL redirects to Foundation.)
 
 By default (the **Auto** setting) the sidebar entry auto-hides once you
 reach 100% across **all four stages** — i.e. once the program is stood
@@ -1064,27 +1065,28 @@ you need to touch the enterprise governance program.
 
 The governance program's four-phase tracker lives on **Get Started**
 (Module 2.5) — the **Govern** and **Operate** stages — not a page of its
-own. The **lifecycle status** (Planning → Active → Paused → Completed) is
-changed right there from the lifecycle bar, each stage shows a plain
-**"n / m done"** count, and **Next Actions** lists the highest-priority
-pending items with deep-links. There's deliberately no single overall
-percentage: that number rolled up every check and could slide *down* as
-your catalog changed, which looked like a regression. (The old
-`/governance-program` URL redirects to `/setup`.)
+own. Each stage shows a plain **"n / m done"** count, and **Next Actions**
+lists the highest-priority pending items with deep-links. There's
+deliberately no single overall percentage: that number rolled up every check
+and could slide *down* as your catalog changed, which looked like a
+regression. Get Started shows the **lifecycle status** (Planning → Active →
+Paused → Completed) read-only, with a link to change it. (The old
+`/governance-program` URL redirects to **Governance → Foundation**.)
 
 **Phase 1** is Foundation Definition; its scope, guiding principles, and
 operating model are authored on **Governance → Foundation** (the Govern
-stage links to it). The program can't launch until Phase 1 is complete —
-the **Launch button stays disabled** (with a tooltip) until Foundation is
-done, on both the Get Started lifecycle bar and the Foundation page. Because
-Foundation is the prerequisite, you can also **launch straight from the
-Governance → Foundation page** once it's complete. Launching with the later
-phases (2–4) still incomplete pops a confirmation listing exactly what's
-missing and records the reason in the audit log (an audited "early launch").
+stage links to it). Because a launch depends on that foundation, the
+**governed lifecycle controls** (launch / pause / resume / reopen) live on
+the Foundation page too — its steady-state home — from the lifecycle bar at
+the top. The program can't launch until Phase 1 is complete: the **Launch
+button stays disabled** (with a tooltip) until Foundation is done. Launching
+with the later phases (2–4) still incomplete pops a confirmation listing
+exactly what's missing and records the reason in the audit log (an audited
+"early launch").
 
 When the program first goes Active, Procela stamps an actual **Launched**
 date — set once and kept through any later pause/resume/reopen — and shows it
-next to the lifecycle status on Get Started and on the Foundation page.
+next to the lifecycle status on both Get Started and the Foundation page.
 
 (The Foundation page holds scope, guiding principles, and the operating model
 only. The old *Target Start / Target Launch* date fields were removed — they
