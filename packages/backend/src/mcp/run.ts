@@ -36,7 +36,7 @@ export async function main(): Promise<number> {
 
   let server;
   try {
-    server = buildMcpServer(token);
+    server = await buildMcpServer(token);
   } catch (err) {
     log(`authentication failed: ${err instanceof Error ? err.message : String(err)}`);
     return 77;

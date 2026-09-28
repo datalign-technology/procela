@@ -49,6 +49,7 @@ import aiRouter from './routes/ai';
 import { enforceAiBudget } from './middleware/ai-budget';
 import { requireAiEnabled } from './middleware/ai-enabled';
 import { mcpHttpRouter, unverifiedPrincipal } from './mcp/http';
+import servicePrincipalsRouter from './routes/service-principals';
 import processCatalogRouter from './routes/process-catalog';
 import systemsRouter from './routes/systems';
 import dataAssetsRouter from './routes/data-assets';
@@ -370,6 +371,11 @@ if (config.mcpServerEnabled && config.aiFeaturesEnabled) {
   app.use('/mcp', mcpLimiter, mcpHttpRouter());
   logger.info({ max: mcpRateLimitMax, windowMs: mcpRateLimitWindowMs }, 'MCP Streamable-HTTP transport mounted at /mcp');
 }
+// MCP service-principal token issuance — admin-gated per handler
+// (requirePermission('org:write')). The tokens it mints authenticate agents to
+// the /mcp surface; managing them is org configuration, not an AI call, so it
+// sits here rather than behind requireAiEnabled.
+app.use('/api/v1/service-principals', authenticateToken, servicePrincipalsRouter);
 app.use('/api/v1/digest', authenticateToken, digestRouter);
 app.use('/api/v1/search', authenticateToken, searchRouter);
 app.use('/api/v1/notifications', authenticateToken, notificationsRouter);

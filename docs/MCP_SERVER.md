@@ -45,7 +45,8 @@ It is the first slice of the design in
 | **RBAC floor** | A read tool asserts the caller's role carries the relevant `*:read` permission; a write tool asserts the matching `*:write`. |
 | **Audit** | Every read is written to the hash-chained audit log (`entityType: McpTool`, `action: MCP_QUERY`); every **write** is logged with the **real** entity type/id and before/after state under an `MCP_*` action, before returning. Non-bypassable. |
 | **Human-in-the-loop** | Write tools carry MCP annotations (`readOnlyHint: false`, `destructiveHint`, `idempotentHint`) so a client asks the operator to confirm before calling. |
-| **Least privilege** | For read-only use, point it at a dedicated **Viewer**, org-restricted service token — never a shared admin token. A token used for writes carries exactly the `*:write` its role grants, nothing more. Rotate it like any credential. |
+| **Service tokens** | Agents authenticate as a **service principal** — a revocable, org-scoped, role-capped grant an org admin mints in-app (Settings → Integrations → Agent access), never a shared admin token. It is looked up on every call and a revoked one is refused; it is confined to its grant org's subtree and can never reach a sibling tenant (unlike a human token, a synthetic identity is scoped explicitly, not via the email→person path). |
+| **Least privilege** | A service token is capped to **Viewer** (read-only) or **Editor** (adds writes, still gated by `MCP_WRITE_ENABLED`) — never an admin role. It carries exactly the `*:read`/`*:write` its role grants. Give each agent its own token and revoke like any credential. |
 
 ## Read tools
 
@@ -116,11 +117,21 @@ token as a bearer:
   "mcpServers": {
     "procela": {
       "url": "https://api.procela.io/mcp",
-      "headers": { "Authorization": "Bearer <a Viewer-scoped Procela access token>" }
+      "headers": { "Authorization": "Bearer <a service token from Settings → Integrations → Agent access>" }
     }
   }
 }
 ```
+
+**Getting a token.** An org admin mints one at **Settings → Integrations →
+Agent access (MCP) → Service tokens**: pick a label and a role (Viewer or
+Editor), and copy the token — it is shown once and never stored. Each token is
+a long-lived bearer scoped to that org (and its divisions) and capped to the
+chosen role. Revoke any token from the same panel; a revoked token stops
+authenticating immediately. Behind the API this is `POST/GET/DELETE
+/api/v1/service-principals` (admin-gated, audited); the token is a JWT with
+`type: "service"` whose `sub` is the grant id, and `mcp/identity.ts` checks the
+grant on every call.
 
 Wire behaviour:
 
