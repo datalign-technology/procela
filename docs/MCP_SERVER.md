@@ -1,14 +1,44 @@
-# Procela read-only MCP server (v1)
+# Procela MCP server
 
-A read-only [Model Context Protocol](https://modelcontextprotocol.io) server
-that exposes Procela's **governed catalog** — processes, data assets, systems,
-ownership, gaps, health, and governance scope — to external AI agents (Claude
-Desktop, IDE assistants, internal copilots). It lets an agent answer *"what
-process depends on this data, who owns it, and is it governed?"* without a
-bespoke integration.
+A [Model Context Protocol](https://modelcontextprotocol.io) server that turns
+Procela into the **governance-context provider for a customer's whole agent
+fleet**. It exposes Procela's **governed catalog** — processes, data assets,
+systems, ownership, gaps, health, and governance scope — to external AI agents
+(Claude Desktop, IDE assistants, internal copilots) so an agent can answer
+*"what process depends on this data, who owns it, and is it governed?"* — and,
+where explicitly allowed, make audited changes — without a bespoke integration.
 
-It is the first slice of the design in
-[`MCP_SERVER_DESIGN.md`](./MCP_SERVER_DESIGN.md). **Read-only, off by default.**
+This is the operator + integrator guide. The design rationale and threat model
+live in [`MCP_SERVER_DESIGN.md`](./MCP_SERVER_DESIGN.md); the role→permission
+mapping is in [`RBAC_PERMISSION_MATRIX.md`](./RBAC_PERMISSION_MATRIX.md).
+
+## What shipped
+
+The full surface is built and off by default at every layer:
+
+- **Read tools + a catalog-summary resource** — the governed catalog as typed
+  queries (never row-level source data).
+- **Write tools** (opt-in) — assign owner, set process status, create task —
+  each RBAC-gated, validated like the REST API, and audited before/after.
+- **Two transports** — hosted **Streamable-HTTP** (`POST /mcp`, per-request
+  auth, multi-tenant) and local **stdio** (a spawned process, on-prem/desktop).
+- **Per-tenant enablement** — an org admin opts their tenant in before its
+  context is reachable, on top of the deployment kill switches.
+- **Service-principal tokens** — revocable, org-scoped, role-capped bearers an
+  admin mints in-app, one per agent, instead of a shared credential.
+
+### End-to-end setup (hosted / SaaS)
+
+1. **Operator** enables the surface for the deployment: `MCP_SERVER_ENABLED=true`
+   (and keep `AI_FEATURES_ENABLED` on). Add `MCP_WRITE_ENABLED=true` only if
+   agents should be allowed to make changes.
+2. **Org admin** opts their tenant in at **Settings → Integrations → Agent
+   access (MCP)** and mints a **service token** there (label + Viewer/Editor
+   role) — copied once.
+3. **Integrator** points an MCP client at `POST https://<host>/mcp` with
+   `Authorization: Bearer <that token>`.
+
+All three gates must pass; any one flips the surface (or writes) off.
 
 ## What it is (and isn't)
 
@@ -140,7 +170,7 @@ Wire behaviour:
 | `POST /mcp` with a JSON-RPC message (has `id`) | `200 application/json` with the JSON-RPC response. A batch (array) request returns an array. |
 | `POST /mcp` with only notifications (no `id`) | `202 Accepted`, empty body. |
 | `POST /mcp` with a missing / malformed / invalid bearer token | `401` + `WWW-Authenticate: Bearer` (the reason is not leaked). |
-| `GET /mcp` | `405` + `Allow: POST` — v1 has no server-initiated SSE stream. |
+| `GET /mcp` | `405` + `Allow: POST` — there is no server-initiated SSE stream (every tool is request/response). |
 | `DELETE /mcp` | `204` — the transport is stateless (no `Mcp-Session-Id`), so teardown is a no-op. |
 
 Each request is authenticated and authorized on its own (identity, tenant
@@ -158,6 +188,10 @@ rate-limited **per principal** (the token subject; IP fallback) — see
 | `MCP_RATE_LIMIT_MAX` | Max `POST /mcp` requests per principal per window (default 120). HTTP transport only. |
 | `MCP_RATE_LIMIT_WINDOW_MS` | The rate-limit window in ms (default 60000). HTTP transport only. |
 | `MCP_WRITE_ENABLED` | `true` also registers the write tools (assign owner, set status, create task). Default off — the read tools work without it. |
+| `MCP_SERVICE_TOKEN_TTL` | Lifetime of a minted service token — a duration string (`365d`, `90d`, `12h`) or bare seconds. Default `365d`. Revocation is immediate regardless; this just bounds a leaked/lost token. |
+
+Per-tenant enablement (`mcpEnabled`) is org configuration, not an env var — an
+org admin sets it in the app, and it resolves up the org tree.
 
 ## Not yet (planned follow-ups)
 
