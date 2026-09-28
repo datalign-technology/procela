@@ -52,6 +52,7 @@ import { prismaDecisionRightsRepository } from '../db/decision-rights.repo';
 import { prismaSyncConnectionsRepository } from '../db/sync-connections.repo';
 import { prismaConnectionsRepository } from '../db/connections.repo';
 import { prismaConnectorsRepository } from '../db/connectors.repo';
+import { prismaServicePrincipalsRepository } from '../db/service-principals.repo';
 import { prismaConnectorEventsRepository } from '../db/connector-events.repo';
 import { prismaMaturitySnapshotsRepository } from '../db/maturity-snapshots.repo';
 import { prismaDataLineageLinksRepository } from '../db/data-lineage-links.repo';
@@ -669,6 +670,21 @@ suite('live-db repository round-trips', () => {
     assert.deepStrictEqual((await connector.list({ orgId }))[0].systemIds.length, 1);
     assert.strictEqual((await connectorEvent.list({ orgId })).length, 1);
     assert.strictEqual((await sync.list({ orgId })).length, 1);
+  });
+
+  it('ServicePrincipal: create → list → revoke (revokedAt set) round-trip', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+    const sp = prismaServicePrincipalsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaServicePrincipalsRepository>[0] extends () => infer C ? C : never);
+    const id = randomUUID();
+    await sp.create({
+      id, orgId, label: 'Live agent', role: 'VIEWER', createdBy: 'admin-live',
+      tokenPrefix: 'abcdef', lastUsedAt: null, revokedAt: null, createdAt: now, updatedAt: now,
+    });
+    assert.strictEqual((await sp.list({ orgId })).length, 1);
+    const revoked = await sp.update(id, { revokedAt: now });
+    assert.strictEqual(revoked?.revokedAt, now);
+    assert.strictEqual((await sp.get(id))?.role, 'VIEWER');
   });
 
   it('DataQualityRule / DbtCloudConnection / AssetLineageEdge / DataLineageLink: mixed JSON + scalar', async () => {

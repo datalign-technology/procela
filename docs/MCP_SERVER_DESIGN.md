@@ -223,8 +223,14 @@ audit-query filters for reviewers.
   is live — `mcpEnabled` on the org (resolved up the org tree like
   `scorecardTargets`, off by default), authored at **Settings → Integrations →
   Agent access (MCP)**, and enforced on every tool call and the resource via
-  `Session.assertMcpEnabled` (`mcp/enablement.ts`). The generated
-  service-principal grant / token-issuance UX is the remaining follow-up.
+  `Session.assertMcpEnabled` (`mcp/enablement.ts`). **The service-principal
+  grant / token-issuance UX has also shipped** — an org admin mints revocable,
+  org-scoped, role-capped (Viewer/Editor) tokens at the same panel
+  (`routes/service-principals`, `POST/GET/DELETE /api/v1/service-principals`,
+  admin-gated + audited); the token is a `type: "service"` JWT whose grant is
+  checked (and can be revoked) on every call in `mcp/identity.ts`, scoped
+  explicitly to its grant org's subtree — never through the human email→person
+  path (§7's least-privilege service-principal requirement).
 - **Deployment kill switches.** Honors `AI_FEATURES_ENABLED=false` (the
   `requireAiEnabled` gate) and a new deployment flag
   `MCP_SERVER_ENABLED=false` — so a FedRAMP / air-gapped / "no external AI

@@ -17,10 +17,11 @@ import config from '../config';
 export const SERVER_INFO = { name: 'procela-governance', version: '1.0.0' };
 
 /** Build a fully-wired MCP server for a bearer token. Throws if the token is
- *  invalid (surfaced by the caller as an auth failure). Used by the stdio
- *  transport, which authenticates once per process. */
-export function buildMcpServer(token: string): McpServer {
-  return buildMcpServerForSession(createSession(token));
+ *  invalid (surfaced by the caller as an auth failure). Async because session
+ *  creation may read a service-principal grant. Used by the stdio transport,
+ *  which authenticates once per process. */
+export async function buildMcpServer(token: string): Promise<McpServer> {
+  return buildMcpServerForSession(await createSession(token));
 }
 
 /** Build a fully-wired MCP server for an already-authenticated session. The

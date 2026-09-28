@@ -40,7 +40,10 @@ export interface TokenPayload {
   orgId: string;
   role: string;
   name?: string;
-  type?: 'access' | 'refresh';
+  // 'service' is a non-human service-principal grant (an MCP agent bearer):
+  // long-lived, revocable via its grant row, and org-scoped explicitly rather
+  // than through the email→person path humans use. See routes/service-principals.
+  type?: 'access' | 'refresh' | 'service';
 }
 
 export interface PaginationParams {

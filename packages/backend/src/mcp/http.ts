@@ -105,7 +105,7 @@ export async function dispatchHttp(input: HttpDispatchInput): Promise<HttpDispat
 
   let server;
   try {
-    server = buildMcpServerForSession(createSession(token));
+    server = buildMcpServerForSession(await createSession(token));
   } catch {
     // Don't leak the verifier's reason (expired vs malformed vs bad payload) —
     // a 401 is all an unauthenticated caller is owed.
