@@ -8,7 +8,7 @@ A platform that connects business processes to the data and systems that support
 
 Monorepo with three packages:
 
-- **`packages/backend`** — Express + TypeScript REST API. Handles authentication (Dev / Local / OIDC / SAML), authorisation, business logic, audit logging, SCIM provisioning, AI calls.
+- **`packages/backend`** — Express + TypeScript REST API. Handles authentication (Dev / Local / OIDC / SAML), authorisation, business logic, audit logging, SCIM provisioning, AI calls, and an **MCP server** (`src/mcp/`) that exposes the governed catalog to external AI agents over the Model Context Protocol (hosted `POST /mcp` + local stdio; off by default). See [`docs/MCP_SERVER.md`](./docs/MCP_SERVER.md).
 - **`packages/frontend`** — React + TypeScript + Vite SPA. Consumes the REST API; no direct database access.
 - **`packages/connector`** — `@procela/connector`, the optional on-prem edge agent (Node 20). Pairs with the backend, scans customer databases (PostgreSQL, MySQL, SQL Server, Oracle, dbt manifest), and reports discovered tables and columns back as Bronze data assets — audit-only, no data values cross the wire. Containerised and shipped via a GHCR release workflow.
 
@@ -182,6 +182,7 @@ Procela/
 │   │   ├── src/
 │   │   │   ├── routes/         # HTTP handlers, one per entity
 │   │   │   ├── services/       # auth, MFA, SCIM, SAML, GDPR, crypto, audit
+│   │   │   ├── mcp/            # MCP server — agent access (read/write tools, HTTP + stdio)
 │   │   │   ├── middleware/     # authenticateToken, authorize, rate-limit
 │   │   │   └── lib/            # persistence, logger
 │   │   └── package.json

@@ -90,13 +90,15 @@ Everything below is **v1** unless stated.
 ## 5. Architecture
 
 ### 5.1 Placement
-A new workspace package, **`packages/mcp-server`**, that depends on the
-backend's domain services (or a shared `packages/core` if we extract one). It
+The plan was a new workspace package, **`packages/mcp-server`**, depending on the
+backend's domain services. **Status (shipped):** the server lives **inside the
+backend** at **`packages/backend/src/mcp/`** — a transport-agnostic core
+(`protocol.ts`) with `tools.ts` / `write-tools.ts`, the `http.ts` Streamable-HTTP
+transport, and a stdio entrypoint — rather than a separate package. This keeps it
+sharing the backend's process, identity, and middleware directly. Either way it
 does **not** re-implement data access — it calls the same repositories,
-`lib/tenant-scope`, `lib/governance-scope`, and the snapshot logic factored out
-of `routes/chat.ts`. Refactor note: extract the chat snapshot builder into a
-reusable `buildCatalogView(orgScope)` service so both the assistant and the MCP
-server share one code path (and one test surface).
+`lib/tenant-scope`, `lib/governance-scope`, and the catalog snapshot logic shared
+with `routes/chat.ts`.
 
 ### 5.2 Transport
 - **SaaS / multi-tenant:** **Streamable HTTP** transport, mounted behind the
