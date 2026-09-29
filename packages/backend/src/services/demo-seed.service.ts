@@ -889,7 +889,8 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
 
   // ── Process hierarchy (Tidewater Electric) ──
   // Compact but meaningful: one value stream, two processes, one
-  // sub-process per process, three activities. Enough to demo
+  // sub-process per process. The Detect & Assess triage sub-process runs
+  // SCADA anomaly → open OMS incident → triage. Enough to demo
   // Dependencies, BCM attributes, and mappings.
   const vs = { id: demoId('node-vs-outage'), parentId: null, level: 'VALUE_STREAM' as const, name: 'Outage Management', description: 'End-to-end restoration flow — detect, dispatch, communicate, recover.', activityId: 'VS-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const procDetect = { id: demoId('node-proc-detect'), parentId: vs.id, level: 'PROCESS' as const, name: 'Detect & Assess', description: 'Detect outages via SCADA + customer channel, triage severity.', activityId: 'PRO-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
@@ -899,16 +900,22 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // the seeded Outage triage shows a real predecessor — matches
   // playbook beat 3's promise.
   const actSignal = { id: demoId('node-act-signal'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'SCADA anomaly detected', description: 'Grid telemetry flags a probable outage — voltage sag, breaker open, or historian gap.', activityId: 'ACT-DEMO-0', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actTriage = { id: demoId('node-act-triage'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Outage triage', description: 'Classify incoming outages, dispatch first responders.', activityId: 'ACT-DEMO-1', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Field crew on site within 30 minutes for Tier 1 outages\n\nP95 30 min from detection', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  // Between detection and triage: the confirmed anomaly becomes a tracked
+  // incident in the OMS (the system of record for restoration). Attached to
+  // the OMS system so the step tells the "opened here" story.
+  const actOpenIncident = { id: demoId('node-act-open-incident'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Open outage incident in OMS', description: 'The confirmed anomaly is opened as a tracked incident in the Outage Management System — the system of record for the restoration workflow.', activityId: 'ACT-DEMO-0A', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysOMS.id], systemLinks: [{ systemId: sysOMS.id, externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type' }], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Incident opened in OMS within 5 minutes of a confirmed anomaly', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actTriage = { id: demoId('node-act-triage'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Outage triage', description: 'Classify incoming outages, dispatch first responders.', activityId: 'ACT-DEMO-1', status: 'ACTIVE', orderIndex: 2, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Field crew on site within 30 minutes for Tier 1 outages\n\nP95 30 min from detection', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actDispatch = { id: demoId('node-act-dispatch'), parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Crew dispatch', description: 'Assign crews to outages by location + skill.', activityId: 'ACT-DEMO-2', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'Line Superintendent', systemIds: [sysGIS.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actNotify = { id: demoId('node-act-notify'), parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Customer notification sent', description: 'SMS/email/voice notifications to affected customers.', activityId: 'ACT-DEMO-3', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, responsibleRole: 'Manager Contact Center', responsiblePersonId: samira.id, systemIds: [sysCIS.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  await createAll(repos.processNodes, [vs, procDetect, procRestore, spTriage, actSignal, actTriage, actDispatch, actNotify]);
+  await createAll(repos.processNodes, [vs, procDetect, procRestore, spTriage, actSignal, actOpenIncident, actTriage, actDispatch, actNotify]);
 
   // Flow relationships wiring the Electric activity chain. Feeds the
-  // Dependencies panel: Outage triage sees actSignal as predecessor
-  // and actDispatch as successor; actDispatch fans into actNotify.
+  // Dependencies panel: SCADA anomaly → open OMS incident → Outage triage →
+  // Crew dispatch → Customer notification. So Outage triage sees "Open outage
+  // incident in OMS" as its predecessor and Crew dispatch as its successor.
   await createAll(repos.flowRelationships, [
-    { id: demoId('flow-1'), fromNodeId: actSignal.id, toNodeId: actTriage.id, type: 'SEQUENCE' as const, label: 'anomaly confirmed', createdAt: ts },
+    { id: demoId('flow-1'), fromNodeId: actSignal.id, toNodeId: actOpenIncident.id, type: 'SEQUENCE' as const, label: 'anomaly confirmed', createdAt: ts },
+    { id: demoId('flow-1b'), fromNodeId: actOpenIncident.id, toNodeId: actTriage.id, type: 'SEQUENCE' as const, label: 'incident opened', createdAt: ts },
     { id: demoId('flow-2'), fromNodeId: actTriage.id, toNodeId: actDispatch.id, type: 'SEQUENCE' as const, label: 'crew required', createdAt: ts },
     { id: demoId('flow-3'), fromNodeId: actDispatch.id, toNodeId: actNotify.id, type: 'SEQUENCE' as const, label: 'ETA available', createdAt: ts },
   ]);
@@ -936,6 +943,7 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // ── Mappings ──
   await createAll(repos.mappings, [
     { id: demoId('map-1'), orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetOutageLogs.id, linkType: 'INPUT', notes: 'Consumes raw outage records', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: demoId('map-1b'), orgId: orgElectric.id, processStepId: actOpenIncident.id, dataAssetId: assetOutageLogs.id, linkType: 'INPUT', notes: 'Opens an OMS incident from the confirmed outage record', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: demoId('map-2'), orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Cross-references affected customers', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: demoId('map-3'), orgId: orgElectric.id, processStepId: actNotify.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Pulls customer contact preferences', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: demoId('map-4'), orgId: orgTidewater.id, processStepId: actDispatch.id, dataAssetId: assetMeterReads.id, linkType: 'INPUT', notes: 'Verifies restoration via meter reads', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
@@ -1351,8 +1359,8 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     agents: 5,
     dataDomains: 6,
     dataAssets: 9,
-    processNodes: 15,
-    mappings: 7,
+    processNodes: 16,
+    mappings: 8,
     governanceTasks: 3,
     governanceIssues: 1,
     dataQualityRules: 2,

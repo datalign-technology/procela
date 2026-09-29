@@ -33,6 +33,8 @@ const { mappings } = require('../routes/mappings');
 const { dataAssets } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { organizations } = require('../routes/organizations');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { systems } = require('../routes/systems');
 
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -80,6 +82,9 @@ describe('process-catalog routes — Tier 2 coverage', () => {
   const versionProcId = PREFIX + 'ver-proc';
   const versionActId  = PREFIX + 'ver-act';
   const flowId = PREFIX + 'flow';
+  const refVsId = PREFIX + 'ref-vs';
+  const refActId = PREFIX + 'ref-act';
+  const refSysId = PREFIX + 'sys';
 
   before(async () => {
     const app = express();
@@ -99,6 +104,7 @@ describe('process-catalog routes — Tier 2 coverage', () => {
     sweep(dataAssets,      (a) => typeof a.id === 'string' && a.id.startsWith(PREFIX));
     sweep(flowRelationships, (f) => typeof f.id === 'string' && f.id.startsWith(PREFIX));
     sweep(processNodes,    (n) => typeof n.id === 'string' && n.id.startsWith(PREFIX));
+    sweep(systems,         (s) => typeof s.id === 'string' && s.id.startsWith(PREFIX));
 
     const now = new Date().toISOString();
     const baseNode = (extra: Record<string, any>) => ({
@@ -131,8 +137,13 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       baseNode({ id: versionVsId,  parentId: null,         level: 'VALUE_STREAM', name: 'Version VS' }),
       baseNode({ id: versionProcId, parentId: versionVsId,  level: 'PROCESS',     name: 'Version process' }),
       baseNode({ id: versionActId,  parentId: versionProcId, level: 'ACTIVITY',   name: 'Version activity' }),
+
+      // systemLinks seed: a DRAFT activity we can attach a system + reference to.
+      baseNode({ id: refVsId,  parentId: null,   level: 'VALUE_STREAM', name: 'SystemRef VS' }),
+      baseNode({ id: refActId, parentId: refVsId, level: 'ACTIVITY',    name: 'SystemRef activity' }),
     );
-    seedIds.push(vsId, procId, actId, lockVsId, lockActId, cloneVsId, cloneProcId, cloneActId, versionVsId, versionProcId, versionActId);
+    systems.push({ id: refSysId, orgId, name: 'SystemRef test system', description: '', createdAt: now, updatedAt: now });
+    seedIds.push(vsId, procId, actId, lockVsId, lockActId, cloneVsId, cloneProcId, cloneActId, versionVsId, versionProcId, versionActId, refVsId, refActId);
 
     flowRelationships.push({
       id: flowId, fromNodeId: actId, toNodeId: actId, type: 'SEQUENCE',
@@ -168,7 +179,47 @@ describe('process-catalog routes — Tier 2 coverage', () => {
     pruneById(dataAssets, PREFIX);
     pruneById(flowRelationships, PREFIX);
     pruneById(processNodes, PREFIX);
+    pruneById(systems, PREFIX);
     await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  describe('PUT /nodes/:id — systemLinks references', () => {
+    it('round-trips a per-system reference, validates membership, and prunes on unlink', async () => {
+      // Link the system.
+      let res = await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, { systemIds: [refSysId] });
+      assert.strictEqual(res.status, 200);
+
+      // Attach a reference to that system.
+      res = await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, {
+        systemLinks: [{ systemId: refSysId, externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type' }],
+      });
+      assert.strictEqual(res.status, 200);
+      const node = processNodes.find((n: any) => n.id === refActId);
+      assert.deepStrictEqual(node.systemLinks, [{ systemId: refSysId, externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type' }]);
+      assert.deepStrictEqual(node.systemIds, [refSysId]);
+
+      // A reference to a system the activity isn't linked to is rejected.
+      res = await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, {
+        systemLinks: [{ systemId: 'not-a-member', externalRef: 'X' }],
+      });
+      assert.strictEqual(res.status, 400);
+
+      // A blank reference is dropped rather than stored.
+      res = await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, {
+        systemLinks: [{ systemId: refSysId, externalRef: '   ' }],
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(!processNodes.find((n: any) => n.id === refActId).systemLinks);
+
+      // Re-attach, then unlink the system — its dangling reference is pruned.
+      await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, {
+        systemLinks: [{ systemId: refSysId, externalRef: 'INC-TYPE-OUTAGE' }],
+      });
+      res = await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, { systemIds: [] });
+      assert.strictEqual(res.status, 200);
+      const after = processNodes.find((n: any) => n.id === refActId);
+      assert.ok(!after.systemLinks || after.systemLinks.length === 0);
+    });
   });
 
   describe('DELETE /nodes/:id — cascade', () => {

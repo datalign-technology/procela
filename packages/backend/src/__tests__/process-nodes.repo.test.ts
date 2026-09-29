@@ -222,7 +222,53 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
     assert.deepStrictEqual(calls.skillDelete, { where: { processNodeId: 'n1' } });
     assert.deepStrictEqual(calls.skillCreate, { data: [{ processNodeId: 'n1', skillId: 's-new' }] });
     assert.deepStrictEqual(calls.systemDelete, { where: { processNodeId: 'n1' } });
-    assert.deepStrictEqual(calls.systemCreate, { data: [{ processNodeId: 'n1', systemId: 'sys-new' }] });
+    // The systems join carries per-link reference columns (null when unset).
+    assert.deepStrictEqual(calls.systemCreate, { data: [{ processNodeId: 'n1', systemId: 'sys-new', externalRef: null, refLabel: null, refUrl: null }] });
+  });
+
+  it('round-trips systemLinks reference metadata on the systems join', async () => {
+    const calls: Record<string, unknown> = {};
+    const makeJoinDelegate = (key: string) => ({
+      findMany: async () => [],
+      deleteMany: async (arg: unknown) => { calls[key + 'Delete'] = arg; return { count: 0 }; },
+      createMany: async (arg: unknown) => { calls[key + 'Create'] = arg; return { count: 1 }; },
+    });
+    // A full base row (structurally a PrismaProcessNodeRow, so no type-name
+    // cast is needed — matching the delegate signature keeps it type-checked).
+    const baseRow = {
+      id: 'n1', parentId: null, level: 'ACTIVITY', name: 'Outage triage', description: null,
+      orgId: 'o1', ownerId: null, status: 'ACTIVE', orderIndex: 0, activityId: 'ACT-1',
+      responsibleRole: null, responsiblePersonId: null, purpose: null, businessOutcome: null,
+      stakeholders: null, inputsOutputs: null, complianceTags: [], statusJustification: null,
+      frequency: null, riskLevel: null, automationLevel: null, estimatedDuration: null,
+      criticalityTier: null, rtoHours: null, rpoHours: null, successMeasure: null, slaTarget: null,
+      trigger: null, volume: null, nextReviewDate: null, riskMitigation: null, domain: 'OPERATIONAL',
+      version: 1, submittedBy: null, submittedAt: null, reviewedBy: null, reviewedAt: null,
+      reviewComment: null, createdAt: new Date(), updatedAt: new Date(),
+    };
+    const client = {
+      processNode: makeDelegate({
+        update: async () => ({ ...baseRow }),
+        findUnique: async () => ({
+          ...baseRow,
+          systems: [{ systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type', refUrl: null }],
+        }),
+      }),
+      processNodeOrg: makeJoinDelegate('org'),
+      processNodeControl: makeJoinDelegate('control'),
+      processNodeSkill: makeJoinDelegate('skill'),
+      processNodeSystem: makeJoinDelegate('system'),
+    };
+    const repo = prismaProcessNodesRepository(() => client as unknown as { processNode: PrismaProcessNodeDelegate });
+    const updated = await repo.update('n1', {
+      systemIds: ['sys-oms'],
+      systemLinks: [{ systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type' }],
+    });
+    // Write carries the reference columns…
+    assert.deepStrictEqual(calls.systemCreate, { data: [{ processNodeId: 'n1', systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type', refUrl: null }] });
+    // …and read maps the join rows back to systemIds + sparse systemLinks.
+    assert.deepStrictEqual(updated!.systemIds, ['sys-oms']);
+    assert.deepStrictEqual(updated!.systemLinks, [{ systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type' }]);
   });
 
   it('update returns null on P2025', async () => {

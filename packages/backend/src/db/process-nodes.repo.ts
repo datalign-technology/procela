@@ -20,7 +20,7 @@
 // scalar column with an FK to Organization, orgIds via the join
 // table — matching what the JSON row does.
 
-import type { ProcessNode as StoredProcessNode } from '../routes/process-catalog';
+import type { ProcessNode as StoredProcessNode, SystemLink } from '../routes/process-catalog';
 import { saveStore } from '../lib/persistence';
 import { jsonRepository, Repository } from './repository';
 import { getPrisma, hasDatabase } from './prisma';
@@ -77,7 +77,7 @@ type PrismaProcessNodeRow = {
   orgLinks?: Array<{ orgId: string }>;
   controls?: Array<{ controlId: string }>;
   requiredSkills?: Array<{ skillId: string }>;
-  systems?: Array<{ systemId: string }>;
+  systems?: Array<{ systemId: string; externalRef?: string | null; refLabel?: string | null; refUrl?: string | null }>;
 };
 
 export interface PrismaProcessNodeDelegate {
@@ -155,6 +155,18 @@ function fromPrisma(r: PrismaProcessNodeRow): StoredProcessNode {
     ...(r.reviewComment ? { reviewComment: r.reviewComment } : {}),
     ...(r.systems && r.systems.length > 0
       ? { systemIds: r.systems.map((s) => s.systemId) }
+      : {}),
+    ...(r.systems && r.systems.some((s) => s.externalRef || s.refLabel || s.refUrl)
+      ? {
+          systemLinks: r.systems
+            .filter((s) => s.externalRef || s.refLabel || s.refUrl)
+            .map((s) => ({
+              systemId: s.systemId,
+              ...(s.externalRef ? { externalRef: s.externalRef } : {}),
+              ...(s.refLabel ? { refLabel: s.refLabel } : {}),
+              ...(s.refUrl ? { refUrl: s.refUrl } : {}),
+            })),
+        }
       : {}),
     domain: r.domain as StoredProcessNode['domain'],
     createdAt: r.createdAt.toISOString(),
@@ -246,6 +258,48 @@ async function rewriteJoin<K extends string, V extends string>(
   void valueColumn;
 }
 
+// The activity↔system join (process_node_systems) carries per-link reference
+// metadata (externalRef / refLabel / refUrl), so it can't use the string-only
+// rewriteJoin above. Membership comes from patch.systemIds (falling back to the
+// existing rows when only the metadata is being changed); the reference values
+// come authoritatively from patch.systemLinks — callers send the full desired
+// link state (the route always persists the whole node), so there's no
+// carry-forward to accidentally resurrect a cleared reference.
+async function rewriteSystemLinks(
+  client: unknown,
+  nodeId: string,
+  patch: Partial<StoredProcessNode>,
+): Promise<void> {
+  const table = (client as Record<string, {
+    findMany(arg: { where: Record<string, string> }): Promise<Array<{ systemId: string }>>;
+    deleteMany(arg: { where: Record<string, string> }): Promise<{ count: number }>;
+    createMany(arg: { data: Array<Record<string, string | null>> }): Promise<{ count: number }>;
+  }>).processNodeSystem;
+
+  const ids = patch.systemIds !== undefined
+    ? patch.systemIds
+    : (await table.findMany({ where: { processNodeId: nodeId } })).map((e) => e.systemId);
+
+  const linkById = new Map<string, SystemLink>();
+  for (const l of patch.systemLinks ?? []) linkById.set(l.systemId, l);
+
+  await table.deleteMany({ where: { processNodeId: nodeId } });
+  if (ids.length > 0) {
+    await table.createMany({
+      data: ids.map((systemId) => {
+        const l = linkById.get(systemId);
+        return {
+          processNodeId: nodeId,
+          systemId,
+          externalRef: l?.externalRef ?? null,
+          refLabel: l?.refLabel ?? null,
+          refUrl: l?.refUrl ?? null,
+        };
+      }),
+    });
+  }
+}
+
 export function prismaProcessNodesRepository(
   clientFactory: () => { processNode: PrismaProcessNodeDelegate } = getPrisma as unknown as () => { processNode: PrismaProcessNodeDelegate },
 ): Repository<StoredProcessNode> {
@@ -273,6 +327,7 @@ export function prismaProcessNodesRepository(
       if (row.controlIds) patch.controlIds = row.controlIds;
       if (row.requiredSkillIds) patch.requiredSkillIds = row.requiredSkillIds;
       if (row.systemIds) patch.systemIds = row.systemIds;
+      if (row.systemLinks) patch.systemLinks = row.systemLinks;
       if (Object.keys(patch).length > 0) {
         await this.update(created.id, patch);
       }
@@ -304,11 +359,10 @@ export function prismaProcessNodesRepository(
             (nodeId, skillId) => ({ processNodeId: nodeId, skillId }),
           );
         }
-        if (patch.systemIds !== undefined) {
-          await rewriteJoin(
-            client, 'processNodeSystem', 'processNodeId', 'systemId', id, patch.systemIds,
-            (nodeId, systemId) => ({ processNodeId: nodeId, systemId }),
-          );
+        // The systems join carries per-link reference metadata, so it can't
+        // use the string-only rewriteJoin above.
+        if (patch.systemIds !== undefined || patch.systemLinks !== undefined) {
+          await rewriteSystemLinks(client, id, patch);
         }
         return await this.get(id);
       } catch (err) {
