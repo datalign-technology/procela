@@ -233,21 +233,26 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
       deleteMany: async (arg: unknown) => { calls[key + 'Delete'] = arg; return { count: 0 }; },
       createMany: async (arg: unknown) => { calls[key + 'Create'] = arg; return { count: 1 }; },
     });
+    // A full base row (structurally a PrismaProcessNodeRow, so no type-name
+    // cast is needed — matching the delegate signature keeps it type-checked).
+    const baseRow = {
+      id: 'n1', parentId: null, level: 'ACTIVITY', name: 'Outage triage', description: null,
+      orgId: 'o1', ownerId: null, status: 'ACTIVE', orderIndex: 0, activityId: 'ACT-1',
+      responsibleRole: null, responsiblePersonId: null, purpose: null, businessOutcome: null,
+      stakeholders: null, inputsOutputs: null, complianceTags: [], statusJustification: null,
+      frequency: null, riskLevel: null, automationLevel: null, estimatedDuration: null,
+      criticalityTier: null, rtoHours: null, rpoHours: null, successMeasure: null, slaTarget: null,
+      trigger: null, volume: null, nextReviewDate: null, riskMitigation: null, domain: 'OPERATIONAL',
+      version: 1, submittedBy: null, submittedAt: null, reviewedBy: null, reviewedAt: null,
+      reviewComment: null, createdAt: new Date(), updatedAt: new Date(),
+    };
     const client = {
       processNode: makeDelegate({
-        update: async () => ({}) as unknown as PrismaProcessNodeRow,
+        update: async () => ({ ...baseRow }),
         findUnique: async () => ({
-          id: 'n1', parentId: null, level: 'ACTIVITY', name: 'Outage triage', description: null,
-          orgId: 'o1', ownerId: null, status: 'ACTIVE', orderIndex: 0, activityId: 'ACT-1',
-          responsibleRole: null, responsiblePersonId: null, purpose: null, businessOutcome: null,
-          stakeholders: null, inputsOutputs: null, complianceTags: [], statusJustification: null,
-          frequency: null, riskLevel: null, automationLevel: null, estimatedDuration: null,
-          criticalityTier: null, rtoHours: null, rpoHours: null, successMeasure: null, slaTarget: null,
-          trigger: null, volume: null, nextReviewDate: null, riskMitigation: null, domain: 'OPERATIONAL',
-          version: 1, submittedBy: null, submittedAt: null, reviewedBy: null, reviewedAt: null,
-          reviewComment: null, createdAt: new Date(), updatedAt: new Date(),
+          ...baseRow,
           systems: [{ systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type', refUrl: null }],
-        }) as unknown as PrismaProcessNodeRow,
+        }),
       }),
       processNodeOrg: makeJoinDelegate('org'),
       processNodeControl: makeJoinDelegate('control'),
