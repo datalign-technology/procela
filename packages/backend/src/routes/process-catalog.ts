@@ -1134,7 +1134,11 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (systemIds !== undefined) {
     const cleaned = await validateSystemIds(systemIds, res);
     if (cleaned === null) return;
-    node.systemIds = cleaned.length > 0 ? cleaned : undefined;
+    // Keep an empty array (not undefined) so the persistence layer sees a
+    // real "no systems" state and clears the join rows — collapsing to
+    // undefined reads as "not provided" and silently leaves stale links
+    // behind in Postgres (deleting the last system wouldn't stick).
+    node.systemIds = cleaned;
   }
   // Per-system reference metadata. When the caller sends systemLinks, it
   // replaces the full set (validated against the node's resulting membership).

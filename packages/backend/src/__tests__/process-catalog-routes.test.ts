@@ -219,6 +219,13 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       assert.strictEqual(res.status, 200);
       const after = processNodes.find((n: any) => n.id === refActId);
       assert.ok(!after.systemLinks || after.systemLinks.length === 0);
+      // Regression: clearing the last system must persist systemIds as an
+      // empty array, never collapse to undefined. The route persists the
+      // whole node, and the Prisma repo only rewrites (i.e. deletes) the
+      // systems join when patch.systemIds !== undefined — collapsing to
+      // undefined skips the rewrite, leaving the last join row behind in
+      // Postgres so the unlink silently doesn't stick.
+      assert.deepStrictEqual(after.systemIds, []);
     });
   });
 
