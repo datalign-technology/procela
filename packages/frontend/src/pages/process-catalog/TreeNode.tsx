@@ -50,7 +50,7 @@ function collectDescendantIds(node: ProcessNode, out: Set<string> = new Set()): 
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onMoveNode, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope }: {
+function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onMoveNode, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, connectionsBySystem, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope }: {
   node: ProcessNode; depth: number;
   /** The parent node's id, or null for a root (value-stream) row. Drag-to-
    *  reorder is constrained to siblings — a drop is only honoured when the
@@ -84,6 +84,9 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
   assetsList: DataAssetRef[];
   policiesList: PolicyRef[];
   systemsList: SystemRef[];
+  /** Live connections available per system id — threaded to the systems
+   *  field's source-key picker. Optional; absent ⇒ free-text refs only. */
+  connectionsBySystem?: Record<string, { id: string; name: string }[]>;
   mappingsByStep: Record<string, MappingInfo[]>;
   /** Per-node attachment counts (bulk-fetched once by the page) so every
    *  node's "Attach (n)" badge is populated without a per-node request. */
@@ -869,6 +872,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                   selected={node.systemIds || []}
                   options={systemsList}
                   links={node.systemLinks || []}
+                  connectionsBySystem={connectionsBySystem}
                   onSave={(ids) => onUpdate(node.id, { systemIds: ids })}
                   onSaveLinks={(links) => onUpdate(node.id, { systemLinks: links })}
                   disabled={isLocked}
@@ -1223,6 +1227,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
           assetsList={assetsList}
           policiesList={policiesList}
           systemsList={systemsList}
+          connectionsBySystem={connectionsBySystem}
           mappingsByStep={mappingsByStep}
           attachmentCountByNode={attachmentCountByNode}
           skillCoverageByNode={skillCoverageByNode}

@@ -224,7 +224,7 @@ export interface SystemRef { id: string; name: string; systemType?: string; }
 /** Per-system reference into a system of record: the identifier that uniquely
  *  locates this activity in that system, an optional label for what the id is,
  *  and an optional deep link. `systemId` keys back to an entry in `systemIds`. */
-export interface SystemLink { systemId: string; externalRef?: string; refLabel?: string; refUrl?: string; }
+export interface SystemLink { systemId: string; externalRef?: string; refLabel?: string; refUrl?: string; sourceConnectionId?: string; sourceAsset?: string; sourceColumn?: string; isKey?: boolean; }
 export interface PolicyRef { id: string; name: string; code: string; documentType: string; orgId?: string }
 export interface MappingInfo {
   id: string;
@@ -544,6 +544,9 @@ export default function ProcessCatalogPage() {
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
   const [policiesList, setPoliciesList] = useState<PolicyRef[]>([]);
   const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
+  // Live connections keyed by the systems they're linked to — feeds the
+  // systems field's discover-fed source-key picker.
+  const [connectionsBySystem, setConnectionsBySystem] = useState<Record<string, { id: string; name: string }[]>>({});
   // Governance controls for the Activity-level Controls picker.
   // Keeps id, code, and name — enough for the multi-select dropdown
   // and the chip labels.
@@ -618,7 +621,7 @@ export default function ProcessCatalogPage() {
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes, coverageRes, controlsRes, attachCountsRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes, coverageRes, controlsRes, attachCountsRes, connectionsRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
@@ -641,6 +644,10 @@ export default function ProcessCatalogPage() {
         // Bulk per-node attachment counts (one round-trip for the whole
         // tree). Catch so a counts fault just leaves badges blank.
         apiClient.get<{ success: boolean; data: Record<string, number> }>(`/attachments/counts?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`).catch(() => ({ data: {} as Record<string, number> })),
+        // Live connections, to offer the discover-fed source-key picker on the
+        // systems field. Catch so a connections fault just falls the picker
+        // back to free-text refs rather than breaking the catalog.
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; systemIds?: string[] }> }>('/connections').catch(() => ({ data: [] as Array<{ id: string; name: string; systemIds?: string[] }> })),
       ]);
       setSkillCoverageByNode(coverageRes.data?.byNode || {});
       setAttachmentCountByNode(attachCountsRes.data || {});
@@ -659,6 +666,15 @@ export default function ProcessCatalogPage() {
       setAssetsList((assetsRes.data || []).map((a) => ({ id: a.id, name: a.name, orgId: a.orgId })));
       setPoliciesList((policiesRes.data || []).map((p) => ({ id: p.id, name: p.name, code: p.code, documentType: p.documentType, orgId: p.orgId })));
       setSystemsList((systemsRes.data || []).map((s) => ({ id: s.id, name: s.name, systemType: s.systemType })));
+      // Invert connections → per-system list so the systems field can offer a
+      // source-key picker for any system that has a live connection.
+      const bySystem: Record<string, { id: string; name: string }[]> = {};
+      for (const c of (connectionsRes.data || [])) {
+        for (const sid of (c.systemIds || [])) {
+          (bySystem[sid] ||= []).push({ id: c.id, name: c.name });
+        }
+      }
+      setConnectionsBySystem(bySystem);
       setControlsList((controlsRes.data || []).map((c) => ({ id: c.id, code: c.code, name: c.name, policyId: c.policyId })));
       setRoleAssignments((rolesRes.data || []).map((r) => ({ personId: r.personId, roleType: r.roleType })));
       // Fetch agent executions, DAMA roles, and schedules for agent-assigned activities
@@ -1733,6 +1749,7 @@ export default function ProcessCatalogPage() {
               assetsList={assetsList}
               policiesList={policiesList}
               systemsList={systemsList}
+              connectionsBySystem={connectionsBySystem}
               mappingsByStep={mappingsByStep}
               attachmentCountByNode={attachmentCountByNode}
               skillCoverageByNode={skillCoverageByNode}

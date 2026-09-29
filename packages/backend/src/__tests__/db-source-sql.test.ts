@@ -6,12 +6,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildSelectSql,
+  buildColumnSampleSql,
   clampLimit,
+  clampSampleLimit,
   assertIdentifier,
   normalizeValue,
   normalizeRow,
   DEFAULT_ROW_LIMIT,
   MAX_ROW_LIMIT,
+  SAMPLE_DEFAULT_LIMIT,
+  SAMPLE_MAX_LIMIT,
 } from '../lib/db-source/sql';
 
 test('buildSelectSql: Postgres table-scan quotes idents and uses LIMIT', () => {
@@ -86,6 +90,43 @@ test('assertIdentifier / buildSelectSql: reject injection attempts in identifier
   for (const ok of ['systems', 'data_assets', '_tmp', 'tbl$1', 'A1']) {
     assert.equal(assertIdentifier('table', ok), ok);
   }
+});
+
+test('buildColumnSampleSql: DISTINCT, aliased value, NULL-filtered, per-dialect limit', () => {
+  assert.equal(
+    buildColumnSampleSql('POSTGRESQL', { schema: 'dbo', table: 'incidents', column: 'Incident_ID', limit: 10 }),
+    'SELECT DISTINCT "Incident_ID" AS value FROM "dbo"."incidents" WHERE "Incident_ID" IS NOT NULL LIMIT 10',
+  );
+  assert.equal(
+    buildColumnSampleSql('MYSQL', { table: 'incidents', column: 'incident_id', limit: 5 }),
+    'SELECT DISTINCT `incident_id` AS value FROM `incidents` WHERE `incident_id` IS NOT NULL LIMIT 5',
+  );
+  assert.equal(
+    buildColumnSampleSql('SQLSERVER', { schema: 'dbo', table: 'incidents', column: 'Incident_ID', limit: 8 }),
+    'SELECT DISTINCT TOP (8) [Incident_ID] AS value FROM [dbo].[incidents] WHERE [Incident_ID] IS NOT NULL',
+  );
+  assert.equal(
+    buildColumnSampleSql('ORACLE', { schema: 'OMS', table: 'INCIDENTS', column: 'INCIDENT_ID', limit: 7 }),
+    'SELECT DISTINCT INCIDENT_ID AS value FROM OMS.INCIDENTS WHERE INCIDENT_ID IS NOT NULL FETCH FIRST 7 ROWS ONLY',
+  );
+});
+
+test('buildColumnSampleSql: defaults the limit and rejects injection in table/column', () => {
+  assert.equal(
+    buildColumnSampleSql('POSTGRESQL', { table: 't', column: 'c' }),
+    `SELECT DISTINCT "c" AS value FROM "t" WHERE "c" IS NOT NULL LIMIT ${SAMPLE_DEFAULT_LIMIT}`,
+  );
+  assert.throws(() => buildColumnSampleSql('POSTGRESQL', { table: 'incidents', column: 'id; DROP TABLE x' }), /Invalid column identifier/);
+  assert.throws(() => buildColumnSampleSql('POSTGRESQL', { table: 'a b', column: 'id' }), /Invalid table identifier/);
+});
+
+test('clampSampleLimit: defaults, floors, and caps at the tiny sample max', () => {
+  assert.equal(clampSampleLimit(undefined), SAMPLE_DEFAULT_LIMIT);
+  assert.equal(clampSampleLimit(NaN), SAMPLE_DEFAULT_LIMIT);
+  assert.equal(clampSampleLimit(0), 1);
+  assert.equal(clampSampleLimit(-3), 1);
+  assert.equal(clampSampleLimit(4.9), 4);
+  assert.equal(clampSampleLimit(SAMPLE_MAX_LIMIT + 100), SAMPLE_MAX_LIMIT);
 });
 
 test('clampLimit: defaults, floors, and caps', () => {

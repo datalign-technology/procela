@@ -106,12 +106,26 @@ const REQUIRED_LEVELS: NodeLevel[] = ['VALUE_STREAM', 'PROCESS', 'ACTIVITY'];
  *  unique identifier (`externalRef`) that locates the activity inside that
  *  system, an optional label describing what the id is, and an optional URL
  *  deep-linking to it. `systemId` keys back to an entry in the node's
- *  `systemIds`. */
+ *  `systemIds`.
+ *
+ *  When the system is connected (a ConnectionProfile is linked to it), the
+ *  reference can instead be a *structured* pointer at the discovered field
+ *  that uniquely identifies the activity's records: `sourceConnectionId` +
+ *  `sourceAsset` (table, may be schema-qualified) + `sourceColumn`, with
+ *  `isKey` marking it the unique/primary key. This is the discover-fed form
+ *  of the same idea — `externalRef` stays the fallback for systems with no
+ *  live connection (spreadsheets, APIs). Values are never stored here; the
+ *  pointer is metadata, and actual values are only ever fetched on demand
+ *  as an ephemeral sample preview. */
 export interface SystemLink {
   systemId: string;
   externalRef?: string;
   refLabel?: string;
   refUrl?: string;
+  sourceConnectionId?: string;
+  sourceAsset?: string;
+  sourceColumn?: string;
+  isKey?: boolean;
 }
 
 export interface ProcessNode {
@@ -723,13 +737,27 @@ function validateSystemLinks(value: unknown, res: Response, allowed: string[]): 
     const externalRef = trim(e.externalRef, 256);
     const refLabel = trim(e.refLabel, 128);
     const refUrl = trim(e.refUrl, 2048);
+    // Structured source-key pointer. A pointer is only meaningful with a
+    // column, and a column is only reachable via its connection + table, so
+    // the three travel together — a partial pointer is a 400 rather than a
+    // silently half-stored row. isKey only rides along a real pointer.
+    const sourceConnectionId = trim(e.sourceConnectionId, 64);
+    const sourceAsset = trim(e.sourceAsset, 256);
+    const sourceColumn = trim(e.sourceColumn, 128);
+    const hasPointer = !!(sourceConnectionId || sourceAsset || sourceColumn);
+    if (hasPointer && !(sourceConnectionId && sourceAsset && sourceColumn)) {
+      res.status(400).json({ success: false, error: 'a source-key pointer needs sourceConnectionId, sourceAsset, and sourceColumn together' });
+      return null;
+    }
+    const isKey = hasPointer && e.isKey === true;
     // Drop empty rows — a link with no reference at all isn't worth storing.
-    if (!externalRef && !refLabel && !refUrl) continue;
+    if (!externalRef && !refLabel && !refUrl && !hasPointer) continue;
     byId.set(systemId, {
       systemId,
       ...(externalRef ? { externalRef } : {}),
       ...(refLabel ? { refLabel } : {}),
       ...(refUrl ? { refUrl } : {}),
+      ...(hasPointer ? { sourceConnectionId, sourceAsset, sourceColumn, ...(isKey ? { isKey: true } : {}) } : {}),
     });
   }
   return [...byId.values()];

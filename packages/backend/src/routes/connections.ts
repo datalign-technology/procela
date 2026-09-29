@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
-import { testConnection, discoverAssets } from '../services/connector.service';
+import { testConnection, discoverAssets, sampleColumnValues } from '../services/connector.service';
 import { analyzeLocalFileAsync, deleteLocalFileDir, getUploadsDir } from '../lib/local-file-connector';
 import logger from '../lib/logger';
 import { hasDatabase } from '../db/prisma';
@@ -557,6 +557,59 @@ router.post('/:id/discover', async (req: Request, res: Response) => {
   } catch (err) {
     logger.error({ err, id: conn.id }, 'Asset discovery failed');
     res.status(500).json({ success: false, error: 'Asset discovery failed' });
+  }
+});
+
+/**
+ * POST /api/v1/connections/:id/sample
+ * Body: { table: string, column: string, limit?: number }
+ *
+ * Return a small DISTINCT-value sample of one column from a connected,
+ * direct-connect database/warehouse — the "does this hold what I expect"
+ * preview behind the activity↔system source-key picker. Values are read on
+ * demand and returned once; nothing is persisted (the audit records the
+ * table/column probed, never the values). Bounded to a tiny row cap in the
+ * SQL builder, so it can't be turned into a bulk export.
+ */
+router.post('/:id/sample', async (req: Request, res: Response) => {
+  const conn = await connectionsRepo.get(String(req.params.id));
+  if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  if (!assertOrgAccess(req, res, conn.orgId, 'Connection profile not found')) return;
+
+  const body = (req.body ?? {}) as { table?: unknown; column?: unknown; limit?: unknown };
+  const table = typeof body.table === 'string' ? body.table.trim() : '';
+  const column = typeof body.column === 'string' ? body.column.trim() : '';
+  if (!table || !column) {
+    res.status(400).json({ success: false, error: 'table and column are required' });
+    return;
+  }
+  const limit = typeof body.limit === 'number' ? body.limit : undefined;
+
+  try {
+    const sample = await sampleColumnValues(conn, table, column, limit);
+    if (!sample) {
+      res.status(422).json({
+        success: false,
+        error: 'Sample preview is only available for direct-connect databases and warehouses. This connection type has no live SQL source to read.',
+      });
+      return;
+    }
+    // Audit the probe — table + column only, never the sampled values.
+    auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'SAMPLE', null, {
+      table, column, returned: sample.distinctCount,
+    });
+    res.json({ success: true, data: sample });
+  } catch (err) {
+    // An invalid identifier (rejected by assertIdentifier) is the caller's
+    // fault → 400; anything else (auth, host, permissions) is a 502-ish
+    // upstream failure surfaced as its message.
+    const msg = err instanceof Error ? err.message : 'Sample preview failed';
+    if (/invalid .* identifier/i.test(msg)) {
+      res.status(400).json({ success: false, error: msg });
+      return;
+    }
+    logger.warn({ err, id: conn.id }, 'Column sample preview failed');
+    res.status(502).json({ success: false, error: `Sample preview failed: ${msg}` });
   }
 });
 

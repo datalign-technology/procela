@@ -223,7 +223,7 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
     assert.deepStrictEqual(calls.skillCreate, { data: [{ processNodeId: 'n1', skillId: 's-new' }] });
     assert.deepStrictEqual(calls.systemDelete, { where: { processNodeId: 'n1' } });
     // The systems join carries per-link reference columns (null when unset).
-    assert.deepStrictEqual(calls.systemCreate, { data: [{ processNodeId: 'n1', systemId: 'sys-new', externalRef: null, refLabel: null, refUrl: null }] });
+    assert.deepStrictEqual(calls.systemCreate, { data: [{ processNodeId: 'n1', systemId: 'sys-new', externalRef: null, refLabel: null, refUrl: null, sourceConnectionId: null, sourceAsset: null, sourceColumn: null, isKey: null }] });
   });
 
   it('round-trips systemLinks reference metadata on the systems join', async () => {
@@ -251,7 +251,7 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
         update: async () => ({ ...baseRow }),
         findUnique: async () => ({
           ...baseRow,
-          systems: [{ systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type', refUrl: null }],
+          systems: [{ systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type', refUrl: null, sourceConnectionId: null, sourceAsset: null, sourceColumn: null, isKey: null }],
         }),
       }),
       processNodeOrg: makeJoinDelegate('org'),
@@ -264,11 +264,53 @@ describe('prismaProcessNodesRepository (stubbed Prisma)', () => {
       systemIds: ['sys-oms'],
       systemLinks: [{ systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type' }],
     });
-    // Write carries the reference columns…
-    assert.deepStrictEqual(calls.systemCreate, { data: [{ processNodeId: 'n1', systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type', refUrl: null }] });
+    // Write carries the reference columns (source-key pointer null when unset)…
+    assert.deepStrictEqual(calls.systemCreate, { data: [{ processNodeId: 'n1', systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type', refUrl: null, sourceConnectionId: null, sourceAsset: null, sourceColumn: null, isKey: null }] });
     // …and read maps the join rows back to systemIds + sparse systemLinks.
     assert.deepStrictEqual(updated!.systemIds, ['sys-oms']);
     assert.deepStrictEqual(updated!.systemLinks, [{ systemId: 'sys-oms', externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type' }]);
+  });
+
+  it('round-trips a structured source-key pointer on the systems join', async () => {
+    const calls: Record<string, unknown> = {};
+    const makeJoinDelegate = (key: string) => ({
+      findMany: async () => [],
+      deleteMany: async (arg: unknown) => { calls[key + 'Delete'] = arg; return { count: 0 }; },
+      createMany: async (arg: unknown) => { calls[key + 'Create'] = arg; return { count: 1 }; },
+    });
+    const baseRow = {
+      id: 'n1', parentId: null, level: 'ACTIVITY', name: 'Open outage incident in OMS', description: null,
+      orgId: 'o1', ownerId: null, status: 'DRAFT', orderIndex: 0, activityId: 'ACT-1',
+      responsibleRole: null, responsiblePersonId: null, purpose: null, businessOutcome: null,
+      stakeholders: null, inputsOutputs: null, complianceTags: [], statusJustification: null,
+      frequency: null, riskLevel: null, automationLevel: null, estimatedDuration: null,
+      criticalityTier: null, rtoHours: null, rpoHours: null, successMeasure: null, slaTarget: null,
+      trigger: null, volume: null, nextReviewDate: null, riskMitigation: null, domain: 'OPERATIONAL',
+      version: 1, submittedBy: null, submittedAt: null, reviewedBy: null, reviewedAt: null,
+      reviewComment: null, createdAt: new Date(), updatedAt: new Date(),
+    };
+    const client = {
+      processNode: makeDelegate({
+        update: async () => ({ ...baseRow }),
+        findUnique: async () => ({
+          ...baseRow,
+          systems: [{ systemId: 'sys-oms', externalRef: null, refLabel: null, refUrl: null, sourceConnectionId: 'conn-oms', sourceAsset: 'dbo.incidents', sourceColumn: 'Incident_ID', isKey: true }],
+        }),
+      }),
+      processNodeOrg: makeJoinDelegate('org'),
+      processNodeControl: makeJoinDelegate('control'),
+      processNodeSkill: makeJoinDelegate('skill'),
+      processNodeSystem: makeJoinDelegate('system'),
+    };
+    const repo = prismaProcessNodesRepository(() => client as unknown as { processNode: PrismaProcessNodeDelegate });
+    const updated = await repo.update('n1', {
+      systemIds: ['sys-oms'],
+      systemLinks: [{ systemId: 'sys-oms', sourceConnectionId: 'conn-oms', sourceAsset: 'dbo.incidents', sourceColumn: 'Incident_ID', isKey: true }],
+    });
+    // Write carries the structured pointer columns…
+    assert.deepStrictEqual(calls.systemCreate, { data: [{ processNodeId: 'n1', systemId: 'sys-oms', externalRef: null, refLabel: null, refUrl: null, sourceConnectionId: 'conn-oms', sourceAsset: 'dbo.incidents', sourceColumn: 'Incident_ID', isKey: true }] });
+    // …and read maps them back into a sparse systemLinks pointer.
+    assert.deepStrictEqual(updated!.systemLinks, [{ systemId: 'sys-oms', sourceConnectionId: 'conn-oms', sourceAsset: 'dbo.incidents', sourceColumn: 'Incident_ID', isKey: true }]);
   });
 
   it('update returns null on P2025', async () => {

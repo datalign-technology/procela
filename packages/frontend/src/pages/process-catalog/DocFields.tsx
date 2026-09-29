@@ -4,6 +4,7 @@ import PersonPicker from '../../components/PersonPicker';
 import { GOVERNANCE_ROLES } from '../../types';
 import { inputStyle, ROLE_OPTIONS, type SystemRef, type SystemLink } from '../ProcessCatalogPage';
 import { clickable } from '../../lib/a11y';
+import { apiClient } from '../../api/client';
 
 // ── Inline Edit ──
 
@@ -495,7 +496,7 @@ export function DocMultiSelect({ label, selected, options, onSave, disabled, pla
 // Distinct from DocMultiSelect because options are id/name pairs, not
 // flat strings. Same visual treatment so it nests naturally with the
 // other Doc* fields in the node panel.
-export function DocSystemsField({ selected, options, links, onSave, onSaveLinks, disabled }: {
+export function DocSystemsField({ selected, options, links, onSave, onSaveLinks, connectionsBySystem, disabled }: {
   selected: string[]; options: SystemRef[];
   /** Per-system reference metadata, keyed by systemId. */
   links?: SystemLink[];
@@ -503,6 +504,9 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
   /** Persist the full set of per-system references. Optional so the field
    *  degrades to a plain picker if a host doesn't wire references. */
   onSaveLinks?: (links: SystemLink[]) => void;
+  /** Live connections available per system id — drives the discover-fed
+   *  source-key picker. A system with no entry falls back to free-text refs. */
+  connectionsBySystem?: Record<string, { id: string; name: string }[]>;
   disabled: boolean;
 }) {
   const byId = new Map(options.map((o) => [o.id, o]));
@@ -513,16 +517,31 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
   const canEditRefs = !disabled && !!onSaveLinks;
 
   // Replace one system's reference in the full links array, dropping empties.
-  const saveRef = (systemId: string, next: { externalRef?: string; refLabel?: string; refUrl?: string }) => {
+  // A reference is either a free-text externalRef (+label/url) or a structured
+  // source-key pointer (connection + table + column); the pointer's three
+  // parts travel together, matching the backend's validation.
+  const saveRef = (systemId: string, next: {
+    externalRef?: string; refLabel?: string; refUrl?: string;
+    sourceConnectionId?: string; sourceAsset?: string; sourceColumn?: string; isKey?: boolean;
+  }) => {
     if (!onSaveLinks) return;
     const externalRef = next.externalRef?.trim() || undefined;
     const refLabel = next.refLabel?.trim() || undefined;
     const refUrl = next.refUrl?.trim() || undefined;
+    const sourceConnectionId = next.sourceConnectionId?.trim() || undefined;
+    const sourceAsset = next.sourceAsset?.trim() || undefined;
+    const sourceColumn = next.sourceColumn?.trim() || undefined;
+    const hasPointer = !!(sourceConnectionId && sourceAsset && sourceColumn);
     const others = (links ?? []).filter((l) => l.systemId !== systemId);
-    const merged = (externalRef || refLabel || refUrl)
-      ? [...others, { systemId, ...(externalRef ? { externalRef } : {}), ...(refLabel ? { refLabel } : {}), ...(refUrl ? { refUrl } : {}) }]
-      : others;
-    onSaveLinks(merged);
+    const entry: SystemLink = {
+      systemId,
+      ...(externalRef ? { externalRef } : {}),
+      ...(refLabel ? { refLabel } : {}),
+      ...(refUrl ? { refUrl } : {}),
+      ...(hasPointer ? { sourceConnectionId, sourceAsset, sourceColumn, ...(next.isKey ? { isKey: true } : {}) } : {}),
+    };
+    const keep = externalRef || refLabel || refUrl || hasPointer;
+    onSaveLinks(keep ? [...others, entry] : others);
     setEditing(null);
   };
 
@@ -534,7 +553,10 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
           {selected.map((id) => {
             const s = byId.get(id);
             const link = linkById.get(id);
-            const ref = link?.externalRef;
+            // A structured source-key column takes display precedence over the
+            // free-text externalRef; `ref` (either) drives the ✎ vs +ref label.
+            const keyCol = link?.sourceColumn;
+            const ref = keyCol || link?.externalRef;
             return (
               <span key={id} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
@@ -545,13 +567,18 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
                   style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}>
                   {s?.name || id}
                 </Link>
-                {ref && (
-                  link?.refUrl
+                {keyCol ? (
+                  <span title={`${link?.sourceAsset ? link.sourceAsset + ' · ' : ''}${keyCol}${link?.isKey ? ' (unique key)' : ''}`}
+                    style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, opacity: 0.85, borderLeft: '1px solid #93c5fd', paddingLeft: 3, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    {link?.isKey ? '🔑' : ''}{keyCol}
+                  </span>
+                ) : link?.externalRef ? (
+                  link.refUrl
                     ? <a href={link.refUrl} target="_blank" rel="noreferrer" title={link.refLabel || 'Open reference'}
-                        style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, color: '#1e40af', opacity: 0.85, textDecoration: 'underline' }}>{ref}</a>
+                        style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, color: '#1e40af', opacity: 0.85, textDecoration: 'underline' }}>{link.externalRef}</a>
                     : <span title={link?.refLabel || 'System reference'}
-                        style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, opacity: 0.8, borderLeft: '1px solid #93c5fd', paddingLeft: 3 }}>{ref}</span>
-                )}
+                        style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, opacity: 0.8, borderLeft: '1px solid #93c5fd', paddingLeft: 3 }}>{link.externalRef}</span>
+                ) : null}
                 {canEditRefs && (
                   <button onClick={() => setEditing(editing === id ? null : id)}
                     title={ref ? 'Edit system reference' : 'Add a system reference (id in this system)'}
@@ -590,6 +617,7 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
           <SystemRefEditor
             systemName={byId.get(editing)?.name || editing}
             link={linkById.get(editing)}
+            connections={connectionsBySystem?.[editing] ?? []}
             onSave={(next) => saveRef(editing, next)}
             onCancel={() => setEditing(null)}
           />
@@ -603,32 +631,160 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
 // locates this activity in the system of record, an optional label, and an
 // optional deep link. Rendered under the chip row when a chip's ✎/+ref is
 // clicked.
-function SystemRefEditor({ systemName, link, onSave, onCancel }: {
+/** A discovered table/collection and its columns, as the connection's
+ *  discover endpoint returns them. */
+type DiscoveredAsset = { name: string; type?: string; columns?: string[] };
+
+function SystemRefEditor({ systemName, link, connections, onSave, onCancel }: {
   systemName: string;
   link?: SystemLink;
-  onSave: (next: { externalRef?: string; refLabel?: string; refUrl?: string }) => void;
+  /** Live connections for this system — when present, the structured
+   *  source-key picker is offered above the free-text fields. */
+  connections: { id: string; name: string }[];
+  onSave: (next: {
+    externalRef?: string; refLabel?: string; refUrl?: string;
+    sourceConnectionId?: string; sourceAsset?: string; sourceColumn?: string; isKey?: boolean;
+  }) => void;
   onCancel: () => void;
 }) {
   const [externalRef, setExternalRef] = useState(link?.externalRef ?? '');
   const [refLabel, setRefLabel] = useState(link?.refLabel ?? '');
   const [refUrl, setRefUrl] = useState(link?.refUrl ?? '');
+  // Structured source-key pointer.
+  const [sourceConnectionId, setSourceConnectionId] = useState(link?.sourceConnectionId ?? '');
+  const [sourceAsset, setSourceAsset] = useState(link?.sourceAsset ?? '');
+  const [sourceColumn, setSourceColumn] = useState(link?.sourceColumn ?? '');
+  const [isKey, setIsKey] = useState(!!link?.isKey);
+  // Discovered schema for the chosen connection.
+  const [assets, setAssets] = useState<DiscoveredAsset[]>([]);
+  const [loadingSchema, setLoadingSchema] = useState(false);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+  // Ephemeral sample preview.
+  const [sampleValues, setSampleValues] = useState<string[] | null>(null);
+  const [sampleTruncated, setSampleTruncated] = useState(false);
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
+
   const field: React.CSSProperties = { ...inputStyle, fontSize: 11, padding: '3px 6px' };
+  const sel: React.CSSProperties = { ...field, cursor: 'pointer' };
+
+  async function loadSchema(connId: string) {
+    setLoadingSchema(true); setSchemaError(null);
+    try {
+      const r = await apiClient.post<{ success: boolean; data?: { details?: { assets?: DiscoveredAsset[] } } }>(`/connections/${connId}/discover`);
+      setAssets(r.data?.details?.assets ?? []);
+    } catch (e) {
+      setSchemaError(e instanceof Error ? e.message : 'Could not read this connection’s schema');
+      setAssets([]);
+    } finally {
+      setLoadingSchema(false);
+    }
+  }
+
+  // Load the schema for a pre-set connection (editing an existing pointer).
+  useEffect(() => {
+    if (sourceConnectionId) void loadSchema(sourceConnectionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function pickConnection(connId: string) {
+    setSourceConnectionId(connId);
+    setSourceAsset(''); setSourceColumn(''); setAssets([]);
+    setSampleValues(null); setSampleError(null); setSampleTruncated(false);
+    if (connId) void loadSchema(connId);
+  }
+
+  const columns = assets.find((a) => a.name === sourceAsset)?.columns ?? [];
+
+  async function preview() {
+    if (!sourceConnectionId || !sourceAsset || !sourceColumn) return;
+    setSampleLoading(true); setSampleError(null); setSampleValues(null); setSampleTruncated(false);
+    try {
+      const r = await apiClient.post<{ success: boolean; data: { values: string[]; truncated: boolean } }>(
+        `/connections/${sourceConnectionId}/sample`, { table: sourceAsset, column: sourceColumn },
+      );
+      setSampleValues(r.data.values); setSampleTruncated(r.data.truncated);
+    } catch (e) {
+      setSampleError(e instanceof Error ? e.message : 'Preview failed');
+    } finally {
+      setSampleLoading(false);
+    }
+  }
+
+  const save = () => onSave({
+    externalRef, refLabel, refUrl,
+    sourceConnectionId: sourceConnectionId || undefined,
+    sourceAsset: sourceAsset || undefined,
+    sourceColumn: sourceColumn || undefined,
+    isKey,
+  });
+
   return (
     <div style={{
-      display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 9px',
+      display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px',
       background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6,
     }}>
-      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 600 }}>Reference in {systemName}:</span>
-      <input value={externalRef} onChange={(e) => setExternalRef(e.target.value)} placeholder="ID (e.g. INC-WF-014)"
-        aria-label="System reference id" style={{ ...field, width: 150 }} autoFocus />
-      <input value={refLabel} onChange={(e) => setRefLabel(e.target.value)} placeholder="Label (optional)"
-        aria-label="Reference label" style={{ ...field, width: 130 }} />
-      <input value={refUrl} onChange={(e) => setRefUrl(e.target.value)} placeholder="Link URL (optional)"
-        aria-label="Reference URL" style={{ ...field, width: 160 }} />
-      <button onClick={() => onSave({ externalRef, refLabel, refUrl })}
-        style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 5, cursor: 'pointer', border: '1px solid var(--color-primary)', background: 'var(--color-primary)', color: '#fff' }}>Save</button>
-      <button onClick={onCancel}
-        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, cursor: 'pointer', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)' }}>Cancel</button>
+      {connections.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Identifying field in {systemName}
+          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+            <select aria-label="Connection" value={sourceConnectionId} onChange={(e) => pickConnection(e.target.value)} style={{ ...sel, width: 150 }}>
+              <option value="">Connection…</option>
+              {connections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <select aria-label="Table" value={sourceAsset} disabled={!sourceConnectionId || loadingSchema}
+              onChange={(e) => { setSourceAsset(e.target.value); setSourceColumn(''); setSampleValues(null); }} style={{ ...sel, width: 160 }}>
+              <option value="">{loadingSchema ? 'Loading…' : 'Table…'}</option>
+              {assets.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
+            </select>
+            <select aria-label="Field" value={sourceColumn} disabled={!sourceAsset}
+              onChange={(e) => { setSourceColumn(e.target.value); setSampleValues(null); }} style={{ ...sel, width: 150 }}>
+              <option value="">Field…</option>
+              {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={isKey} onChange={(e) => setIsKey(e.target.checked)} /> unique key
+            </label>
+            <button onClick={() => void preview()} disabled={!sourceColumn || sampleLoading}
+              style={{ fontSize: 11, padding: '3px 9px', borderRadius: 5, cursor: sourceColumn ? 'pointer' : 'not-allowed', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)', opacity: sourceColumn ? 1 : 0.5 }}>
+              {sampleLoading ? 'Sampling…' : 'Preview values'}
+            </button>
+          </div>
+          {schemaError && <span style={{ fontSize: 10, color: 'var(--color-error)' }}>{schemaError}</span>}
+          {sampleError && <span style={{ fontSize: 10, color: 'var(--color-error)' }}>{sampleError}</span>}
+          {sampleValues && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+              {sampleValues.length === 0
+                ? <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No values found</span>
+                : sampleValues.map((v, i) => (
+                    <span key={i} style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, padding: '1px 5px', borderRadius: 4, background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>{v}</span>
+                  ))}
+              {sampleTruncated && <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>…more</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 600 }}>
+          {connections.length > 0 ? 'Or free-text ref:' : `Reference in ${systemName}:`}
+        </span>
+        <input value={externalRef} onChange={(e) => setExternalRef(e.target.value)} placeholder="ID (e.g. INC-WF-014)"
+          aria-label="System reference id" style={{ ...field, width: 150 }} autoFocus={connections.length === 0} />
+        <input value={refLabel} onChange={(e) => setRefLabel(e.target.value)} placeholder="Label (optional)"
+          aria-label="Reference label" style={{ ...field, width: 130 }} />
+        <input value={refUrl} onChange={(e) => setRefUrl(e.target.value)} placeholder="Link URL (optional)"
+          aria-label="Reference URL" style={{ ...field, width: 160 }} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button onClick={save}
+          style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 5, cursor: 'pointer', border: '1px solid var(--color-primary)', background: 'var(--color-primary)', color: '#fff' }}>Save</button>
+        <button onClick={onCancel}
+          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, cursor: 'pointer', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)' }}>Cancel</button>
+      </div>
     </div>
   );
 }
