@@ -235,12 +235,25 @@ process.nextTick(() => {
   }
   let nodesTouched = 0;
   for (const n of processNodes) {
-    if (!n.systemIds || n.systemIds.length === 0) continue;
-    const kept = n.systemIds.filter((sid) => validSystemIds.has(sid));
-    if (kept.length !== n.systemIds.length) {
-      n.systemIds = kept.length > 0 ? kept : undefined;
-      nodesTouched++;
+    if ((!n.systemIds || n.systemIds.length === 0) && !n.systemLinks) continue;
+    let changed = false;
+    if (n.systemIds && n.systemIds.length > 0) {
+      const kept = n.systemIds.filter((sid) => validSystemIds.has(sid));
+      if (kept.length !== n.systemIds.length) {
+        n.systemIds = kept.length > 0 ? kept : undefined;
+        changed = true;
+      }
     }
+    // Prune reference metadata for any system that's no longer a valid member.
+    if (n.systemLinks) {
+      const members = new Set(n.systemIds ?? []);
+      const keptLinks = n.systemLinks.filter((l) => members.has(l.systemId));
+      if (keptLinks.length !== n.systemLinks.length) {
+        n.systemLinks = keptLinks.length > 0 ? keptLinks : undefined;
+        changed = true;
+      }
+    }
+    if (changed) nodesTouched++;
   }
   if (nodesTouched > 0) {
     saveStore('processNodes', processNodes);
@@ -752,6 +765,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const kept = n.systemIds.filter((sid) => sid !== removed.id);
     if (kept.length !== n.systemIds.length) {
       n.systemIds = kept.length > 0 ? kept : undefined;
+      // Drop the removed system's reference metadata too, so it never dangles.
+      if (n.systemLinks) {
+        const keptLinks = n.systemLinks.filter((l) => l.systemId !== removed.id);
+        n.systemLinks = keptLinks.length > 0 ? keptLinks : undefined;
+      }
       await processNodesRepo().update(n.id, n);
     }
   }

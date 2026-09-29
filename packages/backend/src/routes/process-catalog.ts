@@ -102,6 +102,18 @@ const VALID_CHILDREN: Record<NodeLevel, NodeLevel[]> = {
 // Required levels
 const REQUIRED_LEVELS: NodeLevel[] = ['VALUE_STREAM', 'PROCESS', 'ACTIVITY'];
 
+/** A reference from an activity↔system link into the system of record: the
+ *  unique identifier (`externalRef`) that locates the activity inside that
+ *  system, an optional label describing what the id is, and an optional URL
+ *  deep-linking to it. `systemId` keys back to an entry in the node's
+ *  `systemIds`. */
+export interface SystemLink {
+  systemId: string;
+  externalRef?: string;
+  refLabel?: string;
+  refUrl?: string;
+}
+
 export interface ProcessNode {
   id: string;
   parentId: string | null;
@@ -210,6 +222,15 @@ export interface ProcessNode {
    *  system without (yet) a mapped data asset is still captured.
    *  Cascaded on system delete by the systems route. */
   systemIds?: string[];
+  /** Per-system reference metadata for the activity↔system links above —
+   *  the identifier that uniquely locates this activity inside a system of
+   *  record (e.g. an OMS incident-type code, a SAP transaction code, an
+   *  Airflow DAG id), an optional human label for it, and an optional deep
+   *  link. Sparse: only systems that carry a reference get an entry, and an
+   *  entry's `systemId` must be present in `systemIds` (membership stays
+   *  authoritative on `systemIds`; this only annotates). Persisted as extra
+   *  columns on the process_node_systems join in Postgres. */
+  systemLinks?: SystemLink[];
   // Governance vs operational classifier. Replaces the brittle
   // `name.includes('Governance')` runtime checks. Set at creation
   // (governance template → GOVERNANCE; business wizard / manual →
@@ -665,6 +686,55 @@ async function validateSystemIds(value: unknown, res: Response): Promise<string[
   return out;
 }
 
+/** Validate the per-system reference metadata. `allowed` is the node's
+ *  membership set (`systemIds`) — a link may only annotate a system the node
+ *  actually runs on. Trims the three string fields, caps their length, drops
+ *  any entry that carries no reference at all (so blank rows aren't stored),
+ *  and dedupes by systemId (last write wins). Returns the cleaned array, or
+ *  null after writing a 400. */
+function validateSystemLinks(value: unknown, res: Response, allowed: string[]): SystemLink[] | null {
+  if (!Array.isArray(value)) {
+    res.status(400).json({ success: false, error: 'systemLinks must be an array' });
+    return null;
+  }
+  const allow = new Set(allowed);
+  const trim = (v: unknown, max: number): string | undefined => {
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== 'string') return undefined;
+    const t = v.trim();
+    return t ? t.slice(0, max) : undefined;
+  };
+  const byId = new Map<string, SystemLink>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') {
+      res.status(400).json({ success: false, error: 'systemLinks entries must be objects' });
+      return null;
+    }
+    const e = entry as Record<string, unknown>;
+    const systemId = typeof e.systemId === 'string' ? e.systemId.trim() : '';
+    if (!systemId) {
+      res.status(400).json({ success: false, error: 'systemLinks entries need a systemId' });
+      return null;
+    }
+    if (!allow.has(systemId)) {
+      res.status(400).json({ success: false, error: `systemLinks references system "${systemId}" that the activity isn't linked to` });
+      return null;
+    }
+    const externalRef = trim(e.externalRef, 256);
+    const refLabel = trim(e.refLabel, 128);
+    const refUrl = trim(e.refUrl, 2048);
+    // Drop empty rows — a link with no reference at all isn't worth storing.
+    if (!externalRef && !refLabel && !refUrl) continue;
+    byId.set(systemId, {
+      systemId,
+      ...(externalRef ? { externalRef } : {}),
+      ...(refLabel ? { refLabel } : {}),
+      ...(refUrl ? { refUrl } : {}),
+    });
+  }
+  return [...byId.values()];
+}
+
 // ── HIERARCHY NODES ──
 
 /** DELETE /all — delete all process nodes and flow relationships */
@@ -784,7 +854,7 @@ router.get('/nodes/:id', (req: Request, res: Response) => {
 router.post('/nodes', async (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
+    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds, systemLinks,
     criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds } = req.body;
 
   if (!name) {
@@ -841,6 +911,12 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ? undefined
     : await validateSystemIds(systemIds, res);
   if (cleanedSystemIds === null) return;
+
+  // Per-system reference metadata — only annotate systems in the cleaned set.
+  const cleanedSystemLinks = systemLinks === undefined
+    ? undefined
+    : validateSystemLinks(systemLinks, res, cleanedSystemIds ?? []);
+  if (cleanedSystemLinks === null) return;
 
   // The org(s) this node will belong to — used to scope person assignments
   // so an owner / responsible person can't come from a sibling tenant.
@@ -903,6 +979,7 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ...(statusJustification ? { statusJustification } : {}),
     ...(Array.isArray(requiredSkillIds) && requiredSkillIds.length ? { requiredSkillIds } : {}),
     ...(cleanedSystemIds && cleanedSystemIds.length ? { systemIds: cleanedSystemIds } : {}),
+    ...(cleanedSystemLinks && cleanedSystemLinks.length ? { systemLinks: cleanedSystemLinks } : {}),
     // New attributes — only persist when supplied so existing rows
     // don't grow "" placeholders and pickers stay clean.
     ...(criticalityTier && CRITICALITY_TIERS.includes(criticalityTier) ? { criticalityTier } : {}),
@@ -944,7 +1021,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
 
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
+    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds, systemLinks,
     criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
     reviewComment } = req.body;
 
@@ -997,7 +1074,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     || purpose !== undefined || businessOutcome !== undefined || stakeholders !== undefined
     || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined
     || frequency !== undefined || riskLevel !== undefined || automationLevel !== undefined || estimatedDuration !== undefined
-    || requiredSkillIds !== undefined || systemIds !== undefined
+    || requiredSkillIds !== undefined || systemIds !== undefined || systemLinks !== undefined
     || responsiblePersonId !== undefined
     || criticalityTier !== undefined || rtoHours !== undefined || rpoHours !== undefined
     || successMeasure !== undefined || slaTarget !== undefined
@@ -1058,6 +1135,19 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     const cleaned = await validateSystemIds(systemIds, res);
     if (cleaned === null) return;
     node.systemIds = cleaned.length > 0 ? cleaned : undefined;
+  }
+  // Per-system reference metadata. When the caller sends systemLinks, it
+  // replaces the full set (validated against the node's resulting membership).
+  // When only systemIds changed, prune any reference whose system was removed
+  // so metadata never dangles past its link.
+  if (systemLinks !== undefined) {
+    const cleanedLinks = validateSystemLinks(systemLinks, res, node.systemIds ?? []);
+    if (cleanedLinks === null) return;
+    node.systemLinks = cleanedLinks.length > 0 ? cleanedLinks : undefined;
+  } else if (systemIds !== undefined && node.systemLinks) {
+    const keep = new Set(node.systemIds ?? []);
+    const pruned = node.systemLinks.filter((l) => keep.has(l.systemId));
+    node.systemLinks = pruned.length > 0 ? pruned : undefined;
   }
   // BCM + governance attributes — accept undefined (leave unchanged),
   // null / empty (clear), or the new value. Enum + range checks so

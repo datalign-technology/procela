@@ -868,7 +868,9 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                 <DocSystemsField
                   selected={node.systemIds || []}
                   options={systemsList}
+                  links={node.systemLinks || []}
                   onSave={(ids) => onUpdate(node.id, { systemIds: ids })}
+                  onSaveLinks={(links) => onUpdate(node.id, { systemLinks: links })}
                   disabled={isLocked}
                 />
               )}

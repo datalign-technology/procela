@@ -366,6 +366,14 @@ model ProcessNodeSkill {
 model ProcessNodeSystem {
   processNodeId String @db.Uuid
   systemId      String @db.Uuid
+  // Per-link reference into the system of record: the identifier that
+  // uniquely locates this activity inside the system (e.g. an OMS incident-
+  // type code, a SAP transaction code, an Airflow DAG id), an optional label
+  // for what that id is, and an optional deep link. All nullable — a link
+  // without a reference is the common case.
+  externalRef   String?
+  refLabel      String?
+  refUrl        String?
 
   processNode ProcessNode @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
   system      System      @relation(fields: [systemId], references: [id], onDelete: Cascade)

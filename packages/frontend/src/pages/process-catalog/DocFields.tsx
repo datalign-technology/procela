@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PersonPicker from '../../components/PersonPicker';
 import { GOVERNANCE_ROLES } from '../../types';
-import { inputStyle, ROLE_OPTIONS, type SystemRef } from '../ProcessCatalogPage';
+import { inputStyle, ROLE_OPTIONS, type SystemRef, type SystemLink } from '../ProcessCatalogPage';
 import { clickable } from '../../lib/a11y';
 
 // ── Inline Edit ──
@@ -495,53 +495,140 @@ export function DocMultiSelect({ label, selected, options, onSave, disabled, pla
 // Distinct from DocMultiSelect because options are id/name pairs, not
 // flat strings. Same visual treatment so it nests naturally with the
 // other Doc* fields in the node panel.
-export function DocSystemsField({ selected, options, onSave, disabled }: {
-  selected: string[]; options: SystemRef[]; onSave: (ids: string[]) => void; disabled: boolean;
+export function DocSystemsField({ selected, options, links, onSave, onSaveLinks, disabled }: {
+  selected: string[]; options: SystemRef[];
+  /** Per-system reference metadata, keyed by systemId. */
+  links?: SystemLink[];
+  onSave: (ids: string[]) => void;
+  /** Persist the full set of per-system references. Optional so the field
+   *  degrades to a plain picker if a host doesn't wire references. */
+  onSaveLinks?: (links: SystemLink[]) => void;
+  disabled: boolean;
 }) {
   const byId = new Map(options.map((o) => [o.id, o]));
+  const linkById = new Map((links ?? []).map((l) => [l.systemId, l]));
   const available = options.filter((o) => !selected.includes(o.id));
+  // Which system's reference editor is open (null = none).
+  const [editing, setEditing] = useState<string | null>(null);
+  const canEditRefs = !disabled && !!onSaveLinks;
+
+  // Replace one system's reference in the full links array, dropping empties.
+  const saveRef = (systemId: string, next: { externalRef?: string; refLabel?: string; refUrl?: string }) => {
+    if (!onSaveLinks) return;
+    const externalRef = next.externalRef?.trim() || undefined;
+    const refLabel = next.refLabel?.trim() || undefined;
+    const refUrl = next.refUrl?.trim() || undefined;
+    const others = (links ?? []).filter((l) => l.systemId !== systemId);
+    const merged = (externalRef || refLabel || refUrl)
+      ? [...others, { systemId, ...(externalRef ? { externalRef } : {}), ...(refLabel ? { refLabel } : {}), ...(refUrl ? { refUrl } : {}) }]
+      : others;
+    onSaveLinks(merged);
+    setEditing(null);
+  };
+
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 2 }}>Systems:</span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', flex: 1 }}>
-        {selected.map((id) => {
-          const s = byId.get(id);
-          return (
-            <span key={id} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 3,
-              padding: '1px 6px', borderRadius: 10, fontSize: 10, fontWeight: 500,
-              background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd',
-            }}>
-              <Link to={`/systems?highlight=${id}`} title={`Open ${s?.name || 'system'}`}
-                style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}>
-                {s?.name || id}
-              </Link>
-              {!disabled && (
-                <button onClick={() => onSave(selected.filter((sid) => sid !== id))}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#1e40af', padding: 0, lineHeight: 1 }}>&times;</button>
-              )}
-            </span>
-          );
-        })}
-        {!disabled && available.length > 0 && (
-          <select
-            aria-label="Add system"
-            value=""
-            onChange={(e) => { if (e.target.value) onSave([...selected, e.target.value]); }}
-            style={{
-              fontSize: 10, border: '1px solid var(--color-border)', borderRadius: 4,
-              background: 'var(--color-surface)', cursor: 'pointer',
-              color: 'var(--color-text-muted)', padding: '2px 6px',
-            }}
-          >
-            <option value="">{selected.length === 0 ? 'Pick systems this runs on...' : '+ Add system'}</option>
-            {available.map((o) => <option key={o.id} value={o.id}>{o.name}{o.systemType ? ` (${o.systemType})` : ''}</option>)}
-          </select>
-        )}
-        {selected.length === 0 && disabled && (
-          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', opacity: 0.6 }}>No systems linked</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center' }}>
+          {selected.map((id) => {
+            const s = byId.get(id);
+            const link = linkById.get(id);
+            const ref = link?.externalRef;
+            return (
+              <span key={id} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                padding: '1px 6px', borderRadius: 10, fontSize: 10, fontWeight: 500,
+                background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd',
+              }}>
+                <Link to={`/systems?highlight=${id}`} title={`Open ${s?.name || 'system'}`}
+                  style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}>
+                  {s?.name || id}
+                </Link>
+                {ref && (
+                  link?.refUrl
+                    ? <a href={link.refUrl} target="_blank" rel="noreferrer" title={link.refLabel || 'Open reference'}
+                        style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, color: '#1e40af', opacity: 0.85, textDecoration: 'underline' }}>{ref}</a>
+                    : <span title={link?.refLabel || 'System reference'}
+                        style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, opacity: 0.8, borderLeft: '1px solid #93c5fd', paddingLeft: 3 }}>{ref}</span>
+                )}
+                {canEditRefs && (
+                  <button onClick={() => setEditing(editing === id ? null : id)}
+                    title={ref ? 'Edit system reference' : 'Add a system reference (id in this system)'}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#1e40af', padding: 0, lineHeight: 1, opacity: 0.75 }}>
+                    {ref ? '✎' : '+ref'}
+                  </button>
+                )}
+                {!disabled && (
+                  <button onClick={() => onSave(selected.filter((sid) => sid !== id))}
+                    title="Unlink system"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#1e40af', padding: 0, lineHeight: 1 }}>&times;</button>
+                )}
+              </span>
+            );
+          })}
+          {!disabled && available.length > 0 && (
+            <select
+              aria-label="Add system"
+              value=""
+              onChange={(e) => { if (e.target.value) onSave([...selected, e.target.value]); }}
+              style={{
+                fontSize: 10, border: '1px solid var(--color-border)', borderRadius: 4,
+                background: 'var(--color-surface)', cursor: 'pointer',
+                color: 'var(--color-text-muted)', padding: '2px 6px',
+              }}
+            >
+              <option value="">{selected.length === 0 ? 'Pick systems this runs on...' : '+ Add system'}</option>
+              {available.map((o) => <option key={o.id} value={o.id}>{o.name}{o.systemType ? ` (${o.systemType})` : ''}</option>)}
+            </select>
+          )}
+          {selected.length === 0 && disabled && (
+            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', opacity: 0.6 }}>No systems linked</span>
+          )}
+        </div>
+        {editing && canEditRefs && (
+          <SystemRefEditor
+            systemName={byId.get(editing)?.name || editing}
+            link={linkById.get(editing)}
+            onSave={(next) => saveRef(editing, next)}
+            onCancel={() => setEditing(null)}
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+// Inline editor for a single activity↔system reference: the external id that
+// locates this activity in the system of record, an optional label, and an
+// optional deep link. Rendered under the chip row when a chip's ✎/+ref is
+// clicked.
+function SystemRefEditor({ systemName, link, onSave, onCancel }: {
+  systemName: string;
+  link?: SystemLink;
+  onSave: (next: { externalRef?: string; refLabel?: string; refUrl?: string }) => void;
+  onCancel: () => void;
+}) {
+  const [externalRef, setExternalRef] = useState(link?.externalRef ?? '');
+  const [refLabel, setRefLabel] = useState(link?.refLabel ?? '');
+  const [refUrl, setRefUrl] = useState(link?.refUrl ?? '');
+  const field: React.CSSProperties = { ...inputStyle, fontSize: 11, padding: '3px 6px' };
+  return (
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '7px 9px',
+      background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6,
+    }}>
+      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 600 }}>Reference in {systemName}:</span>
+      <input value={externalRef} onChange={(e) => setExternalRef(e.target.value)} placeholder="ID (e.g. INC-WF-014)"
+        aria-label="System reference id" style={{ ...field, width: 150 }} autoFocus />
+      <input value={refLabel} onChange={(e) => setRefLabel(e.target.value)} placeholder="Label (optional)"
+        aria-label="Reference label" style={{ ...field, width: 130 }} />
+      <input value={refUrl} onChange={(e) => setRefUrl(e.target.value)} placeholder="Link URL (optional)"
+        aria-label="Reference URL" style={{ ...field, width: 160 }} />
+      <button onClick={() => onSave({ externalRef, refLabel, refUrl })}
+        style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 5, cursor: 'pointer', border: '1px solid var(--color-primary)', background: 'var(--color-primary)', color: '#fff' }}>Save</button>
+      <button onClick={onCancel}
+        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, cursor: 'pointer', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)' }}>Cancel</button>
     </div>
   );
 }

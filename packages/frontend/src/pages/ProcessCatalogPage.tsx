@@ -69,6 +69,9 @@ export interface ProcessNode {
    *  mappings, so a step on a system without a mapped asset is still
    *  surfaced. */
   systemIds?: string[];
+  /** Per-system reference metadata for the links above (external id that
+   *  locates this activity in the system of record, optional label + URL). */
+  systemLinks?: SystemLink[];
   domain?: 'GOVERNANCE' | 'OPERATIONAL';
   // BCM: business-continuity tier + RTO/RPO in hours
   criticalityTier?: 'TIER_1' | 'TIER_2' | 'TIER_3' | 'TIER_4';
@@ -218,6 +221,10 @@ export const ROLE_OPTIONS = [
 export interface PersonRef { id: string; name: string; }
 export interface DataAssetRef { id: string; name: string; orgId?: string }
 export interface SystemRef { id: string; name: string; systemType?: string; }
+/** Per-system reference into a system of record: the identifier that uniquely
+ *  locates this activity in that system, an optional label for what the id is,
+ *  and an optional deep link. `systemId` keys back to an entry in `systemIds`. */
+export interface SystemLink { systemId: string; externalRef?: string; refLabel?: string; refUrl?: string; }
 export interface PolicyRef { id: string; name: string; code: string; documentType: string; orgId?: string }
 export interface MappingInfo {
   id: string;
