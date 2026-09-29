@@ -264,8 +264,8 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(agents), 5, 'agents');
     assert.strictEqual(demoCount(dataDomains), 6, 'domains');
     assert.strictEqual(demoCount(dataAssets), 9, 'assets');
-    assert.strictEqual(demoCount(processNodes), 15, 'process nodes');
-    assert.strictEqual(demoCount(mappings), 7, 'mappings');
+    assert.strictEqual(demoCount(processNodes), 16, 'process nodes');
+    assert.strictEqual(demoCount(mappings), 8, 'mappings');
     assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
     assert.strictEqual(demoCount(governanceIssues), 1, 'issues');
     assert.strictEqual(demoCount(dataQualityRules), 2, 'DQ rules');
