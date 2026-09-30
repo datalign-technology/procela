@@ -255,6 +255,34 @@ describe('process-catalog routes — Tier 2 coverage', () => {
     });
   });
 
+  describe('PUT /nodes/:id — enhanced value-stream fields', () => {
+    it('round-trips the new value-stream + lifecycle fields, and clears them on empty', async () => {
+      const fields = {
+        customerType: 'External',
+        valueProposition: 'Power restored fast and safely.',
+        executiveSponsor: 'Harold Lindstrom — VP Ops',
+        businessCapabilities: 'Detection, dispatch, restoration',
+        endState: 'Service restored, incident closed.',
+        effectiveDate: '2026-01-01',
+        lastReviewedDate: '2026-06-30',
+        reviewCadence: 'Annual',
+      };
+      let res = await request(port, 'PUT', `/process-catalog/nodes/${vsId}`, fields);
+      assert.strictEqual(res.status, 200);
+      const node = processNodes.find((n: any) => n.id === vsId);
+      for (const [k, v] of Object.entries(fields)) assert.strictEqual(node[k], v, `${k} persisted`);
+
+      // Blank/whitespace clears a field back to undefined (no "" placeholders).
+      res = await request(port, 'PUT', `/process-catalog/nodes/${vsId}`, { valueProposition: '   ', reviewCadence: '' });
+      assert.strictEqual(res.status, 200);
+      const after = processNodes.find((n: any) => n.id === vsId);
+      assert.strictEqual(after.valueProposition, undefined);
+      assert.strictEqual(after.reviewCadence, undefined);
+      // Untouched fields stay put.
+      assert.strictEqual(after.customerType, 'External');
+    });
+  });
+
   describe('DELETE /nodes/:id — cascade', () => {
     it('removes the node, its descendants, flow edges, and mapping rows', async () => {
       // Sanity: every seed row is present before delete.

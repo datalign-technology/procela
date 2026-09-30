@@ -65,6 +65,14 @@ type PrismaProcessNodeRow = {
   volume: string | null;
   nextReviewDate: string | null;
   riskMitigation: string | null;
+  customerType: string | null;
+  valueProposition: string | null;
+  executiveSponsor: string | null;
+  businessCapabilities: string | null;
+  endState: string | null;
+  effectiveDate: string | null;
+  lastReviewedDate: string | null;
+  reviewCadence: string | null;
   domain: string;
   version: number;
   submittedBy: string | null;
@@ -145,6 +153,14 @@ function fromPrisma(r: PrismaProcessNodeRow): StoredProcessNode {
     ...(r.volume ? { volume: r.volume } : {}),
     ...(r.nextReviewDate ? { nextReviewDate: r.nextReviewDate } : {}),
     ...(r.riskMitigation ? { riskMitigation: r.riskMitigation } : {}),
+    ...(r.customerType ? { customerType: r.customerType } : {}),
+    ...(r.valueProposition ? { valueProposition: r.valueProposition } : {}),
+    ...(r.executiveSponsor ? { executiveSponsor: r.executiveSponsor } : {}),
+    ...(r.businessCapabilities ? { businessCapabilities: r.businessCapabilities } : {}),
+    ...(r.endState ? { endState: r.endState } : {}),
+    ...(r.effectiveDate ? { effectiveDate: r.effectiveDate } : {}),
+    ...(r.lastReviewedDate ? { lastReviewedDate: r.lastReviewedDate } : {}),
+    ...(r.reviewCadence ? { reviewCadence: r.reviewCadence } : {}),
     ...(r.controls && r.controls.length > 0
       ? { controlIds: r.controls.map((c) => c.controlId) }
       : {}),
@@ -216,6 +232,14 @@ function toPrismaData(row: Partial<StoredProcessNode>): Record<string, unknown> 
   if (row.volume !== undefined) data.volume = row.volume ?? null;
   if (row.nextReviewDate !== undefined) data.nextReviewDate = row.nextReviewDate ?? null;
   if (row.riskMitigation !== undefined) data.riskMitigation = row.riskMitigation ?? null;
+  if (row.customerType !== undefined) data.customerType = row.customerType ?? null;
+  if (row.valueProposition !== undefined) data.valueProposition = row.valueProposition ?? null;
+  if (row.executiveSponsor !== undefined) data.executiveSponsor = row.executiveSponsor ?? null;
+  if (row.businessCapabilities !== undefined) data.businessCapabilities = row.businessCapabilities ?? null;
+  if (row.endState !== undefined) data.endState = row.endState ?? null;
+  if (row.effectiveDate !== undefined) data.effectiveDate = row.effectiveDate ?? null;
+  if (row.lastReviewedDate !== undefined) data.lastReviewedDate = row.lastReviewedDate ?? null;
+  if (row.reviewCadence !== undefined) data.reviewCadence = row.reviewCadence ?? null;
   if (row.domain !== undefined) data.domain = row.domain;
   if (row.submittedBy !== undefined) data.submittedBy = row.submittedBy ?? null;
   if (row.submittedAt !== undefined) {
