@@ -110,6 +110,16 @@ export interface ProcessNode {
   performingOrg?: string;
   handoffs?: string;
   hasVariants?: boolean;
+  // Enhanced activity fields.
+  accountableRole?: string;
+  authorityLevel?: string;
+  activityType?: string;
+  entryCondition?: string;
+  completionCriteria?: string;
+  waitBeforeNext?: string;
+  workInstructions?: string;
+  exceptions?: string;
+  dataElements?: DataElement[];
   // Governance controls this activity implements or is subject to
   controlIds?: string[];
   // Change-management review workflow (only meaningful when the
@@ -212,6 +222,12 @@ export const MATURITY_OPTIONS = ['Initial', 'Repeatable', 'Defined', 'Managed', 
 // Risk) with a suggested set so common triggers stay consistent.
 export const TRIGGER_OPTIONS = ['Scheduled', 'Event-driven', 'Upstream completion', 'Manual', 'External request'];
 
+// Enhanced activity-level options.
+export const ACTIVITY_TYPE_OPTIONS = ['Manual', 'Automated', 'Decision', 'Approval', 'Event', 'Quality check'];
+// Direction of a data element relative to the activity, and its classification.
+export const DATA_DIRECTION_OPTIONS = ['Input', 'Output', 'Both'];
+export const DATA_KIND_OPTIONS = ['Master', 'Reference', 'Transactional', 'Metadata'];
+
 export const AUTOMATION_OPTIONS = ['Manual', 'Semi-automated', 'Fully automated'];
 
 // Buckets for Est. Duration on activities. A fixed list keeps reports
@@ -251,6 +267,10 @@ export interface SystemRef { id: string; name: string; systemType?: string; }
  *  locates this activity in that system, an optional label for what the id is,
  *  and an optional deep link. `systemId` keys back to an entry in `systemIds`. */
 export interface SystemLink { systemId: string; externalRef?: string; refLabel?: string; refUrl?: string; sourceConnectionId?: string; sourceAsset?: string; sourceColumn?: string; isKey?: boolean; }
+// One row of an activity's data-element usage table (business data touched by
+// the activity, with CRUD + system-of-record). `element` is the only required
+// field; `crud` holds a subset of C/R/U/D letters.
+export interface DataElement { element: string; direction?: string; crud?: string[]; systemOfRecord?: string; inRegistry?: boolean; kind?: string; format?: string; }
 export interface PolicyRef { id: string; name: string; code: string; documentType: string; orgId?: string }
 export interface MappingInfo {
   id: string;

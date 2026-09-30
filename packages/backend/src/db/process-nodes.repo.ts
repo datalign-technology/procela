@@ -20,7 +20,7 @@
 // scalar column with an FK to Organization, orgIds via the join
 // table — matching what the JSON row does.
 
-import type { ProcessNode as StoredProcessNode, SystemLink } from '../routes/process-catalog';
+import type { ProcessNode as StoredProcessNode, SystemLink, DataElement } from '../routes/process-catalog';
 import { saveStore } from '../lib/persistence';
 import { jsonRepository, Repository } from './repository';
 import { getPrisma, hasDatabase } from './prisma';
@@ -83,6 +83,15 @@ type PrismaProcessNodeRow = {
   performingOrg: string | null;
   handoffs: string | null;
   hasVariants: boolean | null;
+  accountableRole: string | null;
+  authorityLevel: string | null;
+  activityType: string | null;
+  entryCondition: string | null;
+  completionCriteria: string | null;
+  waitBeforeNext: string | null;
+  workInstructions: string | null;
+  exceptions: string | null;
+  dataElements: DataElement[] | null;
   domain: string;
   version: number;
   submittedBy: string | null;
@@ -181,6 +190,15 @@ function fromPrisma(r: PrismaProcessNodeRow): StoredProcessNode {
     ...(r.performingOrg ? { performingOrg: r.performingOrg } : {}),
     ...(r.handoffs ? { handoffs: r.handoffs } : {}),
     ...(typeof r.hasVariants === 'boolean' ? { hasVariants: r.hasVariants } : {}),
+    ...(r.accountableRole ? { accountableRole: r.accountableRole } : {}),
+    ...(r.authorityLevel ? { authorityLevel: r.authorityLevel } : {}),
+    ...(r.activityType ? { activityType: r.activityType } : {}),
+    ...(r.entryCondition ? { entryCondition: r.entryCondition } : {}),
+    ...(r.completionCriteria ? { completionCriteria: r.completionCriteria } : {}),
+    ...(r.waitBeforeNext ? { waitBeforeNext: r.waitBeforeNext } : {}),
+    ...(r.workInstructions ? { workInstructions: r.workInstructions } : {}),
+    ...(r.exceptions ? { exceptions: r.exceptions } : {}),
+    ...(Array.isArray(r.dataElements) && r.dataElements.length > 0 ? { dataElements: r.dataElements } : {}),
     ...(r.controls && r.controls.length > 0
       ? { controlIds: r.controls.map((c) => c.controlId) }
       : {}),
@@ -270,6 +288,15 @@ function toPrismaData(row: Partial<StoredProcessNode>): Record<string, unknown> 
   if (row.performingOrg !== undefined) data.performingOrg = row.performingOrg ?? null;
   if (row.handoffs !== undefined) data.handoffs = row.handoffs ?? null;
   if (row.hasVariants !== undefined) data.hasVariants = row.hasVariants ?? null;
+  if (row.accountableRole !== undefined) data.accountableRole = row.accountableRole ?? null;
+  if (row.authorityLevel !== undefined) data.authorityLevel = row.authorityLevel ?? null;
+  if (row.activityType !== undefined) data.activityType = row.activityType ?? null;
+  if (row.entryCondition !== undefined) data.entryCondition = row.entryCondition ?? null;
+  if (row.completionCriteria !== undefined) data.completionCriteria = row.completionCriteria ?? null;
+  if (row.waitBeforeNext !== undefined) data.waitBeforeNext = row.waitBeforeNext ?? null;
+  if (row.workInstructions !== undefined) data.workInstructions = row.workInstructions ?? null;
+  if (row.exceptions !== undefined) data.exceptions = row.exceptions ?? null;
+  if (row.dataElements !== undefined) data.dataElements = row.dataElements ?? null;
   if (row.domain !== undefined) data.domain = row.domain;
   if (row.submittedBy !== undefined) data.submittedBy = row.submittedBy ?? null;
   if (row.submittedAt !== undefined) {

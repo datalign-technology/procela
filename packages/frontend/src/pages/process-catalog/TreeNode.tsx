@@ -16,13 +16,14 @@ import {
   DocSystemsField,
 } from './DocFields';
 import DependenciesPanel from './DependenciesPanel';
+import DataElementsPanel from './DataElementsPanel';
 import IOPanel, { type AddMappingTarget } from './IOPanel';
 import {
   inputStyle, btnIcon, btnAdd,
   LEVEL_CONFIG, statusColors,
   SIMPLE_TRANSITIONS, REVIEW_TRANSITIONS, ADVANCED_TRANSITIONS,
   SIMPLE_LOCKED, REVIEW_LOCKED, ADVANCED_LOCKED,
-  FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS, CUSTOMER_TYPE_OPTIONS, REVIEW_CADENCE_OPTIONS, MATURITY_OPTIONS,
+  FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS, CUSTOMER_TYPE_OPTIONS, REVIEW_CADENCE_OPTIONS, MATURITY_OPTIONS, ACTIVITY_TYPE_OPTIONS,
   countByLevel, hasRequiredPath, getRequiredNextLevel,
   type ProcessNode, type NodeLevel,
   type FlowRelationship, type TagEntry,
@@ -569,6 +570,9 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       />
                     );
                   })()}
+                  {/* Accountable Role — the RACI "A" (single role answerable for
+                      the outcome), the pair to the Responsible Role above. */}
+                  <DocRoleField label="Accountable Role" value={node.accountableRole || ''} onSave={(v) => onUpdate(node.id, { accountableRole: v })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   {viewMode === 'advanced' && (
                     <>
                       {/* Automation and Est. Duration removed from the panel
@@ -612,10 +616,25 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       {/* Risk mitigation — free-text notes complementing the
                           Risk Level dropdown above. */}
                       <DocField label="Risk mitigation" value={node.riskMitigation || ''} onSave={(v) => onUpdate(node.id, { riskMitigation: v })} disabled={isLocked} placeholder="How the risk is mitigated — controls, compensations…" />
+                      {/* Enhanced activity fields (Process Catalog record spec). */}
+                      <DocDropdown label="Activity type" value={node.activityType || ''} options={ACTIVITY_TYPE_OPTIONS} onSave={(v) => onUpdate(node.id, { activityType: v })} disabled={isLocked} placeholder="Manual / Automated / Decision / Approval / Event / Quality check" />
+                      <DocField label="Authority level" value={node.authorityLevel || ''} onSave={(v) => onUpdate(node.id, { authorityLevel: v })} disabled={isLocked} placeholder="Decision authority this activity carries" />
+                      <DocField label="Entry condition" value={node.entryCondition || ''} onSave={(v) => onUpdate(node.id, { entryCondition: v })} disabled={isLocked} placeholder="Condition that starts this activity" />
+                      <DocField label="Completion criteria" value={node.completionCriteria || ''} onSave={(v) => onUpdate(node.id, { completionCriteria: v })} disabled={isLocked} placeholder="Condition that marks it done" />
+                      <DocField label="Wait before next" value={node.waitBeforeNext || ''} onSave={(v) => onUpdate(node.id, { waitBeforeNext: v })} disabled={isLocked} placeholder="Wait / delay before the next activity, e.g. 24h SLA" />
+                      <DocField label="Work instructions" value={node.workInstructions || ''} onSave={(v) => onUpdate(node.id, { workInstructions: v })} disabled={isLocked} placeholder="Detailed how-to steps for performing this activity" />
+                      <DocField label="Exceptions" value={node.exceptions || ''} onSave={(v) => onUpdate(node.id, { exceptions: v })} disabled={isLocked} placeholder="Exception / error handling" />
                       <ControlsPicker
                         selected={node.controlIds || []}
                         options={controlsList}
                         onChange={(ids) => onUpdate(node.id, { controlIds: ids })}
+                        disabled={isLocked}
+                      />
+                      {/* Data-element usage table — the business data this
+                          activity touches, with CRUD + system of record. */}
+                      <DataElementsPanel
+                        value={node.dataElements || []}
+                        onSave={(rows) => onUpdate(node.id, { dataElements: rows })}
                         disabled={isLocked}
                       />
                     </>

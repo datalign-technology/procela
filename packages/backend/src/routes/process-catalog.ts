@@ -128,6 +128,26 @@ export interface SystemLink {
   isKey?: boolean;
 }
 
+/** One row of an activity's data-element usage table — a business data
+ *  element the activity touches, and how. `element` is the only required
+ *  field; the rest annotate. `crud` is a subset of C/R/U/D letters. */
+export interface DataElement {
+  /** The business data element name (e.g. "Incident ID", "Customer name"). */
+  element: string;
+  /** Data flow relative to the activity: Input | Output | Both. Plain string. */
+  direction?: string;
+  /** CRUD the activity performs on the element — uppercase C/R/U/D letters. */
+  crud?: string[];
+  /** The system of record for the element — free text (usually a system name). */
+  systemOfRecord?: string;
+  /** Whether the element is present in the governed data registry. */
+  inRegistry?: boolean;
+  /** Classification of the element: Master | Reference | Transactional | etc. */
+  kind?: string;
+  /** Physical/logical format hint — e.g. text, date, number, boolean. */
+  format?: string;
+}
+
 export interface ProcessNode {
   id: string;
   parentId: string | null;
@@ -241,6 +261,29 @@ export interface ProcessNode {
   handoffs?: string;
   /** Whether the sub-process has variant flows. */
   hasVariants?: boolean;
+  // ── Enhanced activity fields ──
+  /** RACI "Accountable" role — the single role answerable for the activity's
+   *  outcome, distinct from `responsibleRole` (who does the work). */
+  accountableRole?: string;
+  /** Decision authority the activity carries — free text. */
+  authorityLevel?: string;
+  /** Activity type: Manual | Automated | Decision | Approval | Event |
+   *  Quality check. Plain string so the option set can grow without a DB
+   *  enum migration. */
+  activityType?: string;
+  /** Condition that starts the activity — free text. */
+  entryCondition?: string;
+  /** Condition that marks the activity complete — free text. */
+  completionCriteria?: string;
+  /** Wait / delay before the next activity runs — free text. */
+  waitBeforeNext?: string;
+  /** Detailed work instructions (how-to steps) — free text. */
+  workInstructions?: string;
+  /** Exception / error handling notes — free text. */
+  exceptions?: string;
+  /** Data-element usage table: the business data the activity touches, with
+   *  CRUD and system-of-record. Sparse — only set where captured. */
+  dataElements?: DataElement[];
   /** Next scheduled governance review date (ISO "YYYY-MM-DD"), forward-
    *  looking — distinct from `reviewedAt` (the last review's timestamp).
    *  Free-text date string so a review cadence can be tracked without a
@@ -808,6 +851,64 @@ function validateSystemLinks(value: unknown, res: Response, allowed: string[]): 
   return [...byId.values()];
 }
 
+/** Validate the activity data-element usage table. Each entry needs an
+ *  `element` name (rows without one are dropped as blank). Trims the free-text
+ *  fields, caps their length, normalises `crud` to a deduped subset of the
+ *  uppercase letters C/R/U/D, and coerces `inRegistry` to a real boolean.
+ *  Returns the cleaned array, or null after writing a 400. */
+function validateDataElements(value: unknown, res: Response): DataElement[] | null {
+  if (!Array.isArray(value)) {
+    res.status(400).json({ success: false, error: 'dataElements must be an array' });
+    return null;
+  }
+  const trim = (v: unknown, max: number): string | undefined => {
+    if (typeof v !== 'string') return undefined;
+    const t = v.trim();
+    return t ? t.slice(0, max) : undefined;
+  };
+  const CRUD = ['C', 'R', 'U', 'D'];
+  const out: DataElement[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') {
+      res.status(400).json({ success: false, error: 'dataElements entries must be objects' });
+      return null;
+    }
+    const e = entry as Record<string, unknown>;
+    const element = trim(e.element, 200);
+    // Drop blank rows — a usage row with no element isn't worth storing (mirrors
+    // the empty-row handling for systemLinks).
+    if (!element) continue;
+    const direction = trim(e.direction, 32);
+    const systemOfRecord = trim(e.systemOfRecord, 256);
+    const kind = trim(e.kind, 64);
+    const format = trim(e.format, 64);
+    let crud: string[] | undefined;
+    if (Array.isArray(e.crud)) {
+      const seen = new Set<string>();
+      const letters: string[] = [];
+      for (const c of e.crud) {
+        if (typeof c !== 'string') continue;
+        const up = c.trim().toUpperCase();
+        if (!CRUD.includes(up) || seen.has(up)) continue;
+        seen.add(up);
+        letters.push(up);
+      }
+      if (letters.length) crud = CRUD.filter((c) => seen.has(c)); // canonical order
+    }
+    const inRegistry = typeof e.inRegistry === 'boolean' ? e.inRegistry : undefined;
+    out.push({
+      element,
+      ...(direction ? { direction } : {}),
+      ...(crud ? { crud } : {}),
+      ...(systemOfRecord ? { systemOfRecord } : {}),
+      ...(inRegistry !== undefined ? { inRegistry } : {}),
+      ...(kind ? { kind } : {}),
+      ...(format ? { format } : {}),
+    });
+  }
+  return out;
+}
+
 // ── HIERARCHY NODES ──
 
 /** DELETE /all — delete all process nodes and flow relationships */
@@ -931,7 +1032,8 @@ router.post('/nodes', async (req: Request, res: Response) => {
     criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
     customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence,
     businessRules, startPoint, endPoint, maturityLevel, processDiagramUrl,
-    entryCriteria, exitCriteria, performingOrg, handoffs, hasVariants } = req.body;
+    entryCriteria, exitCriteria, performingOrg, handoffs, hasVariants,
+    accountableRole, authorityLevel, activityType, entryCondition, completionCriteria, waitBeforeNext, workInstructions, exceptions, dataElements } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -993,6 +1095,11 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ? undefined
     : validateSystemLinks(systemLinks, res, cleanedSystemIds ?? []);
   if (cleanedSystemLinks === null) return;
+
+  const cleanedDataElements = dataElements === undefined
+    ? undefined
+    : validateDataElements(dataElements, res);
+  if (cleanedDataElements === null) return;
 
   // The org(s) this node will belong to — used to scope person assignments
   // so an owner / responsible person can't come from a sibling tenant.
@@ -1088,6 +1195,16 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ...(typeof performingOrg === 'string' && performingOrg.trim() ? { performingOrg: performingOrg.trim() } : {}),
     ...(typeof handoffs === 'string' && handoffs.trim() ? { handoffs: handoffs.trim() } : {}),
     ...(typeof hasVariants === 'boolean' ? { hasVariants } : {}),
+    // Enhanced activity fields.
+    ...(typeof accountableRole === 'string' && accountableRole.trim() ? { accountableRole: accountableRole.trim() } : {}),
+    ...(typeof authorityLevel === 'string' && authorityLevel.trim() ? { authorityLevel: authorityLevel.trim() } : {}),
+    ...(typeof activityType === 'string' && activityType.trim() ? { activityType: activityType.trim() } : {}),
+    ...(typeof entryCondition === 'string' && entryCondition.trim() ? { entryCondition: entryCondition.trim() } : {}),
+    ...(typeof completionCriteria === 'string' && completionCriteria.trim() ? { completionCriteria: completionCriteria.trim() } : {}),
+    ...(typeof waitBeforeNext === 'string' && waitBeforeNext.trim() ? { waitBeforeNext: waitBeforeNext.trim() } : {}),
+    ...(typeof workInstructions === 'string' && workInstructions.trim() ? { workInstructions: workInstructions.trim() } : {}),
+    ...(typeof exceptions === 'string' && exceptions.trim() ? { exceptions: exceptions.trim() } : {}),
+    ...(cleanedDataElements && cleanedDataElements.length ? { dataElements: cleanedDataElements } : {}),
     ...(cleanedControlIds.length ? { controlIds: cleanedControlIds } : {}),
     domain: nodeDomain,
     createdAt: now,
@@ -1123,6 +1240,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence,
     businessRules, startPoint, endPoint, maturityLevel, processDiagramUrl,
     entryCriteria, exitCriteria, performingOrg, handoffs, hasVariants,
+    accountableRole, authorityLevel, activityType, entryCondition, completionCriteria, waitBeforeNext, workInstructions, exceptions, dataElements,
     reviewComment } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
@@ -1318,6 +1436,21 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (performingOrg !== undefined) node.performingOrg = trimField(performingOrg);
   if (handoffs !== undefined) node.handoffs = trimField(handoffs);
   if (hasVariants !== undefined) node.hasVariants = typeof hasVariants === 'boolean' ? hasVariants : undefined;
+  // Enhanced activity fields — same trim-or-undefined contract.
+  if (accountableRole !== undefined) node.accountableRole = trimField(accountableRole);
+  if (authorityLevel !== undefined) node.authorityLevel = trimField(authorityLevel);
+  if (activityType !== undefined) node.activityType = trimField(activityType);
+  if (entryCondition !== undefined) node.entryCondition = trimField(entryCondition);
+  if (completionCriteria !== undefined) node.completionCriteria = trimField(completionCriteria);
+  if (waitBeforeNext !== undefined) node.waitBeforeNext = trimField(waitBeforeNext);
+  if (workInstructions !== undefined) node.workInstructions = trimField(workInstructions);
+  if (exceptions !== undefined) node.exceptions = trimField(exceptions);
+  // Data-element usage table — full-set replace, validated like systemLinks.
+  if (dataElements !== undefined) {
+    const cleaned = validateDataElements(dataElements, res);
+    if (cleaned === null) return;
+    node.dataElements = cleaned.length > 0 ? cleaned : undefined;
+  }
   if (controlIds !== undefined) {
     node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
       ? await cleanControlIds(controlIds)

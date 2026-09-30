@@ -368,11 +368,14 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
 // domain tags the field with a visible cross-domain marker. A legacy
 // free-text value that's in neither catalog is preserved as a selectable
 // option until the user re-picks.
-export function DocRoleField({ value, onSave, disabled, domain }: {
+export function DocRoleField({ value, onSave, disabled, domain, label = 'Responsible Role' }: {
   value: string;
   onSave: (v: string) => void;
   disabled: boolean;
   domain: 'GOVERNANCE' | 'OPERATIONAL';
+  /** Field label — defaults to "Responsible Role"; set to "Accountable Role"
+   *  (or similar) to reuse the same role picker for another RACI slot. */
+  label?: string;
 }) {
   const [showAll, setShowAll] = useState(false);
   const govLabels = GOVERNANCE_ROLES.map((r) => r.label);
@@ -395,9 +398,9 @@ export function DocRoleField({ value, onSave, disabled, domain }: {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, flexWrap: 'wrap' }}>
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Responsible Role:</span>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
       <select
-        aria-label="Responsible Role"
+        aria-label={label}
         value={value}
         onChange={(e) => onSave(e.target.value)}
         disabled={disabled}

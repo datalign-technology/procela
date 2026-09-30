@@ -321,6 +321,19 @@ model ProcessNode {
   performingOrg        String?          // the org/team that performs the sub-process
   handoffs             String?          @db.Text  // handoffs / interfaces with other work
   hasVariants          Boolean?         // whether the sub-process has variant flows
+  // ── Enhanced activity fields ──
+  accountableRole      String?          // RACI "Accountable" role (single, distinct from responsibleRole)
+  authorityLevel       String?          // decision authority the activity carries
+  activityType         String?          // Manual | Automated | Decision | Approval | Event | Quality check
+  entryCondition       String?          @db.Text  // condition that starts the activity
+  completionCriteria   String?          @db.Text  // condition that marks it done
+  waitBeforeNext       String?          // wait / delay before the next activity
+  workInstructions     String?          @db.Text  // detailed how-to steps
+  exceptions           String?          @db.Text  // exception / error handling
+  // Data-element usage table: the business data the activity touches, with
+  // CRUD. JSON array of { element, direction, crud[], systemOfRecord,
+  // inRegistry, kind, format }. Nullable — set only where captured.
+  dataElements         Json?
   domain              NodeDomain       @default(OPERATIONAL)
   version             Int              @default(1)
   submittedBy         String?          @db.Uuid
