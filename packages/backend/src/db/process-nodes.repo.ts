@@ -78,6 +78,11 @@ type PrismaProcessNodeRow = {
   endPoint: string | null;
   maturityLevel: string | null;
   processDiagramUrl: string | null;
+  entryCriteria: string | null;
+  exitCriteria: string | null;
+  performingOrg: string | null;
+  handoffs: string | null;
+  hasVariants: boolean | null;
   domain: string;
   version: number;
   submittedBy: string | null;
@@ -171,6 +176,11 @@ function fromPrisma(r: PrismaProcessNodeRow): StoredProcessNode {
     ...(r.endPoint ? { endPoint: r.endPoint } : {}),
     ...(r.maturityLevel ? { maturityLevel: r.maturityLevel } : {}),
     ...(r.processDiagramUrl ? { processDiagramUrl: r.processDiagramUrl } : {}),
+    ...(r.entryCriteria ? { entryCriteria: r.entryCriteria } : {}),
+    ...(r.exitCriteria ? { exitCriteria: r.exitCriteria } : {}),
+    ...(r.performingOrg ? { performingOrg: r.performingOrg } : {}),
+    ...(r.handoffs ? { handoffs: r.handoffs } : {}),
+    ...(typeof r.hasVariants === 'boolean' ? { hasVariants: r.hasVariants } : {}),
     ...(r.controls && r.controls.length > 0
       ? { controlIds: r.controls.map((c) => c.controlId) }
       : {}),
@@ -255,6 +265,11 @@ function toPrismaData(row: Partial<StoredProcessNode>): Record<string, unknown> 
   if (row.endPoint !== undefined) data.endPoint = row.endPoint ?? null;
   if (row.maturityLevel !== undefined) data.maturityLevel = row.maturityLevel ?? null;
   if (row.processDiagramUrl !== undefined) data.processDiagramUrl = row.processDiagramUrl ?? null;
+  if (row.entryCriteria !== undefined) data.entryCriteria = row.entryCriteria ?? null;
+  if (row.exitCriteria !== undefined) data.exitCriteria = row.exitCriteria ?? null;
+  if (row.performingOrg !== undefined) data.performingOrg = row.performingOrg ?? null;
+  if (row.handoffs !== undefined) data.handoffs = row.handoffs ?? null;
+  if (row.hasVariants !== undefined) data.hasVariants = row.hasVariants ?? null;
   if (row.domain !== undefined) data.domain = row.domain;
   if (row.submittedBy !== undefined) data.submittedBy = row.submittedBy ?? null;
   if (row.submittedAt !== undefined) {

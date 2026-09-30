@@ -230,6 +230,17 @@ export interface ProcessNode {
   maturityLevel?: string;
   /** Attached process diagram — a file path or URL. */
   processDiagramUrl?: string;
+  // ── Enhanced sub-process fields ──
+  /** Conditions that must hold before the sub-process starts. */
+  entryCriteria?: string;
+  /** Conditions that mark the sub-process complete. */
+  exitCriteria?: string;
+  /** The org / team that performs this sub-process. */
+  performingOrg?: string;
+  /** Handoffs / interfaces to other work — free text. */
+  handoffs?: string;
+  /** Whether the sub-process has variant flows. */
+  hasVariants?: boolean;
   /** Next scheduled governance review date (ISO "YYYY-MM-DD"), forward-
    *  looking — distinct from `reviewedAt` (the last review's timestamp).
    *  Free-text date string so a review cadence can be tracked without a
@@ -919,7 +930,8 @@ router.post('/nodes', async (req: Request, res: Response) => {
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds, systemLinks,
     criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
     customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence,
-    businessRules, startPoint, endPoint, maturityLevel, processDiagramUrl } = req.body;
+    businessRules, startPoint, endPoint, maturityLevel, processDiagramUrl,
+    entryCriteria, exitCriteria, performingOrg, handoffs, hasVariants } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -1070,6 +1082,12 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ...(typeof endPoint === 'string' && endPoint.trim() ? { endPoint: endPoint.trim() } : {}),
     ...(typeof maturityLevel === 'string' && maturityLevel.trim() ? { maturityLevel: maturityLevel.trim() } : {}),
     ...(typeof processDiagramUrl === 'string' && processDiagramUrl.trim() ? { processDiagramUrl: processDiagramUrl.trim() } : {}),
+    // Enhanced sub-process fields.
+    ...(typeof entryCriteria === 'string' && entryCriteria.trim() ? { entryCriteria: entryCriteria.trim() } : {}),
+    ...(typeof exitCriteria === 'string' && exitCriteria.trim() ? { exitCriteria: exitCriteria.trim() } : {}),
+    ...(typeof performingOrg === 'string' && performingOrg.trim() ? { performingOrg: performingOrg.trim() } : {}),
+    ...(typeof handoffs === 'string' && handoffs.trim() ? { handoffs: handoffs.trim() } : {}),
+    ...(typeof hasVariants === 'boolean' ? { hasVariants } : {}),
     ...(cleanedControlIds.length ? { controlIds: cleanedControlIds } : {}),
     domain: nodeDomain,
     createdAt: now,
@@ -1104,6 +1122,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
     customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence,
     businessRules, startPoint, endPoint, maturityLevel, processDiagramUrl,
+    entryCriteria, exitCriteria, performingOrg, handoffs, hasVariants,
     reviewComment } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
@@ -1294,6 +1313,11 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (endPoint !== undefined) node.endPoint = trimField(endPoint);
   if (maturityLevel !== undefined) node.maturityLevel = trimField(maturityLevel);
   if (processDiagramUrl !== undefined) node.processDiagramUrl = trimField(processDiagramUrl);
+  if (entryCriteria !== undefined) node.entryCriteria = trimField(entryCriteria);
+  if (exitCriteria !== undefined) node.exitCriteria = trimField(exitCriteria);
+  if (performingOrg !== undefined) node.performingOrg = trimField(performingOrg);
+  if (handoffs !== undefined) node.handoffs = trimField(handoffs);
+  if (hasVariants !== undefined) node.hasVariants = typeof hasVariants === 'boolean' ? hasVariants : undefined;
   if (controlIds !== undefined) {
     node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
       ? await cleanControlIds(controlIds)

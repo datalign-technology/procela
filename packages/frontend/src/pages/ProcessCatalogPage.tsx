@@ -104,6 +104,12 @@ export interface ProcessNode {
   endPoint?: string;
   maturityLevel?: string;
   processDiagramUrl?: string;
+  // Enhanced sub-process fields.
+  entryCriteria?: string;
+  exitCriteria?: string;
+  performingOrg?: string;
+  handoffs?: string;
+  hasVariants?: boolean;
   // Governance controls this activity implements or is subject to
   controlIds?: string[];
   // Change-management review workflow (only meaningful when the
