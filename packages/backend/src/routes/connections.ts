@@ -606,8 +606,15 @@ router.post('/:id/sample', async (req: Request, res: Response) => {
     const msg = err instanceof Error ? err.message : 'Sample preview failed';
     // Caller-fault inputs (a bad identifier, or a column/file the source
     // doesn't have) are 400s; upstream faults (auth, host, permissions) fall
-    // through to the 502 below.
-    if (/invalid .* identifier|not found in file|Unsupported file type|Column .* not found/i.test(msg)) {
+    // through to the 502 below. Plain substring checks (not a regex) so an
+    // uncontrolled error message can't trigger catastrophic backtracking.
+    const lower = msg.toLowerCase();
+    const callerFault =
+      (lower.includes('invalid') && lower.includes('identifier')) ||
+      lower.includes('not found in file') ||
+      lower.includes('unsupported file type') ||
+      (lower.includes('column') && lower.includes('not found'));
+    if (callerFault) {
       res.status(400).json({ success: false, error: msg });
       return;
     }
