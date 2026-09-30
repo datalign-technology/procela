@@ -18,6 +18,7 @@ import {
 import DependenciesPanel from './DependenciesPanel';
 import DataElementsPanel from './DataElementsPanel';
 import ReadinessPanel, { requiredLabels } from './ReadinessPanel';
+import ActivityFlowBoard from './ActivityFlowBoard';
 import IOPanel, { type AddMappingTarget } from './IOPanel';
 import {
   inputStyle, btnIcon, btnAdd,
@@ -582,6 +583,9 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       <DocField label="Handoffs" typeLabel="Long text" value={node.handoffs || ''} onSave={(v) => onUpdate(node.id, { handoffs: v })} disabled={isLocked} placeholder="Handoffs / interfaces to other work" />
                       <DocField label="Business rules" typeLabel="Long text" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this runs" />
                       <DocDropdown label="Has variants" typeLabel="Yes / No" value={node.hasVariants === true ? 'Yes' : node.hasVariants === false ? 'No' : ''} options={['Yes', 'No']} onSave={(v) => onUpdate(node.id, { hasVariants: v === 'Yes' })} disabled={isLocked} placeholder="Does this have variant flows?" />
+                      {/* The activities beneath this sub-process as a left-to-right
+                          flow, with handoff markers where the responsible role changes. */}
+                      <ActivityFlowBoard node={node} />
                       {/* Rolled up from the activities beneath this sub-process (read-only). */}
                       <ActivityRollup node={node} systemsList={systemsList} />
                       {/* Cross-cutting governance-lifecycle dates. */}
