@@ -504,7 +504,27 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                  Inputs / Outputs note now lives next to the data-asset
                  panel below so the text and the structured list sit
                  together. */}
-              {node.level === 'SUBPROCESS' && null}
+              {node.level === 'SUBPROCESS' && (
+                <>
+                  <DocPersonField label="Owner" orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
+                  {viewMode === 'advanced' && (
+                    <>
+                      {/* Enhanced sub-process record fields (Process Catalog spec). */}
+                      <DocField label="Entry criteria" value={node.entryCriteria || ''} onSave={(v) => onUpdate(node.id, { entryCriteria: v })} disabled={isLocked} placeholder="Conditions that must hold before this starts" />
+                      <DocField label="Exit criteria" value={node.exitCriteria || ''} onSave={(v) => onUpdate(node.id, { exitCriteria: v })} disabled={isLocked} placeholder="Conditions that mark this complete" />
+                      <DocField label="Performing org" value={node.performingOrg || ''} onSave={(v) => onUpdate(node.id, { performingOrg: v })} disabled={isLocked} placeholder="The team / org that performs this sub-process" />
+                      <DocField label="Handoffs" value={node.handoffs || ''} onSave={(v) => onUpdate(node.id, { handoffs: v })} disabled={isLocked} placeholder="Handoffs / interfaces to other work" />
+                      <DocField label="Business rules" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this runs" />
+                      <DocDropdown label="Has variants" value={node.hasVariants === true ? 'Yes' : node.hasVariants === false ? 'No' : ''} options={['Yes', 'No']} onSave={(v) => onUpdate(node.id, { hasVariants: v === 'Yes' })} disabled={isLocked} placeholder="Does this have variant flows?" />
+                      {/* Cross-cutting governance-lifecycle dates. */}
+                      <DocField label="Effective date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect" />
+                      <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
+                      <DocDropdown label="Review cadence" value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
+                      <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date" />
+                    </>
+                  )}
+                </>
+              )}
               {/* Activity fields */}
               {node.level === 'ACTIVITY' && (
                 <>

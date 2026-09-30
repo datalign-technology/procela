@@ -295,6 +295,25 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       const node = processNodes.find((n: any) => n.id === procId);
       for (const [k, v] of Object.entries(fields)) assert.strictEqual(node[k], v, `${k} persisted`);
     });
+
+    it('round-trips the new sub-process fields, incl. the hasVariants boolean', async () => {
+      const res = await request(port, 'PUT', `/process-catalog/nodes/${procId}`, {
+        entryCriteria: 'A confirmed incident is open.',
+        exitCriteria: 'Crews allocated.',
+        performingOrg: 'Distribution Control Center',
+        handoffs: 'Hands off to Field Dispatch.',
+        hasVariants: true,
+      });
+      assert.strictEqual(res.status, 200);
+      const node = processNodes.find((n: any) => n.id === procId);
+      assert.strictEqual(node.entryCriteria, 'A confirmed incident is open.');
+      assert.strictEqual(node.performingOrg, 'Distribution Control Center');
+      assert.strictEqual(node.hasVariants, true);
+      // Boolean false persists (not dropped as falsy).
+      const res2 = await request(port, 'PUT', `/process-catalog/nodes/${procId}`, { hasVariants: false });
+      assert.strictEqual(res2.status, 200);
+      assert.strictEqual(processNodes.find((n: any) => n.id === procId).hasVariants, false);
+    });
   });
 
   describe('DELETE /nodes/:id — cascade', () => {
