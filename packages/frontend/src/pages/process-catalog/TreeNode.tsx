@@ -128,7 +128,7 @@ function Wide({ children }: { children: React.ReactNode }) {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onMoveNode, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, connectionsBySystem, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope }: {
+function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onMoveNode, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, connectionsBySystem, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope, detailMode }: {
   node: ProcessNode; depth: number;
   /** The parent node's id, or null for a root (value-stream) row. Drag-to-
    *  reorder is constrained to siblings — a drop is only honoured when the
@@ -139,6 +139,11 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
    *  value-stream row only — the anchor granularity: a scoped value stream's
    *  whole subtree is in scope, so badging every descendant would be noise. */
   nodeInScope?: (id: string) => boolean;
+  /** Render as a standalone detail pane (the right side of the two-pane
+   *  catalog): no nav chrome (drag handle / select checkbox / expand caret),
+   *  always expanded, and no recursive children — just this node's record
+   *  detail + its action controls. The left `CatalogNav` handles navigation. */
+  detailMode?: boolean;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
   onClone: (id: string) => void;
@@ -313,7 +318,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
     setPromoteDocType('POLICY');
   };
   const nodeTags = allTags.filter((t) => t.entityId === node.id);
-  const isExpanded = expanded.has(node.id);
+  const isExpanded = detailMode ? true : expanded.has(node.id);
   const hasChildren = (node.children || []).length > 0;
   const config = LEVEL_CONFIG[node.level];
   const validChildren = (validChildrenMap[node.level] || []) as NodeLevel[];
@@ -387,6 +392,10 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
         {/* Drag handle — mouse affordance only; the up/down arrows at the row's
             end remain the keyboard path. Drag onto a sibling edge to reorder, or
             onto a valid parent row to re-parent. */}
+        {/* Nav chrome — drag handle, select checkbox, expand caret. Hidden in
+            detailMode: the left CatalogNav owns navigation, so the right detail
+            pane shows the record only. */}
+        {!detailMode && (<>
         {canDrag ? (
           <DragHandle {...handleProps} title="Drag to reorder, or onto another row to re-parent" style={{ marginTop: 3 }} />
         ) : (
@@ -411,6 +420,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
             {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : isLeafLevel ? config.icon : '\u25B7'}
           </span>
         </div>
+        </>)}
 
         {/* Level badge */}
         <span style={{
@@ -1389,8 +1399,9 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
         )}
       </div>
 
-      {/* Children */}
-      {isExpanded && (node.children || []).map((child, idx, arr) => (
+      {/* Children — suppressed in detailMode (the detail pane shows one node;
+          the left CatalogNav renders the hierarchy). */}
+      {!detailMode && isExpanded && (node.children || []).map((child, idx, arr) => (
         <TreeNode key={child.id} node={child} depth={depth + 1} parentId={node.id}
           nodeInScope={nodeInScope}
           onUpdate={onUpdate} onDelete={onDelete} onClone={onClone} onAddChild={onAddChild}

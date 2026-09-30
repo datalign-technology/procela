@@ -30,6 +30,7 @@ import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
 import { SkeletonRows } from '../components/Skeleton';
 import TreeNode from './process-catalog/TreeNode';
+import CatalogNav from './process-catalog/CatalogNav';
 import { useScopeMembership } from '../hooks/useScopeMembership';
 import type { AddMappingTarget } from './process-catalog/IOPanel';
 // Lazy: only renders when the user clicks "History" on a node.
@@ -553,6 +554,8 @@ export default function ProcessCatalogPage() {
     }
     const ancestors = findAncestorIds(tree, targetId);
     if (!ancestors) return;
+    // Two-pane: open the node's record in the right detail pane.
+    setSelectedNodeId(targetId);
     setExpanded((prev) => {
       const next = new Set(prev);
       for (const id of ancestors) next.add(id);
@@ -579,6 +582,9 @@ export default function ProcessCatalogPage() {
   }, [tree, location.search]);
 
   const [addingTo, setAddingTo] = useState<string | null>(null);
+  // The node whose record detail is shown in the right pane of the two-pane
+  // catalog. The left CatalogNav sets this; a deep-link (?node=) also sets it.
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
@@ -1035,25 +1041,12 @@ export default function ProcessCatalogPage() {
   };
 
   // ── Bulk select handlers ──
-  const collectAllNodeIds = (nodes: ProcessNode[]): string[] => {
-    const ids: string[] = [];
-    function walk(arr: ProcessNode[]) {
-      for (const n of arr) { ids.push(n.id); if (n.children) walk(n.children); }
-    }
-    walk(nodes);
-    return ids;
-  };
   const toggleNodeSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  };
-  const allNodeIds = collectAllNodeIds(tree);
-  const toggleSelectAllNodes = () => {
-    if (selectedIds.size === allNodeIds.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(allNodeIds));
   };
   const handleBulkDeleteNodes = async () => {
     if (selectedIds.size === 0) return;
@@ -1277,6 +1270,15 @@ export default function ProcessCatalogPage() {
     () => pruneHiddenLevels(showOwnerlessOnly ? pruneToOwnerless(lensedTree) : lensedTree, hiddenLevels),
     [lensedTree, hiddenLevels, showOwnerlessOnly],
   );
+
+  // The node shown in the right detail pane. Resolved against the FULL tree so a
+  // selection stays valid even when the nav is filtered. When nothing is
+  // selected (or the selection was deleted/filtered out of existence), default
+  // to the first visible value stream so the pane is never empty on load.
+  const selectedNode = selectedNodeId ? findNodeInTree(tree, selectedNodeId) : null;
+  useEffect(() => {
+    if (!selectedNode && visibleTree.length > 0) setSelectedNodeId(visibleTree[0].id);
+  }, [selectedNode, visibleTree]);
 
   // Build the role-eligibility maps. Activity.responsibleRole is stored
   // as a label string (e.g. "Business Data Steward"); dama-roles uses
@@ -1558,17 +1560,9 @@ export default function ProcessCatalogPage() {
       {/* Toolbar */}
       {tree.length > 0 && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center' }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-            <input
-              type="checkbox"
-              checked={allNodeIds.length > 0 && selectedIds.size === allNodeIds.length}
-              onChange={toggleSelectAllNodes}
-            />
-            Select all
-          </label>
           <ExpandCollapseControls onExpandAll={expandAll} onCollapseAll={() => setExpanded(new Set())} />
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-            Click any name or description to edit. Optional levels can be added at any time.
+            Click a step on the left to open its details. Optional levels can be added at any time.
           </span>
         </div>
       )}
@@ -1775,50 +1769,54 @@ export default function ProcessCatalogPage() {
             Every level is hidden. Re-enable a level in the Legend above to see the catalog.
           </div>
         ) : (
-          visibleTree.map((node, idx) => (
-            <TreeNode key={node.id} node={node} depth={0} parentId={null}
-              nodeInScope={scope.applied ? (id) => scope.has('node', id) : undefined}
-              onUpdate={updateNode} onDelete={deleteNode} onClone={cloneNode}
-              onAddChild={(parentId) => setAddingTo(parentId)}
-              expanded={expanded} toggleExpand={toggleExpand}
-              selectedIds={selectedIds} toggleSelect={toggleNodeSelect}
-              validChildrenMap={validChildrenMap} flows={flows}
-              activitiesFlat={activitiesFlat}
-              valueStreamName={node.level === 'VALUE_STREAM' ? node.name : ''}
-              controlsList={controlsList}
-              siblingIndex={idx} siblingCount={visibleTree.length} onReorder={reorderNode} onMoveNode={moveNode}
-              onShowHistory={showHistory}
-              allTags={allTags}
-              onAddTag={addTag}
-              onRemoveTag={removeTag}
-              peopleList={peopleList}
-              assetsList={assetsList}
-              policiesList={policiesList}
-              systemsList={systemsList}
-              connectionsBySystem={connectionsBySystem}
-              mappingsByStep={mappingsByStep}
-              attachmentCountByNode={attachmentCountByNode}
-              skillCoverageByNode={skillCoverageByNode}
-              activePageOrgId={activeOrgId || ''}
-              onAddMapping={addMapping}
-              onRemoveMapping={removeMapping}
-              onRestoreMapping={restoreMapping}
-              statusMode={statusMode}
-              agentExecByActivity={agentExecByActivity}
-              onRunAgent={aiEnabled ? handleRunAgent : undefined}
-              onReviewExecution={handleReviewExecution}
-              onPromoteExecution={handlePromoteExecution}
-              runningActivity={runningActivity}
-              agentRoles={agentRoleOptions}
-              governanceHolderIds={governanceHolderIds}
-              holdersByRoleLabel={holdersByRoleLabel}
-              viewMode={viewMode}
-              ancestorStatusChain={[]}
-              schedulesByActivity={schedulesByActivity}
-              onCreateSchedule={handleCreateSchedule}
-              onToggleSchedule={handleToggleSchedule}
-              onDeleteSchedule={handleDeleteSchedule} />
-          ))
+          /* Two-pane: a compact navigation tree on the left; the selected
+             record's detail + actions on the right (TreeNode in detailMode). */
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) minmax(0, 1fr)', alignItems: 'start' }}>
+            <div style={{ borderRight: '1px solid var(--color-border)', padding: 8, alignSelf: 'stretch' }}>
+              <CatalogNav
+                nodes={visibleTree}
+                selectedId={selectedNodeId}
+                expanded={expanded}
+                onToggle={toggleExpand}
+                onSelect={setSelectedNodeId}
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              {selectedNode ? (
+                <TreeNode key={selectedNode.id} detailMode node={selectedNode} depth={0} parentId={null}
+                  nodeInScope={scope.applied ? (id) => scope.has('node', id) : undefined}
+                  onUpdate={updateNode} onDelete={deleteNode} onClone={cloneNode}
+                  onAddChild={(parentId) => setAddingTo(parentId)}
+                  expanded={expanded} toggleExpand={toggleExpand}
+                  selectedIds={selectedIds} toggleSelect={toggleNodeSelect}
+                  validChildrenMap={validChildrenMap} flows={flows}
+                  activitiesFlat={activitiesFlat}
+                  valueStreamName={selectedNode.level === 'VALUE_STREAM' ? selectedNode.name : ''}
+                  controlsList={controlsList}
+                  siblingIndex={0} siblingCount={1} onReorder={reorderNode} onMoveNode={moveNode}
+                  onShowHistory={showHistory}
+                  allTags={allTags} onAddTag={addTag} onRemoveTag={removeTag}
+                  peopleList={peopleList} assetsList={assetsList} policiesList={policiesList} systemsList={systemsList}
+                  connectionsBySystem={connectionsBySystem} mappingsByStep={mappingsByStep}
+                  attachmentCountByNode={attachmentCountByNode} skillCoverageByNode={skillCoverageByNode}
+                  activePageOrgId={activeOrgId || ''}
+                  onAddMapping={addMapping} onRemoveMapping={removeMapping} onRestoreMapping={restoreMapping}
+                  statusMode={statusMode}
+                  agentExecByActivity={agentExecByActivity}
+                  onRunAgent={aiEnabled ? handleRunAgent : undefined}
+                  onReviewExecution={handleReviewExecution} onPromoteExecution={handlePromoteExecution}
+                  runningActivity={runningActivity} agentRoles={agentRoleOptions}
+                  governanceHolderIds={governanceHolderIds} holdersByRoleLabel={holdersByRoleLabel}
+                  viewMode={viewMode} ancestorStatusChain={[]}
+                  schedulesByActivity={schedulesByActivity}
+                  onCreateSchedule={handleCreateSchedule} onToggleSchedule={handleToggleSchedule} onDeleteSchedule={handleDeleteSchedule} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: '3rem 2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
+                  Select a step on the left to see its details.
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </Card>
 
