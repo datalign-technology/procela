@@ -102,6 +102,30 @@ function ActivityRollup({ node, systemsList }: { node: ProcessNode; systemsList:
   );
 }
 
+// The record detail lays its fields out in a responsive two-column grid (see the
+// FIELD_GRID container below) so a wide page isn't a single narrow column with a
+// dead gap out to the right. Simple fields are one grid cell; anything that needs
+// the full width — the readiness/roll-up panels, the flow board, the data-element
+// and skills tables, the agent runner, the systems picker — is wrapped in this so
+// it spans every column instead of being squeezed into one.
+const FIELD_GRID: React.CSSProperties = {
+  display: 'grid',
+  // auto-fit + minmax gives two columns once there's room (~760px+) and folds
+  // back to one when the panel is narrow. Needs a definite container width —
+  // width:100% makes the block fill its flex-item parent so the track count
+  // resolves against the real width rather than collapsing to a single column.
+  width: '100%',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
+  columnGap: 24,
+  rowGap: 'var(--space-field)',
+  alignItems: 'start',
+  marginTop: 'var(--space-section)',
+  paddingLeft: 2,
+};
+function Wide({ children }: { children: React.ReactNode }) {
+  return <div style={{ gridColumn: '1 / -1' }}>{children}</div>;
+}
+
 // ── Tree Node ──
 
 function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onMoveNode, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, connectionsBySystem, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope }: {
@@ -347,7 +371,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
       <div
         data-node-id={node.id}
         style={{
-        display: 'flex', alignItems: 'flex-start', gap: 6,
+        display: 'flex', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap',
         padding: '7px 12px', paddingLeft: 12 + depth * 22,
         borderBottom: '1px solid var(--color-border)',
         background: isSelected ? '#f0f9ff' : (completeness && !completeness.complete ? '#fffbeb' : undefined),
@@ -440,16 +464,24 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
               )}
             </div>
           )}
+        </div>
+        {/* The expanded record detail spans the full row width (on its own
+            wrapped line below the header) instead of being boxed into the
+            narrow name column beside the right-hand controls — so the
+            two-column field grid actually has room. order:1 keeps it after
+            the status / action controls; when collapsed it carries only the
+            small guidance hints (or nothing). */}
+        <div style={{ order: 1, flexBasis: '100%', width: '100%', minWidth: 0 }}>
           {/* Documentation fields — visible when expanded. FieldStack
              owns the vertical rhythm (--space-field) so the gap between
              rows is uniform no matter which fields render for this node
              type / status; children must not add their own margins. */}
           {isExpanded && (
-            <FieldStack style={{ marginTop: 'var(--space-section)', paddingLeft: 2 }}>
+            <div style={FIELD_GRID}>
               {/* Readiness — how many of this record's required fields are
                   filled, scored as a green "ready" bar / amber "active but
                   incomplete" / neutral draft-progress panel (mock-up parity). */}
-              <ReadinessPanel node={node} />
+              <Wide><ReadinessPanel node={node} /></Wide>
               {/* Locked-state notice. When a node's status locks editing,
                   every field renders disabled with no explanation — so a
                   user opening it to make a change hits dead inputs and no
@@ -459,7 +491,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                   dropdown hunt. Only offered when Draft is actually a
                   reachable transition from this status. */}
               {isLocked && (STATUS_TRANSITIONS[node.status] || []).includes('DRAFT') && (
-                <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, flexWrap: 'wrap' }}>
+                <div style={{ gridColumn: '1 / -1', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, flexWrap: 'wrap' }}>
                   <Lock size={12} strokeWidth={2} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
                   <span style={{ color: 'var(--color-text-secondary)' }}>
                     This {config.label.toLowerCase()} is <strong>{node.status.replace('_', ' ').toLowerCase()}</strong> and locked for editing.
@@ -512,7 +544,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         <DocField label="Business capabilities" typeLabel="Long text" value={node.businessCapabilities || ''} onSave={(v) => onUpdate(node.id, { businessCapabilities: v })} disabled={isLocked} placeholder="Capabilities this stream realises" />
                         <DocField label="End state" required={reqLabels.has('End state')} typeLabel="Long text" value={node.endState || ''} onSave={(v) => onUpdate(node.id, { endState: v })} disabled={isLocked} placeholder="The desired end state this stream drives toward" />
                         {/* Rolled up from the activities beneath this stream (read-only). */}
-                        <ActivityRollup node={node} systemsList={systemsList} />
+                        <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                         {/* Cross-cutting governance-lifecycle dates. */}
                         <DocField label="Effective date" required={reqLabels.has('Effective date')} typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
                         <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review, e.g. 2026-06-30" />
@@ -556,7 +588,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         <DocField label="Business rules" typeLabel="Long text" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this process runs" />
                         <DocField label="Process diagram" typeLabel="File or URL" value={node.processDiagramUrl || ''} onSave={(v) => onUpdate(node.id, { processDiagramUrl: v })} disabled={isLocked} placeholder="Link or file path to the process diagram" />
                         {/* Rolled up from the activities beneath this process (read-only). */}
-                        <ActivityRollup node={node} systemsList={systemsList} />
+                        <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                         {/* Cross-cutting governance-lifecycle dates. */}
                         <DocField label="Effective date" required={reqLabels.has('Effective date')} typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
                         <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
@@ -585,9 +617,9 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       <DocDropdown label="Has variants" typeLabel="Yes / No" value={node.hasVariants === true ? 'Yes' : node.hasVariants === false ? 'No' : ''} options={['Yes', 'No']} onSave={(v) => onUpdate(node.id, { hasVariants: v === 'Yes' })} disabled={isLocked} placeholder="Does this have variant flows?" />
                       {/* The activities beneath this sub-process as a left-to-right
                           flow, with handoff markers where the responsible role changes. */}
-                      <ActivityFlowBoard node={node} />
+                      <Wide><ActivityFlowBoard node={node} /></Wide>
                       {/* Rolled up from the activities beneath this sub-process (read-only). */}
-                      <ActivityRollup node={node} systemsList={systemsList} />
+                      <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                       {/* Cross-cutting governance-lifecycle dates. */}
                       <DocField label="Effective date" required={reqLabels.has('Effective date')} typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect" />
                       <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
@@ -698,24 +730,28 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       <DocField label="Wait before next" typeLabel="Number + unit" value={node.waitBeforeNext || ''} onSave={(v) => onUpdate(node.id, { waitBeforeNext: v })} disabled={isLocked} placeholder="Wait / delay before the next activity, e.g. 24h SLA" />
                       <DocField label="Work instructions" required={reqLabels.has('Work instructions')} typeLabel="Long text" value={node.workInstructions || ''} onSave={(v) => onUpdate(node.id, { workInstructions: v })} disabled={isLocked} placeholder="Detailed how-to steps for performing this activity" />
                       <DocField label="Exceptions" typeLabel="Long text" value={node.exceptions || ''} onSave={(v) => onUpdate(node.id, { exceptions: v })} disabled={isLocked} placeholder="Exception / error handling" />
-                      <ControlsPicker
-                        selected={node.controlIds || []}
-                        options={controlsList}
-                        onChange={(ids) => onUpdate(node.id, { controlIds: ids })}
-                        disabled={isLocked}
-                        typeLabel="Multi-select · Controls"
-                      />
+                      <Wide>
+                        <ControlsPicker
+                          selected={node.controlIds || []}
+                          options={controlsList}
+                          onChange={(ids) => onUpdate(node.id, { controlIds: ids })}
+                          disabled={isLocked}
+                          typeLabel="Multi-select · Controls"
+                        />
+                      </Wide>
                       {/* Data-element usage table — the business data this
                           activity touches, with CRUD + system of record. */}
-                      <DataElementsPanel
-                        value={node.dataElements || []}
-                        onSave={(rows) => onUpdate(node.id, { dataElements: rows })}
-                        disabled={isLocked}
-                      />
+                      <Wide>
+                        <DataElementsPanel
+                          value={node.dataElements || []}
+                          onSave={(rows) => onUpdate(node.id, { dataElements: rows })}
+                          disabled={isLocked}
+                        />
+                      </Wide>
                     </>
                   )}
-                  <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
-                  <UnqualifiedPersonChip missingSkillNames={skillCoverageByNode[node.id]?.missingSkillNames || []} />
+                  <Wide><SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" /></Wide>
+                  <Wide><UnqualifiedPersonChip missingSkillNames={skillCoverageByNode[node.id]?.missingSkillNames || []} /></Wide>
                   {/* Agent execution — have an agent PERFORM this activity.
                       Scoped to the governance value stream; the backend enforces
                       the same rule. */}
@@ -730,7 +766,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       PENDING: { bg: '#fef3c7', c: '#92400e', t: 'Pending review' },
                     };
                     return (
-                      <div style={{ marginTop: 4, padding: '6px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4 }}>
+                      <div style={{ gridColumn: '1 / -1', marginTop: 4, padding: '6px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, flexWrap: 'wrap' }}>
                           <span style={{ color: '#6b21a8', fontWeight: 600 }}>Perform with agent:</span>
                           <select aria-label="Perform with agent" value={selectedId} onChange={(e) => setRunAgentId(e.target.value)} disabled={running}
@@ -991,8 +1027,8 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
               {/* Task fields — required skills */}
               {node.level === 'TASK' && (
                 <>
-                  <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
-                  <UnqualifiedPersonChip missingSkillNames={skillCoverageByNode[node.id]?.missingSkillNames || []} />
+                  <Wide><SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" /></Wide>
+                  <Wide><UnqualifiedPersonChip missingSkillNames={skillCoverageByNode[node.id]?.missingSkillNames || []} /></Wide>
                 </>
               )}
               {/* Systems this step runs on — first-class link, distinct
@@ -1006,18 +1042,20 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                  decisions, not systems). Higher levels get the pointer
                  note below instead. */}
               {node.level === 'ACTIVITY' && node.domain !== 'GOVERNANCE' && (
-                <DocSystemsField
-                  selected={node.systemIds || []}
-                  options={systemsList}
-                  links={node.systemLinks || []}
-                  connectionsBySystem={connectionsBySystem}
-                  onSave={(ids) => onUpdate(node.id, { systemIds: ids })}
-                  onSaveLinks={(links) => onUpdate(node.id, { systemLinks: links })}
-                  disabled={isLocked}
-                  typeLabel="Reference · Systems"
-                />
+                <Wide>
+                  <DocSystemsField
+                    selected={node.systemIds || []}
+                    options={systemsList}
+                    links={node.systemLinks || []}
+                    connectionsBySystem={connectionsBySystem}
+                    onSave={(ids) => onUpdate(node.id, { systemIds: ids })}
+                    onSaveLinks={(links) => onUpdate(node.id, { systemLinks: links })}
+                    disabled={isLocked}
+                    typeLabel="Reference · Systems"
+                  />
+                </Wide>
               )}
-            </FieldStack>
+            </div>
           )}
           {/* Free-text Inputs / Outputs note — sits directly above the
              structured IOPanel so the description and the attached
