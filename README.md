@@ -64,6 +64,13 @@ npm run db:migrate  -w packages/backend
 npm run dev
 ```
 
+> **Pulling new migrations "just works".** When `DATABASE_URL` is set, `npm run
+> dev` first runs `prisma migrate deploy` (via the backend's `predev` hook) to
+> apply any pending migrations, so after a `git pull` that adds one you don't
+> have to remember step 3. With no `DATABASE_URL` (JSON mode) it's skipped. If a
+> migration can't apply, dev stops with the error rather than booting against a
+> schema that's behind the code.
+
 > **Windows / PowerShell:** the Prisma CLI reads `.env` from its own working
 > directory, not the repo root — if `db:migrate` reports "Environment
 > variable not found: DATABASE_URL", set it for the session first:
