@@ -16,7 +16,7 @@
 
 import fs from 'fs';
 import net from 'net';
-import { analyzeLocalFileAsync } from '../lib/local-file-connector';
+import { analyzeLocalFileAsync, readColumnValues } from '../lib/local-file-connector';
 import { SUPPORTED_DB_SOURCE_TYPES, fetchDbRows, buildColumnSampleSql, clampSampleLimit } from '../lib/db-source';
 import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
@@ -650,7 +650,22 @@ export async function sampleColumnValues(
   // Decrypt at-rest secrets just-in-time, exactly as discovery does.
   profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
   const dbReq = toDbSourceRequest(profile);
-  if (!dbReq) return null;
+  if (!dbReq) {
+    // Local-file connection (an uploaded or seeded CSV/JSON): the file *is* the
+    // source, so sample distinct values straight from it — no database needed.
+    // The `table` param is the file itself and is ignored; the column must be
+    // one of the file's headers (the picker only offers discovered columns).
+    if (profile.connectionType === 'FILE_STORAGE' && profile.config?.storageType === 'LOCAL' && profile.config?.localFilePath) {
+      const n = clampSampleLimit(limit);
+      const seen = new Set<string>();
+      for (const v of readColumnValues(profile.config.localFilePath, column)) {
+        if (v != null && v !== '') seen.add(v);
+      }
+      const all = [...seen];
+      return { values: all.slice(0, n), distinctCount: Math.min(all.length, n), truncated: all.length > n, limit: n };
+    }
+    return null;
+  }
 
   // Discovered asset names are schema-qualified (e.g. analytics.fact_sales);
   // split at the first dot so schema + table validate as separate identifiers.

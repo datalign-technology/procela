@@ -107,7 +107,7 @@ const { savedViews } = require('../routes/saved-views');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataAssetColumns, dataAssetBindings } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { connections } = require('../routes/connections');
+const { connections, connectionSystemLinks } = require('../routes/connections');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -227,7 +227,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith(DEMO_ID_SENTINEL)) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals, dataLineageLinks, assetLineageEdges, columnLineageEdges, maturitySnapshots, gapSnapshots, agentSchedules, agentExecutions, comments, tags, attachments, reports, analysisReports, savedViews, dataAssetColumns, dataAssetBindings, connections]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents, governancePolicies, governanceControls, governanceGroups, governancePrograms, decisionRights, skills, damaRoles, sops, glossaryTerms, operationsManuals, dataLineageLinks, assetLineageEdges, columnLineageEdges, maturitySnapshots, gapSnapshots, agentSchedules, agentExecutions, comments, tags, attachments, reports, analysisReports, savedViews, dataAssetColumns, dataAssetBindings, connections, connectionSystemLinks]) sweep(s);
     // RACI overrides key on nodeId (no id) — clear demo-prefixed nodes.
     for (let i = raciOverrides.length - 1; i >= 0; i--) if (raciOverrides[i]?.nodeId?.startsWith(DEMO_ID_SENTINEL)) raciOverrides.splice(i, 1);
   });
@@ -844,7 +844,13 @@ describe('demo-seed endpoint', () => {
     it(`seeds collaboration + reporting + connections for ${industry}`, async () => {
       await request(port, 'POST', '/admin/demo-seed', { industry }, 'SUPER_ADMIN');
       const demo = (arr: any[]) => arr.filter((r) => r?.id?.startsWith(DEMO_ID_SENTINEL));
-      assert.strictEqual(demo(connections).length, 1, 'connection');
+      // Utilities also seeds a live OMS local-CSV connection (for the
+      // activity↔system source-key picker), on top of the shared warehouse one.
+      assert.strictEqual(demo(connections).length, industry === 'utilities' ? 2 : 1, 'connections');
+      if (industry === 'utilities') {
+        const oms = demo(connections).find((c: any) => c.id === demoId('conn-oms-incidents'));
+        assert.ok(oms && oms.connectionType === 'FILE_STORAGE' && oms.config?.localFilePath, 'OMS local-CSV connection seeded');
+      }
       // Utilities also seeds 2 upstream Meter Reads columns for the
       // column-level lineage demo; shipbuilding has just the 4 spotlight cols.
       assert.strictEqual(demo(dataAssetColumns).length, industry === 'utilities' ? 6 : 4, 'asset columns');
@@ -860,8 +866,9 @@ describe('demo-seed endpoint', () => {
       const root = demo(comments).find((c: any) => c.parentId === null);
       const reply = demo(comments).find((c: any) => c.parentId !== null);
       assert.ok(root && reply && reply.parentId === root.id, 'reply nests under root');
-      // Binding points at the seeded connection; a report has an entity+columns.
-      assert.strictEqual(demo(dataAssetBindings)[0].connectionId, demo(connections)[0].id);
+      // Binding points at a seeded connection (the warehouse one); a report
+      // has an entity+columns.
+      assert.ok(demo(connections).some((c: any) => c.id === demo(dataAssetBindings)[0].connectionId), 'binding points at a seeded connection');
       assert.ok(demo(reports).every((r: any) => r.definition?.entity && Array.isArray(r.definition.columns)));
     });
   }

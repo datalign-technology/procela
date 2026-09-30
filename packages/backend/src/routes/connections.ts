@@ -590,7 +590,7 @@ router.post('/:id/sample', async (req: Request, res: Response) => {
     if (!sample) {
       res.status(422).json({
         success: false,
-        error: 'Sample preview is only available for direct-connect databases and warehouses. This connection type has no live SQL source to read.',
+        error: 'Sample preview is available for direct-connect databases, warehouses, and local files. This connection type has no readable source.',
       });
       return;
     }
@@ -604,7 +604,10 @@ router.post('/:id/sample', async (req: Request, res: Response) => {
     // fault → 400; anything else (auth, host, permissions) is a 502-ish
     // upstream failure surfaced as its message.
     const msg = err instanceof Error ? err.message : 'Sample preview failed';
-    if (/invalid .* identifier/i.test(msg)) {
+    // Caller-fault inputs (a bad identifier, or a column/file the source
+    // doesn't have) are 400s; upstream faults (auth, host, permissions) fall
+    // through to the 502 below.
+    if (/invalid .* identifier|not found in file|Unsupported file type|Column .* not found/i.test(msg)) {
       res.status(400).json({ success: false, error: msg });
       return;
     }
