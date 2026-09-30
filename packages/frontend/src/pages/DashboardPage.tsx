@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Check } from 'lucide-react';
+import { X, Check, Sparkles } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -849,6 +849,45 @@ function DashboardScopeNote({ orgId }: { orgId: string | null }) {
   );
 }
 
+// "Ask Procela" — a teal-accented card of suggested questions (mock-up parity).
+// Each pill opens the AI assistant with the question pre-filled (via the
+// procela:ask-question event ChatPanel listens for), so the user reviews and
+// sends it. AI-gated by the caller, like Run Wizard.
+const ASK_SUGGESTIONS = [
+  'Where are our data gaps?',
+  'Which assets are below 80% health and linked to critical processes?',
+  'Which data assets do we have that no process uses?',
+  'Which systems run our customer-facing processes?',
+];
+
+function AskProcela() {
+  const ask = (question: string) => {
+    window.dispatchEvent(new CustomEvent('procela:ask-question', { detail: { question } }));
+  };
+  return (
+    <Card padding="16px 18px">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <Sparkles size={16} aria-hidden="true" style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--color-text)' }}>Ask Procela</h2>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {ASK_SUGGESTIONS.map((q) => (
+          <button
+            key={q}
+            type="button"
+            onClick={() => ask(q)}
+            style={{
+              minHeight: 34, padding: '6px 12px', textAlign: 'left',
+              background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+              borderRadius: 999, fontSize: 13, color: 'var(--color-text)', cursor: 'pointer',
+            }}
+          >{q}</button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -1001,7 +1040,12 @@ export default function DashboardPage() {
               two-column split only applies on a wide viewport and when the
               rail is shown (see .dashboard-two-pane in global.css). */}
           <div className={`dashboard-two-pane${focus ? '' : ' two-col'}`}>
-            <div className="dtp-main"><TodayQueue lens={lens} orgId={activeOrgId} /></div>
+            <div className="dtp-main">
+              <TodayQueue lens={lens} orgId={activeOrgId} />
+              {/* Ask Procela — suggested questions into the AI assistant
+                  (mock-up parity). AI-gated, like Run Wizard. */}
+              {aiEnabled && <AskProcela />}
+            </div>
             {!focus && (
               <div className="dtp-side">
                 <NextMeeting lens={lens} orgId={activeOrgId} />
