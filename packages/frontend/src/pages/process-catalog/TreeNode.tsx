@@ -1017,7 +1017,12 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
               <span style={{ color: completeness.hasActivity ? 'var(--color-success)' : 'var(--color-warning)' }}>
                 {completeness.hasActivity ? '\u2713' : '\u2717'} Activity
               </span>
-              {completeness.complete && <span style={{ color: 'var(--color-success)', fontWeight: 500 }}>Ready</span>}
+              {completeness.complete && (
+                <span style={{ color: 'var(--color-success)', fontWeight: 500 }}
+                  title="This branch has the required levels (Value Stream → Process → Activity). It does not mean every field is filled or that all records beneath are Active.">
+                  Structure complete
+                </span>
+              )}
             </div>
           )}
         </div>
