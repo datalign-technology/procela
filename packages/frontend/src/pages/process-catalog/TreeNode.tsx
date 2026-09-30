@@ -13,7 +13,7 @@ import Modal from '../../components/Modal';
 import {
   InlineEdit, DocField, DocDropdown, TierField, RtoField, RpoField,
   ControlsPicker, DocPersonField, DocRoleField, DocMultiSelect,
-  DocSystemsField,
+  DocSystemsField, DocCalculated,
 } from './DocFields';
 import DependenciesPanel from './DependenciesPanel';
 import DataElementsPanel from './DataElementsPanel';
@@ -47,6 +47,57 @@ interface TreeDragData { level: string; descendantIds: Set<string> }
 function collectDescendantIds(node: ProcessNode, out: Set<string> = new Set()): Set<string> {
   for (const c of node.children || []) { out.add(c.id); collectDescendantIds(c, out); }
   return out;
+}
+
+/** Collect every ACTIVITY node under a node (any depth). Used to roll up the
+ *  systems, roles and data elements a parent-level record touches via the
+ *  activities beneath it — the mock-ups' "Rolled up from activities" card. */
+function collectActivities(node: ProcessNode, out: ProcessNode[] = []): ProcessNode[] {
+  for (const c of node.children || []) {
+    if (c.level === 'ACTIVITY') out.push(c);
+    collectActivities(c, out);
+  }
+  return out;
+}
+
+/** Roll up the distinct systems (by name), roles and data-element names from a
+ *  node's descendant activities. `systemsList` maps system ids to names. */
+function rollupFromActivities(node: ProcessNode, systemsList: SystemRef[]) {
+  const acts = collectActivities(node);
+  const nameById = new Map(systemsList.map((s) => [s.id, s.name]));
+  const systems = new Set<string>();
+  const roles = new Set<string>();
+  const dataElements = new Set<string>();
+  for (const a of acts) {
+    for (const id of a.systemIds || []) { const n = nameById.get(id); if (n) systems.add(n); }
+    if (a.responsibleRole) roles.add(a.responsibleRole);
+    if (a.accountableRole) roles.add(a.accountableRole);
+    for (const d of a.dataElements || []) { if (d.element) dataElements.add(d.element); }
+  }
+  return {
+    activityCount: acts.length,
+    systems: [...systems].sort(),
+    roles: [...roles].sort(),
+    dataElements: [...dataElements].sort(),
+  };
+}
+
+/** The mock-ups' "Rolled up from activities" card: the systems, roles and data
+ *  elements a parent-level record touches, derived read-only from the
+ *  activities beneath it (never typed here). Renders nothing until there is at
+ *  least one activity underneath. */
+function ActivityRollup({ node, systemsList }: { node: ProcessNode; systemsList: SystemRef[] }) {
+  const { activityCount, systems, roles, dataElements } = rollupFromActivities(node, systemsList);
+  if (activityCount === 0) return null;
+  const deriv = 'Derived from the activities underneath — never typed here.';
+  return (
+    <>
+      <SectionLabel>Rolled up from activities</SectionLabel>
+      <DocCalculated label="Systems involved" chips={systems} caption={deriv} emptyText="No systems on the activities yet" />
+      <DocCalculated label="Roles involved" chips={roles} caption={deriv} emptyText="No roles on the activities yet" />
+      <DocCalculated label="Data elements" chips={dataElements} caption="From the activities' data-element usage — the basis for lineage." emptyText="No data elements captured yet" />
+    </>
+  );
 }
 
 // ── Tree Node ──
@@ -449,6 +500,8 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         <DocField label="Executive sponsor" typeLabel="Short text" value={node.executiveSponsor || ''} onSave={(v) => onUpdate(node.id, { executiveSponsor: v })} disabled={isLocked} placeholder="Name / title of the accountable executive" />
                         <DocField label="Business capabilities" typeLabel="Long text" value={node.businessCapabilities || ''} onSave={(v) => onUpdate(node.id, { businessCapabilities: v })} disabled={isLocked} placeholder="Capabilities this stream realises" />
                         <DocField label="End state" typeLabel="Long text" value={node.endState || ''} onSave={(v) => onUpdate(node.id, { endState: v })} disabled={isLocked} placeholder="The desired end state this stream drives toward" />
+                        {/* Rolled up from the activities beneath this stream (read-only). */}
+                        <ActivityRollup node={node} systemsList={systemsList} />
                         {/* Cross-cutting governance-lifecycle dates. */}
                         <DocField label="Effective date" typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
                         <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review, e.g. 2026-06-30" />
@@ -491,6 +544,8 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         <DocDropdown label="Maturity level" typeLabel="Pick list · 1–5" value={node.maturityLevel || ''} options={MATURITY_OPTIONS} onSave={(v) => onUpdate(node.id, { maturityLevel: v })} disabled={isLocked} placeholder="Process maturity" />
                         <DocField label="Business rules" typeLabel="Long text" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this process runs" />
                         <DocField label="Process diagram" typeLabel="File or URL" value={node.processDiagramUrl || ''} onSave={(v) => onUpdate(node.id, { processDiagramUrl: v })} disabled={isLocked} placeholder="Link or file path to the process diagram" />
+                        {/* Rolled up from the activities beneath this process (read-only). */}
+                        <ActivityRollup node={node} systemsList={systemsList} />
                         {/* Cross-cutting governance-lifecycle dates. */}
                         <DocField label="Effective date" typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
                         <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
@@ -517,6 +572,8 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       <DocField label="Handoffs" typeLabel="Long text" value={node.handoffs || ''} onSave={(v) => onUpdate(node.id, { handoffs: v })} disabled={isLocked} placeholder="Handoffs / interfaces to other work" />
                       <DocField label="Business rules" typeLabel="Long text" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this runs" />
                       <DocDropdown label="Has variants" typeLabel="Yes / No" value={node.hasVariants === true ? 'Yes' : node.hasVariants === false ? 'No' : ''} options={['Yes', 'No']} onSave={(v) => onUpdate(node.id, { hasVariants: v === 'Yes' })} disabled={isLocked} placeholder="Does this have variant flows?" />
+                      {/* Rolled up from the activities beneath this sub-process (read-only). */}
+                      <ActivityRollup node={node} systemsList={systemsList} />
                       {/* Cross-cutting governance-lifecycle dates. */}
                       <DocField label="Effective date" typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect" />
                       <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />

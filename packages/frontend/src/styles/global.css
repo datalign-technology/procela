@@ -124,6 +124,7 @@ ol {
   --color-surface: #ffffff;
   --color-border: #e2e0da;         /* warm default border */
   --color-border-subtle: #eceae4;  /* warm fainter divider/fill */
+  --color-calc-fill: #f1f0ec;      /* read-only "Calculated" / rolled-up field fill */
 
   --color-success: #16a34a;
   --color-warning: #d97706;
