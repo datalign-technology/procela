@@ -22,7 +22,7 @@ import {
   LEVEL_CONFIG, statusColors,
   SIMPLE_TRANSITIONS, REVIEW_TRANSITIONS, ADVANCED_TRANSITIONS,
   SIMPLE_LOCKED, REVIEW_LOCKED, ADVANCED_LOCKED,
-  FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS,
+  FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS, CUSTOMER_TYPE_OPTIONS, REVIEW_CADENCE_OPTIONS,
   countByLevel, hasRequiredPath, getRequiredNextLevel,
   type ProcessNode, type NodeLevel,
   type FlowRelationship, type TagEntry,
@@ -440,7 +440,20 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         drifted from it. Existing values are retained on the
                         record, just no longer edited from this panel. */}
                     {viewMode === 'advanced' && (
-                      <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                      <>
+                        <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                        {/* Enhanced value-stream record fields (Process Catalog spec). */}
+                        <DocField label="Value proposition" value={node.valueProposition || ''} onSave={(v) => onUpdate(node.id, { valueProposition: v })} disabled={isLocked} placeholder="The value this stream delivers, in the customer's terms…" />
+                        <DocDropdown label="Customer type" value={node.customerType || ''} options={CUSTOMER_TYPE_OPTIONS} onSave={(v) => onUpdate(node.id, { customerType: v })} disabled={isLocked} placeholder="Internal / External / Both" />
+                        <DocField label="Executive sponsor" value={node.executiveSponsor || ''} onSave={(v) => onUpdate(node.id, { executiveSponsor: v })} disabled={isLocked} placeholder="Name / title of the accountable executive" />
+                        <DocField label="Business capabilities" value={node.businessCapabilities || ''} onSave={(v) => onUpdate(node.id, { businessCapabilities: v })} disabled={isLocked} placeholder="Capabilities this stream realises" />
+                        <DocField label="End state" value={node.endState || ''} onSave={(v) => onUpdate(node.id, { endState: v })} disabled={isLocked} placeholder="The desired end state this stream drives toward" />
+                        {/* Cross-cutting governance-lifecycle dates. */}
+                        <DocField label="Effective date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
+                        <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review, e.g. 2026-06-30" />
+                        <DocDropdown label="Review cadence" value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
+                        <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
+                      </>
                     )}
                   </>
                 );

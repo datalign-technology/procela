@@ -196,6 +196,28 @@ export interface ProcessNode {
    *  day". `frequency` captures cadence; this captures scale, which is
    *  what actually drives criticality and sizing. */
   volume?: string;
+  // ── Enhanced value-stream fields ──
+  /** Who the value stream serves: Internal | External | Both. Plain
+   *  string so the option set can grow without a DB enum migration. */
+  customerType?: string;
+  /** The value the stream delivers, in the customer's terms — distinct
+   *  from the narrative `purpose` (what it does). */
+  valueProposition?: string;
+  /** Executive sponsor — name/title, free text. */
+  executiveSponsor?: string;
+  /** Business capabilities the stream realises — free text. */
+  businessCapabilities?: string;
+  /** The desired end state the stream drives toward — free text. */
+  endState?: string;
+  // ── Cross-cutting governance-lifecycle dates (any level) ──
+  /** When this record took effect (ISO "YYYY-MM-DD", free text). */
+  effectiveDate?: string;
+  /** When this record was last reviewed (ISO "YYYY-MM-DD", free text) —
+   *  the backward-looking pair to `nextReviewDate`. */
+  lastReviewedDate?: string;
+  /** How often this record is reviewed: Monthly | Quarterly | Annual |
+   *  Biennial | As needed. Plain string. */
+  reviewCadence?: string;
   /** Next scheduled governance review date (ISO "YYYY-MM-DD"), forward-
    *  looking — distinct from `reviewedAt` (the last review's timestamp).
    *  Free-text date string so a review cadence can be tracked without a
@@ -883,7 +905,8 @@ router.post('/nodes', async (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds, systemLinks,
-    criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds } = req.body;
+    criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
+    customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -1019,6 +1042,15 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ...(typeof volume === 'string' && volume.trim() ? { volume: volume.trim() } : {}),
     ...(typeof nextReviewDate === 'string' && nextReviewDate.trim() ? { nextReviewDate: nextReviewDate.trim() } : {}),
     ...(typeof riskMitigation === 'string' && riskMitigation.trim() ? { riskMitigation: riskMitigation.trim() } : {}),
+    // Enhanced value-stream + cross-cutting lifecycle fields.
+    ...(typeof customerType === 'string' && customerType.trim() ? { customerType: customerType.trim() } : {}),
+    ...(typeof valueProposition === 'string' && valueProposition.trim() ? { valueProposition: valueProposition.trim() } : {}),
+    ...(typeof executiveSponsor === 'string' && executiveSponsor.trim() ? { executiveSponsor: executiveSponsor.trim() } : {}),
+    ...(typeof businessCapabilities === 'string' && businessCapabilities.trim() ? { businessCapabilities: businessCapabilities.trim() } : {}),
+    ...(typeof endState === 'string' && endState.trim() ? { endState: endState.trim() } : {}),
+    ...(typeof effectiveDate === 'string' && effectiveDate.trim() ? { effectiveDate: effectiveDate.trim() } : {}),
+    ...(typeof lastReviewedDate === 'string' && lastReviewedDate.trim() ? { lastReviewedDate: lastReviewedDate.trim() } : {}),
+    ...(typeof reviewCadence === 'string' && reviewCadence.trim() ? { reviewCadence: reviewCadence.trim() } : {}),
     ...(cleanedControlIds.length ? { controlIds: cleanedControlIds } : {}),
     domain: nodeDomain,
     createdAt: now,
@@ -1051,6 +1083,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds, systemLinks,
     criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
+    customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence,
     reviewComment } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
@@ -1225,6 +1258,17 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (volume !== undefined) node.volume = (typeof volume === 'string' && volume.trim()) ? volume.trim() : undefined;
   if (nextReviewDate !== undefined) node.nextReviewDate = (typeof nextReviewDate === 'string' && nextReviewDate.trim()) ? nextReviewDate.trim() : undefined;
   if (riskMitigation !== undefined) node.riskMitigation = (typeof riskMitigation === 'string' && riskMitigation.trim()) ? riskMitigation.trim() : undefined;
+  // Enhanced value-stream + cross-cutting lifecycle fields — same
+  // trim-or-undefined contract as the free-text scalars above.
+  const trimField = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  if (customerType !== undefined) node.customerType = trimField(customerType);
+  if (valueProposition !== undefined) node.valueProposition = trimField(valueProposition);
+  if (executiveSponsor !== undefined) node.executiveSponsor = trimField(executiveSponsor);
+  if (businessCapabilities !== undefined) node.businessCapabilities = trimField(businessCapabilities);
+  if (endState !== undefined) node.endState = trimField(endState);
+  if (effectiveDate !== undefined) node.effectiveDate = trimField(effectiveDate);
+  if (lastReviewedDate !== undefined) node.lastReviewedDate = trimField(lastReviewedDate);
+  if (reviewCadence !== undefined) node.reviewCadence = trimField(reviewCadence);
   if (controlIds !== undefined) {
     node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
       ? await cleanControlIds(controlIds)

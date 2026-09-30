@@ -89,6 +89,15 @@ export interface ProcessNode {
   // notes on how the activity's risk (riskLevel) is mitigated.
   nextReviewDate?: string;
   riskMitigation?: string;
+  // Enhanced value-stream fields + cross-cutting governance-lifecycle dates.
+  customerType?: string;
+  valueProposition?: string;
+  executiveSponsor?: string;
+  businessCapabilities?: string;
+  endState?: string;
+  effectiveDate?: string;
+  lastReviewedDate?: string;
+  reviewCadence?: string;
   // Governance controls this activity implements or is subject to
   controlIds?: string[];
   // Change-management review workflow (only meaningful when the
@@ -181,6 +190,10 @@ export const FREQUENCY_OPTIONS = [
 ];
 
 export const RISK_OPTIONS = ['High', 'Medium', 'Low'];
+
+// Enhanced value-stream + cross-cutting record options.
+export const CUSTOMER_TYPE_OPTIONS = ['Internal', 'External', 'Both'];
+export const REVIEW_CADENCE_OPTIONS = ['Monthly', 'Quarterly', 'Annual', 'Biennial', 'As needed'];
 
 // What initiates an activity. Free-text under the hood (like Frequency /
 // Risk) with a suggested set so common triggers stay consistent.
