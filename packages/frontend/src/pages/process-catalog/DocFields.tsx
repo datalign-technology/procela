@@ -64,7 +64,7 @@ export function DocCalculated({ label, chips, text, caption, emptyText = 'None y
 }) {
   const hasChips = !!(chips && chips.length);
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}{required && <RequiredDot />}:</span>
       <div style={{ flex: 1, maxWidth: 420 }}>
         <div style={{
@@ -144,7 +144,7 @@ export function DocField({ label, value, onSave, disabled, placeholder, typeLabe
     setEditing(false);
   };
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}{required && <RequiredDot />}:</span>
       {editing && !disabled ? (
         <div style={{ flex: 1 }}>
@@ -187,7 +187,7 @@ export function DocDropdown({ label, value, options, onSave, disabled, placehold
 }) {
   const [saved, setSaved] = useState(false);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}{required && <RequiredDot />}:</span>
       <select
         aria-label={label}
@@ -231,7 +231,7 @@ export function TierField({ value, onSave, disabled, typeLabel }: {
 }) {
   const [saved, setSaved] = useState(false);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Criticality:</span>
       <select
         aria-label="Criticality"
@@ -269,7 +269,7 @@ export function RtoField({ value, onSave, disabled, typeLabel }: {
     if (n !== value) { onSave(n); setSaved(true); setTimeout(() => setSaved(false), 1500); }
   };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>RTO (hours):</span>
       <input
         type="number"
@@ -309,7 +309,7 @@ export function RpoField({ value, onSave, disabled, typeLabel }: {
     if (n !== value) { onSave(n); setSaved(true); setTimeout(() => setSaved(false), 1500); }
   };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>RPO (hours):</span>
       <input
         type="number"
@@ -354,7 +354,7 @@ export function ControlsPicker({ selected, options, onChange, disabled, typeLabe
   const available = options.filter((o) => !selected.includes(o.id));
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 3 }}>Controls:</span>
       <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
         {selected.map((id) => {
@@ -441,7 +441,7 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
   required?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}{required && <RequiredDot />}:</span>
       <div style={{ flex: 1, maxWidth: 320 }}>
         <PersonPicker
@@ -514,7 +514,7 @@ export function DocRoleField({ value, onSave, disabled, domain, label = 'Respons
   const crossDomain = inSecondary;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, flexWrap: 'wrap', minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}{required && <RequiredDot />}:</span>
       <select
         aria-label={label}
@@ -575,7 +575,7 @@ export function DocMultiSelect({ label, selected, options, onSave, disabled, pla
 }) {
   const available = options.filter((o) => !selected.includes(o));
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 2 }}>{label}{required && <RequiredDot />}:</span>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', flex: 1 }}>
         {selected.map((v) => (
@@ -674,7 +674,7 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 2 }}>Systems:</span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center' }}>
