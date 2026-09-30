@@ -22,7 +22,7 @@ import {
   LEVEL_CONFIG, statusColors,
   SIMPLE_TRANSITIONS, REVIEW_TRANSITIONS, ADVANCED_TRANSITIONS,
   SIMPLE_LOCKED, REVIEW_LOCKED, ADVANCED_LOCKED,
-  FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS, CUSTOMER_TYPE_OPTIONS, REVIEW_CADENCE_OPTIONS,
+  FREQUENCY_OPTIONS, RISK_OPTIONS, TRIGGER_OPTIONS, CUSTOMER_TYPE_OPTIONS, REVIEW_CADENCE_OPTIONS, MATURITY_OPTIONS,
   countByLevel, hasRequiredPath, getRequiredNextLevel,
   type ProcessNode, type NodeLevel,
   type FlowRelationship, type TagEntry,
@@ -484,6 +484,17 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                         <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
                         <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
+                        {/* Enhanced process record fields (Process Catalog spec). */}
+                        <DocField label="Start point" value={node.startPoint || ''} onSave={(v) => onUpdate(node.id, { startPoint: v })} disabled={isLocked} placeholder="What starts this process (its trigger / entry point)" />
+                        <DocField label="End point" value={node.endPoint || ''} onSave={(v) => onUpdate(node.id, { endPoint: v })} disabled={isLocked} placeholder="Where this process ends (its exit point)" />
+                        <DocDropdown label="Maturity level" value={node.maturityLevel || ''} options={MATURITY_OPTIONS} onSave={(v) => onUpdate(node.id, { maturityLevel: v })} disabled={isLocked} placeholder="Process maturity" />
+                        <DocField label="Business rules" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this process runs" />
+                        <DocField label="Process diagram" value={node.processDiagramUrl || ''} onSave={(v) => onUpdate(node.id, { processDiagramUrl: v })} disabled={isLocked} placeholder="Link or file path to the process diagram" />
+                        {/* Cross-cutting governance-lifecycle dates. */}
+                        <DocField label="Effective date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
+                        <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
+                        <DocDropdown label="Review cadence" value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
+                        <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
                       </>
                     )}
                   </>

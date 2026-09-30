@@ -309,6 +309,12 @@ model ProcessNode {
   effectiveDate        String?
   lastReviewedDate     String?
   reviewCadence        String?          // Monthly | Quarterly | Annual | Biennial | As needed
+  // ── Enhanced process fields ──
+  businessRules        String?          @db.Text
+  startPoint           String?          // what starts the process (start trigger)
+  endPoint             String?          // where the process ends
+  maturityLevel        String?          // Initial | Repeatable | Defined | Managed | Optimizing
+  processDiagramUrl    String?          // attached diagram (file path or URL)
   domain              NodeDomain       @default(OPERATIONAL)
   version             Int              @default(1)
   submittedBy         String?          @db.Uuid

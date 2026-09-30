@@ -73,6 +73,11 @@ type PrismaProcessNodeRow = {
   effectiveDate: string | null;
   lastReviewedDate: string | null;
   reviewCadence: string | null;
+  businessRules: string | null;
+  startPoint: string | null;
+  endPoint: string | null;
+  maturityLevel: string | null;
+  processDiagramUrl: string | null;
   domain: string;
   version: number;
   submittedBy: string | null;
@@ -161,6 +166,11 @@ function fromPrisma(r: PrismaProcessNodeRow): StoredProcessNode {
     ...(r.effectiveDate ? { effectiveDate: r.effectiveDate } : {}),
     ...(r.lastReviewedDate ? { lastReviewedDate: r.lastReviewedDate } : {}),
     ...(r.reviewCadence ? { reviewCadence: r.reviewCadence } : {}),
+    ...(r.businessRules ? { businessRules: r.businessRules } : {}),
+    ...(r.startPoint ? { startPoint: r.startPoint } : {}),
+    ...(r.endPoint ? { endPoint: r.endPoint } : {}),
+    ...(r.maturityLevel ? { maturityLevel: r.maturityLevel } : {}),
+    ...(r.processDiagramUrl ? { processDiagramUrl: r.processDiagramUrl } : {}),
     ...(r.controls && r.controls.length > 0
       ? { controlIds: r.controls.map((c) => c.controlId) }
       : {}),
@@ -240,6 +250,11 @@ function toPrismaData(row: Partial<StoredProcessNode>): Record<string, unknown> 
   if (row.effectiveDate !== undefined) data.effectiveDate = row.effectiveDate ?? null;
   if (row.lastReviewedDate !== undefined) data.lastReviewedDate = row.lastReviewedDate ?? null;
   if (row.reviewCadence !== undefined) data.reviewCadence = row.reviewCadence ?? null;
+  if (row.businessRules !== undefined) data.businessRules = row.businessRules ?? null;
+  if (row.startPoint !== undefined) data.startPoint = row.startPoint ?? null;
+  if (row.endPoint !== undefined) data.endPoint = row.endPoint ?? null;
+  if (row.maturityLevel !== undefined) data.maturityLevel = row.maturityLevel ?? null;
+  if (row.processDiagramUrl !== undefined) data.processDiagramUrl = row.processDiagramUrl ?? null;
   if (row.domain !== undefined) data.domain = row.domain;
   if (row.submittedBy !== undefined) data.submittedBy = row.submittedBy ?? null;
   if (row.submittedAt !== undefined) {

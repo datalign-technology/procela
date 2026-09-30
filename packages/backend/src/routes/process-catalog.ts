@@ -218,6 +218,18 @@ export interface ProcessNode {
   /** How often this record is reviewed: Monthly | Quarterly | Annual |
    *  Biennial | As needed. Plain string. */
   reviewCadence?: string;
+  // ── Enhanced process fields ──
+  /** Business rules governing the process — free text. */
+  businessRules?: string;
+  /** What starts the process (its start trigger / entry point). */
+  startPoint?: string;
+  /** Where the process ends (its exit point / end state). */
+  endPoint?: string;
+  /** Process maturity: Initial | Repeatable | Defined | Managed |
+   *  Optimizing. Plain string. */
+  maturityLevel?: string;
+  /** Attached process diagram — a file path or URL. */
+  processDiagramUrl?: string;
   /** Next scheduled governance review date (ISO "YYYY-MM-DD"), forward-
    *  looking — distinct from `reviewedAt` (the last review's timestamp).
    *  Free-text date string so a review cadence can be tracked without a
@@ -906,7 +918,8 @@ router.post('/nodes', async (req: Request, res: Response) => {
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds, systemLinks,
     criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
-    customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence } = req.body;
+    customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence,
+    businessRules, startPoint, endPoint, maturityLevel, processDiagramUrl } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -1051,6 +1064,12 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ...(typeof effectiveDate === 'string' && effectiveDate.trim() ? { effectiveDate: effectiveDate.trim() } : {}),
     ...(typeof lastReviewedDate === 'string' && lastReviewedDate.trim() ? { lastReviewedDate: lastReviewedDate.trim() } : {}),
     ...(typeof reviewCadence === 'string' && reviewCadence.trim() ? { reviewCadence: reviewCadence.trim() } : {}),
+    // Enhanced process fields.
+    ...(typeof businessRules === 'string' && businessRules.trim() ? { businessRules: businessRules.trim() } : {}),
+    ...(typeof startPoint === 'string' && startPoint.trim() ? { startPoint: startPoint.trim() } : {}),
+    ...(typeof endPoint === 'string' && endPoint.trim() ? { endPoint: endPoint.trim() } : {}),
+    ...(typeof maturityLevel === 'string' && maturityLevel.trim() ? { maturityLevel: maturityLevel.trim() } : {}),
+    ...(typeof processDiagramUrl === 'string' && processDiagramUrl.trim() ? { processDiagramUrl: processDiagramUrl.trim() } : {}),
     ...(cleanedControlIds.length ? { controlIds: cleanedControlIds } : {}),
     domain: nodeDomain,
     createdAt: now,
@@ -1084,6 +1103,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds, systemLinks,
     criticalityTier, rtoHours, rpoHours, successMeasure, slaTarget, trigger, volume, nextReviewDate, riskMitigation, controlIds,
     customerType, valueProposition, executiveSponsor, businessCapabilities, endState, effectiveDate, lastReviewedDate, reviewCadence,
+    businessRules, startPoint, endPoint, maturityLevel, processDiagramUrl,
     reviewComment } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
@@ -1269,6 +1289,11 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (effectiveDate !== undefined) node.effectiveDate = trimField(effectiveDate);
   if (lastReviewedDate !== undefined) node.lastReviewedDate = trimField(lastReviewedDate);
   if (reviewCadence !== undefined) node.reviewCadence = trimField(reviewCadence);
+  if (businessRules !== undefined) node.businessRules = trimField(businessRules);
+  if (startPoint !== undefined) node.startPoint = trimField(startPoint);
+  if (endPoint !== undefined) node.endPoint = trimField(endPoint);
+  if (maturityLevel !== undefined) node.maturityLevel = trimField(maturityLevel);
+  if (processDiagramUrl !== undefined) node.processDiagramUrl = trimField(processDiagramUrl);
   if (controlIds !== undefined) {
     node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
       ? await cleanControlIds(controlIds)
