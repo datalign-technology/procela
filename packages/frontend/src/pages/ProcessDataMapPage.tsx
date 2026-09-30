@@ -310,6 +310,16 @@ export default function ProcessDataMapPage() {
     return ids;
   }, [edges, focus]);
 
+  // Activities with at least one mapped data asset. An activity NOT in this
+  // set is a coverage gap — the map flags it inline (dashed attention-orange
+  // outline + "No data" badge) so gaps read straight off the board, matching
+  // the mock-ups and the Gap Detection story, instead of only as a footnote.
+  const mappedActivityIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of edges) s.add(e.activityId);
+    return s;
+  }, [edges]);
+
   return (
     <div>
       <PageHeader
@@ -505,20 +515,35 @@ export default function ProcessDataMapPage() {
               const a = row.activity;
               const indent = 8 + row.depth * 16;
               const dim = focus && !focusedNodeIds.has(a.id);
+              const isGap = !mappedActivityIds.has(a.id);
+              const isActiveFocus = focus?.kind === 'activity' && focus.id === a.id;
               return (
                 <g key={a.id}
                   onClick={() => setFocus((f) => f?.kind === 'activity' && f.id === a.id ? null : { kind: 'activity', id: a.id })}
                   style={{ cursor: 'pointer', opacity: dim ? 0.35 : 1 }}
                 >
+                  <title>{isGap ? `${a.name} — no data asset mapped` : a.name}</title>
                   <rect x={indent} y={y} width={COL_WIDTH - indent} height={ROW_HEIGHT - 4}
-                    fill={focus?.kind === 'activity' && focus.id === a.id ? '#d1fae5' : 'var(--color-bg)'}
-                    stroke="#cbd5e1" rx={3} />
+                    fill={isActiveFocus ? '#d1fae5' : 'var(--color-bg)'}
+                    stroke={isGap ? 'var(--color-attention)' : '#cbd5e1'}
+                    strokeWidth={isGap ? 1.5 : 1}
+                    strokeDasharray={isGap ? '4 3' : undefined} rx={3} />
                   <text x={indent + 10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
                     {truncate(a.name, 32 - row.depth * 2)}
                   </text>
                   <text x={indent + 10} y={y + 26} fontSize={9} fill="#64748b">
                     Activity
                   </text>
+                  {isGap && (
+                    <g>
+                      <rect x={indent + 52} y={y + 17} width={58} height={13} rx={3}
+                        fill="var(--color-attention-bg)" stroke="var(--color-attention-border)" />
+                      <text x={indent + 52 + 29} y={y + 26} textAnchor="middle" fontSize={8} fontWeight={700}
+                        fill="var(--color-attention)" style={{ textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                        No data
+                      </text>
+                    </g>
+                  )}
                 </g>
               );
             })}
