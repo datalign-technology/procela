@@ -115,7 +115,7 @@ const FIELD_GRID: React.CSSProperties = {
   // width:100% makes the block fill its flex-item parent so the track count
   // resolves against the real width rather than collapsing to a single column.
   width: '100%',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
   columnGap: 24,
   rowGap: 'var(--space-field)',
   alignItems: 'start',
@@ -371,7 +371,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
       <div
         data-node-id={node.id}
         style={{
-        display: 'flex', alignItems: 'flex-start', gap: 6,
+        display: 'flex', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap',
         padding: '7px 12px', paddingLeft: 12 + depth * 22,
         borderBottom: '1px solid var(--color-border)',
         background: isSelected ? '#f0f9ff' : (completeness && !completeness.complete ? '#fffbeb' : undefined),
@@ -464,6 +464,14 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
               )}
             </div>
           )}
+        </div>
+        {/* The expanded record detail spans the full row width (on its own
+            wrapped line below the header) instead of being boxed into the
+            narrow name column beside the right-hand controls — so the
+            two-column field grid actually has room. order:1 keeps it after
+            the status / action controls; when collapsed it carries only the
+            small guidance hints (or nothing). */}
+        <div style={{ order: 1, flexBasis: '100%', width: '100%', minWidth: 0 }}>
           {/* Documentation fields — visible when expanded. FieldStack
              owns the vertical rhythm (--space-field) so the gap between
              rows is uniform no matter which fields render for this node
