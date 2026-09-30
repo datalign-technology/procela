@@ -125,6 +125,13 @@ ol {
   --color-border: #e2e0da;         /* warm default border */
   --color-border-subtle: #eceae4;  /* warm fainter divider/fill */
   --color-calc-fill: #f1f0ec;      /* read-only "Calculated" / rolled-up field fill */
+  /* "Attention / required" family — the mock-ups use a burnt-orange (not pure
+     red) for required-but-missing fields and the "active but incomplete"
+     readiness panel. Distinct from --color-error, which stays red for
+     destructive / genuine-error affordances. */
+  --color-attention: #9a3f12;
+  --color-attention-bg: #fbede4;
+  --color-attention-border: #e9c3ab;
 
   --color-success: #16a34a;
   --color-warning: #d97706;

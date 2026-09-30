@@ -17,6 +17,7 @@ import {
 } from './DocFields';
 import DependenciesPanel from './DependenciesPanel';
 import DataElementsPanel from './DataElementsPanel';
+import ReadinessPanel from './ReadinessPanel';
 import IOPanel, { type AddMappingTarget } from './IOPanel';
 import {
   inputStyle, btnIcon, btnAdd,
@@ -439,6 +440,10 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
              type / status; children must not add their own margins. */}
           {isExpanded && (
             <FieldStack style={{ marginTop: 'var(--space-section)', paddingLeft: 2 }}>
+              {/* Readiness — how many of this record's required fields are
+                  filled, scored as a green "ready" bar / amber "active but
+                  incomplete" / neutral draft-progress panel (mock-up parity). */}
+              <ReadinessPanel node={node} />
               {/* Locked-state notice. When a node's status locks editing,
                   every field renders disabled with no explanation — so a
                   user opening it to make a change hits dead inputs and no
