@@ -1491,7 +1491,7 @@ export default function ProcessCatalogPage() {
                   : config.hint}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
-                  background: hidden ? '#f8fafc' : (count > 0 ? config.bg : '#f8fafc'),
+                  background: hidden ? 'var(--color-bg)' : (count > 0 ? config.bg : 'var(--color-bg)'),
                   color: hidden ? '#94a3b8' : (count > 0 ? config.color : '#94a3b8'),
                   borderRadius: 4, padding: '3px 8px', fontSize: 11, fontWeight: 500,
                   border: config.required ? `1px solid ${(hidden ? '#94a3b8' : (count > 0 ? config.color : '#94a3b8'))}33` : '1px solid transparent',

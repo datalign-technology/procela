@@ -12,7 +12,7 @@ export default function ScopeBanner() {
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '4px 12px',
-        background: '#f8fafc',
+        background: 'var(--color-bg)',
         borderBottom: '1px solid var(--color-border)',
         fontSize: 11, color: 'var(--color-text-muted)',
       }}
