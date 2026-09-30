@@ -6,6 +6,27 @@ import { inputStyle, ROLE_OPTIONS, type SystemRef, type SystemLink } from '../Pr
 import { clickable } from '../../lib/a11y';
 import { apiClient } from '../../api/client';
 
+// ── Field-type tag ──
+// The mono "field type" annotation the Process Catalog — Enhanced mock-ups show
+// beside every field label (e.g. "Short text", "Pick list", "Reference ·
+// People"). Presentational only — it names what kind of value the field holds.
+// Pushed to the right of the field row; wraps-safe and never clips the control.
+export function TypeTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        marginLeft: 'auto', flexShrink: 0, alignSelf: 'baseline',
+        fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.4,
+        color: 'var(--color-text-muted)', whiteSpace: 'nowrap',
+        paddingLeft: 8,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 // ── Inline Edit ──
 
 export function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, placeholder = 'Click to edit...', disabled = false }: {
@@ -39,8 +60,10 @@ export function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, pla
 
 // ── Documentation Field (label + inline edit in a compact row) ──
 
-export function DocField({ label, value, onSave, disabled, placeholder }: {
+export function DocField({ label, value, onSave, disabled, placeholder, typeLabel }: {
   label: string; value: string; onSave: (v: string) => void; disabled: boolean; placeholder: string;
+  /** Optional mock-up field-type annotation (e.g. "Short text", "Date"). */
+  typeLabel?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -77,14 +100,17 @@ export function DocField({ label, value, onSave, disabled, placeholder }: {
           {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
         </>
       )}
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
 
 // ── Documentation Dropdown (single select from predefined list) ──
 
-export function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
+export function DocDropdown({ label, value, options, onSave, disabled, placeholder, typeLabel }: {
   label: string; value: string; options: string[]; onSave: (v: string) => void; disabled: boolean; placeholder: string;
+  /** Optional mock-up field-type annotation (e.g. "Pick list"). */
+  typeLabel?: string;
 }) {
   const [saved, setSaved] = useState(false);
   return (
@@ -106,6 +132,7 @@ export function DocDropdown({ label, value, options, onSave, disabled, placehold
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
       {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
@@ -123,10 +150,11 @@ const TIER_LABELS: Record<string, string> = {
   TIER_4: 'Tier 4 — Non-critical',
 };
 
-export function TierField({ value, onSave, disabled }: {
+export function TierField({ value, onSave, disabled, typeLabel }: {
   value: string;
   onSave: (v: string) => void;
   disabled: boolean;
+  typeLabel?: string;
 }) {
   const [saved, setSaved] = useState(false);
   return (
@@ -144,14 +172,16 @@ export function TierField({ value, onSave, disabled }: {
         ))}
       </select>
       {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
 
-export function RtoField({ value, onSave, disabled }: {
+export function RtoField({ value, onSave, disabled, typeLabel }: {
   value: number | undefined;
   onSave: (v: number | null) => void;
   disabled: boolean;
+  typeLabel?: string;
 }) {
   const [draft, setDraft] = useState<string>(value !== undefined ? String(value) : '');
   const [saved, setSaved] = useState(false);
@@ -182,14 +212,16 @@ export function RtoField({ value, onSave, disabled }: {
         style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: 90 }}
       />
       {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
 
-export function RpoField({ value, onSave, disabled }: {
+export function RpoField({ value, onSave, disabled, typeLabel }: {
   value: number | undefined;
   onSave: (v: number | null) => void;
   disabled: boolean;
+  typeLabel?: string;
 }) {
   const [draft, setDraft] = useState<string>(value !== undefined ? String(value) : '');
   const [saved, setSaved] = useState(false);
@@ -221,6 +253,7 @@ export function RpoField({ value, onSave, disabled }: {
         title="Recovery Point Objective — how much data loss (in time) is tolerable"
       />
       {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
@@ -230,11 +263,12 @@ export function RpoField({ value, onSave, disabled }: {
 //    governance-controls store; selection is stored as controlIds on
 //    the node. ──
 
-export function ControlsPicker({ selected, options, onChange, disabled }: {
+export function ControlsPicker({ selected, options, onChange, disabled, typeLabel }: {
   selected: string[];
   options: Array<{ id: string; code: string; name: string; policyId: string }>;
   onChange: (ids: string[]) => void;
   disabled: boolean;
+  typeLabel?: string;
 }) {
   const [adding, setAdding] = useState('');
   const toggle = (id: string) => onChange(selected.filter((x) => x !== id));
@@ -290,6 +324,7 @@ export function ControlsPicker({ selected, options, onChange, disabled }: {
           )
         )}
       </div>
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
@@ -301,7 +336,7 @@ export function ControlsPicker({ selected, options, onChange, disabled }: {
 //    legacy comma-joined *name* string (valueMode="name") so no data
 //    migration is needed. ──
 
-export function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, disabledHintLink, placeholder, orgId }: {
+export function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, disabledHintLink, placeholder, orgId, typeLabel }: {
   label: string;
   mode: 'single' | 'multi';
   valueMode: 'id' | 'name';
@@ -327,6 +362,8 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
   disabledHintLink?: { to: string; label: string };
   /** Overrides the default trigger placeholder. */
   placeholder?: string;
+  /** Optional mock-up field-type annotation (e.g. "Reference · People"). */
+  typeLabel?: string;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
@@ -357,6 +394,7 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
           </div>
         )}
       </div>
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
@@ -368,7 +406,7 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
 // domain tags the field with a visible cross-domain marker. A legacy
 // free-text value that's in neither catalog is preserved as a selectable
 // option until the user re-picks.
-export function DocRoleField({ value, onSave, disabled, domain, label = 'Responsible Role' }: {
+export function DocRoleField({ value, onSave, disabled, domain, label = 'Responsible Role', typeLabel }: {
   value: string;
   onSave: (v: string) => void;
   disabled: boolean;
@@ -376,6 +414,8 @@ export function DocRoleField({ value, onSave, disabled, domain, label = 'Respons
   /** Field label — defaults to "Responsible Role"; set to "Accountable Role"
    *  (or similar) to reuse the same role picker for another RACI slot. */
   label?: string;
+  /** Optional mock-up field-type annotation (e.g. "Reference · Roles"). */
+  typeLabel?: string;
 }) {
   const [showAll, setShowAll] = useState(false);
   const govLabels = GOVERNANCE_ROLES.map((r) => r.label);
@@ -442,14 +482,17 @@ export function DocRoleField({ value, onSave, disabled, domain, label = 'Respons
           show {domain === 'GOVERNANCE' ? 'governance' : 'business'} roles only
         </button>
       )}
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
 
 // ── Documentation Multi-Select (chips with add dropdown) ──
 
-export function DocMultiSelect({ label, selected, options, onSave, disabled, placeholder }: {
+export function DocMultiSelect({ label, selected, options, onSave, disabled, placeholder, typeLabel }: {
   label: string; selected: string[]; options: string[]; onSave: (vals: string[]) => void; disabled: boolean; placeholder: string;
+  /** Optional mock-up field-type annotation (e.g. "Multi-select"). */
+  typeLabel?: string;
 }) {
   const available = options.filter((o) => !selected.includes(o));
   return (
@@ -491,6 +534,7 @@ export function DocMultiSelect({ label, selected, options, onSave, disabled, pla
           <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', opacity: 0.6 }}>{placeholder}</span>
         )}
       </div>
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
@@ -499,7 +543,7 @@ export function DocMultiSelect({ label, selected, options, onSave, disabled, pla
 // Distinct from DocMultiSelect because options are id/name pairs, not
 // flat strings. Same visual treatment so it nests naturally with the
 // other Doc* fields in the node panel.
-export function DocSystemsField({ selected, options, links, onSave, onSaveLinks, connectionsBySystem, disabled }: {
+export function DocSystemsField({ selected, options, links, onSave, onSaveLinks, connectionsBySystem, disabled, typeLabel }: {
   selected: string[]; options: SystemRef[];
   /** Per-system reference metadata, keyed by systemId. */
   links?: SystemLink[];
@@ -511,6 +555,8 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
    *  source-key picker. A system with no entry falls back to free-text refs. */
   connectionsBySystem?: Record<string, { id: string; name: string }[]>;
   disabled: boolean;
+  /** Optional mock-up field-type annotation (e.g. "Reference · Systems"). */
+  typeLabel?: string;
 }) {
   const byId = new Map(options.map((o) => [o.id, o]));
   const linkById = new Map((links ?? []).map((l) => [l.systemId, l]));
@@ -626,6 +672,7 @@ export function DocSystemsField({ selected, options, links, onSave, onSaveLinks,
           />
         )}
       </div>
+      {typeLabel && <TypeTag>{typeLabel}</TypeTag>}
     </div>
   );
 }
