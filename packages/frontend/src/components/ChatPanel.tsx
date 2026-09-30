@@ -297,6 +297,19 @@ export default function ChatPanel() {
     return () => window.removeEventListener('procela:toggle-chat', handler);
   }, []);
 
+  // Open the panel with a question pre-filled (e.g. the dashboard's
+  // "Ask Procela" suggested-question pills). The question lands in the input so
+  // the user reviews and sends it, rather than firing a request unprompted.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const q = (e as CustomEvent<{ question?: string }>).detail?.question;
+      setOpen(true);
+      if (q) setInput(q);
+    };
+    window.addEventListener('procela:ask-question', handler);
+    return () => window.removeEventListener('procela:ask-question', handler);
+  }, []);
+
   // Refresh the saved-conversation list whenever the panel opens (so a
   // thread saved on a previous visit shows up) and whenever the active
   // org changes.
