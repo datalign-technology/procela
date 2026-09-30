@@ -314,6 +314,50 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       assert.strictEqual(res2.status, 200);
       assert.strictEqual(processNodes.find((n: any) => n.id === procId).hasVariants, false);
     });
+
+    it('round-trips the new activity scalar fields on an activity node', async () => {
+      const fields = {
+        accountableRole: 'System Operator Lead',
+        authorityLevel: 'Can declare a Tier-1 outage',
+        activityType: 'Event',
+        entryCondition: 'A SCADA anomaly is confirmed.',
+        completionCriteria: 'An OMS incident exists with a unique id.',
+        waitBeforeNext: '5m SLA',
+        workInstructions: 'Open the incident in OMS and set priority.',
+        exceptions: 'If OMS is down, log to the manual outage sheet.',
+      };
+      const res = await request(port, 'PUT', `/process-catalog/nodes/${actId}`, fields);
+      assert.strictEqual(res.status, 200);
+      const node = processNodes.find((n: any) => n.id === actId);
+      for (const [k, v] of Object.entries(fields)) assert.strictEqual(node[k], v, `${k} persisted`);
+    });
+
+    it('round-trips + validates the activity data-elements table', async () => {
+      // A full row, plus a blank-element row that should be dropped, plus a
+      // row whose crud carries a junk letter that should be filtered out.
+      const res = await request(port, 'PUT', `/process-catalog/nodes/${actId}`, {
+        dataElements: [
+          { element: 'Incident ID', direction: 'Output', crud: ['C', 'x', 'r'], systemOfRecord: 'OMS', inRegistry: true, kind: 'Transactional', format: 'text' },
+          { element: '   ', crud: ['C'] },
+        ],
+      });
+      assert.strictEqual(res.status, 200);
+      const node = processNodes.find((n: any) => n.id === actId);
+      assert.strictEqual(node.dataElements.length, 1, 'blank-element row dropped');
+      const row = node.dataElements[0];
+      assert.strictEqual(row.element, 'Incident ID');
+      assert.strictEqual(row.inRegistry, true);
+      assert.deepStrictEqual(row.crud, ['C', 'R'], 'crud normalised to canonical order, junk dropped');
+
+      // A non-array is a 400.
+      const bad = await request(port, 'PUT', `/process-catalog/nodes/${actId}`, { dataElements: 'nope' });
+      assert.strictEqual(bad.status, 400);
+
+      // An empty array clears the table.
+      const clear = await request(port, 'PUT', `/process-catalog/nodes/${actId}`, { dataElements: [] });
+      assert.strictEqual(clear.status, 200);
+      assert.strictEqual(processNodes.find((n: any) => n.id === actId).dataElements, undefined);
+    });
   });
 
   describe('DELETE /nodes/:id — cascade', () => {
