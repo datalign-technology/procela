@@ -175,7 +175,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
               style={{ fontWeight: 500, fontSize: 13, cursor: 'pointer', color: isActive ? 'var(--color-primary)' : undefined }}>{node.name}</span>
             <span style={typeBadge(node.type)}>{node.type}</span>
             {node.industry && (
-              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: '#f8fafc', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>
                 {node.industry}
               </span>
             )}
@@ -804,7 +804,7 @@ export default function OrganizationsPage() {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <span style={typeBadge(detailOrg.type)}>{detailOrg.type}</span>
-                      {detailOrg.industry && <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: '#f8fafc', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>{detailOrg.industry}</span>}
+                      {detailOrg.industry && <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>{detailOrg.industry}</span>}
                     </div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{detailOrg.name}</h3>
                   </div>

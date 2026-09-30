@@ -511,7 +511,7 @@ export default function ProcessDataMapPage() {
                   style={{ cursor: 'pointer', opacity: dim ? 0.35 : 1 }}
                 >
                   <rect x={indent} y={y} width={COL_WIDTH - indent} height={ROW_HEIGHT - 4}
-                    fill={focus?.kind === 'activity' && focus.id === a.id ? '#d1fae5' : '#f8fafc'}
+                    fill={focus?.kind === 'activity' && focus.id === a.id ? '#d1fae5' : 'var(--color-bg)'}
                     stroke="#cbd5e1" rx={3} />
                   <text x={indent + 10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
                     {truncate(a.name, 32 - row.depth * 2)}
@@ -552,7 +552,7 @@ export default function ProcessDataMapPage() {
                   style={{ cursor: 'pointer', opacity: dim ? 0.35 : 1 }}
                 >
                   <rect x={x} y={y} width={COL_WIDTH - indent} height={ROW_HEIGHT - 4}
-                    fill={focus?.kind === 'asset' && focus.id === a.id ? '#d1fae5' : '#f8fafc'}
+                    fill={focus?.kind === 'asset' && focus.id === a.id ? '#d1fae5' : 'var(--color-bg)'}
                     stroke="#cbd5e1" rx={3} />
                   <text x={x + 10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
                     {truncate(a.name, 28)}

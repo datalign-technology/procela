@@ -699,7 +699,7 @@ export default function ValueStreamWizard() {
                           cached templates that still carry both don't lose
                           the outcome text. */}
                       {(vs.purpose || vs.businessOutcome) && (
-                        <div style={{ fontSize: 11, padding: '6px 10px', background: '#f8fafc', borderRadius: 4, marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 4, marginBottom: 10 }}>
                           <div><span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>Purpose:</span> {[vs.purpose, vs.businessOutcome].map((s) => (s || '').trim()).filter(Boolean).join(' — ')}</div>
                         </div>
                       )}

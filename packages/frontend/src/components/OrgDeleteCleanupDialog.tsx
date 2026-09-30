@@ -345,7 +345,7 @@ export default function OrgDeleteCleanupDialog({
           {/* Default-for-everything picker */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-            background: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: 8,
+            background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8,
             marginBottom: 16,
           }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Default for everything:</label>

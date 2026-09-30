@@ -89,38 +89,41 @@ ol {
    governance UI and the existing logo, so the cost of switching
    outweighs the upside. Revisit if the brand identity itself moves. */
 :root {
-  --color-primary: #1a7a6d;
-  --color-primary-hover: #15655a;
-  --color-primary-light: #d1f0eb;
+  /* Brand teal, retuned to the "Process Catalog — Enhanced" mock-up's
+     deeper, warmer teal (#0E5E6F) — the same hue family as the previous
+     #1a7a6d, one step deeper so it sits on the warm parchment ground
+     below with more weight. */
+  --color-primary: #0e5e6f;
+  --color-primary-hover: #0a4652;
+  --color-primary-light: #dceceb; /* warm light-teal tint for active fills */
 
-  /* Sidebar palette is a near-black slate (Collibra / Purview /
-     Linear lineage), not the brand teal. The teal is reserved as an
-     accent — used on the active-row left bar and the active label —
-     so the rail reads as neutral chrome and the content area's
-     brand colour stands out. */
-  --color-sidebar: #0f172a;             /* slate-900 */
-  --color-sidebar-hover: #1e293b;       /* slate-800 */
-  --color-sidebar-active: #1e293b;      /* slate-800 (same as hover; accent bar differentiates) */
-  --color-sidebar-text: #cbd5e1;        /* slate-300 — readable on slate-900 */
+  /* Sidebar palette is a warm near-black (the mock-up's #1A1C1F top-nav
+     ground), not the brand teal. The teal stays an accent — used on the
+     active-row left bar and the active label — so the rail reads as
+     neutral chrome and the content area's brand colour stands out. Warmed
+     from the old cool slate to sit in the same neutral family as the
+     parchment content ground. */
+  --color-sidebar: #1a1c1f;             /* warm near-black (mock-up nav ground) */
+  --color-sidebar-hover: #2e3136;       /* warm charcoal (active-pill ground) */
+  --color-sidebar-active: #2e3136;      /* same as hover; accent bar differentiates */
+  --color-sidebar-text: #c9ccd1;        /* warm grey — readable on the near-black */
   --color-sidebar-text-active: #ffffff;
-  --color-sidebar-text-muted: #94a3b8;  /* slate-400 — section labels */
-  --color-sidebar-border: #1e293b;      /* slate-800 — dividers + brand row underline */
+  --color-sidebar-text-muted: #9a9ea5;  /* warm grey — section labels */
+  --color-sidebar-border: #2e3136;      /* warm charcoal — dividers + brand row underline */
   --color-sidebar-accent: #2dd4bf;      /* teal-400 — active-row left bar; pops on near-black */
 
-  --color-text: #1e293b;
-  --color-text-secondary: #64748b;
-  /* slate-500 — was slate-400 (#94a3b8), which sat at ~2.6:1 against
-   * the white surface and failed WCAG AA for both normal text (4.5:1)
-   * and large text (3:1). slate-500 (#64748b) lands at ~4.6:1 and
-   * passes AA across the board. The visual hierarchy with primary
-   * text stays — that comes from font-size + weight + uppercase
-   * tracking, not just colour. */
-  --color-text-muted: #64748b;
+  /* Warm-neutral text ramp matching the mock-up: near-black primary,
+     a distinct darker "secondary" for field labels, and a lighter muted
+     for captions/codes (the previous ramp collapsed secondary + muted
+     onto one slate-500). */
+  --color-text: #1a1c1f;
+  --color-text-secondary: #454a52; /* field labels — ~8.6:1 on white */
+  --color-text-muted: #646973;     /* captions / codes / type-labels — ~5:1 on white, AA */
 
-  --color-bg: #f8fafc;
+  --color-bg: #f4f3ef;             /* warm parchment page ground */
   --color-surface: #ffffff;
-  --color-border: #e2e8f0;
-  --color-border-subtle: #f1f5f9; /* fainter divider/fill — was a bare inline literal */
+  --color-border: #e2e0da;         /* warm default border */
+  --color-border-subtle: #eceae4;  /* warm fainter divider/fill */
 
   --color-success: #16a34a;
   --color-warning: #d97706;
@@ -135,12 +138,15 @@ ol {
   --color-tier-silver: #9ca3af;
   --color-tier-gold: #d4a017;
 
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  /* IBM Plex (self-hosted via @fontsource, imported in main.tsx) matches the
+     "Process Catalog — Enhanced" mock-ups; the system stack stays as the
+     fallback while the woff2 loads or in an environment that blocks it. */
+  --font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans',
+    'Helvetica Neue', sans-serif;
 
-  --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, 'DejaVu Sans Mono',
-    Menlo, Consolas, monospace;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', SFMono-Regular, ui-monospace,
+    'DejaVu Sans Mono', Menlo, Consolas, monospace;
 
   --radius-sm: 3px;
   --radius-md: 6px;
