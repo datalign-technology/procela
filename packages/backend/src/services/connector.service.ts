@@ -16,8 +16,8 @@
 
 import fs from 'fs';
 import net from 'net';
-import { analyzeLocalFileAsync } from '../lib/local-file-connector';
-import { SUPPORTED_DB_SOURCE_TYPES } from '../lib/db-source';
+import { analyzeLocalFileAsync, readColumnValues } from '../lib/local-file-connector';
+import { SUPPORTED_DB_SOURCE_TYPES, fetchDbRows, buildColumnSampleSql, clampSampleLimit } from '../lib/db-source';
 import type { DbSourceRequest, DbSourceType } from '../lib/db-source';
 import { discoverDbSchema } from '../lib/db-source/introspect';
 import { discoverMongoSchema, type MongoSourceRequest } from '../lib/db-source/mongo-introspect';
@@ -618,6 +618,70 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
     simulated: true,
     details: { tableCount: mockAssets.length, assets: mockAssets },
   };
+}
+
+/** The result of a column sample preview — a handful of DISTINCT values plus
+ *  enough context to caption them. Values are ephemeral: fetched on demand,
+ *  returned once, and never persisted anywhere. */
+export interface ColumnSample {
+  values: string[];
+  /** Number of distinct values returned (≤ limit). */
+  distinctCount: number;
+  /** True when the sample filled the limit — there may be more values. */
+  truncated: boolean;
+  limit: number;
+}
+
+/**
+ * Fetch a small DISTINCT-value sample of one column from a connected,
+ * direct-connect relational or warehouse source — the "does this column hold
+ * what I expect" preview behind the source-key picker. Returns null when the
+ * connection isn't a live SQL source (API / spreadsheet / SDK-only warehouse /
+ * Mongo), so the caller can turn that into a clear "not available" response.
+ * Identifier validation inside `buildColumnSampleSql` is the injection
+ * boundary; a bad table/column throws and the caller maps it to a 400.
+ */
+export async function sampleColumnValues(
+  profile: ConnectionProfileLike,
+  table: string,
+  column: string,
+  limit?: number,
+): Promise<ColumnSample | null> {
+  // Decrypt at-rest secrets just-in-time, exactly as discovery does.
+  profile = { ...profile, credentials: await decryptCredentials(profile.credentials) };
+  const dbReq = toDbSourceRequest(profile);
+  if (!dbReq) {
+    // Local-file connection (an uploaded or seeded CSV/JSON): the file *is* the
+    // source, so sample distinct values straight from it — no database needed.
+    // The `table` param is the file itself and is ignored; the column must be
+    // one of the file's headers (the picker only offers discovered columns).
+    if (profile.connectionType === 'FILE_STORAGE' && profile.config?.storageType === 'LOCAL' && profile.config?.localFilePath) {
+      const n = clampSampleLimit(limit);
+      const seen = new Set<string>();
+      for (const v of readColumnValues(profile.config.localFilePath, column)) {
+        if (v != null && v !== '') seen.add(v);
+      }
+      const all = [...seen];
+      return { values: all.slice(0, n), distinctCount: Math.min(all.length, n), truncated: all.length > n, limit: n };
+    }
+    return null;
+  }
+
+  // Discovered asset names are schema-qualified (e.g. analytics.fact_sales);
+  // split at the first dot so schema + table validate as separate identifiers.
+  // A bare name falls back to the connection's default schema.
+  let schema = dbReq.schema;
+  let tbl = table.trim();
+  const dot = tbl.indexOf('.');
+  if (dot > 0) { schema = tbl.slice(0, dot); tbl = tbl.slice(dot + 1); }
+
+  const n = clampSampleLimit(limit);
+  const sql = buildColumnSampleSql(dbReq.dbType, { schema, table: tbl, column, limit: n });
+  const rows = await fetchDbRows({ ...dbReq, query: sql, limit: n });
+  const values = rows
+    .map((r) => r.value)
+    .filter((v): v is string => v !== undefined && v !== '');
+  return { values, distinctCount: values.length, truncated: values.length >= n, limit: n };
 }
 
 // ── LOCAL file-storage helpers ────────────────────────────────────────────

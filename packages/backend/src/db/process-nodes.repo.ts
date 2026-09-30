@@ -77,7 +77,7 @@ type PrismaProcessNodeRow = {
   orgLinks?: Array<{ orgId: string }>;
   controls?: Array<{ controlId: string }>;
   requiredSkills?: Array<{ skillId: string }>;
-  systems?: Array<{ systemId: string; externalRef?: string | null; refLabel?: string | null; refUrl?: string | null }>;
+  systems?: Array<{ systemId: string; externalRef?: string | null; refLabel?: string | null; refUrl?: string | null; sourceConnectionId?: string | null; sourceAsset?: string | null; sourceColumn?: string | null; isKey?: boolean | null }>;
 };
 
 export interface PrismaProcessNodeDelegate {
@@ -156,15 +156,23 @@ function fromPrisma(r: PrismaProcessNodeRow): StoredProcessNode {
     ...(r.systems && r.systems.length > 0
       ? { systemIds: r.systems.map((s) => s.systemId) }
       : {}),
-    ...(r.systems && r.systems.some((s) => s.externalRef || s.refLabel || s.refUrl)
+    ...(r.systems && r.systems.some((s) => s.externalRef || s.refLabel || s.refUrl || s.sourceColumn)
       ? {
           systemLinks: r.systems
-            .filter((s) => s.externalRef || s.refLabel || s.refUrl)
+            .filter((s) => s.externalRef || s.refLabel || s.refUrl || s.sourceColumn)
             .map((s) => ({
               systemId: s.systemId,
               ...(s.externalRef ? { externalRef: s.externalRef } : {}),
               ...(s.refLabel ? { refLabel: s.refLabel } : {}),
               ...(s.refUrl ? { refUrl: s.refUrl } : {}),
+              ...(s.sourceColumn
+                ? {
+                    sourceConnectionId: s.sourceConnectionId ?? undefined,
+                    sourceAsset: s.sourceAsset ?? undefined,
+                    sourceColumn: s.sourceColumn,
+                    ...(s.isKey ? { isKey: true } : {}),
+                  }
+                : {}),
             })),
         }
       : {}),
@@ -273,7 +281,7 @@ async function rewriteSystemLinks(
   const table = (client as Record<string, {
     findMany(arg: { where: Record<string, string> }): Promise<Array<{ systemId: string }>>;
     deleteMany(arg: { where: Record<string, string> }): Promise<{ count: number }>;
-    createMany(arg: { data: Array<Record<string, string | null>> }): Promise<{ count: number }>;
+    createMany(arg: { data: Array<Record<string, string | boolean | null>> }): Promise<{ count: number }>;
   }>).processNodeSystem;
 
   const ids = patch.systemIds !== undefined
@@ -294,6 +302,10 @@ async function rewriteSystemLinks(
           externalRef: l?.externalRef ?? null,
           refLabel: l?.refLabel ?? null,
           refUrl: l?.refUrl ?? null,
+          sourceConnectionId: l?.sourceConnectionId ?? null,
+          sourceAsset: l?.sourceAsset ?? null,
+          sourceColumn: l?.sourceColumn ?? null,
+          isKey: l?.isKey ?? null,
         };
       }),
     });

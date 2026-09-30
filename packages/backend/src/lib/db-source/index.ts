@@ -45,6 +45,7 @@ export async function fetchDbRows(req: DbSourceRequest): Promise<SourceRow[]> {
   }
 }
 
-export { buildSelectSql, normalizeRow, normalizeValue } from './sql';
+export { buildSelectSql, buildColumnSampleSql, clampSampleLimit, SAMPLE_DEFAULT_LIMIT, SAMPLE_MAX_LIMIT, normalizeRow, normalizeValue } from './sql';
+export type { ColumnSampleSpec } from './sql';
 export { SUPPORTED_DB_SOURCE_TYPES } from './types';
 export type { DbSourceRequest, DbSourceType, SourceRow } from './types';

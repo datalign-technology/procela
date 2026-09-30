@@ -51,7 +51,10 @@ import { reports } from '../routes/reports';
 import { analysisReports } from '../routes/analysis-reports';
 import { savedViews } from '../routes/saved-views';
 import { dataAssetColumns, dataAssetBindings } from '../routes/data-assets';
-import { connections } from '../routes/connections';
+import { connections, connectionSystemLinks } from '../routes/connections';
+import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
+import { getUploadsDir, deleteLocalFileDir } from '../lib/local-file-connector';
+import fs from 'fs';
 import { saveStore } from '../lib/persistence';
 import { invalidateOrgScopeCache } from '../lib/org-scope';
 import logger from '../lib/logger';
@@ -237,6 +240,7 @@ interface DemoRepos {
   dataAssetColumns: Repository<any>;
   dataAssetBindings: Repository<any>;
   connections: Repository<any>;
+  connectionSystemLinks: Repository<any>;
 }
 
 function buildRepos(): DemoRepos {
@@ -283,6 +287,7 @@ function buildRepos(): DemoRepos {
     dataAssetColumns: getDataAssetColumnsRepository(dataAssetColumns as any),
     dataAssetBindings: getDataAssetBindingsRepository(dataAssetBindings as any),
     connections: getConnectionsRepository(connections as any),
+    connectionSystemLinks: getConnectionSystemLinksRepository(connectionSystemLinks as any),
   };
 }
 
@@ -356,7 +361,12 @@ async function sweep(repos: DemoRepos): Promise<void> {
   await sweepRepo(repos.comments);
   await sweepRepo(repos.dataAssetBindings);
   await sweepRepo(repos.dataAssetColumns);
+  await sweepRepo(repos.connectionSystemLinks);
   await sweepRepo(repos.connections);
+  // Remove the local CSV the OMS demo connection points at (its id is
+  // deterministic), so re-seeding or switching industries leaves no orphaned
+  // upload dir behind.
+  deleteLocalFileDir(demoId('conn-oms-incidents'));
   await sweepRepo(repos.agentExecutions);
   await sweepRepo(repos.agentSchedules);
   await sweepRepo(repos.gapSnapshots);
@@ -899,11 +909,11 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   // actSignal sits upstream of actTriage so the Dependencies panel on
   // the seeded Outage triage shows a real predecessor — matches
   // playbook beat 3's promise.
-  const actSignal = { id: demoId('node-act-signal'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'SCADA anomaly detected', description: 'Grid telemetry flags a probable outage — voltage sag, breaker open, or historian gap.', activityId: 'ACT-DEMO-0', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actSignal = { id: demoId('node-act-signal'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Detect SCADA anomaly', description: 'Monitor grid telemetry and flag a probable outage — voltage sag, breaker open, or historian gap.', activityId: 'ACT-DEMO-SCADA', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, trigger: 'Event-driven', automationLevel: 'Fully automated', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   // Between detection and triage: the confirmed anomaly becomes a tracked
   // incident in the OMS (the system of record for restoration). Attached to
   // the OMS system so the step tells the "opened here" story.
-  const actOpenIncident = { id: demoId('node-act-open-incident'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Open outage incident in OMS', description: 'The confirmed anomaly is opened as a tracked incident in the Outage Management System — the system of record for the restoration workflow.', activityId: 'ACT-DEMO-0A', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysOMS.id], systemLinks: [{ systemId: sysOMS.id, externalRef: 'INC-TYPE-OUTAGE', refLabel: 'OMS incident type' }], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Incident opened in OMS within 5 minutes of a confirmed anomaly', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actOpenIncident = { id: demoId('node-act-open-incident'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Open outage incident in OMS', description: 'The confirmed anomaly is opened as a tracked incident in the Outage Management System — the system of record for the restoration workflow.', activityId: 'ACT-DEMO-OMS', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysOMS.id], systemLinks: [{ systemId: sysOMS.id, sourceConnectionId: demoId('conn-oms-incidents'), sourceAsset: 'oms_incidents.csv', sourceColumn: 'Incident_ID', isKey: true }], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Incident opened in OMS within 5 minutes of a confirmed anomaly', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actTriage = { id: demoId('node-act-triage'), parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Outage triage', description: 'Classify incoming outages, dispatch first responders.', activityId: 'ACT-DEMO-1', status: 'ACTIVE', orderIndex: 2, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Field crew on site within 30 minutes for Tier 1 outages\n\nP95 30 min from detection', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actDispatch = { id: demoId('node-act-dispatch'), parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Crew dispatch', description: 'Assign crews to outages by location + skill.', activityId: 'ACT-DEMO-2', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'Line Superintendent', systemIds: [sysGIS.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actNotify = { id: demoId('node-act-notify'), parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Customer notification sent', description: 'SMS/email/voice notifications to affected customers.', activityId: 'ACT-DEMO-3', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, responsibleRole: 'Manager Contact Center', responsiblePersonId: samira.id, systemIds: [sysCIS.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
@@ -952,6 +962,41 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
     { id: demoId('map-w2'), orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Identifies the customers in the affected zone', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: demoId('map-w3'), orgId: orgWater.id, processStepId: actWaterQualityTest.id, dataAssetId: assetWaterQuality.id, linkType: 'OUTPUT', notes: 'Writes the shift sample result set', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
   ]);
+
+  // ── A live, self-contained OMS data source ──
+  // Give the OMS system a real connection backed by a small local CSV of
+  // incidents, so the activity↔system source-key picker on "Open outage
+  // incident in OMS" is fully exercisable out of the box: discovery lists the
+  // file's columns, and the sample preview reads real Incident_ID values. A
+  // local file (not a database) keeps it self-contained — no external server,
+  // works in both the JSON-store and Postgres modes.
+  const omsConnId = demoId('conn-oms-incidents');
+  const omsCsvName = 'oms_incidents.csv';
+  const omsUploadDir = getUploadsDir(omsConnId);
+  fs.mkdirSync(omsUploadDir, { recursive: true });
+  const omsCsvPath = `${omsUploadDir}/${omsCsvName}`;
+  const omsCsv = [
+    'Incident_ID,Status,Priority,Feeder,Opened_At',
+    'INC-2026-0001,OPEN,P1,FDR-12,2026-09-29T06:14:00Z',
+    'INC-2026-0002,RESTORED,P2,FDR-07,2026-09-29T07:02:00Z',
+    'INC-2026-0003,DISPATCHED,P1,FDR-31,2026-09-29T07:48:00Z',
+    'INC-2026-0004,OPEN,P3,FDR-05,2026-09-29T08:20:00Z',
+    'INC-2026-0005,RESTORED,P2,FDR-19,2026-09-29T09:05:00Z',
+    'INC-2026-0006,ACKNOWLEDGED,P1,FDR-12,2026-09-29T09:41:00Z',
+    'INC-2026-0007,DISPATCHED,P2,FDR-24,2026-09-29T10:16:00Z',
+    'INC-2026-0008,OPEN,P1,FDR-03,2026-09-29T11:00:00Z',
+    'INC-2026-0009,RESTORED,P3,FDR-31,2026-09-29T11:52:00Z',
+    'INC-2026-0010,CLOSED,P2,FDR-07,2026-09-29T12:33:00Z',
+  ].join('\n');
+  fs.writeFileSync(omsCsvPath, omsCsv, 'utf-8');
+  await repos.connections.create({
+    id: omsConnId, orgId: orgElectric.id, name: 'OMS Incident Store',
+    connectionType: 'FILE_STORAGE',
+    config: { storageType: 'LOCAL', localFilePath: omsCsvPath, originalFileName: omsCsvName, columns: ['Incident_ID', 'Status', 'Priority', 'Feeder', 'Opened_At'] },
+    credentials: {}, status: 'CONNECTED', lastTestedAt: ts, lastTestResult: 'Read oms_incidents.csv: 10 rows × 5 columns', createdAt: ts, updatedAt: ts,
+  });
+  // Link the connection to the OMS system so the source-key picker offers it.
+  await repos.connectionSystemLinks.create({ id: demoId('conn-link-oms'), orgId: orgElectric.id, connectionId: omsConnId, systemId: sysOMS.id, createdAt: ts });
 
   // ── Governance tasks assigned to Susan (populates My Dashboard) ──
   await createAll(repos.governanceTasks, [

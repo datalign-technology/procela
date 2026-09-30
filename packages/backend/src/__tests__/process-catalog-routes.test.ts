@@ -227,6 +227,32 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       // Postgres so the unlink silently doesn't stick.
       assert.deepStrictEqual(after.systemIds, []);
     });
+
+    it('round-trips a structured source-key pointer and rejects a partial one', async () => {
+      // Re-link the system so it's a valid membership target again.
+      let res = await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, { systemIds: [refSysId] });
+      assert.strictEqual(res.status, 200);
+
+      // A full pointer (connection + table + column + isKey) persists.
+      res = await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, {
+        systemLinks: [{ systemId: refSysId, sourceConnectionId: 'conn-oms', sourceAsset: 'dbo.incidents', sourceColumn: 'Incident_ID', isKey: true }],
+      });
+      assert.strictEqual(res.status, 200);
+      const node = processNodes.find((n: any) => n.id === refActId);
+      assert.deepStrictEqual(node.systemLinks, [{
+        systemId: refSysId, sourceConnectionId: 'conn-oms', sourceAsset: 'dbo.incidents', sourceColumn: 'Incident_ID', isKey: true,
+      }]);
+
+      // A partial pointer (column without connection/table) is a 400 — the
+      // three parts must travel together.
+      res = await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, {
+        systemLinks: [{ systemId: refSysId, sourceColumn: 'Incident_ID' }],
+      });
+      assert.strictEqual(res.status, 400);
+
+      // Clean up so later tests start from a bare system link.
+      await request(port, 'PUT', `/process-catalog/nodes/${refActId}`, { systemIds: [] });
+    });
   });
 
   describe('DELETE /nodes/:id — cascade', () => {

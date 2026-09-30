@@ -86,6 +86,47 @@ export function buildSelectSql(dbType: DbSourceType, spec: SelectSpec): string {
   return `SELECT * FROM ${target} LIMIT ${n}`;
 }
 
+/** Default and hard cap on a column-sample preview. Deliberately tiny — a
+ *  sample is a "does this column hold what I think" glance, not an export. */
+export const SAMPLE_DEFAULT_LIMIT = 10;
+export const SAMPLE_MAX_LIMIT = 50;
+
+/** Clamp a caller-supplied sample size into [1, SAMPLE_MAX], defaulting when
+ *  absent or non-finite. */
+export function clampSampleLimit(limit?: number): number {
+  if (limit == null || !Number.isFinite(limit)) return SAMPLE_DEFAULT_LIMIT;
+  return Math.max(1, Math.min(SAMPLE_MAX_LIMIT, Math.floor(limit)));
+}
+
+export interface ColumnSampleSpec {
+  schema?: string;
+  table: string;
+  column: string;
+  limit?: number;
+}
+
+/**
+ * Build the DISTINCT-value sample query for one column. The result projects a
+ * single aliased column `value`, so the caller reads `row.value` regardless of
+ * the source column's name. NULLs are excluded (a sample of identifiers wants
+ * real values). All identifiers pass through `assertIdentifier` first, so the
+ * conservative charset is the injection boundary just as in `buildSelectSql`.
+ */
+export function buildColumnSampleSql(dbType: DbSourceType, spec: ColumnSampleSpec): string {
+  const col = quoteIdent(dbType, assertIdentifier('column', spec.column.trim()));
+  const target = qualifiedName(dbType, spec.schema, spec.table.trim());
+  const n = clampSampleLimit(spec.limit);
+
+  if (dbType === 'SQLSERVER') {
+    return `SELECT DISTINCT TOP (${n}) ${col} AS value FROM ${target} WHERE ${col} IS NOT NULL`;
+  }
+  if (dbType === 'ORACLE') {
+    // Oracle: DISTINCT + FETCH FIRST is the 12c+ standard; no LIMIT clause.
+    return `SELECT DISTINCT ${col} AS value FROM ${target} WHERE ${col} IS NOT NULL FETCH FIRST ${n} ROWS ONLY`;
+  }
+  return `SELECT DISTINCT ${col} AS value FROM ${target} WHERE ${col} IS NOT NULL LIMIT ${n}`;
+}
+
 /** Coerce one engine-returned cell to the string shape the sync engine
  *  consumes. null/undefined collapse to '' (applyRow treats '' as "no
  *  value"); Dates become ISO; Buffers and objects are stringified so a

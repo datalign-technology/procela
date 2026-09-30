@@ -374,6 +374,17 @@ model ProcessNodeSystem {
   externalRef   String?
   refLabel      String?
   refUrl        String?
+  // Structured pointer at the field in the connected source that uniquely
+  // identifies this activity's records — the discover-fed alternative to the
+  // free-text externalRef. sourceConnectionId names a ConnectionProfile (soft
+  // FK — connections live outside Prisma), sourceAsset the table/collection
+  // (may be schema-qualified, e.g. dbo.incidents), sourceColumn the field
+  // (e.g. Incident_ID), and isKey marks it the unique/primary key. All
+  // nullable — the pointer is only set once a system is actually connected.
+  sourceConnectionId String?
+  sourceAsset        String?
+  sourceColumn       String?
+  isKey              Boolean?
 
   processNode ProcessNode @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
   system      System      @relation(fields: [systemId], references: [id], onDelete: Cascade)
