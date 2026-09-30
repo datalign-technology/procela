@@ -28,14 +28,31 @@ export function TypeTag({ children }: { children: React.ReactNode }) {
   );
 }
 
+// The mock-ups' "required to activate" marker — a small burnt-orange dot after a
+// field's label. Purely a hint; it doesn't enforce anything.
+export function RequiredDot() {
+  return (
+    <span
+      aria-hidden="true"
+      title="Required to activate"
+      style={{ color: 'var(--color-attention)', marginLeft: 3, fontSize: 8, verticalAlign: '1px' }}
+    >
+      ●
+    </span>
+  );
+}
+
 // ── Calculated / rolled-up read-only field ──
 // The mock-ups render derived values (systems/roles rolled up from the
 // activities underneath, etc.) in a distinctly read-only way: a tinted,
 // non-editable box with a leading padlock, a "Calculated" type slot in place
 // of an editable field-type, and a caption stating the derivation. Presentation
 // only — it never writes. Pass `chips` for a set of values, or `text` for one.
-export function DocCalculated({ label, chips, text, caption, emptyText = 'None yet' }: {
+export function DocCalculated({ label, chips, text, caption, emptyText = 'None yet', required }: {
   label: string;
+  /** Accepted for prop-shape parity with the editable fields; calculated
+   *  fields are never required, so this is effectively always false. */
+  required?: boolean;
   /** A set of derived values rendered as neutral chips. */
   chips?: string[];
   /** A single derived value (used when `chips` is absent). */
@@ -48,7 +65,7 @@ export function DocCalculated({ label, chips, text, caption, emptyText = 'None y
   const hasChips = !!(chips && chips.length);
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}:</span>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}{required && <RequiredDot />}:</span>
       <div style={{ flex: 1, maxWidth: 420 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
@@ -112,10 +129,12 @@ export function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, pla
 
 // ── Documentation Field (label + inline edit in a compact row) ──
 
-export function DocField({ label, value, onSave, disabled, placeholder, typeLabel }: {
+export function DocField({ label, value, onSave, disabled, placeholder, typeLabel, required }: {
   label: string; value: string; onSave: (v: string) => void; disabled: boolean; placeholder: string;
   /** Optional mock-up field-type annotation (e.g. "Short text", "Date"). */
   typeLabel?: string;
+  /** Flags the field with the "required to activate" dot. */
+  required?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -126,7 +145,7 @@ export function DocField({ label, value, onSave, disabled, placeholder, typeLabe
   };
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11 }}>
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}{required && <RequiredDot />}:</span>
       {editing && !disabled ? (
         <div style={{ flex: 1 }}>
           <input autoFocus aria-label={label} style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%' }}
@@ -159,15 +178,17 @@ export function DocField({ label, value, onSave, disabled, placeholder, typeLabe
 
 // ── Documentation Dropdown (single select from predefined list) ──
 
-export function DocDropdown({ label, value, options, onSave, disabled, placeholder, typeLabel }: {
+export function DocDropdown({ label, value, options, onSave, disabled, placeholder, typeLabel, required }: {
   label: string; value: string; options: string[]; onSave: (v: string) => void; disabled: boolean; placeholder: string;
   /** Optional mock-up field-type annotation (e.g. "Pick list"). */
   typeLabel?: string;
+  /** Flags the field with the "required to activate" dot. */
+  required?: boolean;
 }) {
   const [saved, setSaved] = useState(false);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}{required && <RequiredDot />}:</span>
       <select
         aria-label={label}
         value={value}
@@ -388,7 +409,7 @@ export function ControlsPicker({ selected, options, onChange, disabled, typeLabe
 //    legacy comma-joined *name* string (valueMode="name") so no data
 //    migration is needed. ──
 
-export function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, disabledHintLink, placeholder, orgId, typeLabel }: {
+export function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, disabledHintLink, placeholder, orgId, typeLabel, required }: {
   label: string;
   mode: 'single' | 'multi';
   valueMode: 'id' | 'name';
@@ -416,10 +437,12 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
   placeholder?: string;
   /** Optional mock-up field-type annotation (e.g. "Reference · People"). */
   typeLabel?: string;
+  /** Flags the field with the "required to activate" dot. */
+  required?: boolean;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}:</span>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}{required && <RequiredDot />}:</span>
       <div style={{ flex: 1, maxWidth: 320 }}>
         <PersonPicker
           mode={mode}
@@ -458,7 +481,7 @@ export function DocPersonField({ label, mode, valueMode, value, onChange, disabl
 // domain tags the field with a visible cross-domain marker. A legacy
 // free-text value that's in neither catalog is preserved as a selectable
 // option until the user re-picks.
-export function DocRoleField({ value, onSave, disabled, domain, label = 'Responsible Role', typeLabel }: {
+export function DocRoleField({ value, onSave, disabled, domain, label = 'Responsible Role', typeLabel, required }: {
   value: string;
   onSave: (v: string) => void;
   disabled: boolean;
@@ -468,6 +491,8 @@ export function DocRoleField({ value, onSave, disabled, domain, label = 'Respons
   label?: string;
   /** Optional mock-up field-type annotation (e.g. "Reference · Roles"). */
   typeLabel?: string;
+  /** Flags the field with the "required to activate" dot. */
+  required?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
   const govLabels = GOVERNANCE_ROLES.map((r) => r.label);
@@ -490,7 +515,7 @@ export function DocRoleField({ value, onSave, disabled, domain, label = 'Respons
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, flexWrap: 'wrap' }}>
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}{required && <RequiredDot />}:</span>
       <select
         aria-label={label}
         value={value}
@@ -541,15 +566,17 @@ export function DocRoleField({ value, onSave, disabled, domain, label = 'Respons
 
 // ── Documentation Multi-Select (chips with add dropdown) ──
 
-export function DocMultiSelect({ label, selected, options, onSave, disabled, placeholder, typeLabel }: {
+export function DocMultiSelect({ label, selected, options, onSave, disabled, placeholder, typeLabel, required }: {
   label: string; selected: string[]; options: string[]; onSave: (vals: string[]) => void; disabled: boolean; placeholder: string;
   /** Optional mock-up field-type annotation (e.g. "Multi-select"). */
   typeLabel?: string;
+  /** Flags the field with the "required to activate" dot. */
+  required?: boolean;
 }) {
   const available = options.filter((o) => !selected.includes(o));
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 2 }}>{label}:</span>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 2 }}>{label}{required && <RequiredDot />}:</span>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', flex: 1 }}>
         {selected.map((v) => (
           <span key={v} style={{
