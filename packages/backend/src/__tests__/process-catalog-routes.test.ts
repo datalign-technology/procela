@@ -281,6 +281,20 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       // Untouched fields stay put.
       assert.strictEqual(after.customerType, 'External');
     });
+
+    it('round-trips the new process fields on a process node', async () => {
+      const fields = {
+        businessRules: 'Tier-1 feeders escalate immediately.',
+        startPoint: 'A SCADA alarm is received.',
+        endPoint: 'A triaged incident is open in OMS.',
+        maturityLevel: 'Managed',
+        processDiagramUrl: 'https://wiki.example/outage-detect.svg',
+      };
+      const res = await request(port, 'PUT', `/process-catalog/nodes/${procId}`, fields);
+      assert.strictEqual(res.status, 200);
+      const node = processNodes.find((n: any) => n.id === procId);
+      for (const [k, v] of Object.entries(fields)) assert.strictEqual(node[k], v, `${k} persisted`);
+    });
   });
 
   describe('DELETE /nodes/:id — cascade', () => {

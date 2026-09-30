@@ -98,6 +98,12 @@ export interface ProcessNode {
   effectiveDate?: string;
   lastReviewedDate?: string;
   reviewCadence?: string;
+  // Enhanced process fields.
+  businessRules?: string;
+  startPoint?: string;
+  endPoint?: string;
+  maturityLevel?: string;
+  processDiagramUrl?: string;
   // Governance controls this activity implements or is subject to
   controlIds?: string[];
   // Change-management review workflow (only meaningful when the
@@ -194,6 +200,7 @@ export const RISK_OPTIONS = ['High', 'Medium', 'Low'];
 // Enhanced value-stream + cross-cutting record options.
 export const CUSTOMER_TYPE_OPTIONS = ['Internal', 'External', 'Both'];
 export const REVIEW_CADENCE_OPTIONS = ['Monthly', 'Quarterly', 'Annual', 'Biennial', 'As needed'];
+export const MATURITY_OPTIONS = ['Initial', 'Repeatable', 'Defined', 'Managed', 'Optimizing'];
 
 // What initiates an activity. Free-text under the hood (like Frequency /
 // Risk) with a suggested set so common triggers stay consistent.
