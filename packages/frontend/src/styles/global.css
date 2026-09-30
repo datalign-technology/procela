@@ -138,12 +138,15 @@ ol {
   --color-tier-silver: #9ca3af;
   --color-tier-gold: #d4a017;
 
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  /* IBM Plex (self-hosted via @fontsource, imported in main.tsx) matches the
+     "Process Catalog — Enhanced" mock-ups; the system stack stays as the
+     fallback while the woff2 loads or in an environment that blocks it. */
+  --font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans',
+    'Helvetica Neue', sans-serif;
 
-  --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, 'DejaVu Sans Mono',
-    Menlo, Consolas, monospace;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', SFMono-Regular, ui-monospace,
+    'DejaVu Sans Mono', Menlo, Consolas, monospace;
 
   --radius-sm: 3px;
   --radius-md: 6px;
