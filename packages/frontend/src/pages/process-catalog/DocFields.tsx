@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 import PersonPicker from '../../components/PersonPicker';
 import { GOVERNANCE_ROLES } from '../../types';
 import { inputStyle, ROLE_OPTIONS, type SystemRef, type SystemLink } from '../ProcessCatalogPage';
@@ -24,6 +25,57 @@ export function TypeTag({ children }: { children: React.ReactNode }) {
     >
       {children}
     </span>
+  );
+}
+
+// ── Calculated / rolled-up read-only field ──
+// The mock-ups render derived values (systems/roles rolled up from the
+// activities underneath, etc.) in a distinctly read-only way: a tinted,
+// non-editable box with a leading padlock, a "Calculated" type slot in place
+// of an editable field-type, and a caption stating the derivation. Presentation
+// only — it never writes. Pass `chips` for a set of values, or `text` for one.
+export function DocCalculated({ label, chips, text, caption, emptyText = 'None yet' }: {
+  label: string;
+  /** A set of derived values rendered as neutral chips. */
+  chips?: string[];
+  /** A single derived value (used when `chips` is absent). */
+  text?: string;
+  /** Short line stating how the value is derived. */
+  caption?: string;
+  /** Shown (italic, muted) when there is nothing to roll up. */
+  emptyText?: string;
+}) {
+  const hasChips = !!(chips && chips.length);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}:</span>
+      <div style={{ flex: 1, maxWidth: 420 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+          background: 'var(--color-calc-fill)', border: '1px solid var(--color-border-subtle)',
+          borderRadius: 8, padding: '6px 10px', minHeight: 26,
+        }}>
+          <Lock size={12} aria-hidden="true" style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+          {hasChips ? (
+            chips!.map((c) => (
+              <span key={c} style={{
+                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                borderRadius: 6, padding: '1px 7px', fontSize: 10, color: 'var(--color-text)',
+              }}>{c}</span>
+            ))
+          ) : text ? (
+            <span style={{ color: 'var(--color-text)' }}>{text}</span>
+          ) : (
+            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{emptyText}</span>
+          )}
+        </div>
+        {caption && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>{caption}</div>}
+      </div>
+      <TypeTag>
+        <Lock size={10} aria-hidden="true" style={{ verticalAlign: '-1px', marginRight: 3 }} />
+        Calculated
+      </TypeTag>
+    </div>
   );
 }
 
