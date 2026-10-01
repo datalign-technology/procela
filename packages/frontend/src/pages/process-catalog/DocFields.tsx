@@ -78,7 +78,14 @@ export function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, pla
   if (!editing || disabled) {
     return (
       <span {...clickable(() => { setDraft(value); setEditing(true); }, { label: 'Edit field', disabled })}
-        style={{ cursor: disabled ? 'default' : 'pointer', fontSize, fontWeight, opacity: disabled ? 0.7 : 1 }}
+        style={{
+          cursor: disabled ? 'default' : 'pointer', fontSize, fontWeight, opacity: disabled ? 0.7 : 1,
+          // The standard click-to-edit cue (shared with InlineCellEdit on the
+          // Systems / Glossary lists): a dashed underline marks an editable
+          // value. inline-block keeps a wrapped value to a single underline;
+          // locked fields drop it (they aren't editable).
+          ...(disabled ? {} : { display: 'inline-block', maxWidth: '100%', borderBottom: '1px dashed var(--color-border)' }),
+        }}
         title={disabled ? 'Locked — change status to Draft to edit' : 'Click to edit'}>
         {value || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{placeholder}</span>}
       </span>
