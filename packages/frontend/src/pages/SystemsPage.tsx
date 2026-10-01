@@ -1550,6 +1550,7 @@ export default function SystemsPage({
             emptyMessage="No systems match the current filters."
             pageSize={20}
             countNoun={['system', 'systems']}
+            onRowClick={(s) => setViewingSystemId(s.id)}
           />
         )}
       </div>

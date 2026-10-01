@@ -2285,6 +2285,7 @@ export default function DataAssetsPage({
             emptyMessage="No data assets match the current filters."
             pageSize={20}
             countNoun={['data asset', 'data assets']}
+            onRowClick={(a) => { void open360(a.id); }}
             expansion={{
               expandedIds: expandedAssetId ? new Set([expandedAssetId]) : new Set(),
               onToggleExpanded: toggleExpandColumns,
