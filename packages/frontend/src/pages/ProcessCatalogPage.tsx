@@ -1501,7 +1501,6 @@ export default function ProcessCatalogPage() {
               ⚠ {ownerless} unowned{showOwnerlessOnly ? ' ✕' : ''}
             </button>
           )}
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 4 }}>* = required · click a level to show / hide it</span>
           <button
             onClick={() => setShowLevelGuide(!showLevelGuide)}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--color-primary)', marginLeft: 'auto', padding: 0 }}
