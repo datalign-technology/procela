@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
+import { clickable } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
@@ -1138,7 +1139,7 @@ export default function PeoplePage() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <Avatar name={person.name} />
                               <span
-                                onClick={() => setPreviewPersonId(previewPersonId === person.id ? null : person.id)}
+                                {...clickable(() => setPreviewPersonId(previewPersonId === person.id ? null : person.id), { label: `Preview ${person.name}`, pressed: previewPersonId === person.id })}
                                 style={{ cursor: 'pointer', color: previewPersonId === person.id ? 'var(--color-primary)' : undefined }}
                               >
                                 {person.name}
