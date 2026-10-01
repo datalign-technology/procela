@@ -142,12 +142,13 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 12px', paddingLeft: 12 + depth * 22,
           borderBottom: '1px solid var(--color-border)',
-          background: isActive ? '#dbeafe' : isSelected ? '#f0f9ff' : undefined,
+          background: isActive ? 'var(--color-primary-light)' : isSelected ? 'var(--color-bg)' : undefined,
+          boxShadow: isActive ? 'inset 2px 0 0 var(--color-primary)' : undefined,
           transition: 'background 0.1s',
           minWidth: 0,
         }}
-        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
+        onMouseEnter={(e) => { if (!isSelected && !isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
+        onMouseLeave={(e) => { if (!isSelected && !isActive) e.currentTarget.style.background = ''; }}
       >
         {/* Selection checkbox — hidden for protected root org */}
         <input

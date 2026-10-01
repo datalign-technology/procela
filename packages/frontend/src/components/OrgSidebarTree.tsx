@@ -52,13 +52,13 @@ export default function OrgSidebarTree({ nodes, selectedId, onSelect, counts, no
       <div key={node.id}>
         <div
           {...clickable(() => onSelect(node.id), { label: `Select ${nounLabel} ${node.name}` })}
+          aria-current={isSelected ? 'true' : undefined}
           style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '4px 6px', paddingLeft: 6 + depth * 14,
-            fontSize: 12, borderRadius: 4, cursor: 'pointer',
-            fontWeight: isSelected ? 600 : 400,
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 10px', paddingLeft: 10 + depth * 18,
+            fontSize: 13, borderRadius: 6, cursor: 'pointer',
             background: isSelected ? 'var(--color-primary-light)' : 'transparent',
-            color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+            boxShadow: isSelected ? 'inset 2px 0 0 var(--color-primary)' : undefined,
           }}
           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
@@ -71,18 +71,18 @@ export default function OrgSidebarTree({ nodes, selectedId, onSelect, counts, no
               aria-expanded={isExpanded}
               onClick={(e) => toggle(node.id, e)}
               onKeyDown={activateOnKeyStop(() => toggle(node.id))}
-              style={{ width: 14, textAlign: 'center', fontSize: 8, color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0 }}
+              style={{ width: 12, textAlign: 'center', fontSize: 10, lineHeight: 1, color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0 }}
             >
               {isExpanded ? '▼' : '▶'}
             </span>
           ) : (
-            <span style={{ width: 14, flexShrink: 0 }} />
+            <span style={{ width: 12, flexShrink: 0 }} />
           )}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontWeight: 600, color: 'var(--color-text)' }}>
             {node.name}
           </span>
           {count > 0 && (
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{count}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', flexShrink: 0 }}>{count}</span>
           )}
         </div>
         {hasChildren && isExpanded && (
