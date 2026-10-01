@@ -555,10 +555,10 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         {/* Rolled up from the activities beneath this stream (read-only). */}
                         <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                         {/* Cross-cutting governance-lifecycle dates. */}
-                        <DocField label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
-                        <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review, e.g. 2026-06-30" />
+                        <DocField type="date" label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
+                        <DocField type="date" label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review, e.g. 2026-06-30" />
                         <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
-                        <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
+                        <DocField type="date" label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
                       </>
                     )}
                   </>
@@ -599,10 +599,10 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         {/* Rolled up from the activities beneath this process (read-only). */}
                         <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                         {/* Cross-cutting governance-lifecycle dates. */}
-                        <DocField label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
-                        <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
+                        <DocField type="date" label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
+                        <DocField type="date" label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
                         <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
-                        <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
+                        <DocField type="date" label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
                       </>
                     )}
                   </>
@@ -630,10 +630,10 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       {/* Rolled up from the activities beneath this sub-process (read-only). */}
                       <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                       {/* Cross-cutting governance-lifecycle dates. */}
-                      <DocField label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect" />
-                      <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
+                      <DocField type="date" label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect" />
+                      <DocField type="date" label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
                       <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
-                      <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date" />
+                      <DocField type="date" label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date" />
                     </>
                   )}
                 </>
@@ -724,7 +724,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                       <DocField label="Target / SLA" value={node.successMeasure || ''} onSave={(v) => onUpdate(node.id, { successMeasure: v })} disabled={isLocked} placeholder="Measurable target / SLA, e.g. resolve within 4h P95, 99.9% monthly" />
                       {/* Next review — forward-looking governance review date
                           (distinct from the status-review timestamp). */}
-                      <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next governance review date, e.g. 2026-12-31" />
+                      <DocField type="date" label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next governance review date, e.g. 2026-12-31" />
                       {/* Risk mitigation — free-text notes complementing the
                           Risk Level dropdown above. */}
                       <DocField label="Risk mitigation" value={node.riskMitigation || ''} onSave={(v) => onUpdate(node.id, { riskMitigation: v })} disabled={isLocked} placeholder="How the risk is mitigated — controls, compensations…" />

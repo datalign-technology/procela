@@ -101,10 +101,13 @@ export function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, pla
 
 // ── Documentation Field (label + inline edit in a compact row) ──
 
-export function DocField({ label, value, onSave, disabled, placeholder, required }: {
+export function DocField({ label, value, onSave, disabled, placeholder, required, type = 'text' }: {
   label: string; value: string; onSave: (v: string) => void; disabled: boolean; placeholder: string;
   /** Flags the field with the "required to activate" dot. */
   required?: boolean;
+  /** 'date' renders a native date picker — a calendar popup, with a standard
+   *  ISO `YYYY-MM-DD` value. Defaults to a free-text input. */
+  type?: 'text' | 'date';
 }) {
   const [draft, setDraft] = useState(value);
   const [focused, setFocused] = useState(false);
@@ -112,34 +115,51 @@ export function DocField({ label, value, onSave, disabled, placeholder, required
   // Keep the always-visible input in sync when the value changes outside this
   // field (another save, an external refresh) and we're not mid-edit.
   useEffect(() => { if (!focused) setDraft(value); }, [value, focused]);
-  const doSave = () => {
-    if (draft !== value) { onSave(draft); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+  const flashSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 1500); };
+  const doSave = () => { if (draft !== value) { onSave(draft); flashSaved(); } };
+  const isDate = type === 'date';
+  // A native <input type="date"> needs a bare YYYY-MM-DD; tolerate a stored ISO
+  // datetime by trimming to the date part (and ignore anything non-ISO).
+  const dateValue = isDate ? (/^\d{4}-\d{2}-\d{2}/.test(draft) ? draft.slice(0, 10) : '') : draft;
+  const fieldStyle: React.CSSProperties = {
+    ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%',
+    border: `1px solid ${saved ? '#22c55e' : 'var(--color-border)'}`,
+    background: saved ? '#f0fdf4' : (disabled ? 'var(--color-bg)' : 'var(--color-surface)'),
+    opacity: disabled ? 0.6 : 1, cursor: disabled ? 'default' : (isDate ? 'pointer' : 'text'),
   };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}{required && <RequiredDot />}:</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <input
-          aria-label={label}
-          value={draft}
-          placeholder={placeholder}
-          disabled={disabled}
-          onChange={(e) => setDraft(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => { setFocused(false); doSave(); }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { doSave(); (e.target as HTMLInputElement).blur(); }
-            if (e.key === 'Escape') { setDraft(value); (e.target as HTMLInputElement).blur(); }
-          }}
-          title={disabled ? 'Locked — change status to Draft to edit' : undefined}
-          style={{
-            ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%',
-            border: `1px solid ${saved ? '#22c55e' : 'var(--color-border)'}`,
-            background: saved ? '#f0fdf4' : (disabled ? 'var(--color-bg)' : 'var(--color-surface)'),
-            opacity: disabled ? 0.6 : 1, cursor: disabled ? 'default' : 'text',
-          }}
-        />
-        {focused && <div style={{ fontSize: 8, color: 'var(--color-text-muted)', marginTop: 1 }}>Enter to save &middot; Esc to cancel</div>}
+        {isDate ? (
+          <input
+            type="date"
+            aria-label={label}
+            value={dateValue}
+            disabled={disabled}
+            max="9999-12-31"
+            onChange={(e) => { const v = e.target.value; setDraft(v); if (v !== value) { onSave(v); flashSaved(); } }}
+            title={disabled ? 'Locked — change status to Draft to edit' : undefined}
+            style={{ ...fieldStyle, width: 'auto', maxWidth: 180 }}
+          />
+        ) : (
+          <input
+            aria-label={label}
+            value={draft}
+            placeholder={placeholder}
+            disabled={disabled}
+            onChange={(e) => setDraft(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => { setFocused(false); doSave(); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { doSave(); (e.target as HTMLInputElement).blur(); }
+              if (e.key === 'Escape') { setDraft(value); (e.target as HTMLInputElement).blur(); }
+            }}
+            title={disabled ? 'Locked — change status to Draft to edit' : undefined}
+            style={fieldStyle}
+          />
+        )}
+        {!isDate && focused && <div style={{ fontSize: 8, color: 'var(--color-text-muted)', marginTop: 1 }}>Enter to save &middot; Esc to cancel</div>}
       </div>
       {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
     </div>
