@@ -17,7 +17,7 @@ import {
 } from './DocFields';
 import DependenciesPanel from './DependenciesPanel';
 import DataElementsPanel from './DataElementsPanel';
-import ReadinessPanel, { requiredLabels } from './ReadinessPanel';
+import ReadinessPanel, { requiredLabels, requiredFields } from './ReadinessPanel';
 import ActivityFlowBoard from './ActivityFlowBoard';
 import IOPanel, { type AddMappingTarget } from './IOPanel';
 import {
@@ -127,7 +127,7 @@ function Wide({ children }: { children: React.ReactNode }) {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onMoveNode, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, connectionsBySystem, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope, detailMode }: {
+function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onMoveNode, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, connectionsBySystem, mappingsByStep, attachmentCountByNode, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, requireFieldsForActivation, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, nodeInScope, detailMode }: {
   node: ProcessNode; depth: number;
   /** The parent node's id, or null for a root (value-stream) row. Drag-to-
    *  reorder is constrained to siblings — a drop is only honoured when the
@@ -184,6 +184,10 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
   onRemoveMapping: (mappingId: string) => void;
   onRestoreMapping: (snapshot: MappingInfo) => void;
   statusMode: 'simple' | 'review' | 'advanced';
+  /** Per-tenant policy: when true, a node can't be set APPROVED/ACTIVE until
+   *  all its required-before-activation fields are filled (backend-enforced;
+   *  this gates the status picker to match). */
+  requireFieldsForActivation: boolean;
   siblingIndex: number;
   siblingCount: number;
   onReorder: (nodeId: string, direction: 'up' | 'down') => void;
@@ -354,10 +358,16 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
     warning = 'Processes need Activities';
   }
 
-  // Can this node be set to ACTIVE?
+  // Can this node be set to ACTIVE (and, in advanced mode, APPROVED)?
   const canBeActive = (() => {
-    if (node.level === 'VALUE_STREAM') return completeness?.complete ?? false;
-    if (node.level === 'PROCESS') return countByLevel(node, 'ACTIVITY') > 0;
+    // Structural gates (always on): a value stream needs a complete
+    // process→activity path; a process needs at least one activity.
+    const structuralOk = node.level === 'VALUE_STREAM' ? (completeness?.complete ?? false)
+      : node.level === 'PROCESS' ? countByLevel(node, 'ACTIVITY') > 0
+        : true;
+    if (!structuralOk) return false;
+    // Per-tenant policy: every required-before-activation field must be filled.
+    if (requireFieldsForActivation && !requiredFields(node).every((r) => r.filled)) return false;
     return true;
   })();
 
@@ -490,7 +500,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
               {/* Readiness — how many of this record's required fields are
                   filled, scored as a green "ready" bar / amber "active but
                   incomplete" / neutral draft-progress panel (mock-up parity). */}
-              <Wide><ReadinessPanel node={node} /></Wide>
+              <Wide><ReadinessPanel node={node} requireFieldsForActivation={requireFieldsForActivation} /></Wide>
               {/* Locked-state notice. When a node's status locks editing,
                   every field renders disabled with no explanation — so a
                   user opening it to make a change hits dead inputs and no
@@ -1405,6 +1415,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
           onRemoveMapping={onRemoveMapping}
           onRestoreMapping={onRestoreMapping}
           statusMode={statusMode}
+          requireFieldsForActivation={requireFieldsForActivation}
           agentExecByActivity={agentExecByActivity}
           onRunAgent={onRunAgent}
           onReviewExecution={onReviewExecution}

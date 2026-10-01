@@ -58,6 +58,7 @@ type PrismaOrgRow = {
   description: string | null;
   headCount: number;
   statusMode: string | null;
+  requireFieldsForActivation?: boolean | null;
   tenantSlug: string | null;
   brandDisplayName: string | null;
   brandGlyph: string | null;
@@ -87,6 +88,7 @@ function fromPrisma(r: PrismaOrgRow): StoredOrg {
     description: r.description ?? '',
     headCount: r.headCount,
     ...(r.statusMode ? { statusMode: r.statusMode.toLowerCase() as StoredOrg['statusMode'] } : {}),
+    ...(typeof r.requireFieldsForActivation === 'boolean' ? { requireFieldsForActivation: r.requireFieldsForActivation } : {}),
     ...(r.tenantSlug ? { tenantSlug: r.tenantSlug } : {}),
     ...(r.brandDisplayName ? { brandDisplayName: r.brandDisplayName } : {}),
     ...(r.brandGlyph ? { brandGlyph: r.brandGlyph } : {}),
@@ -130,6 +132,7 @@ function toPrismaData(row: StoredOrg): Record<string, unknown> {
     // statusMode: same case dance as type — Prisma enum wants
     // upper-case (SIMPLE / REVIEW / ADVANCED), JSON stores lower.
     ...(row.statusMode ? { statusMode: row.statusMode.toUpperCase() } : {}),
+    ...(row.requireFieldsForActivation !== undefined ? { requireFieldsForActivation: row.requireFieldsForActivation } : {}),
     tenantSlug: row.tenantSlug ?? null,
     brandDisplayName: row.brandDisplayName ?? null,
     brandGlyph: row.brandGlyph ?? null,

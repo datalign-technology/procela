@@ -624,6 +624,9 @@ export default function ProcessCatalogPage() {
   >(null);
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'review' | 'advanced'>('simple');
+  // Per-tenant policy: when true, a node can't go APPROVED/ACTIVE with required
+  // fields unfilled. Backend enforces it; this drives the matching UI gate.
+  const [requireFieldsForActivation, setRequireFieldsForActivation] = useState(false);
   const [showLevelGuide, setShowLevelGuide] = useState(false);
   // Simple / Advanced view mode — Simple is the default for newcomers
   // and hides the rarely-used per-level fields (Compliance, Frequency,
@@ -752,11 +755,12 @@ export default function ProcessCatalogPage() {
         setAgentExecByActivity(byActivity);
         setDamaAgentRoles((rolesRes.data || []).filter((r) => r.agentId).map((r) => ({ agentId: r.agentId!, agentName: r.agentName, roleType: r.roleType })));
       } catch { /* agent execution data is optional */ }
-      // Resolve org's statusMode
+      // Resolve org's statusMode + activation policy
       if (activeOrgId) {
         try {
-          const orgRes = await apiClient.get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`);
+          const orgRes = await apiClient.get<{ success: boolean; data: { statusMode?: string; requireFieldsForActivation?: boolean } }>(`/organizations/${activeOrgId}`);
           setStatusMode((orgRes.data?.statusMode as 'simple' | 'review' | 'advanced') || 'simple');
+          setRequireFieldsForActivation(!!orgRes.data?.requireFieldsForActivation);
         } catch { /* */ }
       }
     } catch { /* */ }
@@ -1533,9 +1537,6 @@ export default function ProcessCatalogPage() {
       {tree.length > 0 && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center' }}>
           <ExpandCollapseControls onExpandAll={expandAll} onCollapseAll={() => setExpanded(new Set())} />
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-            Click a step on the left to open its details. Optional levels can be added at any time.
-          </span>
         </div>
       )}
 
@@ -1777,6 +1778,7 @@ export default function ProcessCatalogPage() {
                   activePageOrgId={activeOrgId || ''}
                   onAddMapping={addMapping} onRemoveMapping={removeMapping} onRestoreMapping={restoreMapping}
                   statusMode={statusMode}
+                  requireFieldsForActivation={requireFieldsForActivation}
                   agentExecByActivity={agentExecByActivity}
                   onRunAgent={aiEnabled ? handleRunAgent : undefined}
                   onReviewExecution={handleReviewExecution} onPromoteExecution={handlePromoteExecution}

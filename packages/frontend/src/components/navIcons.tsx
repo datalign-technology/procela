@@ -113,13 +113,14 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M9.5 14.5 L14.5 14.5" />
     </NavSvg>
   ),
+  // Skills: an award ribbon — a medallion with a merit check, hanging on two
+  // ribbon tails. The standard competency / achievement metaphor, distinct from
+  // every other rail icon.
   '/skills': (
     <NavSvg>
-      <path d="M8.5 3 L7 9.5" />
-      <path d="M15.5 3 L17 9.5" />
-      <path d="M12 4.2 L10.5 8" />
-      <path d="M12 4.2 L13.5 8" />
-      <circle cx="12" cy="15" r="5.2" />
+      <circle cx="12" cy="9" r="5.5" />
+      <path d="M9.7 9 L11.2 10.5 L14.3 7.2" />
+      <path d="M9 13.5 L7.5 21 L12 18 L16.5 21 L15 13.5" />
     </NavSvg>
   ),
   '/data-assets': (
