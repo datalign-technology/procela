@@ -127,7 +127,9 @@ function InlineField({ label, value, field, personId, onSaved, canEdit = true }:
       <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{label}</div>
       <div
         {...clickable(() => { setDraft(value); setEditing(true); }, { label: `Edit ${label}` })}
-        style={{ fontSize: 13, cursor: 'pointer' }}
+        // Standard click-to-edit cue — a dashed underline marks the value as
+        // editable, matching the inline-edit affordance on the entity lists.
+        style={{ fontSize: 13, cursor: 'pointer', display: 'inline-block', maxWidth: '100%', borderBottom: '1px dashed var(--color-border)' }}
         title="Click to edit"
       >
         {value || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Click to set...</span>}
