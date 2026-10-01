@@ -419,7 +419,7 @@ export default function GovernanceCalendarPage() {
 
   const calendarColumns: DataTableColumn<CalendarEvent>[] = [
     {
-      key: 'name', header: 'Name', cellStyle: { fontWeight: 500, color: 'var(--color-primary)' },
+      key: 'name', header: 'Name', cellStyle: { fontWeight: 500 },
       render: (ev) => (
         <>
           {ev.name}

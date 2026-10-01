@@ -13,7 +13,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
-import { activateOnKey, activateOnKeyStop } from '../lib/a11y';
+import { activateOnKeyStop, clickable } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -330,11 +330,8 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
           cursor: 'pointer', transition: 'background 0.1s',
           minWidth: 0,
         }}
-        role="button"
-        tabIndex={0}
-        aria-label={`Select ${node.name}`}
-        onClick={() => onSelect(node.id)}
-        onKeyDown={activateOnKey(() => onSelect(node.id))}
+        {...clickable(() => onSelect(node.id), { label: `Select ${node.name}` })}
+        aria-current={isSelected ? 'true' : undefined}
         onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
       >

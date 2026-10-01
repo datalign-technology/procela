@@ -374,7 +374,7 @@ export default function GovernancePoliciesPage() {
       render: (pol: Policy) => pol.code,
     },
     policyCols.isVisible('name') && {
-      key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500, color: 'var(--color-primary)' },
+      key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500 },
       render: (pol: Policy) => {
         const docType = pol.documentType || 'POLICY';
         const promo = promotionsByPolicy[pol.id];

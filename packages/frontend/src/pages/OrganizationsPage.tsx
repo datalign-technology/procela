@@ -26,7 +26,7 @@ import { useToastStore } from '../stores/toastStore';
 // Lazy: only renders when the user opens the connection picker.
 const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 import { SkeletonRows } from '../components/Skeleton';
-import { activateOnKey, clickable } from '../lib/a11y';
+import { activateOnKeyStop, clickable } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 // ── Types ──
@@ -138,13 +138,15 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
   return (
     <div>
       <div
+        {...clickable(() => onSelect(node.id), { label: `View ${node.name}` })}
+        aria-current={isActive ? 'true' : undefined}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 12px', paddingLeft: 12 + depth * 22,
           borderBottom: '1px solid var(--color-border)',
           background: isActive ? 'var(--color-primary-light)' : isSelected ? 'var(--color-bg)' : undefined,
           boxShadow: isActive ? 'inset 2px 0 0 var(--color-primary)' : undefined,
-          transition: 'background 0.1s',
+          transition: 'background 0.1s', cursor: 'pointer',
           minWidth: 0,
         }}
         onMouseEnter={(e) => { if (!isSelected && !isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -154,26 +156,22 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
         <input
           type="checkbox"
           checked={isSelected}
+          onClick={(e) => e.stopPropagation()}
           onChange={() => toggleSelect(node.id)}
           disabled={isRoot || !canEdit}
           title={isRoot ? 'Cannot select the root organization' : !canEdit ? 'Read-only' : 'Select for bulk delete'}
           style={{ flexShrink: 0, width: 14, height: 14, cursor: isRoot || !canEdit ? 'not-allowed' : 'pointer', opacity: isRoot ? 0 : 1 }}
         />
         <span
-          onClick={() => { if (hasChildren) toggleExpand(node.id); }}
-          {...(hasChildren ? { role: 'button', tabIndex: 0, 'aria-label': isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`, 'aria-expanded': isExpanded, onKeyDown: activateOnKey(() => toggleExpand(node.id)) } : {})}
+          onClick={(e) => { e.stopPropagation(); if (hasChildren) toggleExpand(node.id); }}
+          {...(hasChildren ? { role: 'button', tabIndex: 0, 'aria-label': isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`, 'aria-expanded': isExpanded, onKeyDown: activateOnKeyStop(() => toggleExpand(node.id)) } : {})}
           style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none', flexShrink: 0 }}>
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span
-              role="button"
-              tabIndex={0}
-              aria-label={`View ${node.name}`}
-              onClick={(e) => { e.stopPropagation(); onSelect(node.id); }}
-              onKeyDown={activateOnKey(() => onSelect(node.id))}
-              style={{ fontWeight: 500, fontSize: 13, cursor: 'pointer', color: isActive ? 'var(--color-primary)' : undefined }}>{node.name}</span>
+              style={{ fontWeight: 500, fontSize: 13, color: isActive ? 'var(--color-primary)' : undefined }}>{node.name}</span>
             <span style={typeBadge(node.type)}>{node.type}</span>
             {node.industry && (
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>

@@ -5,6 +5,7 @@ import PageHeader from '../components/PageHeader';
 import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import OrgSidebarTree, { type OrgTreeNode } from '../components/OrgSidebarTree';
+import { clickable } from '../lib/a11y';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Button from '../components/Button';
@@ -466,7 +467,7 @@ export default function AgentsPage() {
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span
-              onClick={() => toggleAgentExpanded(a.id)}
+              {...clickable(() => toggleAgentExpanded(a.id), { label: `Expand ${a.name}` })}
               title={a.description || undefined}
               style={{ cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
             >
