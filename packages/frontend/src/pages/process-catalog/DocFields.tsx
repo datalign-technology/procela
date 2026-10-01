@@ -24,10 +24,10 @@ export function RequiredDot() {
 // ── Calculated / rolled-up read-only field ──
 // The mock-ups render derived values (systems/roles rolled up from the
 // activities underneath, etc.) in a distinctly read-only way: a tinted,
-// non-editable box with a leading padlock, a "Calculated" type slot in place
-// of an editable field-type, and a caption stating the derivation. Presentation
-// only — it never writes. Pass `chips` for a set of values, or `text` for one.
-export function DocCalculated({ label, chips, text, caption, emptyText = 'None yet', required }: {
+// non-editable box with a leading padlock in place of an editable field-type.
+// Presentation only — it never writes. Pass `chips` for a set of values, or
+// `text` for one.
+export function DocCalculated({ label, chips, text, emptyText = 'None yet', required }: {
   label: string;
   /** Accepted for prop-shape parity with the editable fields; calculated
    *  fields are never required, so this is effectively always false. */
@@ -36,8 +36,6 @@ export function DocCalculated({ label, chips, text, caption, emptyText = 'None y
   chips?: string[];
   /** A single derived value (used when `chips` is absent). */
   text?: string;
-  /** Short line stating how the value is derived. */
-  caption?: string;
   /** Shown (italic, muted) when there is nothing to roll up. */
   emptyText?: string;
 }) {
@@ -65,7 +63,6 @@ export function DocCalculated({ label, chips, text, caption, emptyText = 'None y
             <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{emptyText}</span>
           )}
         </div>
-        {caption && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>{caption}</div>}
       </div>
     </div>
   );
@@ -109,41 +106,42 @@ export function DocField({ label, value, onSave, disabled, placeholder, required
   /** Flags the field with the "required to activate" dot. */
   required?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [focused, setFocused] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Keep the always-visible input in sync when the value changes outside this
+  // field (another save, an external refresh) and we're not mid-edit.
+  useEffect(() => { if (!focused) setDraft(value); }, [value, focused]);
   const doSave = () => {
     if (draft !== value) { onSave(draft); setSaved(true); setTimeout(() => setSaved(false), 1500); }
-    setEditing(false);
   };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}{required && <RequiredDot />}:</span>
-      {editing && !disabled ? (
-        <div style={{ flex: 1 }}>
-          <input autoFocus aria-label={label} style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%' }}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={doSave}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') doSave();
-              if (e.key === 'Escape') setEditing(false);
-            }}
-          />
-          <div style={{ fontSize: 8, color: 'var(--color-text-muted)', marginTop: 1 }}>Enter to save &middot; Esc to cancel</div>
-        </div>
-      ) : (
-        <>
-          <span
-            {...clickable(() => { setDraft(value); setEditing(true); }, { label: `Edit ${label}`, disabled })}
-            style={{ cursor: disabled ? 'default' : 'pointer', color: value ? 'var(--color-text)' : 'var(--color-text-muted)', fontStyle: value ? 'normal' : 'italic', opacity: disabled ? 0.6 : 1 }}
-            title={disabled ? 'Locked' : 'Click to edit'}
-          >
-            {value || placeholder}
-          </span>
-          {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
-        </>
-      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <input
+          aria-label={label}
+          value={draft}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => { setFocused(false); doSave(); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { doSave(); (e.target as HTMLInputElement).blur(); }
+            if (e.key === 'Escape') { setDraft(value); (e.target as HTMLInputElement).blur(); }
+          }}
+          title={disabled ? 'Locked — change status to Draft to edit' : undefined}
+          style={{
+            ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%',
+            border: `1px solid ${saved ? '#22c55e' : 'var(--color-border)'}`,
+            background: saved ? '#f0fdf4' : (disabled ? 'var(--color-bg)' : 'var(--color-surface)'),
+            opacity: disabled ? 0.6 : 1, cursor: disabled ? 'default' : 'text',
+          }}
+        />
+        {focused && <div style={{ fontSize: 8, color: 'var(--color-text-muted)', marginTop: 1 }}>Enter to save &middot; Esc to cancel</div>}
+      </div>
+      {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
     </div>
   );
 }
