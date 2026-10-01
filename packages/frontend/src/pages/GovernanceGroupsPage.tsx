@@ -1033,7 +1033,7 @@ export default function GovernanceGroupsPage() {
           "Customer Data Stewardship Team") aren't truncated. It floors
           at 460px so action icons stay reachable on smaller laptops
           and caps at 640px so the detail pane keeps room to breathe. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(460px, 640px) 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) minmax(0, 1fr)', gap: 16 }}>
         {/* Left Panel — Tree View */}
         <Card padding={0} shadow="none" style={{ alignSelf: 'start' }}>
           {/* Tree toolbar */}

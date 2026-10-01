@@ -777,9 +777,10 @@ export default function DataDomainsPage() {
           action={{ label: 'Add Domain', onClick: openAdd }}
           secondaryAction={canWrite && aiEnabled ? { label: 'Generate from Industry', onClick: handleGenerate, variant: 'secondary' } : undefined} />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(460px, 640px) 1fr', gap: 16, alignItems: 'start' }}>
-          {/* Left: Domain index — width matches the Governance Groups tree
-              column (minmax(460px, 640px)) so the two pages line up. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+          {/* Left: Domain index — a compact master rail (narrow index + wide
+              detail), matching the Process Catalog's two-pane proportions so
+              every master-detail page reads the same. */}
           <Card padding={0} shadow="none" style={{ overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
               <input aria-label="Search domains" style={{ ...inputStyle, fontSize: 12, padding: '6px 10px' }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -834,16 +835,16 @@ export default function DataDomainsPage() {
                 const isCollapsed = collapsedIds.has(d.id);
                 return (
                   <div key={d.id} {...clickable(() => openDetail(d), { label: `Open domain ${d.name}` })} style={{
-                    padding: '10px 12px', paddingLeft: isSub ? 30 : 12, cursor: 'pointer',
+                    padding: '6px 10px', paddingLeft: isSub ? 28 : 10, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 8,
-                    // Selected tints use the teal brand token (matches DataTable
-                    // and every other selected row); active is the full primary-
-                    // light, bulk-checked a fainter wash so the two levels still
-                    // read. (Were off-brand blues #dbeafe/#f0f9ff, which clashed
-                    // with the teal left-border on the same row.)
+                    // Selected-row treatment matches the Process Catalog nav and
+                    // the Organizations tree: brand tint + a 2px inset left accent
+                    // bar (not a layout-shifting border). Active is the full
+                    // primary-light; bulk-checked a fainter wash so the two levels
+                    // still read.
                     background: isActive ? 'var(--color-primary-light)' : isChecked ? 'color-mix(in srgb, var(--color-primary-light) 45%, transparent)' : 'transparent',
                     borderBottom: '1px solid var(--color-border)',
-                    borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
+                    boxShadow: isActive ? 'inset 2px 0 0 var(--color-primary)' : undefined,
                     transition: 'background 0.1s',
                   }}
                     onMouseEnter={(e) => { if (!isActive && !isChecked) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -881,7 +882,7 @@ export default function DataDomainsPage() {
                     )}
                     <TruncatedText
                       text={d.name}
-                      style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: isActive ? 600 : 400 }}
+                      style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}
                     />
                     {/* Governance signal chips: sub-domain count on parents,
                         master/reference-data markers. Kept compact to preserve
