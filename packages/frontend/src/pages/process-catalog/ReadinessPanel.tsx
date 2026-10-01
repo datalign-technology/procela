@@ -70,7 +70,7 @@ export function requiredLabels(node: ProcessNode): Set<string> {
   return new Set(requiredFields(node).map((r) => r.label));
 }
 
-export default function ReadinessPanel({ node }: { node: ProcessNode }) {
+export default function ReadinessPanel({ node, requireFieldsForActivation = false }: { node: ProcessNode; requireFieldsForActivation?: boolean }) {
   const reqs = requiredFields(node);
   const total = reqs.length;
   if (total === 0) return null;
@@ -130,7 +130,9 @@ export default function ReadinessPanel({ node }: { node: ProcessNode }) {
       </div>
       {!amber && (
         <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
-          Activate is enabled once every required field is filled in.
+          {requireFieldsForActivation
+            ? 'Activation is enabled once every required field is filled in.'
+            : 'These fields are recommended before activation.'}
         </span>
       )}
       {missing.length > 0 && (

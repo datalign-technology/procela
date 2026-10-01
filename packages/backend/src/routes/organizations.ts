@@ -27,6 +27,9 @@ export interface StoredOrg {
   description: string;
   headCount: number;
   statusMode?: 'simple' | 'review' | 'advanced';
+  /** When true, process-catalog nodes cannot go APPROVED/ACTIVE with required
+   *  fields unfilled (per-tenant governance policy). Default false = advisory. */
+  requireFieldsForActivation?: boolean;
   // ── SSO white-labeling ─────────────────────────────────────────
   // Only meaningful on company-level orgs. Populated when a
   // customer runs Procela under their own subdomain / tenant slug
@@ -127,6 +130,7 @@ const organizationRowSchema = z.object({
   description: z.string().default(''),
   headCount: z.number().default(0),
   statusMode: z.enum(['simple', 'review', 'advanced']).optional(),
+  requireFieldsForActivation: z.boolean().optional(),
   tenantSlug: z.string().optional(),
   brandDisplayName: z.string().optional(),
   brandGlyph: z.string().optional(),
@@ -432,7 +436,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
   }
-  const { statusMode, tenantSlug, brandDisplayName, brandGlyph, ssoButtonLabel, brandPrimaryColor } = req.body;
+  const { statusMode, requireFieldsForActivation, tenantSlug, brandDisplayName, brandGlyph, ssoButtonLabel, brandPrimaryColor } = req.body;
   if (name !== undefined) org.name = name;
   if (parentId !== undefined) org.parentId = parentId;
   if (type !== undefined) org.type = type;
@@ -440,6 +444,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
   if (description !== undefined) org.description = description;
   if (headCount !== undefined) org.headCount = headCount;
   if (statusMode !== undefined && (statusMode === 'simple' || statusMode === 'review' || statusMode === 'advanced')) org.statusMode = statusMode;
+  if (requireFieldsForActivation !== undefined) org.requireFieldsForActivation = !!requireFieldsForActivation;
 
   // ── SSO white-labeling ──
   if (tenantSlug !== undefined) {

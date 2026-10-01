@@ -126,13 +126,29 @@ export default function SettingsPage() {
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [confirmLifecycle, setConfirmLifecycle] = useState<'simple' | 'review' | 'advanced' | null>(null);
   const [lifecycleMigrationMsg, setLifecycleMigrationMsg] = useState<string | null>(null);
+  // Per-tenant policy: require all fields before a node can be activated.
+  const [requireFields, setRequireFields] = useState(false);
+  const [requireFieldsBusy, setRequireFieldsBusy] = useState(false);
   useEffect(() => {
     if (!activeOrgId) return;
     apiClient
-      .get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`)
-      .then((res) => setLifecycleMode((res.data?.statusMode as 'simple' | 'review' | 'advanced') || 'simple'))
+      .get<{ success: boolean; data: { statusMode?: string; requireFieldsForActivation?: boolean } }>(`/organizations/${activeOrgId}`)
+      .then((res) => {
+        setLifecycleMode((res.data?.statusMode as 'simple' | 'review' | 'advanced') || 'simple');
+        setRequireFields(!!res.data?.requireFieldsForActivation);
+      })
       .catch(() => { /* leave default */ });
   }, [activeOrgId]);
+  const applyRequireFields = async (next: boolean) => {
+    if (!activeOrgId || requireFieldsBusy) return;
+    setRequireFieldsBusy(true);
+    const prev = requireFields;
+    setRequireFields(next); // optimistic
+    try {
+      await apiClient.put(`/organizations/${activeOrgId}`, { requireFieldsForActivation: next });
+    } catch { setRequireFields(prev); /* toast handled by client */ }
+    finally { setRequireFieldsBusy(false); }
+  };
   const applyLifecycle = async (newMode: 'simple' | 'review' | 'advanced') => {
     if (!activeOrgId || lifecycleBusy) return;
     setLifecycleBusy(true);
@@ -538,6 +554,27 @@ export default function SettingsPage() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Activation policy — require every readiness field before a node can
+            be signed off / made live. Off by default (advisory read-out). */}
+        <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 16, paddingTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SectionLabel marginBottom={4}>Activation policy</SectionLabel>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
+              Require every <strong>required-before-activation</strong> field to be filled before a value stream, process, sub-process or activity can be moved to {lifecycleMode === 'advanced' ? 'Approved or Active' : 'Active'}. When off, activation is allowed and any missing fields are shown as an advisory read-out.
+            </p>
+          </div>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0, cursor: activeOrgId ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 500 }}>
+            <input
+              type="checkbox"
+              checked={requireFields}
+              disabled={!activeOrgId || requireFieldsBusy}
+              onChange={(e) => applyRequireFields(e.target.checked)}
+              style={{ width: 15, height: 15, cursor: activeOrgId ? 'pointer' : 'not-allowed' }}
+            />
+            {requireFields ? 'Enforced' : 'Advisory'}
+          </label>
         </div>
       </Card>
 

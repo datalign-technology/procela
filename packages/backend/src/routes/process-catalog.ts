@@ -16,6 +16,7 @@ import { getGovernanceControlsRepository } from '../db/governance-controls.repo'
 import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { hasDatabase } from '../db/prisma';
 import { getVisibleOrgScope, getAncestorOrgIds, getCachedOrgList } from '../lib/org-scope';
+import { missingRequiredFields } from '../lib/node-readiness';
 import { scopeListForRequest, assertOrgAccessAny } from '../lib/tenant-scope';
 import { auditService } from '../services/audit.service';
 // data-assets and mappings both import from this file, so adding the
@@ -1466,6 +1467,32 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
         error: `Cannot transition from ${node.status.replace('_', ' ')} to ${status.replace('_', ' ')}. Valid transitions: ${allowed.map((s: string) => s.replace('_', ' ')).join(', ') || 'none'}.`,
       });
       return;
+    }
+    // Per-tenant policy (requireFieldsForActivation): a node cannot be signed
+    // off (APPROVED) or made live (ACTIVE) while any required-before-activation
+    // field is still empty. Default-off tenants skip this entirely (readiness
+    // stays an advisory read-out). Resolved up the org tree so a company-level
+    // policy governs its child orgs too — matching how the catalog UI reads it
+    // from the selected (company) org.
+    const activationPolicyOn = (() => {
+      if (status !== 'ACTIVE' && status !== 'APPROVED') return false;
+      const policyOrgIds = new Set<string>([node.orgId]);
+      const ancestors = getAncestorOrgIds(node.orgId);
+      if (ancestors) ancestors.forEach((id) => policyOrgIds.add(id));
+      return getCachedOrgList().some(
+        (o) => policyOrgIds.has(o.id) && (o as { requireFieldsForActivation?: boolean }).requireFieldsForActivation,
+      );
+    })();
+    if (activationPolicyOn) {
+      const missing = missingRequiredFields(node);
+      if (missing.length > 0) {
+        res.status(400).json({
+          success: false,
+          error: `Cannot set "${node.name}" to ${status.replace('_', ' ')} — ${missing.length} required field${missing.length === 1 ? '' : 's'} missing: ${missing.join(', ')}.`,
+          missingFields: missing,
+        });
+        return;
+      }
     }
     // Status is changing — create a version snapshot before applying the change
     const existingVersions = (await processVersionsRepo.list()).filter((v) => v.nodeId === node.id);

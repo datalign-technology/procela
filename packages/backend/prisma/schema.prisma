@@ -98,6 +98,12 @@ model Organization {
   description              String?    @db.Text
   headCount                Int        @default(0)
   statusMode               StatusMode @default(SIMPLE)
+  // Per-tenant governance policy: when true, a process-catalog node (value
+  // stream / process / sub-process / activity) cannot be moved to APPROVED or
+  // ACTIVE until all of its "required before activation" fields are filled.
+  // Default false keeps the shipped advisory behaviour (readiness is a coverage
+  // read-out, not a gate). Resolved like statusMode.
+  requireFieldsForActivation Boolean  @default(false)
   // Branding fields kept flat rather than under a `branding Json?`
   // blob so tenantSlug can be uniquely indexed for tenant lookup.
   tenantSlug               String?    @unique
