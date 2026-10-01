@@ -839,6 +839,7 @@ export default function AgentsPage() {
             expansion={{
               expandedIds: expandedAgentIds,
               onToggleExpanded: toggleAgentExpanded,
+              trigger: 'row-click',
               renderExpandedRow: (a) => {
                 const roles = agentRoles.filter((r) => r.agentId === a.id);
                 const execs = agentExecutions.filter((e) => e.agentId === a.id);

@@ -754,6 +754,7 @@ export default function DecisionRightsPage() {
                 expansion={{
                   expandedIds,
                   onToggleExpanded: toggleExpand,
+                  trigger: 'row-click',
                   renderExpandedRow: (r) => (
                     <div style={{ padding: '12px 18px 16px' }}>
                       <ExpandedRaciDetails

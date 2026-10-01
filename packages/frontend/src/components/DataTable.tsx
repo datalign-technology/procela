@@ -94,6 +94,16 @@ interface DataTableProps<T> {
   selectAllLabel?: string;
   /** Enable expandable detail rows with a leading caret column. */
   expansion?: DataTableExpansion<T>;
+  /** Whole-row click opens the row's primary detail (a modal / viewer). The
+   *  whole `<tr>` becomes a pointer target, matching the catalog-nav and
+   *  management-tree rows (click the row to open it). Clicks that originate
+   *  from an interactive descendant — button, link, input, select, textarea,
+   *  label, or `[role="button"]` — are ignored, so the row's own controls
+   *  (the name link, inline-edit selects, the action icons) keep their
+   *  behaviour without each needing to `stopPropagation`. Coexists with
+   *  `expansion`: the caret is a button, so it never triggers this. Keyboard
+   *  users reach the detail through the focusable name control in the row. */
+  onRowClick?: (row: T) => void;
   /** Rows rendered before a "Load more" footer appears. Long lists cap the
    *  DOM at this many rows and reveal the rest on demand; small lists (≤ this)
    *  render in full with no footer. Default 50; pass `false` to never
@@ -115,6 +125,7 @@ export default function DataTable<T>({
   emptyMessage,
   selectAllLabel = 'Select all rows',
   expansion,
+  onRowClick,
   pageSize = 50,
   countNoun,
 }: DataTableProps<T>) {
@@ -181,13 +192,29 @@ export default function DataTable<T>({
             const isSelected = selection?.isSelected(id) ?? false;
             const canExpand = expansion ? (expansion.getRowExpandable?.(row) ?? true) : false;
             const isExpanded = canExpand && (expansion?.expandedIds.has(id) ?? false);
-            const rowClick = expansion?.trigger === 'row-click' && canExpand;
+            const rowClickExpand = expansion?.trigger === 'row-click' && canExpand;
+            // One row-level click handler shared by both whole-row behaviours:
+            // `onRowClick` (open the row's detail) takes precedence, otherwise
+            // expansion row-click toggles the detail row. Either way a single
+            // guard ignores clicks that originate from an interactive
+            // descendant, so the row's own controls keep working without each
+            // needing to `stopPropagation`. `stopCellProp` keeps the owned
+            // caret / checkbox cells from bubbling a click up to the row.
+            const rowOnClick: ((e: React.MouseEvent) => void) | undefined =
+              onRowClick || rowClickExpand
+                ? (e) => {
+                    if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, [role="button"]')) return;
+                    if (onRowClick) onRowClick(row);
+                    else expansion!.onToggleExpanded(id);
+                  }
+                : undefined;
+            const stopCellProp = rowClickExpand || !!onRowClick;
             return (
               <React.Fragment key={id}>
                 <tr
                   id={rowId?.(row)}
-                  onClick={rowClick ? () => expansion!.onToggleExpanded(id) : undefined}
-                  style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '', cursor: rowClick ? 'pointer' : undefined }}
+                  onClick={rowOnClick}
+                  style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '', cursor: rowOnClick ? 'pointer' : undefined }}
                   onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
                   onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
                 >
@@ -198,7 +225,7 @@ export default function DataTable<T>({
                           type="button"
                           aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
                           aria-expanded={isExpanded}
-                          onClick={(e) => { if (rowClick) e.stopPropagation(); expansion.onToggleExpanded(id); }}
+                          onClick={(e) => { if (stopCellProp) e.stopPropagation(); expansion.onToggleExpanded(id); }}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 10, lineHeight: 1, padding: 4 }}
                         >
                           {isExpanded ? '▼' : '▶'}
@@ -209,7 +236,7 @@ export default function DataTable<T>({
                   {selection && (
                     <td
                       style={{ ...tdStyle, textAlign: 'center', width: 32 }}
-                      onClick={rowClick ? (e) => e.stopPropagation() : undefined}
+                      onClick={stopCellProp ? (e) => e.stopPropagation() : undefined}
                     >
                       <input
                         type="checkbox"
