@@ -537,8 +537,8 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         operational. (Purpose absorbed the former separate
                         "Business Outcome" field — one field for what this
                         accomplishes and the value it delivers.) */}
-                    <DocField label="Purpose" required={reqLabels.has('Purpose')} typeLabel="Long text" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What this accomplishes and the value it delivers…" />
-                    <DocPersonField label="Owner" required={reqLabels.has('Owner')} typeLabel="Reference · People" orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    <DocField label="Purpose" required={reqLabels.has('Purpose')} value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What this accomplishes and the value it delivers…" />
+                    <DocPersonField label="Owner" required={reqLabels.has('Owner')} orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     {/* Stakeholders removed: the RACI Matrix is the
                         structured home for who's responsible / accountable /
                         consulted / informed. A parallel free-text field just
@@ -546,20 +546,20 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         record, just no longer edited from this panel. */}
                     {viewMode === 'advanced' && (
                       <>
-                        <DocMultiSelect label="Compliance" typeLabel="Multi-select · Regulations" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                        <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                         {/* Enhanced value-stream record fields (Process Catalog spec). */}
-                        <DocField label="Value proposition" required={reqLabels.has('Value proposition')} typeLabel="Long text" value={node.valueProposition || ''} onSave={(v) => onUpdate(node.id, { valueProposition: v })} disabled={isLocked} placeholder="The value this stream delivers, in the customer's terms…" />
-                        <DocDropdown label="Customer type" required={reqLabels.has('Customer type')} typeLabel="Pick list" value={node.customerType || ''} options={CUSTOMER_TYPE_OPTIONS} onSave={(v) => onUpdate(node.id, { customerType: v })} disabled={isLocked} placeholder="Internal / External / Both" />
-                        <DocField label="Executive sponsor" required={reqLabels.has('Executive sponsor')} typeLabel="Short text" value={node.executiveSponsor || ''} onSave={(v) => onUpdate(node.id, { executiveSponsor: v })} disabled={isLocked} placeholder="Name / title of the accountable executive" />
-                        <DocField label="Business capabilities" typeLabel="Long text" value={node.businessCapabilities || ''} onSave={(v) => onUpdate(node.id, { businessCapabilities: v })} disabled={isLocked} placeholder="Capabilities this stream realises" />
-                        <DocField label="End state" required={reqLabels.has('End state')} typeLabel="Long text" value={node.endState || ''} onSave={(v) => onUpdate(node.id, { endState: v })} disabled={isLocked} placeholder="The desired end state this stream drives toward" />
+                        <DocField label="Value proposition" required={reqLabels.has('Value proposition')} value={node.valueProposition || ''} onSave={(v) => onUpdate(node.id, { valueProposition: v })} disabled={isLocked} placeholder="The value this stream delivers, in the customer's terms…" />
+                        <DocDropdown label="Customer type" required={reqLabels.has('Customer type')} value={node.customerType || ''} options={CUSTOMER_TYPE_OPTIONS} onSave={(v) => onUpdate(node.id, { customerType: v })} disabled={isLocked} placeholder="Internal / External / Both" />
+                        <DocField label="Executive sponsor" required={reqLabels.has('Executive sponsor')} value={node.executiveSponsor || ''} onSave={(v) => onUpdate(node.id, { executiveSponsor: v })} disabled={isLocked} placeholder="Name / title of the accountable executive" />
+                        <DocField label="Business capabilities" value={node.businessCapabilities || ''} onSave={(v) => onUpdate(node.id, { businessCapabilities: v })} disabled={isLocked} placeholder="Capabilities this stream realises" />
+                        <DocField label="End state" required={reqLabels.has('End state')} value={node.endState || ''} onSave={(v) => onUpdate(node.id, { endState: v })} disabled={isLocked} placeholder="The desired end state this stream drives toward" />
                         {/* Rolled up from the activities beneath this stream (read-only). */}
                         <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                         {/* Cross-cutting governance-lifecycle dates. */}
-                        <DocField label="Effective date" required={reqLabels.has('Effective date')} typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
-                        <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review, e.g. 2026-06-30" />
-                        <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} typeLabel="Pick list" value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
-                        <DocField label="Next review" typeLabel="Date" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
+                        <DocField label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
+                        <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review, e.g. 2026-06-30" />
+                        <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
+                        <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
                       </>
                     )}
                   </>
@@ -578,8 +578,8 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         Sub-Process / Activity / Task levels keep
                         Owner-first since they're execution units
                         without a strategic purpose of their own. */}
-                    <DocField label="Purpose" required={reqLabels.has('Purpose')} typeLabel="Long text" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                    <DocPersonField label="Owner" required={reqLabels.has('Owner')} typeLabel="Reference · People" orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    <DocField label="Purpose" required={reqLabels.has('Purpose')} value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
+                    <DocPersonField label="Owner" required={reqLabels.has('Owner')} orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     {/* Stakeholders is not edited here. The RACI Matrix is
                         the structured home for who-needs-to-be-responsible /
                         accountable / consulted / informed; a parallel
@@ -588,22 +588,22 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         values stay on the record. */}
                     {viewMode === 'advanced' && (
                       <>
-                        <DocMultiSelect label="Compliance" typeLabel="Multi-select · Regulations" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
-                        <DocDropdown label="Frequency" required={reqLabels.has('Frequency')} typeLabel="Pick list" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
-                        <DocDropdown label="Risk Level" typeLabel="Pick list" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
+                        <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={complianceFrameworks} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                        <DocDropdown label="Frequency" required={reqLabels.has('Frequency')} value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
+                        <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
                         {/* Enhanced process record fields (Process Catalog spec). */}
-                        <DocField label="Start point" required={reqLabels.has('Start point')} typeLabel="Short text" value={node.startPoint || ''} onSave={(v) => onUpdate(node.id, { startPoint: v })} disabled={isLocked} placeholder="What starts this process (its trigger / entry point)" />
-                        <DocField label="End point" required={reqLabels.has('End point')} typeLabel="Short text" value={node.endPoint || ''} onSave={(v) => onUpdate(node.id, { endPoint: v })} disabled={isLocked} placeholder="Where this process ends (its exit point)" />
-                        <DocDropdown label="Maturity level" typeLabel="Pick list · 1–5" value={node.maturityLevel || ''} options={MATURITY_OPTIONS} onSave={(v) => onUpdate(node.id, { maturityLevel: v })} disabled={isLocked} placeholder="Process maturity" />
-                        <DocField label="Business rules" typeLabel="Long text" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this process runs" />
-                        <DocField label="Process diagram" typeLabel="File or URL" value={node.processDiagramUrl || ''} onSave={(v) => onUpdate(node.id, { processDiagramUrl: v })} disabled={isLocked} placeholder="Link or file path to the process diagram" />
+                        <DocField label="Start point" required={reqLabels.has('Start point')} value={node.startPoint || ''} onSave={(v) => onUpdate(node.id, { startPoint: v })} disabled={isLocked} placeholder="What starts this process (its trigger / entry point)" />
+                        <DocField label="End point" required={reqLabels.has('End point')} value={node.endPoint || ''} onSave={(v) => onUpdate(node.id, { endPoint: v })} disabled={isLocked} placeholder="Where this process ends (its exit point)" />
+                        <DocDropdown label="Maturity level" value={node.maturityLevel || ''} options={MATURITY_OPTIONS} onSave={(v) => onUpdate(node.id, { maturityLevel: v })} disabled={isLocked} placeholder="Process maturity" />
+                        <DocField label="Business rules" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this process runs" />
+                        <DocField label="Process diagram" value={node.processDiagramUrl || ''} onSave={(v) => onUpdate(node.id, { processDiagramUrl: v })} disabled={isLocked} placeholder="Link or file path to the process diagram" />
                         {/* Rolled up from the activities beneath this process (read-only). */}
                         <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                         {/* Cross-cutting governance-lifecycle dates. */}
-                        <DocField label="Effective date" required={reqLabels.has('Effective date')} typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
-                        <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
-                        <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} typeLabel="Pick list" value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
-                        <DocField label="Next review" typeLabel="Date" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
+                        <DocField label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect, e.g. 2026-01-01" />
+                        <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
+                        <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
+                        <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date, e.g. 2026-12-31" />
                       </>
                     )}
                   </>
@@ -615,26 +615,26 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                  together. */}
               {node.level === 'SUBPROCESS' && (
                 <>
-                  <DocPersonField label="Owner" required={reqLabels.has('Owner')} typeLabel="Reference · People" orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
+                  <DocPersonField label="Owner" required={reqLabels.has('Owner')} orgId={activePageOrgId} mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   {viewMode === 'advanced' && (
                     <>
                       {/* Enhanced sub-process record fields (Process Catalog spec). */}
-                      <DocField label="Entry criteria" required={reqLabels.has('Entry criteria')} typeLabel="Long text" value={node.entryCriteria || ''} onSave={(v) => onUpdate(node.id, { entryCriteria: v })} disabled={isLocked} placeholder="Conditions that must hold before this starts" />
-                      <DocField label="Exit criteria" required={reqLabels.has('Exit criteria')} typeLabel="Long text" value={node.exitCriteria || ''} onSave={(v) => onUpdate(node.id, { exitCriteria: v })} disabled={isLocked} placeholder="Conditions that mark this complete" />
-                      <DocField label="Performing org" required={reqLabels.has('Performing org')} typeLabel="Short text" value={node.performingOrg || ''} onSave={(v) => onUpdate(node.id, { performingOrg: v })} disabled={isLocked} placeholder="The team / org that performs this sub-process" />
-                      <DocField label="Handoffs" typeLabel="Long text" value={node.handoffs || ''} onSave={(v) => onUpdate(node.id, { handoffs: v })} disabled={isLocked} placeholder="Handoffs / interfaces to other work" />
-                      <DocField label="Business rules" typeLabel="Long text" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this runs" />
-                      <DocDropdown label="Has variants" typeLabel="Yes / No" value={node.hasVariants === true ? 'Yes' : node.hasVariants === false ? 'No' : ''} options={['Yes', 'No']} onSave={(v) => onUpdate(node.id, { hasVariants: v === 'Yes' })} disabled={isLocked} placeholder="Does this have variant flows?" />
+                      <DocField label="Entry criteria" required={reqLabels.has('Entry criteria')} value={node.entryCriteria || ''} onSave={(v) => onUpdate(node.id, { entryCriteria: v })} disabled={isLocked} placeholder="Conditions that must hold before this starts" />
+                      <DocField label="Exit criteria" required={reqLabels.has('Exit criteria')} value={node.exitCriteria || ''} onSave={(v) => onUpdate(node.id, { exitCriteria: v })} disabled={isLocked} placeholder="Conditions that mark this complete" />
+                      <DocField label="Performing org" required={reqLabels.has('Performing org')} value={node.performingOrg || ''} onSave={(v) => onUpdate(node.id, { performingOrg: v })} disabled={isLocked} placeholder="The team / org that performs this sub-process" />
+                      <DocField label="Handoffs" value={node.handoffs || ''} onSave={(v) => onUpdate(node.id, { handoffs: v })} disabled={isLocked} placeholder="Handoffs / interfaces to other work" />
+                      <DocField label="Business rules" value={node.businessRules || ''} onSave={(v) => onUpdate(node.id, { businessRules: v })} disabled={isLocked} placeholder="Rules that govern how this runs" />
+                      <DocDropdown label="Has variants" value={node.hasVariants === true ? 'Yes' : node.hasVariants === false ? 'No' : ''} options={['Yes', 'No']} onSave={(v) => onUpdate(node.id, { hasVariants: v === 'Yes' })} disabled={isLocked} placeholder="Does this have variant flows?" />
                       {/* The activities beneath this sub-process as a left-to-right
                           flow, with handoff markers where the responsible role changes. */}
                       <Wide><ActivityFlowBoard node={node} /></Wide>
                       {/* Rolled up from the activities beneath this sub-process (read-only). */}
                       <Wide><ActivityRollup node={node} systemsList={systemsList} /></Wide>
                       {/* Cross-cutting governance-lifecycle dates. */}
-                      <DocField label="Effective date" required={reqLabels.has('Effective date')} typeLabel="Date" value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect" />
-                      <DocField label="Last reviewed" typeLabel="Date" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
-                      <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} typeLabel="Pick list" value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
-                      <DocField label="Next review" typeLabel="Date" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date" />
+                      <DocField label="Effective date" required={reqLabels.has('Effective date')} value={node.effectiveDate || ''} onSave={(v) => onUpdate(node.id, { effectiveDate: v })} disabled={isLocked} placeholder="When this record took effect" />
+                      <DocField label="Last reviewed" value={node.lastReviewedDate || ''} onSave={(v) => onUpdate(node.id, { lastReviewedDate: v })} disabled={isLocked} placeholder="Date of the last review" />
+                      <DocDropdown label="Review cadence" required={reqLabels.has('Review cadence')} value={node.reviewCadence || ''} options={REVIEW_CADENCE_OPTIONS} onSave={(v) => onUpdate(node.id, { reviewCadence: v })} disabled={isLocked} placeholder="How often this is reviewed" />
+                      <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next review date" />
                     </>
                   )}
                 </>
@@ -642,7 +642,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
               {/* Activity fields */}
               {node.level === 'ACTIVITY' && (
                 <>
-                  <DocRoleField value={node.responsibleRole || ''} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} typeLabel="Reference · Roles" required={reqLabels.has('Responsible Role')} />
+                  <DocRoleField value={node.responsibleRole || ''} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} required={reqLabels.has('Responsible Role')} />
                   {/* Responsible Person — restricted to people who
                      currently hold node.responsibleRole. Disabled until
                      the role is set, or if no one holds that role yet
@@ -668,7 +668,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         : undefined;
                     return (
                       <DocPersonField
-                        label="Responsible Person" typeLabel="Reference · People"
+                        label="Responsible Person"
                         orgId={activePageOrgId}
                         mode="single"
                         valueMode="id"
@@ -685,7 +685,7 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                   })()}
                   {/* Accountable Role — the RACI "A" (single role answerable for
                       the outcome), the pair to the Responsible Role above. */}
-                  <DocRoleField label="Accountable Role" required={reqLabels.has('Accountable Role')} typeLabel="Reference · Roles" value={node.accountableRole || ''} onSave={(v) => onUpdate(node.id, { accountableRole: v })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
+                  <DocRoleField label="Accountable Role" required={reqLabels.has('Accountable Role')} value={node.accountableRole || ''} onSave={(v) => onUpdate(node.id, { accountableRole: v })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   {viewMode === 'advanced' && (
                     <>
                       {/* Automation and Est. Duration removed from the panel
@@ -698,13 +698,11 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         value={node.criticalityTier || ''}
                         onSave={(v) => onUpdate(node.id, { criticalityTier: v || null })}
                         disabled={isLocked}
-                        typeLabel="Pick list"
                       />
                       <RtoField
                         value={node.rtoHours}
                         onSave={(v) => onUpdate(node.id, { rtoHours: v })}
                         disabled={isLocked}
-                        typeLabel="Number + unit"
                       />
                       {/* RPO — the BCM pair to RTO: how much data loss (in
                           time) is tolerable if this activity fails. */}
@@ -712,41 +710,39 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                         value={node.rpoHours}
                         onSave={(v) => onUpdate(node.id, { rpoHours: v })}
                         disabled={isLocked}
-                        typeLabel="Number + unit"
                       />
                       {/* Trigger — what initiates the activity (complements the
                           flow edges, which only give ordering). */}
-                      <DocDropdown label="Trigger" typeLabel="Pick list" value={node.trigger || ''} options={TRIGGER_OPTIONS} onSave={(v) => onUpdate(node.id, { trigger: v })} disabled={isLocked} placeholder="What starts this?" />
+                      <DocDropdown label="Trigger" value={node.trigger || ''} options={TRIGGER_OPTIONS} onSave={(v) => onUpdate(node.id, { trigger: v })} disabled={isLocked} placeholder="What starts this?" />
                       {/* Volume — processing scale/throughput; Frequency is
                           cadence, this is how much. */}
-                      <DocField label="Volume" typeLabel="Number + unit" value={node.volume || ''} onSave={(v) => onUpdate(node.id, { volume: v })} disabled={isLocked} placeholder="Throughput, e.g. ~10k invoices/day" />
+                      <DocField label="Volume" value={node.volume || ''} onSave={(v) => onUpdate(node.id, { volume: v })} disabled={isLocked} placeholder="Throughput, e.g. ~10k invoices/day" />
                       {/* Target / SLA — the former "Success Measure" and
                           "SLA Target" fields, merged: both expressed the same
                           "what does good look like" target. Stored in
                           successMeasure; any legacy slaTarget was folded in by
                           the merge_sla_into_success_measure migration. */}
-                      <DocField label="Target / SLA" typeLabel="Short text" value={node.successMeasure || ''} onSave={(v) => onUpdate(node.id, { successMeasure: v })} disabled={isLocked} placeholder="Measurable target / SLA, e.g. resolve within 4h P95, 99.9% monthly" />
+                      <DocField label="Target / SLA" value={node.successMeasure || ''} onSave={(v) => onUpdate(node.id, { successMeasure: v })} disabled={isLocked} placeholder="Measurable target / SLA, e.g. resolve within 4h P95, 99.9% monthly" />
                       {/* Next review — forward-looking governance review date
                           (distinct from the status-review timestamp). */}
-                      <DocField label="Next review" typeLabel="Date" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next governance review date, e.g. 2026-12-31" />
+                      <DocField label="Next review" value={node.nextReviewDate || ''} onSave={(v) => onUpdate(node.id, { nextReviewDate: v })} disabled={isLocked} placeholder="Next governance review date, e.g. 2026-12-31" />
                       {/* Risk mitigation — free-text notes complementing the
                           Risk Level dropdown above. */}
-                      <DocField label="Risk mitigation" typeLabel="Long text" value={node.riskMitigation || ''} onSave={(v) => onUpdate(node.id, { riskMitigation: v })} disabled={isLocked} placeholder="How the risk is mitigated — controls, compensations…" />
+                      <DocField label="Risk mitigation" value={node.riskMitigation || ''} onSave={(v) => onUpdate(node.id, { riskMitigation: v })} disabled={isLocked} placeholder="How the risk is mitigated — controls, compensations…" />
                       {/* Enhanced activity fields (Process Catalog record spec). */}
-                      <DocDropdown label="Activity type" required={reqLabels.has('Activity type')} typeLabel="Pick list" value={node.activityType || ''} options={ACTIVITY_TYPE_OPTIONS} onSave={(v) => onUpdate(node.id, { activityType: v })} disabled={isLocked} placeholder="Manual / Automated / Decision / Approval / Event / Quality check" />
-                      <DocField label="Authority level" typeLabel="Short text" value={node.authorityLevel || ''} onSave={(v) => onUpdate(node.id, { authorityLevel: v })} disabled={isLocked} placeholder="Decision authority this activity carries" />
-                      <DocField label="Entry condition" typeLabel="Long text" value={node.entryCondition || ''} onSave={(v) => onUpdate(node.id, { entryCondition: v })} disabled={isLocked} placeholder="Condition that starts this activity" />
-                      <DocField label="Completion criteria" required={reqLabels.has('Completion criteria')} typeLabel="Long text" value={node.completionCriteria || ''} onSave={(v) => onUpdate(node.id, { completionCriteria: v })} disabled={isLocked} placeholder="Condition that marks it done" />
-                      <DocField label="Wait before next" typeLabel="Number + unit" value={node.waitBeforeNext || ''} onSave={(v) => onUpdate(node.id, { waitBeforeNext: v })} disabled={isLocked} placeholder="Wait / delay before the next activity, e.g. 24h SLA" />
-                      <DocField label="Work instructions" required={reqLabels.has('Work instructions')} typeLabel="Long text" value={node.workInstructions || ''} onSave={(v) => onUpdate(node.id, { workInstructions: v })} disabled={isLocked} placeholder="Detailed how-to steps for performing this activity" />
-                      <DocField label="Exceptions" typeLabel="Long text" value={node.exceptions || ''} onSave={(v) => onUpdate(node.id, { exceptions: v })} disabled={isLocked} placeholder="Exception / error handling" />
+                      <DocDropdown label="Activity type" required={reqLabels.has('Activity type')} value={node.activityType || ''} options={ACTIVITY_TYPE_OPTIONS} onSave={(v) => onUpdate(node.id, { activityType: v })} disabled={isLocked} placeholder="Manual / Automated / Decision / Approval / Event / Quality check" />
+                      <DocField label="Authority level" value={node.authorityLevel || ''} onSave={(v) => onUpdate(node.id, { authorityLevel: v })} disabled={isLocked} placeholder="Decision authority this activity carries" />
+                      <DocField label="Entry condition" value={node.entryCondition || ''} onSave={(v) => onUpdate(node.id, { entryCondition: v })} disabled={isLocked} placeholder="Condition that starts this activity" />
+                      <DocField label="Completion criteria" required={reqLabels.has('Completion criteria')} value={node.completionCriteria || ''} onSave={(v) => onUpdate(node.id, { completionCriteria: v })} disabled={isLocked} placeholder="Condition that marks it done" />
+                      <DocField label="Wait before next" value={node.waitBeforeNext || ''} onSave={(v) => onUpdate(node.id, { waitBeforeNext: v })} disabled={isLocked} placeholder="Wait / delay before the next activity, e.g. 24h SLA" />
+                      <DocField label="Work instructions" required={reqLabels.has('Work instructions')} value={node.workInstructions || ''} onSave={(v) => onUpdate(node.id, { workInstructions: v })} disabled={isLocked} placeholder="Detailed how-to steps for performing this activity" />
+                      <DocField label="Exceptions" value={node.exceptions || ''} onSave={(v) => onUpdate(node.id, { exceptions: v })} disabled={isLocked} placeholder="Exception / error handling" />
                       <Wide>
                         <ControlsPicker
                           selected={node.controlIds || []}
                           options={controlsList}
                           onChange={(ids) => onUpdate(node.id, { controlIds: ids })}
                           disabled={isLocked}
-                          typeLabel="Multi-select · Controls"
                         />
                       </Wide>
                       {/* Data-element usage table — the business data this
@@ -1061,7 +1057,6 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                     onSave={(ids) => onUpdate(node.id, { systemIds: ids })}
                     onSaveLinks={(links) => onUpdate(node.id, { systemLinks: links })}
                     disabled={isLocked}
-                    typeLabel="Reference · Systems"
                   />
                 </Wide>
               )}
