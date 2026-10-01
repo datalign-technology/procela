@@ -1780,6 +1780,8 @@ export default function ProcessCatalogPage() {
                 onToggle={toggleExpand}
                 onSelect={setSelectedNodeId}
                 currentUserId={currentUser?.id}
+                onMove={moveNode}
+                validChildrenMap={validChildrenMap}
               />
             </div>
             <div style={{ minWidth: 0 }}>

@@ -1,7 +1,16 @@
 import { Check, AlertTriangle } from 'lucide-react';
 import { clickable, activateOnKeyStop } from '../../lib/a11y';
+import { useSortable, sortableIndicatorStyle, DragHandle } from '../../components/Sortable';
 import { LEVEL_CONFIG, statusColors, type ProcessNode, type NodeLevel } from '../ProcessCatalogPage';
 import { requiredFields } from './ReadinessPanel';
+
+// Drag payload — the dragged node's level (does the hovered row accept it as a
+// child?) and its subtree ids (refuse a drop into its own descendant).
+interface NavDrag { level: NodeLevel; descendantIds: Set<string> }
+function collectDescendantIds(node: ProcessNode, out: Set<string> = new Set()): Set<string> {
+  for (const c of node.children || []) { out.add(c.id); collectDescendantIds(c, out); }
+  return out;
+}
 
 // ── Catalog navigation tree (left pane of the two-pane catalog) ──────────────
 // A compact, read-only hierarchy: expand/collapse carets, a short level badge,
@@ -60,13 +69,16 @@ function CompletenessMark({ node }: { node: ProcessNode }) {
   );
 }
 
-function NavRow({ node, depth, selectedId, expanded, onToggle, onSelect }: {
+function NavRow({ node, depth, parentId, selectedId, expanded, onToggle, onSelect, onMove, validChildrenMap }: {
   node: ProcessNode;
   depth: number;
+  parentId: string | null;
   selectedId: string | null;
   expanded: Set<string>;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
+  onMove?: (draggedId: string, targetId: string, mode: 'before' | 'after' | 'inside') => void;
+  validChildrenMap?: Record<string, string[]>;
 }) {
   const cfg = LEVEL_CONFIG[node.level];
   const kids = node.children || [];
@@ -74,21 +86,42 @@ function NavRow({ node, depth, selectedId, expanded, onToggle, onSelect }: {
   const isOpen = expanded.has(node.id);
   const isSelected = selectedId === node.id;
   const dot = statusColors[node.status]?.color || 'var(--color-text-muted)';
+  const canDrag = !!onMove;
+  const { dragging, dropMode, handleProps, rowProps } = useSortable<NavDrag>({
+    id: node.id,
+    group: parentId,
+    data: { level: node.level, descendantIds: collectDescendantIds(node) },
+    draggable: canDrag,
+    canDropInside: (drag) =>
+      (validChildrenMap?.[node.level] || []).includes(drag.data.level)
+      && !drag.data.descendantIds.has(node.id),
+    onMove: onMove || (() => {}),
+  });
   return (
     <>
       <div
         {...clickable(() => onSelect(node.id), { label: `Open ${node.name}` })}
+        {...(canDrag ? rowProps : {})}
         aria-current={isSelected ? 'true' : undefined}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '6px 10px', paddingLeft: 10 + depth * 18,
           cursor: 'pointer', borderRadius: 6,
           background: isSelected ? 'var(--color-primary-light)' : 'transparent',
-          boxShadow: isSelected ? 'inset 2px 0 0 var(--color-primary)' : undefined,
+          ...(canDrag ? sortableIndicatorStyle(dropMode, dragging) : {}),
+          ...(isSelected && !dropMode ? { boxShadow: 'inset 2px 0 0 var(--color-primary)' } : {}),
         }}
         onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
       >
+        {canDrag && (
+          <DragHandle
+            {...handleProps}
+            size={12}
+            style={{ marginLeft: -2 }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
         {/* Caret — toggles expand without selecting. Spacer keeps leaf rows aligned. */}
         {hasKids ? (
           <span
@@ -121,23 +154,25 @@ function NavRow({ node, depth, selectedId, expanded, onToggle, onSelect }: {
         <CompletenessMark node={node} />
       </div>
       {isOpen && kids.map((child) => (
-        <NavRow key={child.id} node={child} depth={depth + 1} selectedId={selectedId} expanded={expanded} onToggle={onToggle} onSelect={onSelect} />
+        <NavRow key={child.id} node={child} depth={depth + 1} parentId={node.id} selectedId={selectedId} expanded={expanded} onToggle={onToggle} onSelect={onSelect} onMove={onMove} validChildrenMap={validChildrenMap} />
       ))}
     </>
   );
 }
 
-export default function CatalogNav({ nodes, selectedId, expanded, onToggle, onSelect }: {
+export default function CatalogNav({ nodes, selectedId, expanded, onToggle, onSelect, onMove, validChildrenMap }: {
   nodes: ProcessNode[];
   selectedId: string | null;
   expanded: Set<string>;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
+  onMove?: (draggedId: string, targetId: string, mode: 'before' | 'after' | 'inside') => void;
+  validChildrenMap?: Record<string, string[]>;
 }) {
   return (
     <div role="tree" aria-label="Process hierarchy" style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {nodes.map((node) => (
-        <NavRow key={node.id} node={node} depth={0} selectedId={selectedId} expanded={expanded} onToggle={onToggle} onSelect={onSelect} />
+        <NavRow key={node.id} node={node} depth={0} parentId={null} selectedId={selectedId} expanded={expanded} onToggle={onToggle} onSelect={onSelect} onMove={onMove} validChildrenMap={validChildrenMap} />
       ))}
     </div>
   );

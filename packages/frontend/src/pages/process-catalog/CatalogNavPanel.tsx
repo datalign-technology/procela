@@ -61,13 +61,15 @@ function Pill({ label, active, onClick }: { label: string; active: boolean; onCl
   );
 }
 
-export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle, onSelect, currentUserId }: {
+export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle, onSelect, currentUserId, onMove, validChildrenMap }: {
   nodes: ProcessNode[];
   selectedId: string | null;
   expanded: Set<string>;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
   currentUserId?: string;
+  onMove?: (draggedId: string, targetId: string, mode: 'before' | 'after' | 'inside') => void;
+  validChildrenMap?: Record<string, string[]>;
 }) {
   const [filter, setFilter] = useState<NavFilter>('all');
 
@@ -100,7 +102,15 @@ export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle,
 
       {/* Navigation tree */}
       {navTree.length > 0 ? (
-        <CatalogNav nodes={navTree} selectedId={selectedId} expanded={expanded} onToggle={onToggle} onSelect={onSelect} />
+        <CatalogNav
+          nodes={navTree}
+          selectedId={selectedId}
+          expanded={expanded}
+          onToggle={onToggle}
+          onSelect={onSelect}
+          onMove={filter === 'all' ? onMove : undefined}
+          validChildrenMap={validChildrenMap}
+        />
       ) : (
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '12px 10px' }}>
           Nothing matches &ldquo;{FILTERS.find((f) => f.key === filter)?.label}&rdquo;.
