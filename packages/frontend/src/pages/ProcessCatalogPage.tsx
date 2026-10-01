@@ -30,7 +30,7 @@ import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
 import { SkeletonRows } from '../components/Skeleton';
 import TreeNode from './process-catalog/TreeNode';
-import CatalogNav from './process-catalog/CatalogNav';
+import CatalogNavPanel from './process-catalog/CatalogNavPanel';
 import { useScopeMembership } from '../hooks/useScopeMembership';
 import type { AddMappingTarget } from './process-catalog/IOPanel';
 // Lazy: only renders when the user clicks "History" on a node.
@@ -1773,12 +1773,13 @@ export default function ProcessCatalogPage() {
              record's detail + actions on the right (TreeNode in detailMode). */
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) minmax(0, 1fr)', alignItems: 'start' }}>
             <div style={{ borderRight: '1px solid var(--color-border)', padding: 8, alignSelf: 'stretch' }}>
-              <CatalogNav
+              <CatalogNavPanel
                 nodes={visibleTree}
                 selectedId={selectedNodeId}
                 expanded={expanded}
                 onToggle={toggleExpand}
                 onSelect={setSelectedNodeId}
+                currentUserId={currentUser?.id}
               />
             </div>
             <div style={{ minWidth: 0 }}>
