@@ -137,9 +137,6 @@ export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle,
           <Lock size={11} style={{ color: 'var(--color-text-muted)' }} /> Calculated — rolled up or derived, not typed
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>Pick list</span> Field type, shown beside each label
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)' }}>10/13</span> Required fields complete
         </div>
       </div>
