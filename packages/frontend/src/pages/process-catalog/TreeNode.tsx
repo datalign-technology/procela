@@ -91,13 +91,12 @@ function rollupFromActivities(node: ProcessNode, systemsList: SystemRef[]) {
 function ActivityRollup({ node, systemsList }: { node: ProcessNode; systemsList: SystemRef[] }) {
   const { activityCount, systems, roles, dataElements } = rollupFromActivities(node, systemsList);
   if (activityCount === 0) return null;
-  const deriv = 'Derived from the activities underneath — never typed here.';
   return (
     <>
       <SectionLabel>Rolled up from activities</SectionLabel>
-      <DocCalculated label="Systems involved" chips={systems} caption={deriv} emptyText="No systems on the activities yet" />
-      <DocCalculated label="Roles involved" chips={roles} caption={deriv} emptyText="No roles on the activities yet" />
-      <DocCalculated label="Data elements" chips={dataElements} caption="From the activities' data-element usage — the basis for lineage." emptyText="No data elements captured yet" />
+      <DocCalculated label="Systems involved" chips={systems} emptyText="No systems on the activities yet" />
+      <DocCalculated label="Roles involved" chips={roles} emptyText="No roles on the activities yet" />
+      <DocCalculated label="Data elements" chips={dataElements} emptyText="No data elements captured yet" />
     </>
   );
 }
@@ -1186,24 +1185,6 @@ function TreeNode({ node, depth, parentId, onUpdate, onDelete, onClone, onAddChi
                   onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }}>
                   + Add {LEVEL_CONFIG[guidedLevel].label}
                 </button>
-              )}
-            </div>
-          )}
-          {/* Progress checklist for value streams */}
-          {completeness && (
-            <div style={{ fontSize: 10, marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: 'var(--color-success)' }}>{'\u2713'} Value Stream</span>
-              <span style={{ color: completeness.hasProcess ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                {completeness.hasProcess ? '\u2713' : '\u2717'} Process
-              </span>
-              <span style={{ color: completeness.hasActivity ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                {completeness.hasActivity ? '\u2713' : '\u2717'} Activity
-              </span>
-              {completeness.complete && (
-                <span style={{ color: 'var(--color-success)', fontWeight: 500 }}
-                  title="This branch has the required levels (Value Stream → Process → Activity). It does not mean every field is filled or that all records beneath are Active.">
-                  Structure complete
-                </span>
               )}
             </div>
           )}
