@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -160,6 +161,15 @@ export default function GovernanceIssuesPage({
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // Row-click expansion: open an issue's full detail (description + metadata
+  // that doesn't fit the columns) inline, matching the other governance
+  // work-item lists (Policies, SOPs, Decision Rights).
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) => setExpandedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   // Filters
   const [filterStatus, setFilterStatus] = useState('');
@@ -507,6 +517,26 @@ export default function GovernanceIssuesPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all issues"
             emptyMessage="No issues match the current filters."
+            expansion={{
+              expandedIds,
+              onToggleExpanded: toggleExpand,
+              trigger: 'row-click',
+              renderExpandedRow: (i) => (
+                <div style={{ padding: '12px 16px 14px 48px', background: '#fafbfc' }}>
+                  <SectionLabel marginBottom={6}>Description</SectionLabel>
+                  <div style={{ fontSize: 12, color: i.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: i.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
+                    {i.description || 'No description provided.'}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
+                    {i.domainName && (
+                      <div><span style={{ color: 'var(--color-text-muted)' }}>Domain </span><span style={{ fontWeight: 500 }}>{i.domainName}</span></div>
+                    )}
+                    <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{formatDate(i.createdAt)}</span></div>
+                    <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{formatDate(i.updatedAt)}</span></div>
+                  </div>
+                </div>
+              ),
+            }}
           />
         )}
       </div>
