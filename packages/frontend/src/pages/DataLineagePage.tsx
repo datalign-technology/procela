@@ -24,6 +24,9 @@ import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import { useSortedList } from '../hooks/useSortedList';
+import SectionLabel from '../components/SectionLabel';
+import DetailEditActions from '../components/DetailEditActions';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
 
 interface LineageLink {
   id: string;
@@ -250,6 +253,149 @@ function Badge({ label, colors }: { label: string; colors: { bg: string; color: 
   );
 }
 
+function linkToForm(link: LineageLink): FormData {
+  return {
+    sourceSystemId: link.sourceSystemId,
+    targetSystemId: link.targetSystemId,
+    dataAssetId: link.dataAssetId || '',
+    flowType: link.flowType,
+    frequency: link.frequency,
+    status: link.status,
+    description: link.description,
+  };
+}
+
+const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
+
+// The flow's own fields, shared by the create form and the in-row edit panel.
+// `onChange` merges a partial patch.
+function LineageFields({ form, onChange, systemsList, assetsList }: {
+  form: FormData;
+  onChange: (patch: Partial<FormData>) => void;
+  systemsList: SystemRef[];
+  assetsList: DataAssetRef[];
+}) {
+  const sameSystem = !!form.sourceSystemId && !!form.targetSystemId && form.sourceSystemId === form.targetSystemId;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div>
+        <label style={labelStyle}>Source System *</label>
+        <select aria-label="Source System" style={selectStyle} value={form.sourceSystemId} onChange={(e) => onChange({ sourceSystemId: e.target.value })}>
+          <option value="">-- Select source system --</option>
+          {systemsList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Target System *</label>
+        <select aria-label="Target System" style={selectStyle} value={form.targetSystemId} onChange={(e) => onChange({ targetSystemId: e.target.value })}>
+          <option value="">-- Select target system --</option>
+          {systemsList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        {sameSystem && (
+          <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 4 }}>Source and target cannot be the same system</div>
+        )}
+      </div>
+      <div>
+        <label style={labelStyle}>Data Asset (optional)</label>
+        <select aria-label="Data Asset (optional)" style={selectStyle} value={form.dataAssetId} onChange={(e) => onChange({ dataAssetId: e.target.value })}>
+          <option value="">-- None --</option>
+          {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Flow Type</label>
+        <select aria-label="Flow Type" style={selectStyle} value={form.flowType} onChange={(e) => onChange({ flowType: e.target.value })}>
+          {FLOW_TYPES.map((ft) => <option key={ft} value={ft}>{ft.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Frequency</label>
+        <select aria-label="Frequency" style={selectStyle} value={form.frequency} onChange={(e) => onChange({ frequency: e.target.value })}>
+          {FREQUENCIES.map((f) => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Status</label>
+        <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => onChange({ status: e.target.value })}>
+          <option value="ACTIVE">Active</option>
+          <option value="INACTIVE">Inactive</option>
+          <option value="DEPRECATED">Deprecated</option>
+        </select>
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Description</label>
+        <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => onChange({ description: e.target.value })} placeholder="Describe this data flow" />
+      </div>
+    </div>
+  );
+}
+
+// The expanded detail row for one lineage flow. View mode summarises the
+// flow; Edit flips LineageFields into a staged Edit→Save that PUTs on save.
+// The row's delete quick-action stays in the list row.
+function ExpandedFlow({ link, systemsList, assetsList, canWrite, onSaved }: {
+  link: LineageLink;
+  systemsList: SystemRef[];
+  assetsList: DataAssetRef[];
+  canWrite: boolean;
+  onSaved: () => void;
+}) {
+  const { addToast } = useToastStore();
+  const m = useDetailEditMode<FormData>(
+    linkToForm(link),
+    async (draft) => {
+      if (!draft.sourceSystemId || !draft.targetSystemId) { addToast('error', 'Source and target systems are required'); throw new Error('missing-systems'); }
+      if (draft.sourceSystemId === draft.targetSystemId) { addToast('error', 'Source and target systems cannot be the same'); throw new Error('same-system'); }
+      try {
+        await apiClient.put(`/data-lineage/${link.id}`, draft);
+        addToast('success', 'Lineage flow updated');
+        onSaved();
+      } catch { addToast('error', 'Failed to save lineage flow'); throw new Error('save-failed'); }
+    },
+  );
+  return (
+    <div style={{ padding: '12px 16px', background: '#fafbfc' }}>
+      {canWrite && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
+          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+        </div>
+      )}
+      {m.isEditing ? (
+        <LineageFields form={m.draft} onChange={m.patch} systemsList={systemsList} assetsList={assetsList} />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+          <div>
+            <SectionLabel marginBottom={4}>Source → Target</SectionLabel>
+            <div style={{ fontSize: 13 }}>{(link.sourceSystemName || link.sourceSystemId)} → {(link.targetSystemName || link.targetSystemId)}</div>
+          </div>
+          <div>
+            <SectionLabel marginBottom={4}>Data asset</SectionLabel>
+            <div style={{ fontSize: 13 }}>{link.dataAssetName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None</span>}</div>
+          </div>
+          <div>
+            <SectionLabel marginBottom={4}>Flow type</SectionLabel>
+            <div><Badge label={link.flowType} colors={FLOW_TYPE_BADGES[link.flowType] || FLOW_TYPE_BADGES.MANUAL} /></div>
+          </div>
+          <div>
+            <SectionLabel marginBottom={4}>Frequency</SectionLabel>
+            <div><Badge label={link.frequency} colors={FREQUENCY_BADGES[link.frequency] || FREQUENCY_BADGES.ON_DEMAND} /></div>
+          </div>
+          <div>
+            <SectionLabel marginBottom={4}>Status</SectionLabel>
+            <div><Badge label={link.status} colors={STATUS_BADGES[link.status] || STATUS_BADGES.ACTIVE} /></div>
+          </div>
+          {link.description && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <SectionLabel marginBottom={4}>Description</SectionLabel>
+              <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{link.description}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type LineageColId = 'source' | 'target' | 'asset' | 'flowType' | 'frequency' | 'status' | 'description';
 const LINEAGE_COLUMN_DEFS: Array<{ id: LineageColId; label: string; defaultVisible: boolean }> = [
   { id: 'source',      label: 'Source System', defaultVisible: true  },
@@ -274,8 +420,11 @@ export default function DataLineagePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  // Row-click expansion for the flows list: open one flow's detail at a time.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpandedIds((prev) => (prev.has(id) ? new Set() : new Set([id])));
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmDeleteDbtConn, setConfirmDeleteDbtConn] = useState<DbtCloudConnectionRow | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'visualization'>('table');
@@ -475,24 +624,10 @@ export default function DataLineagePage() {
 
   const sel = useRowSelection(sorted, (l) => l.id);
 
+  // Create-only: editing a flow happens in the row's expanded detail.
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
-    setEditingId(null);
-    setShowForm(true);
-  };
-
-  const openEdit = (link: LineageLink) => {
-    setForm({
-      sourceSystemId: link.sourceSystemId,
-      targetSystemId: link.targetSystemId,
-      dataAssetId: link.dataAssetId || '',
-      flowType: link.flowType,
-      frequency: link.frequency,
-      status: link.status,
-      description: link.description,
-    });
-    setEditingId(link.id);
     setShowForm(true);
   };
 
@@ -506,15 +641,9 @@ export default function DataLineagePage() {
       return;
     }
     try {
-      if (editingId) {
-        await apiClient.put(`/data-lineage/${editingId}`, form);
-        addToast('success', 'Lineage flow updated');
-      } else {
-        await apiClient.post('/data-lineage', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
-        addToast('success', 'Lineage flow created');
-      }
+      await apiClient.post('/data-lineage', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+      addToast('success', 'Lineage flow created');
       setShowForm(false);
-      setEditingId(null);
       setForm(emptyForm);
       fetchData();
       if (viewMode === 'visualization') fetchVisualization();
@@ -550,12 +679,7 @@ export default function DataLineagePage() {
 
   const handleCancel = () => {
     setShowForm(false);
-    setEditingId(null);
     setForm(emptyForm);
-  };
-
-  const updateField = (field: keyof FormData, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const lineageColumns = ([
@@ -606,7 +730,6 @@ export default function DataLineagePage() {
       render: (link: LineageLink) => (
         !canWrite ? <span style={{ color: 'var(--color-text-muted)' }}>—</span> :
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(link)} />
           <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(link.id)} />
         </div>
       ),
@@ -674,68 +797,16 @@ export default function DataLineagePage() {
         }
       />
 
-      {/* Add/Edit Form */}
+      {/* Add Flow form (editing a flow happens in the row's expanded detail) */}
       {showForm && (
         <Card padding={20} marginBottom={20}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-            {editingId ? 'Edit Lineage Flow' : 'Add New Lineage Flow'}
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Source System *</label>
-              <select aria-label="Source System" style={selectStyle} value={form.sourceSystemId} onChange={(e) => updateField('sourceSystemId', e.target.value)}>
-                <option value="">-- Select source system --</option>
-                {systemsList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target System *</label>
-              <select aria-label="Target System" style={selectStyle} value={form.targetSystemId} onChange={(e) => updateField('targetSystemId', e.target.value)}>
-                <option value="">-- Select target system --</option>
-                {systemsList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              {form.sourceSystemId && form.targetSystemId && form.sourceSystemId === form.targetSystemId && (
-                <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 4 }}>Source and target cannot be the same system</div>
-              )}
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Asset (optional)</label>
-              <select aria-label="Data Asset (optional)" style={selectStyle} value={form.dataAssetId} onChange={(e) => updateField('dataAssetId', e.target.value)}>
-                <option value="">-- None --</option>
-                {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Flow Type</label>
-              <select aria-label="Flow Type" style={selectStyle} value={form.flowType} onChange={(e) => updateField('flowType', e.target.value)}>
-                {FLOW_TYPES.map((ft) => <option key={ft} value={ft}>{ft.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Frequency</label>
-              <select aria-label="Frequency" style={selectStyle} value={form.frequency} onChange={(e) => updateField('frequency', e.target.value)}>
-                {FREQUENCIES.map((f) => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => updateField('status', e.target.value)}>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-                <option value="DEPRECATED">Deprecated</option>
-              </select>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input
-                aria-label="Description"
-                style={inputStyle}
-                value={form.description}
-                onChange={(e) => updateField('description', e.target.value)}
-                placeholder="Describe this data flow"
-              />
-            </div>
-          </div>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add New Lineage Flow</h3>
+          <LineageFields
+            form={form}
+            onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+            systemsList={systemsList}
+            assetsList={assetsList}
+          />
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
             <Button
@@ -743,7 +814,7 @@ export default function DataLineagePage() {
               disabled={!form.sourceSystemId || !form.targetSystemId || form.sourceSystemId === form.targetSystemId}
               onClick={handleSave}
             >
-              {editingId ? 'Save Changes' : 'Add Flow'}
+              Add Flow
             </Button>
           </div>
         </Card>
@@ -802,6 +873,14 @@ export default function DataLineagePage() {
                 sort={{ sortKey, sortDir, onSort: toggleSort }}
                 selectAllLabel="Select all flows"
                 emptyMessage="No flows match the current filters."
+                expansion={{
+                  expandedIds,
+                  onToggleExpanded: toggleExpanded,
+                  trigger: 'row-click',
+                  renderExpandedRow: (link) => (
+                    <ExpandedFlow link={link} systemsList={systemsList} assetsList={assetsList} canWrite={canWrite} onSaved={fetchData} />
+                  ),
+                }}
               />
             </Card>
           )}
