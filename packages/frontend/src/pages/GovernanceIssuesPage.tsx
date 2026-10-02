@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
-import { errorMessage } from '../lib/errorToast';
+import { errorMessage, successToast, errorToast } from '../lib/errorToast';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import DetailEditActions from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
@@ -137,6 +139,146 @@ const ISSUE_COLUMN_DEFS: Array<{ id: IssueColId; label: string; defaultVisible: 
   { id: 'created',  label: 'Created',     defaultVisible: false },
 ];
 
+const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
+
+function fmtDate(d: string | null): string {
+  if (!d) return '--';
+  return new Date(d).toLocaleDateString();
+}
+
+// Shared issue field grid — used by both the top-of-page "Add" form (create,
+// showStatus off → new issues default to OPEN) and the in-row editor (edit,
+// showStatus on), so the two never drift.
+function IssueFields({ form, setForm, people, domains, showStatus }: {
+  form: FormData;
+  setForm: (next: FormData) => void;
+  people: Person[];
+  domains: DataDomain[];
+  showStatus?: boolean;
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Title *</label>
+        <input
+          aria-label="Title"
+          style={inputStyle}
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          placeholder="e.g. Missing metadata on customer records"
+        />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Description</label>
+        <textarea
+          aria-label="Description"
+          style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          placeholder="Describe the issue in detail..."
+        />
+      </div>
+      <div>
+        <label style={labelStyle}>Issue Type</label>
+        <select aria-label="Issue Type" style={selectStyle} value={form.issueType} onChange={(e) => setForm({ ...form, issueType: e.target.value })}>
+          {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Severity</label>
+        <select aria-label="Severity" style={selectStyle} value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+          {ISSUE_SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Domain</label>
+        <select aria-label="Domain" style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
+          <option value="">-- No Domain --</option>
+          {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Assigned To</label>
+        <select aria-label="Assigned To" style={selectStyle} value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}>
+          <option value="">-- Unassigned --</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+        </select>
+      </div>
+      {showStatus && (
+        <div>
+          <label style={labelStyle}>Status</label>
+          <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+            {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The expanded row: read-only detail with a view/edit toggle. Edit flips the
+// SAME panel into the field grid and one Save writes PUT /governance-issues/
+// :id — the row's own in-place editor (there's no separate edit form anymore).
+function ExpandedIssue({ issue, people, domains, orgId, canEdit, onSaved }: {
+  issue: GovernanceIssue;
+  people: Person[];
+  domains: DataDomain[];
+  orgId: string | null;
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
+  const m = useDetailEditMode<FormData>(
+    {
+      title: issue.title,
+      description: issue.description,
+      issueType: issue.issueType,
+      severity: issue.severity,
+      status: issue.status,
+      domainId: issue.domainId || '',
+      assignedTo: issue.assignedTo || '',
+    },
+    async (draft) => {
+      if (!draft.title.trim()) { errorToast(null, 'Title is required'); throw new Error('no-title'); }
+      try {
+        await apiClient.put(`/governance-issues/${issue.id}`, {
+          ...draft,
+          domainId: draft.domainId || null,
+          assignedTo: draft.assignedTo || null,
+          ...(orgId ? { orgId } : {}),
+        });
+        successToast('Issue updated');
+        onSaved();
+      } catch (err) { errorToast(err, 'Failed to update issue'); throw err; }
+    },
+  );
+  return (
+    <div style={{ padding: '12px 16px 14px 48px', background: '#fafbfc' }}>
+      {canEdit && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
+          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+        </div>
+      )}
+      {m.isEditing ? (
+        <IssueFields form={m.draft} setForm={(next) => m.patch(next)} people={people} domains={domains} showStatus />
+      ) : (
+        <>
+          <SectionLabel marginBottom={6}>Description</SectionLabel>
+          <div style={{ fontSize: 12, color: issue.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: issue.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
+            {issue.description || 'No description provided.'}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
+            {issue.domainName && (
+              <div><span style={{ color: 'var(--color-text-muted)' }}>Domain </span><span style={{ fontWeight: 500 }}>{issue.domainName}</span></div>
+            )}
+            <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{fmtDate(issue.createdAt)}</span></div>
+            <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{fmtDate(issue.updatedAt)}</span></div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Component ──
 
 export default function GovernanceIssuesPage({
@@ -157,7 +299,6 @@ export default function GovernanceIssuesPage({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -233,30 +374,15 @@ export default function GovernanceIssuesPage({
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
-    setEditingId(null);
-    setShowForm(true);
-  };
-
-  const openEdit = (issue: GovernanceIssue) => {
-    setForm({
-      title: issue.title,
-      description: issue.description,
-      issueType: issue.issueType,
-      severity: issue.severity,
-      status: issue.status,
-      domainId: issue.domainId || '',
-      assignedTo: issue.assignedTo || '',
-    });
-    setEditingId(issue.id);
     setShowForm(true);
   };
 
   const closeForm = () => {
     setShowForm(false);
-    setEditingId(null);
     setForm(emptyForm);
   };
 
+  // Create-only: existing issues are edited inside their row's expanded detail.
   const handleSave = async () => {
     if (!form.title.trim()) return;
     try {
@@ -266,13 +392,8 @@ export default function GovernanceIssuesPage({
         assignedTo: form.assignedTo || null,
         ...(activeOrgId ? { orgId: activeOrgId } : {}),
       };
-      if (editingId) {
-        await apiClient.put(`/governance-issues/${editingId}`, payload);
-        addToast('success', 'Issue updated');
-      } else {
-        await apiClient.post('/governance-issues', payload);
-        addToast('success', 'Issue created');
-      }
+      await apiClient.post('/governance-issues', payload);
+      addToast('success', 'Issue created');
       closeForm();
       fetchData();
     } catch (err) {
@@ -347,7 +468,6 @@ export default function GovernanceIssuesPage({
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
       render: (i: GovernanceIssue) => (
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(i)} />}
           {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(i.id)} />}
         </div>
       ),
@@ -422,66 +542,8 @@ export default function GovernanceIssuesPage({
       {/* Add/Edit Form */}
       {showForm && (
         <Card padding={20} marginBottom={20}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-            {editingId ? 'Edit Issue' : 'Add New Issue'}
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title *</label>
-              <input
-                autoFocus
-                aria-label="Title"
-                style={inputStyle}
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="e.g. Missing metadata on customer records"
-              />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <textarea
-                aria-label="Description"
-                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Describe the issue in detail..."
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Issue Type</label>
-              <select aria-label="Issue Type" style={selectStyle} value={form.issueType} onChange={(e) => setForm({ ...form, issueType: e.target.value })}>
-                {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Severity</label>
-              <select aria-label="Severity" style={selectStyle} value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
-                {ISSUE_SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Domain</label>
-              <select aria-label="Domain" style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
-                <option value="">-- No Domain --</option>
-                {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assigned To</label>
-              <select aria-label="Assigned To" style={selectStyle} value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}>
-                <option value="">-- Unassigned --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
-            </div>
-            {editingId && (
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-                <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                  {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add New Issue</h3>
+          <IssueFields form={form} setForm={setForm} people={people} domains={domains} />
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={closeForm}>Cancel</Button>
             <Button
@@ -489,7 +551,7 @@ export default function GovernanceIssuesPage({
               disabled={!form.title.trim()}
               onClick={handleSave}
             >
-              {editingId ? 'Save Changes' : 'Add Issue'}
+              Add Issue
             </Button>
           </div>
         </Card>
@@ -522,19 +584,7 @@ export default function GovernanceIssuesPage({
               onToggleExpanded: toggleExpand,
               trigger: 'row-click',
               renderExpandedRow: (i) => (
-                <div style={{ padding: '12px 16px 14px 48px', background: '#fafbfc' }}>
-                  <SectionLabel marginBottom={6}>Description</SectionLabel>
-                  <div style={{ fontSize: 12, color: i.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: i.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
-                    {i.description || 'No description provided.'}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
-                    {i.domainName && (
-                      <div><span style={{ color: 'var(--color-text-muted)' }}>Domain </span><span style={{ fontWeight: 500 }}>{i.domainName}</span></div>
-                    )}
-                    <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{formatDate(i.createdAt)}</span></div>
-                    <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{formatDate(i.updatedAt)}</span></div>
-                  </div>
-                </div>
+                <ExpandedIssue issue={i} people={people} domains={domains} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchData} />
               ),
             }}
           />
