@@ -8,7 +8,6 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
-import { clickable } from '../lib/a11y';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import OrgPicker from '../components/OrgPicker';
@@ -16,6 +15,9 @@ import SkillPicker from '../components/SkillPicker';
 import OrgRolePill from '../components/OrgRolePill';
 import SecurityCard from '../components/SecurityCard';
 import SectionLabel from '../components/SectionLabel';
+import EditableField from '../components/EditableField';
+import DetailEditActions from '../components/DetailEditActions';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PersonDetailPage — the "Person 360" view promoted from a modal to its
@@ -84,58 +86,14 @@ interface FlatOrg { id: string; parentId: string | null; name: string; type: str
 
 // OrgRolePill moved to components/OrgRolePill.tsx for unit testing.
 
-function InlineField({ label, value, field, personId, onSaved, canEdit = true }: {
-  label: string; value: string; field: string; personId: string; onSaved: () => void; canEdit?: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const save = async () => {
-    if (draft !== value) {
-      try {
-        await apiClient.put(`/people/${personId}`, { [field]: draft });
-        successToast(`${label} updated`);
-        onSaved();
-      } catch (err) { errorToast(err, `Failed to update ${label.toLowerCase()}`); }
-    }
-    setEditing(false);
-  };
-  if (editing) {
-    return (
-      <div>
-        <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2 }}>{label}</div>
-        <input autoFocus value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={save}
-          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
-          style={{ fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '3px 8px', width: '100%', background: 'var(--color-surface)' }}
-        />
-      </div>
-    );
-  }
-  if (!canEdit) {
-    return (
-      <div>
-        <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{label}</div>
-        <div style={{ fontSize: 13 }}>
-          {value || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div>
-      <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{label}</div>
-      <div
-        {...clickable(() => { setDraft(value); setEditing(true); }, { label: `Edit ${label}` })}
-        // Standard click-to-edit cue — a dashed underline marks the value as
-        // editable, matching the inline-edit affordance on the entity lists.
-        style={{ fontSize: 13, cursor: 'pointer', display: 'inline-block', maxWidth: '100%', borderBottom: '1px dashed var(--color-border)' }}
-        title="Click to edit"
-      >
-        {value || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Click to set...</span>}
-      </div>
-    </div>
-  );
+const ROLES = ['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER'];
+
+interface PersonEditable {
+  role: string;
+  email: string;
+  title: string;
+  orgIds: string[];
+  skillIds: string[];
 }
 
 export default function PersonDetailPage() {
@@ -146,6 +104,7 @@ export default function PersonDetailPage() {
   const { activeOrgId } = useOrgContext();
   const [data, setData] = useState<Person360Data | null>(null);
   const [allOrgs, setAllOrgs] = useState<FlatOrg[]>([]);
+  const [allSkills, setAllSkills] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -155,12 +114,14 @@ export default function PersonDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [personRes, orgsRes] = await Promise.all([
+      const [personRes, orgsRes, skillsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${id}/360`),
         apiClient.get<{ success: boolean; data: FlatOrg[] }>('/organizations'),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>('/skills'),
       ]);
       setData(personRes.data);
       setAllOrgs(orgsRes.data || []);
+      setAllSkills(skillsRes.data || []);
     } catch (err) {
       setError(errorMessage(err, 'Could not load person'));
     } finally {
@@ -173,30 +134,41 @@ export default function PersonDetailPage() {
   // End the breadcrumb trail on the person's name (Dashboard › People › Ada Lovelace).
   useBreadcrumbLeaf(data?.person?.name);
 
-  // Toggle an org in the person's assignment list, persisting immediately.
-  // Backend requires at least one assignment, so we block the last unassign.
-  const toggleOrgAssignment = async (orgId: string) => {
-    if (!data) return;
-    const current = data.person.orgIds || [];
-    const isAssigned = current.includes(orgId);
-    const next = isAssigned ? current.filter((x) => x !== orgId) : [...current, orgId];
-    if (next.length === 0) {
-      errorToast(null, 'A person must belong to at least one organization.');
-      return;
-    }
-    // Optimistic update.
-    const snapshot = data;
-    setData({ ...data, person: { ...data.person, orgIds: next } });
-    setBusy(true);
-    try {
-      await apiClient.put(`/people/${data.person.id}`, { orgIds: next });
-      await fetch360();
-    } catch (err) {
-      setData(snapshot);
-      errorToast(err, 'Failed to update org assignment');
-    } finally {
-      setBusy(false);
-    }
+  // The person's OWN record fields (role, email, title, orgs, skills) edit as
+  // one staged Edit→Save unit via PUT /people/:id — the same view/edit model
+  // as the other detail pages. The relationship surfaces on the other tabs
+  // (governance groups/roles, domain owner/steward) and the per-org role
+  // OVERRIDE pill write to their own endpoints, so they stay immediate admin
+  // actions — see below.
+  const m = useDetailEditMode<PersonEditable>(
+    {
+      role: data?.person.role ?? 'VIEWER',
+      email: data?.person.email ?? '',
+      title: data?.person.title ?? '',
+      orgIds: data?.person.orgIds ?? [],
+      skillIds: data?.person.skillIds ?? [],
+    },
+    async (draft) => {
+      if (!data) return;
+      if (draft.orgIds.length === 0) {
+        errorToast(null, 'A person must belong to at least one organization.');
+        throw new Error('no-orgs');
+      }
+      try {
+        await apiClient.put(`/people/${data.person.id}`, draft);
+        successToast('Person updated');
+        await fetch360();
+      } catch (err) { errorToast(err, 'Failed to update person'); throw err; }
+    },
+  );
+
+  // Stage an org add/remove into the draft (edit mode). Blocks emptying the
+  // set so Save can't 400 on the backend's non-empty-orgIds guard.
+  const stageOrgToggle = (orgId: string) => {
+    const current = m.draft.orgIds;
+    const next = current.includes(orgId) ? current.filter((x) => x !== orgId) : [...current, orgId];
+    if (next.length === 0) { errorToast(null, 'A person must belong to at least one organization.'); return; }
+    m.set('orgIds', next);
   };
 
   // Set / clear a per-org role override for the person at one org.
@@ -314,6 +286,10 @@ export default function PersonDetailPage() {
   }
 
   const p = data.person;
+  const shownOrgIds = m.isEditing ? m.draft.orgIds : (p.orgIds || []);
+  const shownSkillIds = m.isEditing ? m.draft.skillIds : (p.skillIds || []);
+  const skillNameMap: Record<string, string> = {};
+  allSkills.forEach((s) => { skillNameMap[s.id] = s.name; });
 
   return (
     <div>
@@ -333,12 +309,23 @@ export default function PersonDetailPage() {
           </>
         }
         actions={
-          <Link
-            to="/people"
-            style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}
-          >
-            {'\u2190'} Back to People
-          </Link>
+          <DetailEditActions
+            editing={m.isEditing}
+            canEdit={isAdmin}
+            dirty={m.dirty}
+            saving={m.saving}
+            onEdit={m.enter}
+            onCancel={m.cancel}
+            onSave={m.save}
+            before={
+              <Link
+                to="/people"
+                style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}
+              >
+                {'\u2190'} Back to People
+              </Link>
+            }
+          />
         }
       />
         }
@@ -348,35 +335,21 @@ export default function PersonDetailPage() {
       <div style={cardStyle}>
         <SectionLabel marginBottom={10}>Identity</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2 }}>Application role</div>
-            <select
-              value={p.role}
-              disabled={!isAdmin}
-              onChange={async (e) => {
-                try {
-                  await apiClient.put(`/people/${p.id}`, { role: e.target.value });
-                  successToast(`Role changed to ${e.target.value.replace('_', ' ')}`);
-                  fetch360();
-                } catch (err) { errorToast(err, 'Failed to change role'); }
-              }}
-              style={{
-                fontSize: 13, fontWeight: 500, border: '1px solid var(--color-border)',
-                borderRadius: 4, padding: '3px 8px', background: 'var(--color-surface)',
-                cursor: isAdmin ? 'pointer' : 'not-allowed',
-              }}
-            >
-              {['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER'].map((r) => (
-                <option key={r} value={r}>{r.replace('_', ' ')}</option>
-              ))}
-            </select>
-          </div>
-          <InlineField label="Email" value={p.email} field="email" personId={p.id} onSaved={fetch360} canEdit={isAdmin} />
-          <InlineField label="Job Title" value={p.title} field="title" personId={p.id} onSaved={fetch360} canEdit={isAdmin} />
+          <EditableField
+            label="Application role"
+            editing={m.isEditing}
+            value={m.draft.role}
+            onChange={(v) => m.set('role', v)}
+            type="select"
+            options={ROLES.map((r) => ({ value: r, label: r.replace('_', ' ') }))}
+          >
+            <span style={{ fontWeight: 500 }}>{p.role.replace('_', ' ')}</span>
+          </EditableField>
+          <EditableField label="Email" editing={m.isEditing} value={m.draft.email} onChange={(v) => m.set('email', v)} placeholder="name@org.com" />
+          <EditableField label="Job Title" editing={m.isEditing} value={m.draft.title} onChange={(v) => m.set('title', v)} placeholder="e.g. Data Steward" />
           {/* "Job Role" editor removed: it duplicated Job Title as a second
               free-text job descriptor. The jobRole field itself is kept (it
-              backs the RACI "group by Job Role" dimension and sync mapping)
-              — just no longer edited from a second inline box here. */}
+              backs the RACI "group by Job Role" dimension and sync mapping). */}
         </div>
       </div>
 
@@ -385,21 +358,21 @@ export default function PersonDetailPage() {
           that subtree first, with a one-click expand to all orgs. */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <SectionLabel marginBottom={10}>Assigned organizations ({(data.person.orgIds || []).length})</SectionLabel>
+          <SectionLabel marginBottom={10}>Assigned organizations ({shownOrgIds.length})</SectionLabel>
           {busy && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Saving\u2026</span>}
         </div>
         {/* Selected chips — compact summary above the picker. Each
             chip shows the effective role at that org. Click the role
             pill to swap in a per-org override; click the × to
             unassign. */}
-        {(data.person.orgIds || []).length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-            {(data.person.orgIds || []).map((oid) => {
+        {shownOrgIds.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: m.isEditing ? 10 : 0 }}>
+            {shownOrgIds.map((oid) => {
               const o = allOrgs.find((x) => x.id === oid);
               if (!o) return null;
-              const isLast = (data.person.orgIds || []).length === 1;
+              const isLast = shownOrgIds.length === 1;
               const override = (data.person.orgRoles || []).find((r) => r.orgId === oid);
-              const effectiveRole = override?.role || data.person.role;
+              const effectiveRole = override?.role || (m.isEditing ? m.draft.role : data.person.role);
               return (
                 <div key={oid}
                   style={{
@@ -416,22 +389,24 @@ export default function PersonDetailPage() {
                   <OrgRolePill
                     role={effectiveRole}
                     isOverride={!!override}
-                    disabled={busy || !isAdmin}
+                    disabled={busy || !isAdmin || !m.isEditing}
                     onChange={(role) => setOrgRole(oid, role)}
                   />
-                  <button
-                    onClick={() => toggleOrgAssignment(oid)}
-                    disabled={isLast || busy || !isAdmin}
-                    aria-label={`Unassign from ${o.name}`}
-                    title={isLast ? 'Cannot unassign the last org' : `Unassign from ${o.name}`}
-                    style={{
-                      background: 'transparent', border: 'none',
-                      cursor: isLast || busy ? 'not-allowed' : 'pointer',
-                      color: 'var(--color-primary)', fontSize: 14, lineHeight: 1,
-                      padding: '0 8px', borderRadius: 999,
-                      opacity: isLast ? 0.4 : 1,
-                    }}
-                  >&times;</button>
+                  {m.isEditing && (
+                    <button
+                      onClick={() => stageOrgToggle(oid)}
+                      disabled={isLast}
+                      aria-label={`Unassign from ${o.name}`}
+                      title={isLast ? 'Cannot unassign the last org' : `Unassign from ${o.name}`}
+                      style={{
+                        background: 'transparent', border: 'none',
+                        cursor: isLast ? 'not-allowed' : 'pointer',
+                        color: 'var(--color-primary)', fontSize: 14, lineHeight: 1,
+                        padding: '0 8px', borderRadius: 999,
+                        opacity: isLast ? 0.4 : 1,
+                      }}
+                    >&times;</button>
+                  )}
                 </div>
               );
             })}
@@ -439,18 +414,13 @@ export default function PersonDetailPage() {
         )}
         {/* Add/remove-org picker is a people:write action — admins only.
             Non-admins still see the assigned-org chips above, read-only. */}
-        {isAdmin && <OrgPicker
+        {m.isEditing && isAdmin && <OrgPicker
           orgs={allOrgs}
-          selectedIds={new Set(data.person.orgIds || [])}
-          onToggle={toggleOrgAssignment}
+          selectedIds={new Set(m.draft.orgIds)}
+          onToggle={stageOrgToggle}
           scopeOrgId={activeOrgId || null}
           initialScope="subtree"
-          isDisabled={(orgId) => {
-            // Block unchecking the one-and-only assignment. Matches the
-            // backend's non-empty-orgIds guard and avoids the toast.
-            const current = data.person.orgIds || [];
-            return current.length === 1 && current[0] === orgId;
-          }}
+          isDisabled={(orgId) => m.draft.orgIds.length === 1 && m.draft.orgIds[0] === orgId}
           maxHeight={260}
           aria-label="Search organizations" placeholder="Search organizations (press / to focus)"
         />}
@@ -458,28 +428,26 @@ export default function PersonDetailPage() {
 
       {/* Skills */}
       <div style={cardStyle}>
-        <SkillPicker
-          orgId={activeOrgId || undefined}
-          selectedSkillIds={p.skillIds || []}
-          onChange={async (skillIds) => {
-            if (!data) return;
-            const snapshot = data;
-            setData({ ...data, person: { ...data.person, skillIds } });
-            setBusy(true);
-            try {
-              await apiClient.put(`/people/${p.id}`, { skillIds });
-              successToast('Skills updated');
-            } catch (err) {
-              setData(snapshot);
-              errorToast(err, 'Failed to update skills');
-            } finally {
-              setBusy(false);
-            }
-          }}
-          disabled={busy || !isAdmin}
-          maxHeight={220}
-          label="Skills"
-        />
+        <SectionLabel marginBottom={8}>Skills ({shownSkillIds.length})</SectionLabel>
+        {m.isEditing ? (
+          <SkillPicker
+            orgId={activeOrgId || undefined}
+            selectedSkillIds={m.draft.skillIds}
+            onChange={(skillIds) => m.set('skillIds', skillIds)}
+            maxHeight={220}
+            label=""
+          />
+        ) : shownSkillIds.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No skills assigned</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {shownSkillIds.map((sid) => (
+              <span key={sid} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: 'var(--color-text)' }}>
+                {skillNameMap[sid] || sid}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
           </>) },
           { id: 'accountabilities', label: 'Accountabilities', render: () => (<>
