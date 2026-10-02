@@ -488,14 +488,12 @@ export default function BusinessGlossaryPage() {
           <button
             type="button"
             onClick={() => navigate(`/business-glossary/${t.id}`)}
-            title={t.definition || 'Click to view term'}
+            title={t.definition || 'View term'}
             style={{
               background: 'none', border: 'none', padding: 0,
-              color: 'var(--color-primary)', cursor: 'pointer',
+              color: 'var(--color-text)', cursor: 'pointer',
               font: 'inherit', fontWeight: 500, textAlign: 'left',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
           >
             {t.term}
           </button>

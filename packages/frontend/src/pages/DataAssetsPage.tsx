@@ -1180,15 +1180,15 @@ export default function DataAssetsPage({
       render: (asset: DataAssetEntity) => (
         <div style={{ minWidth: 0 }}>
           <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-            {/* Name is a link to the detail modal for everyone - editors and
-              *  viewers both. Renaming happens via the row's Edit pencil. */}
+            {/* Plain name text — the whole row opens the detail modal
+              *  (cursor + hover tint signal it); this stays a focusable
+              *  button for keyboard users but isn't painted as a hyperlink.
+              *  Renaming happens via the row's Edit pencil. */}
             <button
               type="button"
               onClick={() => open360(asset.id)}
-              title="Click to view details"
-              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
-              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+              title="View details"
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
             >
               {asset.name}
             </button>

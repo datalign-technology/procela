@@ -870,13 +870,11 @@ export default function SystemsPage({
               title={sys.description || sys.name}
               style={{
                 background: 'none', border: 'none', padding: 0,
-                color: 'var(--color-primary)', cursor: 'pointer',
+                color: 'var(--color-text)', cursor: 'pointer',
                 font: 'inherit', fontWeight: 500, textAlign: 'left',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 minWidth: 0, flexShrink: 1,
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
             >
               {sys.name}
             </button>
