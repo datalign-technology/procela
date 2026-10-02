@@ -109,9 +109,12 @@ interface Props {
   canWrite?: boolean;
   /** Called after a successful save so the list behind can refresh. */
   onSaved?: () => void;
+  /** Escape hatch to the full editor (integrations, custodians, connections)
+   *  that the in-modal quick-edit doesn't cover. */
+  onEditFull?: () => void;
 }
 
-export default function SystemDetailModal({ systemId, onClose, people = [], systemTypes = [], canWrite = false, onSaved }: Props) {
+export default function SystemDetailModal({ systemId, onClose, people = [], systemTypes = [], canWrite = false, onSaved, onEditFull }: Props) {
   useScrollLock(!!systemId);
   const navigate = useNavigate();
   const custodianLabel = useTerm('custodian');
@@ -283,6 +286,19 @@ export default function SystemDetailModal({ systemId, onClose, people = [], syst
             <div style={{ marginTop: 12 }}>
               <EditableField label="Description" editing type="textarea" value={m.draft.description} onChange={(v) => m.set('description', v)} placeholder="What this system does" />
             </div>
+            {onEditFull && (
+              <button
+                type="button"
+                onClick={onEditFull}
+                style={{
+                  marginTop: 14, background: 'none', border: 'none', padding: 0,
+                  color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                Edit integrations, custodians &amp; connections…
+              </button>
+            )}
           </>
         ) : (
           <>

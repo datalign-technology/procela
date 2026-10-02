@@ -1386,7 +1386,6 @@ export default function DataAssetsPage({
             )}
             {canWrite && (
               <>
-                <IconButton size="sm" icon="edit" label={inheritedHint || 'Edit'} disabled={inherited} onClick={() => openEdit(asset)} />
                 <IconButton size="sm" icon="copy" label={inheritedHint || 'Duplicate'} disabled={inherited} onClick={() => openDuplicate(asset)} />
                 <IconButton size="sm" icon="trash" label={inheritedHint || 'Delete'} variant="danger" disabled={inherited} onClick={() => setConfirmDelete(asset.id)} />
               </>

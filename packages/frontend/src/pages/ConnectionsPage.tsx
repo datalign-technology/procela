@@ -898,7 +898,6 @@ export default function ConnectionsPage({
             {conn.status === 'CONNECTED' && (
               <IconButton size="sm" icon="search" label="Discover assets" onClick={() => handleDiscover(conn)} />
             )}
-            <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(conn)} />
             <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(conn)} />
             <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(conn.id)} />
           </div>
