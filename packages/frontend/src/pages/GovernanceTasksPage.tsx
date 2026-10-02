@@ -325,7 +325,7 @@ export default function GovernanceTasksPage({
       key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
       render: (t: GovernanceTask) => (
         <>
-          <span style={{ color: 'var(--color-primary)' }}>{t.title}</span>
+          <span>{t.title}</span>
           {isOverdue(t) && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-error)', fontWeight: 600 }}>OVERDUE</span>}
         </>
       ),
