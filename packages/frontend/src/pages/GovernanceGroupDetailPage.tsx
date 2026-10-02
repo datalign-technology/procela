@@ -4,6 +4,10 @@ import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Tabs from '../components/Tabs';
+import Card from '../components/Card';
+import EditableField from '../components/EditableField';
+import DetailEditActions from '../components/DetailEditActions';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
@@ -158,6 +162,16 @@ const EXPECTED_ROLES_BY_GROUP: Record<string, typeof GOVERNANCE_ROLES> = Object.
   ]),
 );
 
+// The group's editable record fields (name / type / status / description /
+// charter). Member & role management stays live on its own panels.
+interface GroupEditable {
+  name: string;
+  type: string;
+  status: string;
+  description: string;
+  charter: string;
+}
+
 export default function GovernanceGroupDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -261,6 +275,32 @@ export default function GovernanceGroupDetailPage() {
 
   // End the breadcrumb trail on the group's name (Dashboard › Groups › Data Council).
   useBreadcrumbLeaf(group?.name);
+
+  // Record-field view/edit (name / type / status / description / charter),
+  // driven by the shared useDetailEditMode so it reads and behaves like every
+  // other detail surface. Member / role management stays live on its own
+  // panels. The hook reseeds from `group` once it loads (serialised compare).
+  const m = useDetailEditMode<GroupEditable>(
+    {
+      name: group?.name ?? '',
+      type: group?.type ?? 'COUNCIL',
+      status: group?.status ?? 'ACTIVE',
+      description: group?.description ?? '',
+      charter: group?.charter ?? '',
+    },
+    async (draft) => {
+      if (!group) return;
+      if (!draft.name.trim()) { addToast('error', 'Name is required'); throw new Error('no-name'); }
+      try {
+        await apiClient.put(`/governance-groups/${group.id}`, draft);
+        setGroup((g) => (g ? { ...g, ...draft } : g));
+        addToast('success', 'Group updated');
+      } catch (e) {
+        addToast('error', e instanceof Error ? e.message : 'Update failed');
+        throw e;
+      }
+    },
+  );
 
   // ── Derived: per-member role assignments ──
   // Person-keyed set used by derived person views (DAMA roles,
@@ -403,20 +443,6 @@ export default function GovernanceGroupDetailPage() {
     }
   };
 
-  // Inline rename from the title pencil. Throws on failure so the editor stays
-  // open for a retry (EditableTitle catches it; the toast reports the reason).
-  const handleRename = async (name: string) => {
-    if (!group) return;
-    try {
-      await apiClient.put(`/governance-groups/${group.id}`, { name });
-      setGroup((g) => (g ? { ...g, name } : g));
-      addToast('success', 'Group renamed');
-    } catch (e) {
-      addToast('error', e instanceof Error ? e.message : 'Rename failed');
-      throw e;
-    }
-  };
-
   // ── Render ──
   if (loading) return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
@@ -452,11 +478,8 @@ export default function GovernanceGroupDetailPage() {
           </>
         }
         title={group.name}
-        onRename={isAdmin ? handleRename : undefined}
-        renameLabel="Rename group"
         copyId={group.id}
         copyLabel="Copy group ID"
-        subtitle={group.description || undefined}
         actions={
           <>
             <Button size="sm" onClick={() => navigate('/governance-groups')}>← Back to list</Button>
@@ -477,6 +500,64 @@ export default function GovernanceGroupDetailPage() {
         }
         tabs={[
           { id: 'composition', label: 'Composition', render: () => (
+      <>
+      {/* Record details — the group's own fields (name / type / status /
+          description / charter) with a view→Edit→Save toggle, matching every
+          other detail surface. Membership & roles below stay live. */}
+      <Card marginBottom={16}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <SectionLabel marginBottom={0}>Details</SectionLabel>
+          <DetailEditActions
+            editing={m.isEditing}
+            canEdit={isAdmin}
+            dirty={m.dirty}
+            saving={m.saving}
+            onEdit={m.enter}
+            onCancel={m.cancel}
+            onSave={m.save}
+          />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+          {m.isEditing && (
+            <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="Group name" />
+          )}
+          <EditableField
+            label="Type"
+            editing={m.isEditing}
+            value={m.draft.type}
+            onChange={(v) => m.set('type', v)}
+            type="select"
+            options={Object.keys(GROUP_TYPE_LABELS).map((t) => ({ value: t, label: GROUP_TYPE_LABELS[t] }))}
+          >
+            {GROUP_TYPE_LABELS[group.type] || group.type}
+          </EditableField>
+          <EditableField
+            label="Status"
+            editing={m.isEditing}
+            value={m.draft.status}
+            onChange={(v) => m.set('status', v)}
+            type="select"
+            options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
+          >
+            {group.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+          </EditableField>
+        </div>
+        {(m.isEditing || group.description) && (
+          <div style={{ marginTop: 14 }}>
+            <EditableField label="Description" editing={m.isEditing} type="textarea" value={m.draft.description} onChange={(v) => m.set('description', v)} placeholder="What this group does" emptyText="No description">
+              {group.description ? <span style={{ color: 'var(--color-text-secondary)' }}>{group.description}</span> : undefined}
+            </EditableField>
+          </div>
+        )}
+        {(m.isEditing || group.charter) && (
+          <div style={{ marginTop: 14 }}>
+            <EditableField label="Charter" editing={m.isEditing} type="textarea" value={m.draft.charter} onChange={(v) => m.set('charter', v)} placeholder="The group's charter / mandate" emptyText="No charter">
+              {group.charter ? <span style={{ whiteSpace: 'pre-wrap', color: 'var(--color-text-secondary)' }}>{group.charter}</span> : undefined}
+            </EditableField>
+          </div>
+        )}
+      </Card>
+
       <SectionShell
         title="Composition"
         hint="Members and the governance roles they hold. Required roles for this group type are tracked at the top. Each role chip shows its typical RACI letter on common decisions."
@@ -728,6 +809,7 @@ export default function GovernanceGroupDetailPage() {
         )}
         </>)}
       </SectionShell>
+      </>
           ) },
           { id: 'decision-rights', label: 'Decision Rights', render: () => (
       <SectionShell
