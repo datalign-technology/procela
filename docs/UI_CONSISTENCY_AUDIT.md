@@ -29,15 +29,23 @@ drift with edits.
 
 ## P1 — Accessibility (highest user impact)
 
-- **☐ A1 [HIGH] Keyboard-inaccessible controls.** `<div/span/tr onClick>`
+- **⏳ A1 [HIGH] Keyboard-inaccessible controls.** `<div/span/tr onClick>`
   used as controls with no `role="button"`, `tabIndex`, or key handler —
   keyboard/SR users cannot reach them. Load-bearing cases: org-tree
   select (`PeoplePage`), domain 360 (`DataDomainsPage`), EnterpriseView
   node inspect, gap/section toggles (`GapDetectionPage`,
   `GovernanceProgramPage`), and **every inline-edit trigger** (Systems,
   DataAssets, PersonDetail, DocFields, IOPanel, TreeNode, ValueStreamWizard,
-  Comparison). Model to copy: `components/InfoTip.tsx`, `Card.tsx`
+  Comparison). Model to copy: `lib/a11y.ts` `clickable()` (returns
+  `role`/`tabIndex`/`onKeyDown`), `components/InfoTip.tsx`, `Card.tsx`
   (`onClick` auto-flips role/keyboard). *Largest a11y gap; a real sweep.*
+  **Progress — the click-consistency sweep (see I1 below) closed the
+  inline-edit and tree-row slice:** the management trees (Organizations,
+  Governance Groups), the catalog nav rows, and the inline-edit triggers
+  (`DocFields` InlineEdit, `PersonDetail` InlineField; Systems /
+  Glossary `InlineCellEdit` already carried `role="button"`) now route
+  through `clickable()`. Remaining: the org-tree select, EnterpriseView
+  inspect, and gap/section toggles.
 - **☐ A2 [MED] Form labels not associated.** 292 `<label>` but only 3
   `htmlFor`; ~250 styled sibling labels announce no field name. All CRUD
   forms. Fix: `id` + `htmlFor` (or wrap, or `aria-label`).
@@ -113,6 +121,26 @@ drift with edits.
   route) → `renderNavIcon('/agents')` (GovernanceGroups, DamaRoles,
   GovernanceGroupDetail); hand-rolled tables with no overflow wrapper
   (`OrphanAssetsPage`, `AuditLogPage`).
+
+## P1 — Interaction consistency  ✅ (click-consistency sweep)
+
+- **✅ I1 [HIGH] "How you click to view / edit" drifted across surfaces.**
+  A four-pass sweep made the open-a-row and edit-a-value gestures uniform:
+  - **Tree rows** — the management trees (Organizations, Governance Groups)
+    and the catalog nav now select/open on a whole-row click via
+    `clickable()`, matching the catalog nav established earlier.
+  - **Inert link-teal names** — names styled like links that weren't links
+    (Calendar, Policies) were de-coloured; bare-`onClick` name spans
+    (Agents, People) were routed through `clickable()`.
+  - **Entity-list rows open their detail on whole-row click.** `DataTable`
+    gained `onRowClick`; both it and `trigger:'row-click'` share one handler
+    guarded against interactive descendants (so embedded controls need no
+    `stopPropagation`). Data Assets / Systems open their modal on row-click;
+    Agents / Decision Rights flipped to row-click expansion (matching SOPs /
+    Data Quality / Policies). Lists with no detail stay inert.
+  - **Inline-edit affordance** — one dashed-underline "click to edit" cue
+    everywhere (`InlineCellEdit`, `InlineEdit`, `InlineField`); dropped on
+    locked fields. Documented in `/CLAUDE.md` and the components README.
 
 ---
 

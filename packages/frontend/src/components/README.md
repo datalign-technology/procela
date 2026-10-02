@@ -290,11 +290,35 @@ complex content; the migrated pages exercise the full range:
 
 `trigger` controls how a row expands. Default `'caret'`: only the leading
 caret button toggles. `'row-click'`: clicking anywhere on the row toggles,
-and the caret stays a keyboard-focusable affordance. In `'row-click'` mode
-DataTable `stopPropagation`s the cells it owns (caret + selection
-checkbox) — but any interactive control you put inside a `column.render`
-(action buttons, links) must `stopPropagation` itself so a click on it
-doesn't also toggle the row.
+and the caret stays a keyboard-focusable affordance.
+
+**`onRowClick` — whole-row click opens the row's detail.** When a list's
+"detail" is a modal / viewer rather than an inline expansion (Data Assets →
+the 360 modal, Systems → the system detail modal), pass `onRowClick(row)` to
+make the whole `<tr>` a pointer target. It coexists with `expansion` — the
+caret column can still expand inline detail (Data Assets does both: row-click
+opens the 360 modal, the caret expands bound columns).
+
+Both whole-row behaviours (`onRowClick` **and** `trigger:'row-click'`) run
+through **one guarded handler**: a click whose target is inside an
+interactive descendant — `button, a, input, select, textarea, label,
+[role="button"]` — is ignored. So the row's own controls (the name link,
+inline-edit `<select>`s, the action icons) keep working **without each
+needing to `stopPropagation`**. DataTable also `stopPropagation`s the cells
+it owns (caret + selection checkbox). Keyboard users reach the detail
+through the focusable name control in the row, so keep the name a real
+`<button>` / `clickable()` element, not plain text.
+
+```tsx
+<DataTable … onRowClick={(asset) => open360(asset.id)} />   {/* Data Assets */}
+<DataTable … onRowClick={(sys) => setViewingSystemId(sys.id)} />  {/* Systems */}
+```
+
+The entity lists split cleanly: **Data Assets** and **Systems** open a modal
+on row-click; **Agents, Decision Rights, SOPs, Data Quality, Governance
+Policies** expand inline via `trigger:'row-click'`. Lists with no row-level
+detail (Skills, Tasks, Issues, Calendar, Mappings, Lineage, Connections,
+Audit Log) stay inert.
 
 **People is the one *entity* list deliberately left hand-rolled.** The
 reason is one specific shape: a **pinned quick-add row** — a persistent

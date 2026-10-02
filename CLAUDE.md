@@ -540,6 +540,19 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   entry), and non-entity-list tables
   (reports, the RACI matrix, the audit log, static reference tables,
   nested detail sub-tables).
+  **Whole-row click opens the row's detail** — a list whose detail is a
+  modal / viewer passes `onRowClick(row)` (Data Assets → the 360 modal,
+  Systems → the system modal); a list whose detail is inline passes
+  `expansion` with `trigger:'row-click'` (Agents, Decision Rights, SOPs,
+  Data Quality, Policies). Both paths share one guarded handler that
+  ignores clicks originating inside an interactive descendant
+  (`button, a, input, select, textarea, label, [role="button"]`), so a
+  row's own controls work without each needing to `stopPropagation`.
+  Keep the row's name a focusable `<button>` / `clickable()` element —
+  it's the keyboard path to the detail. Lists with no row-level detail
+  (Skills, Tasks, Issues, Calendar, Mappings, Lineage, Connections,
+  Audit Log) stay inert. Do NOT re-expose a teal name-link as the only
+  way to open a row.
 - `useRowSelection` — the row-selection hook wired into `DataTable`'s
   `selection` prop. Build it over the *filtered* rows so select-all
   matches what's visible. Do NOT hand-roll a `selectedIds` Set +
@@ -562,6 +575,17 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   style; wire the same 8 properties through this component.
 - `<WizardProgress>` — the step-bar at the top of any multi-step
   flow (Process Wizard, Sync Connection Wizard).
+- **Click-to-edit affordance** — an inline-editable value at rest wears a
+  **dashed underline** (`borderBottom: '1px dashed var(--color-border)'`,
+  rendered `inline-block` so a wrapped value keeps one underline) so it
+  reads as editable before hover, and drops the underline when locked /
+  read-only. This is the one treatment across the app — `InlineCellEdit`
+  (Systems, Business Glossary), `InlineEdit` (Process Catalog name /
+  description), `InlineField` (Person detail). An inline-edit trigger
+  (span / div turned editable) must also be keyboard-reachable — wire it
+  through `clickable()` (`role="button"` + `tabIndex` + key handler), not
+  a bare `onClick`. Do NOT ship a click-to-edit value with only a
+  `cursor:pointer` cue.
 
 **Colours — CSS variables only for semantic use:**
 
