@@ -2,6 +2,11 @@ import type { CSSProperties } from 'react';
 import Modal from './Modal';
 import Button from './Button';
 import SectionLabel from './SectionLabel';
+import EditableField from './EditableField';
+import DetailEditActions from './DetailEditActions';
+import { apiClient } from '../api/client';
+import { successToast, errorToast } from '../lib/errorToast';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import {
   type ConnectionProfile,
   type SystemEntity,
@@ -29,7 +34,11 @@ interface Props {
   systems: SystemEntity[];
   canWrite: boolean;
   onClose: () => void;
+  /** Opens the full list editor (per-type config, credentials, test, upload)
+   *  — the connection's type-specific config lives there, not in this modal. */
   onEdit: (conn: ConnectionProfile) => void;
+  /** Called after an in-modal save so the list refreshes. */
+  onSaved?: () => void;
 }
 
 const badgeStyle = (palette: { bg: string; color: string }): CSSProperties => ({
@@ -65,10 +74,22 @@ function configEntries(conn: ConnectionProfile): Array<{ label: string; value: s
   return out;
 }
 
-export default function ConnectionDetailModal({ conn, systems, canWrite, onClose, onEdit }: Props) {
+export default function ConnectionDetailModal({ conn, systems, canWrite, onClose, onEdit, onSaved }: Props) {
   const systemNameMap: Record<string, string> = {};
   systems.forEach((s) => { systemNameMap[s.id] = s.name; });
-  const servedNames = (conn.systemIds ?? []).map((id) => systemNameMap[id]).filter(Boolean);
+
+  const m = useDetailEditMode<{ name: string; systemIds: string[] }>(
+    { name: conn.name, systemIds: conn.systemIds ?? [] },
+    async (draft) => {
+      try {
+        await apiClient.put(`/connections/${conn.id}`, draft);
+        successToast('Connection updated');
+        onSaved?.();
+      } catch (err) { errorToast(err, 'Failed to update connection'); throw err; }
+    },
+  );
+  const shownSystemIds = m.isEditing ? m.draft.systemIds : (conn.systemIds ?? []);
+  const servedNames = shownSystemIds.map((id) => systemNameMap[id]).filter(Boolean);
 
   const typeBadge = TYPE_BADGES[conn.connectionType] || TYPE_BADGES.DATABASE;
   const statusBadge = STATUS_BADGES[conn.status] || STATUS_BADGES.UNTESTED;
@@ -95,14 +116,25 @@ export default function ConnectionDetailModal({ conn, systems, canWrite, onClose
       actions={
         <>
           <span style={badgeStyle(statusBadge)}>{conn.status}</span>
-          {canWrite && (
-            <Button variant="secondary" size="sm" onClick={() => onEdit(conn)}>Edit</Button>
-          )}
+          <DetailEditActions
+            editing={m.isEditing}
+            canEdit={canWrite}
+            dirty={m.dirty}
+            saving={m.saving}
+            onEdit={m.enter}
+            onCancel={m.cancel}
+            onSave={m.save}
+          />
         </>
       }
     >
       {/* Overview */}
       <SectionLabel style={{ marginBottom: 10 }}>Overview</SectionLabel>
+      {m.isEditing && (
+        <div style={{ marginBottom: 12 }}>
+          <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="Connection name" />
+        </div>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 4 }}>
         <span style={badgeStyle(typeBadge)}>{TYPE_LABELS[conn.connectionType] || conn.connectionType}</span>
         <span style={{ fontSize: 13, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
@@ -112,7 +144,38 @@ export default function ConnectionDetailModal({ conn, systems, canWrite, onClose
 
       {/* Systems served */}
       <SectionLabel style={sectionHead}>Systems served</SectionLabel>
-      {servedNames.length === 0 ? (
+      {m.isEditing ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {servedNames.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {shownSystemIds.map((sid) => (
+                <span key={sid} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '2px 4px 2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 500,
+                  background: 'var(--color-primary-light)', color: 'var(--color-primary)',
+                }}>
+                  {systemNameMap[sid] || sid}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${systemNameMap[sid] || sid}`}
+                    onClick={() => m.set('systemIds', m.draft.systemIds.filter((x) => x !== sid))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: '0 2px', fontSize: 14, lineHeight: 1 }}
+                  >&times;</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <select
+            aria-label="Add a system"
+            value=""
+            onChange={(e) => { const sid = e.target.value; if (sid && !m.draft.systemIds.includes(sid)) m.set('systemIds', [...m.draft.systemIds, sid]); }}
+            style={{ fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 8px', width: '100%', background: 'var(--color-surface)', color: 'var(--color-text)', appearance: 'auto', boxSizing: 'border-box' }}
+          >
+            <option value="">-- Add a system --</option>
+            {systems.filter((s) => !m.draft.systemIds.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+      ) : servedNames.length === 0 ? (
         <div style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
           Not assigned to any system yet.
         </div>
@@ -130,6 +193,18 @@ export default function ConnectionDetailModal({ conn, systems, canWrite, onClose
         </div>
       )}
 
+      {/* Type-specific config lives in the full list editor (per-type fields,
+          credentials, connection test, file upload) — not duplicated here. */}
+      {m.isEditing && canWrite && (
+        <div style={{ marginTop: 14 }}>
+          <Button variant="secondary" size="sm" onClick={() => onEdit(conn)}>
+            Edit type, config &amp; credentials&hellip;
+          </Button>
+        </div>
+      )}
+
+      {/* Read-only context — hidden while editing the name / systems. */}
+      {!m.isEditing && (<>
       {/* Configuration */}
       {entries.length > 0 && (
         <>
@@ -182,6 +257,7 @@ export default function ConnectionDetailModal({ conn, systems, canWrite, onClose
           <span>{conn.updatedAt ? new Date(conn.updatedAt).toLocaleString() : '--'}</span>
         </div>
       </div>
+      </>)}
     </Modal>
   );
 }
