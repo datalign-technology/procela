@@ -13,8 +13,11 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useAiEnabled } from '../stores/aiConfigStore';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
-import { errorMessage, errorToast } from '../lib/errorToast';
+import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 import { getStatusColor } from '../lib/statusBadge';
+import EditableField from '../components/EditableField';
+import DetailEditActions from '../components/DetailEditActions';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
@@ -60,6 +63,24 @@ const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as 
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
 
 interface FormData { name: string; description: string; status: string; criticality: string; parentDomainId: string; code: string; }
+
+// The selected domain's full editable record — identity (name/description/
+// status/criticality/code/parent) PLUS governance (owner/stewards/assets),
+// edited together in the detail pane under one Save.
+interface DomainEditable {
+  name: string; description: string; status: string; criticality: string;
+  code: string; parentDomainId: string;
+  ownerId: string; stewardIds: string[]; dataAssetIds: string[];
+}
+
+const CRITICALITY_OPTIONS = [
+  { value: '', label: 'Unclassified' },
+  { value: 'TIER_1', label: 'Tier-1 (critical)' },
+  { value: 'TIER_2', label: 'Tier-2' },
+  { value: 'TIER_3', label: 'Tier-3' },
+  { value: 'TIER_4', label: 'Tier-4' },
+];
+const criticalityLabel = (v?: string) => CRITICALITY_OPTIONS.find((o) => o.value === (v || ''))?.label || 'Unclassified';
 const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', criticality: '', parentDomainId: '', code: '' };
 
 const SIMPLE_TRANSITIONS: Record<string, string[]> = { DRAFT: ['ACTIVE'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
@@ -108,7 +129,6 @@ export default function DataDomainsPage() {
   const [allAssets, setAllAssets] = useState<DataAssetOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
@@ -146,10 +166,7 @@ export default function DataDomainsPage() {
     setBulkUpdates({ ownerId: '', status: '' });
   };
 
-  // Detail editing
-  const [detailOwnerId, setDetailOwnerId] = useState('');
-  const [detailStewardIds, setDetailStewardIds] = useState<string[]>([]);
-  const [detailAssetIds, setDetailAssetIds] = useState<string[]>([]);
+  // Detail editing — owner/stewards/assets live in the unified `m` draft below.
   const [assetSearch, setAssetSearch] = useState('');
 
   // AI generate — one nested-tree review. "Generate domains" builds top-level
@@ -270,6 +287,42 @@ export default function DataDomainsPage() {
     ? (domains.find((d) => d.id === selectedDomain.parentDomainId) || null)
     : null;
 
+  // Unified detail view/edit: the pane opens read-only and flips its identity
+  // AND governance fields into editors under one Edit → Save. Reseeds from the
+  // selected domain (serialised compare) when the selection changes.
+  const m = useDetailEditMode<DomainEditable>(
+    {
+      name: selectedDomain?.name ?? '',
+      description: selectedDomain?.description ?? '',
+      status: selectedDomain?.status ?? 'DRAFT',
+      criticality: selectedDomain?.criticality ?? '',
+      code: selectedDomain?.code ?? '',
+      parentDomainId: selectedDomain?.parentDomainId ?? '',
+      ownerId: selectedDomain?.ownerId ?? '',
+      stewardIds: selectedDomain?.stewardIds ?? [],
+      dataAssetIds: selectedDomain?.dataAssetIds ?? [],
+    },
+    async (draft) => {
+      if (!selectedDomain) return;
+      if (!draft.name.trim()) { errorToast(null, 'Name is required'); throw new Error('no-name'); }
+      try {
+        await apiClient.put(`/data-domains/${selectedDomain.id}`, {
+          name: draft.name.trim(),
+          description: draft.description,
+          status: draft.status,
+          criticality: draft.criticality,
+          code: draft.code,
+          parentDomainId: draft.parentDomainId,
+          ownerId: draft.ownerId || null,
+          stewardIds: draft.stewardIds,
+          dataAssetIds: draft.dataAssetIds,
+        });
+        successToast('Domain saved');
+        fetchData();
+      } catch (err) { errorToast(err, 'Failed to save domain'); throw err; }
+    },
+  );
+
   useEffect(() => {
     if (!selectedDomainId && filteredDomains.length > 0) setSelectedDomainId(filteredDomains[0].id);
     else if (selectedDomainId && !filteredDomains.find((d) => d.id === selectedDomainId) && filteredDomains.length > 0) setSelectedDomainId(filteredDomains[0].id);
@@ -277,31 +330,15 @@ export default function DataDomainsPage() {
 
   const openDetail = (domain: DataDomain) => {
     setSelectedDomainId(domain.id);
-    setDetailOwnerId(domain.ownerId || '');
-    setDetailStewardIds(domain.stewardIds || []);
-    setDetailAssetIds(domain.dataAssetIds || []);
     setAssetSearch('');
     setShowForm(false);
   };
 
-  // Auto-sync detail state when selectedDomain changes
-  useEffect(() => {
-    if (selectedDomain) {
-      setDetailOwnerId(selectedDomain.ownerId || '');
-      setDetailStewardIds(selectedDomain.stewardIds || []);
-      setDetailAssetIds(selectedDomain.dataAssetIds || []);
-    }
-  }, [selectedDomain]);
-
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    setForm(emptyForm); setEditingId(null); setCreateStewardshipTeam(true); setShowForm(true);
+    setForm(emptyForm); setCreateStewardshipTeam(true); setShowForm(true);
   };
-  const openEdit = (domain: DataDomain) => {
-    setForm({ name: domain.name, description: domain.description, status: domain.status, criticality: domain.criticality || '', parentDomainId: domain.parentDomainId || '', code: domain.code || '' });
-    setEditingId(domain.id); setShowForm(true);
-  };
-  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const closeForm = () => { setShowForm(false); setForm(emptyForm); };
 
   const ensureGovernanceHierarchy = async (): Promise<string | null> => {
     try {
@@ -319,22 +356,20 @@ export default function DataDomainsPage() {
     } catch { return null; }
   };
 
+  // Create-only: an existing domain is edited in the detail pane (the `m`
+  // draft above). The stewardship-team auto-creation is a create-time side
+  // effect, so it stays here.
   const handleSave = async () => {
     if (!form.name.trim()) return;
     try {
-      if (editingId) {
-        await apiClient.put(`/data-domains/${editingId}`, form);
-        addToast('success', 'Domain updated');
-      } else {
-        await apiClient.post('/data-domains', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
-        addToast('success', 'Domain created');
-        if (createStewardshipTeam) {
-          try {
-            const parentId = await ensureGovernanceHierarchy();
-            await apiClient.post('/governance-groups', { name: `${form.name.trim()} Stewardship Team`, type: 'STEWARDSHIP_TEAM', description: `Stewardship team for the ${form.name.trim()} domain.`, status: 'ACTIVE', orgId: activeOrgId, parentId });
-            addToast('success', `Stewardship team created for ${form.name.trim()}`);
-          } catch { addToast('error', 'Domain created, but stewardship team creation failed'); }
-        }
+      await apiClient.post('/data-domains', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+      addToast('success', 'Domain created');
+      if (createStewardshipTeam) {
+        try {
+          const parentId = await ensureGovernanceHierarchy();
+          await apiClient.post('/governance-groups', { name: `${form.name.trim()} Stewardship Team`, type: 'STEWARDSHIP_TEAM', description: `Stewardship team for the ${form.name.trim()} domain.`, status: 'ACTIVE', orgId: activeOrgId, parentId });
+          addToast('success', `Stewardship team created for ${form.name.trim()}`);
+        } catch { addToast('error', 'Domain created, but stewardship team creation failed'); }
       }
       closeForm(); fetchData();
     } catch (err) {
@@ -349,34 +384,11 @@ export default function DataDomainsPage() {
     addToast('success', 'Domain deleted'); fetchData();
   };
 
-  const handleDetailSave = async () => {
-    if (!selectedDomain) return;
-    // Surface failures — a rejected save (e.g. a locked Active/Deprecated
-    // domain refusing a field edit) previously threw silently, so the panel
-    // looked like it saved nothing with no explanation.
-    try {
-      await apiClient.put(`/data-domains/${selectedDomain.id}`, { ownerId: detailOwnerId || null, stewardIds: detailStewardIds, dataAssetIds: detailAssetIds });
-      addToast('success', 'Governance details saved');
-      fetchData();
-    } catch (err) {
-      errorToast(err, 'Failed to save governance details');
-    }
-  };
-
-  // Explicitly assign the parent domain's owner to this sub-domain. Not a
-  // display fallback — it writes a real ownerId so the field never disagrees
-  // with the "no owner" gap. Stewardship stays deliberately manual (each
-  // sub-domain gets its own steward).
-  const inheritOwnerFromParent = async () => {
-    if (!selectedDomain) return;
-    const parent = selectedDomain.parentDomainId ? domains.find((d) => d.id === selectedDomain.parentDomainId) : null;
-    if (!parent?.ownerId) return;
-    try {
-      await apiClient.put(`/data-domains/${selectedDomain.id}`, { ownerId: parent.ownerId, stewardIds: detailStewardIds, dataAssetIds: detailAssetIds });
-      setDetailOwnerId(parent.ownerId);
-      addToast('success', `Owner set to ${parent.ownerName || 'the parent owner'} — inherited from ${parent.name}`);
-      fetchData();
-    } catch (err) { errorToast(err, 'Failed to inherit owner from parent'); }
+  // Set the draft owner to the parent domain's owner (a quick-fill used while
+  // editing a sub-domain that has none); the unified Save persists it.
+  const inheritOwnerFromParent = () => {
+    if (!selectedParentDomain?.ownerId) return;
+    m.set('ownerId', selectedParentDomain.ownerId);
   };
 
   const handleBulkApply = async () => {
@@ -695,7 +707,7 @@ export default function DataDomainsPage() {
       {/* Add/Edit Form */}
       {showForm && (
         <Card padding={20} marginBottom={16}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Data Domain' : 'Add New Data Domain'}</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add New Data Domain</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus aria-label="Name" style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Customer Data" /></div>
@@ -703,14 +715,7 @@ export default function DataDomainsPage() {
               <input aria-label="Code" style={{ ...inputStyle, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder={form.parentDomainId ? 'e.g. MFG-02' : 'e.g. MFG'} />
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Structured governance code. Auto-suggested if left blank.</div></div>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              {editingId ? (
-                <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                  <option value={form.status}>{form.status}</option>
-                  {(transitions[form.status] || []).map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              ) : (
-                <select aria-label="Status" style={selectStyle} value="DRAFT" disabled><option value="DRAFT">Draft</option></select>
-              )}
+              <select aria-label="Status" style={selectStyle} value="DRAFT" disabled><option value="DRAFT">Draft</option></select>
             </div>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Criticality</label>
               <select aria-label="Criticality" style={selectStyle} value={form.criticality} onChange={(e) => setForm({ ...form, criticality: e.target.value })}>
@@ -731,7 +736,7 @@ export default function DataDomainsPage() {
               >
                 <option value="">— None (top-level domain)</option>
                 {domains
-                  .filter((d) => !d.parentDomainId && d.id !== editingId)
+                  .filter((d) => !d.parentDomainId)
                   .map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>Nest this under a parent to make it a sub-domain. One level deep.</div>
@@ -740,16 +745,14 @@ export default function DataDomainsPage() {
             <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" /></div>
           </div>
-          {!editingId && (
-            <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <input type="checkbox" checked={createStewardshipTeam} onChange={(e) => setCreateStewardshipTeam(e.target.checked)} style={{ marginTop: 2 }} />
-              <div><div style={{ fontSize: 12, fontWeight: 500 }}>Create a Stewardship Team for this domain</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>Assign members later under Governance Groups.</div></div>
-            </div>
-          )}
+          <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <input type="checkbox" checked={createStewardshipTeam} onChange={(e) => setCreateStewardshipTeam(e.target.checked)} style={{ marginTop: 2 }} />
+            <div><div style={{ fontSize: 12, fontWeight: 500 }}>Create a Stewardship Team for this domain</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>Assign members later under Governance Groups.</div></div>
+          </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={closeForm}>Cancel</Button>
-            <Button variant="primary" disabled={!form.name.trim()} onClick={handleSave}>{editingId ? 'Save Changes' : 'Add Domain'}</Button>
+            <Button variant="primary" disabled={!form.name.trim()} onClick={handleSave}>Add Domain</Button>
           </div>
         </Card>
       )}
@@ -955,23 +958,29 @@ export default function DataDomainsPage() {
                   </div>
                 </div>
               </div>
-            ) : selectedDomain ? (
+            ) : selectedDomain ? (() => {
+              const editing = m.isEditing;
+              const statusColor = getStatusColor(selectedDomain.status);
+              const statusOptions = Array.from(new Set([m.draft.status, ...(transitions[m.draft.status] || [])])).map((s) => ({ value: s, label: s.replace(/_/g, ' ') }));
+              const parentOptions = [
+                { value: '', label: '— None (top-level domain)' },
+                ...domains.filter((d) => !d.parentDomainId && d.id !== selectedDomain.id).map((d) => ({ value: d.id, label: d.name })),
+              ];
+              const ownerName = people.find((p) => p.id === m.draft.ownerId)?.name || selectedDomain.ownerName;
+              return (
               <div style={{ padding: '24px 28px' }}>
                 {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                      <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{selectedDomain.name}</h2>
-                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, ...(() => { const c = getStatusColor(selectedDomain.status); return { background: c.bg, color: c.color }; })() }}>{selectedDomain.status}</span>
-                    </div>
-                    {selectedDomain.description && <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6, margin: 0 }}>{selectedDomain.description}</p>}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{selectedDomain.name}</h2>
+                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: statusColor.bg, color: statusColor.color }}>{selectedDomain.status}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {canWrite && aiEnabled && !selectedDomain.parentDomainId && (
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                    {!editing && canWrite && aiEnabled && !selectedDomain.parentDomainId && (
                       <IconButton size="sm" icon="wand" label={generating ? 'Generating…' : 'Suggest sub-domains'} disabled={generating} onClick={() => generateSubsForDomain(selectedDomain)} />
                     )}
-                    {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(selectedDomain)} />}
-                    {canWrite && (
+                    <DetailEditActions editing={editing} canEdit={canWrite} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+                    {!editing && canWrite && (
                       <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
                         try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${selectedDomain.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
                         setConfirmDelete(selectedDomain.id);
@@ -980,8 +989,36 @@ export default function DataDomainsPage() {
                   </div>
                 </div>
 
-                {/* Status lifecycle */}
-                {canWrite && (transitions[selectedDomain.status] || []).length > 0 && (
+                {/* Identity fields */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14, marginBottom: 20 }}>
+                  {editing && (
+                    <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="Domain name" />
+                  )}
+                  {editing && (
+                    <EditableField label="Status" editing value={m.draft.status} onChange={(v) => m.set('status', v)} type="select" options={statusOptions} />
+                  )}
+                  <EditableField label="Criticality" editing={editing} value={m.draft.criticality} onChange={(v) => m.set('criticality', v)} type="select" options={CRITICALITY_OPTIONS}>
+                    {criticalityLabel(selectedDomain.criticality)}
+                  </EditableField>
+                  <EditableField label="Code" editing={editing} value={m.draft.code} onChange={(v) => m.set('code', v)} placeholder="e.g. MFG" emptyText="—">
+                    {selectedDomain.code ? <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{selectedDomain.code}</span> : undefined}
+                  </EditableField>
+                  <EditableField label="Parent domain" editing={editing} value={m.draft.parentDomainId} onChange={(v) => m.set('parentDomainId', v)} type="select" options={parentOptions}>
+                    {selectedDomain.parentDomainName || 'Top-level domain'}
+                  </EditableField>
+                </div>
+
+                {/* Description */}
+                {(editing || selectedDomain.description) && (
+                  <div style={{ marginBottom: 20 }}>
+                    <EditableField label="Description" editing={editing} type="textarea" value={m.draft.description} onChange={(v) => m.set('description', v)} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" emptyText="No description">
+                      {selectedDomain.description ? <span style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>{selectedDomain.description}</span> : undefined}
+                    </EditableField>
+                  </div>
+                )}
+
+                {/* Status lifecycle — quick guided transitions (view only). */}
+                {!editing && canWrite && (transitions[selectedDomain.status] || []).length > 0 && (
                   <div style={{ marginBottom: 20 }}>
                     <div style={labelStyle}>Status Transitions</div>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -992,82 +1029,76 @@ export default function DataDomainsPage() {
                   </div>
                 )}
 
-                {/* Owner — the label opens the Role Detail drawer for
-                  *  Data Domain Owner so users learn the role's
-                  *  responsibilities and typical decision authority. */}
+                {/* Owner — label opens the Role Detail drawer. */}
                 <div style={{ marginBottom: 20 }}>
                   <div style={labelStyle}>
-                    <button
-                      type="button"
-                      onClick={() => openRoleDrawer('DATA_DOMAIN_OWNER')}
-                      title="Learn about this role"
-                      style={roleLabelBtnStyle}
-                    >
+                    <button type="button" onClick={() => openRoleDrawer('DATA_DOMAIN_OWNER')} title="Learn about this role" style={roleLabelBtnStyle}>
                       Owner (Data Domain Owner)
                     </button>
                   </div>
-                  <PersonPicker
-                    mode="single"
-                    valueMode="id"
-                    value={detailOwnerId || null}
-                    onChange={(pid) => setDetailOwnerId(pid || '')}
-                    placeholder="-- Unassigned --"
-                  />
-                  {/* One-click explicit inheritance — only for a sub-domain that
-                      has no owner of its own but whose parent does. Writes a real
-                      ownerId (not a display fallback), so the gap clears honestly. */}
-                  {canWrite && !detailOwnerId && selectedParentDomain?.ownerId && selectedParentDomain.ownerName && (
-                    <button
-                      type="button"
-                      onClick={inheritOwnerFromParent}
-                      style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-                      title={`Assign ${selectedParentDomain.ownerName} — the owner of the parent domain "${selectedParentDomain.name}" — as this sub-domain's owner`}
-                    >
-                      ↰ Inherit owner from {selectedParentDomain.name}: {selectedParentDomain.ownerName}
-                    </button>
+                  {editing ? (
+                    <>
+                      <PersonPicker mode="single" valueMode="id" value={m.draft.ownerId || null} onChange={(pid) => m.set('ownerId', pid || '')} placeholder="-- Unassigned --" />
+                      {!m.draft.ownerId && selectedParentDomain?.ownerId && selectedParentDomain.ownerName && (
+                        <button
+                          type="button"
+                          onClick={inheritOwnerFromParent}
+                          style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                          title={`Assign ${selectedParentDomain.ownerName} — the owner of the parent domain "${selectedParentDomain.name}" — as this sub-domain's owner`}
+                        >
+                          ↰ Inherit owner from {selectedParentDomain.name}: {selectedParentDomain.ownerName}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 13 }}>{ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}</div>
                   )}
                 </div>
 
                 {/* Stewards */}
                 <div style={{ marginBottom: 20 }}>
                   <div style={labelStyle}>
-                    <button
-                      type="button"
-                      onClick={() => openRoleDrawer('DATA_DOMAIN_STEWARD')}
-                      title="Learn about this role"
-                      style={roleLabelBtnStyle}
-                    >
-                      Stewards ({detailStewardIds.length})
+                    <button type="button" onClick={() => openRoleDrawer('DATA_DOMAIN_STEWARD')} title="Learn about this role" style={roleLabelBtnStyle}>
+                      Stewards ({editing ? m.draft.stewardIds.length : (selectedDomain.stewards?.length || 0)})
                     </button>
                   </div>
-                  <PersonPicker
-                    mode="multi"
-                    valueMode="id"
-                    value={detailStewardIds}
-                    onChange={(ids) => setDetailStewardIds(ids as string[])}
-                    placeholder="Add stewards…"
-                  />
+                  {editing ? (
+                    <PersonPicker mode="multi" valueMode="id" value={m.draft.stewardIds} onChange={(ids) => m.set('stewardIds', ids as string[])} placeholder="Add stewards…" />
+                  ) : (
+                    <div style={{ fontSize: 13 }}>
+                      {(selectedDomain.stewards?.length || 0) === 0
+                        ? <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None</span>
+                        : selectedDomain.stewards.map((s) => s.name).join(', ')}
+                    </div>
+                  )}
                 </div>
 
-                {/* Data Assets — the checkboxes assign DIRECT membership on this
-                    exact domain. Assets held by sub-domains roll up into this
-                    domain's coverage/health but are shown read-only below (assign
-                    them under their own sub-domain). */}
+                {/* Data Assets — DIRECT membership on this exact domain. */}
                 <div style={{ marginBottom: 20 }}>
                   <div style={labelStyle}>
-                    Data Assets ({detailAssetIds.length} direct{selectedDomain && (selectedDomain.subtreeAssetCount ?? 0) > (selectedDomain.dataAssetIds?.length ?? 0)
+                    Data Assets ({(editing ? m.draft.dataAssetIds.length : (selectedDomain.dataAssetIds?.length || 0))} direct{(selectedDomain.subtreeAssetCount ?? 0) > (selectedDomain.dataAssetIds?.length ?? 0)
                       ? ` · ${selectedDomain.subtreeAssetCount} incl. sub-domains` : ''})
                   </div>
-                  <input aria-label="Search assets" style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} placeholder="Search assets..." value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)} />
-                  <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 6, background: 'var(--color-bg)' }}>
-                    {allAssets.filter((a) => !assetSearch || a.name.toLowerCase().includes(assetSearch.toLowerCase())).map((a) => (
-                      <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '3px 4px', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={detailAssetIds.includes(a.id)} onChange={() => setDetailAssetIds((prev) => prev.includes(a.id) ? prev.filter((id) => id !== a.id) : [...prev, a.id])} />
-                        {a.name}
-                      </label>
-                    ))}
-                  </div>
-                  {selectedDomain && (() => {
+                  {editing ? (
+                    <>
+                      <input aria-label="Search assets" style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} placeholder="Search assets..." value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)} />
+                      <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 6, background: 'var(--color-bg)' }}>
+                        {allAssets.filter((a) => !assetSearch || a.name.toLowerCase().includes(assetSearch.toLowerCase())).map((a) => (
+                          <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '3px 4px', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={m.draft.dataAssetIds.includes(a.id)} onChange={() => m.set('dataAssetIds', m.draft.dataAssetIds.includes(a.id) ? m.draft.dataAssetIds.filter((id) => id !== a.id) : [...m.draft.dataAssetIds, a.id])} />
+                            {a.name}
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 13 }}>
+                      {(selectedDomain.assets?.length || 0) === 0
+                        ? <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None assigned directly</span>
+                        : selectedDomain.assets.map((a) => a.name).join(', ')}
+                    </div>
+                  )}
+                  {(() => {
                     const own = new Set(selectedDomain.dataAssetIds || []);
                     const viaSub = (selectedDomain.subtreeAssets || []).filter((a) => !own.has(a.id));
                     if (viaSub.length === 0) return null;
@@ -1080,17 +1111,13 @@ export default function DataDomainsPage() {
                   })()}
                 </div>
 
-                {/* Save */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button variant="primary" onClick={handleDetailSave}>Save Governance Details</Button>
-                </div>
-
                 {/* Timestamps */}
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)', paddingTop: 12, marginTop: 16 }}>
                   Created {new Date(selectedDomain.createdAt).toLocaleDateString()} · Updated {new Date(selectedDomain.updatedAt).toLocaleDateString()}
                 </div>
               </div>
-            ) : (
+              );
+            })() : (
               <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
                 <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Select a domain from the list to view and edit its governance details.</p>
               </div>
