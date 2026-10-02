@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -157,6 +158,15 @@ export default function GovernanceTasksPage({
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // Row-click expansion: open a task's full detail (description + metadata
+  // that doesn't fit the columns) inline, matching the other governance
+  // work-item lists (Policies, SOPs, Decision Rights).
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) => setExpandedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   // Filters
   const [filterStatus, setFilterStatus] = useState('');
@@ -576,6 +586,26 @@ export default function GovernanceTasksPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all tasks"
             emptyMessage="No tasks match the current filters."
+            expansion={{
+              expandedIds,
+              onToggleExpanded: toggleExpand,
+              trigger: 'row-click',
+              renderExpandedRow: (t) => (
+                <div style={{ padding: '12px 16px 14px 48px', background: '#fafbfc' }}>
+                  <SectionLabel marginBottom={6}>Description</SectionLabel>
+                  <div style={{ fontSize: 12, color: t.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: t.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
+                    {t.description || 'No description provided.'}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
+                    {t.linkedObjectType && (
+                      <div><span style={{ color: 'var(--color-text-muted)' }}>Linked to </span><span style={{ fontWeight: 500 }}>{t.linkedObjectType.replace(/_/g, ' ').toLowerCase()}</span></div>
+                    )}
+                    <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{formatDate(t.createdAt)}</span></div>
+                    <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{formatDate(t.updatedAt)}</span></div>
+                  </div>
+                </div>
+              ),
+            }}
           />
         )}
       </div>
