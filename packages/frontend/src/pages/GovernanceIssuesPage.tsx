@@ -307,7 +307,7 @@ export default function GovernanceIssuesPage({
   const issueColumns = ([
     issueCols.isVisible('title') && {
       key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
-      render: (i: GovernanceIssue) => <span style={{ color: 'var(--color-primary)' }}>{i.title}</span>,
+      render: (i: GovernanceIssue) => <span>{i.title}</span>,
     },
     issueCols.isVisible('type') && {
       key: 'type', header: 'Type', sortable: true,
