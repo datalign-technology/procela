@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
-import { errorMessage } from '../lib/errorToast';
+import { errorMessage, successToast, errorToast } from '../lib/errorToast';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import DetailEditActions from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
@@ -135,6 +137,142 @@ const TASK_COLUMN_DEFS: Array<{ id: TaskColId; label: string; defaultVisible: bo
   { id: 'mode',     label: 'Mode',     defaultVisible: false },
 ];
 
+const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
+
+function fmtDate(d: string | null): string {
+  if (!d) return '--';
+  return new Date(d).toLocaleDateString();
+}
+
+// Shared task field grid — used by both the top-of-page "Add" form (create)
+// and the in-row editor (edit), so the two never drift. Status is deliberately
+// absent: it's driven by the row's transition buttons, not a form field.
+function TaskFields({ form, setForm, people }: {
+  form: FormData;
+  setForm: (next: FormData) => void;
+  people: Person[];
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Title *</label>
+        <input
+          aria-label="Title"
+          style={inputStyle}
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          placeholder="e.g. Review customer data quality report"
+        />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Description</label>
+        <textarea
+          aria-label="Description"
+          style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          placeholder="Describe the task in detail..."
+        />
+      </div>
+      <div>
+        <label style={labelStyle}>Type</label>
+        <select aria-label="Type" style={selectStyle} value={form.taskType} onChange={(e) => setForm({ ...form, taskType: e.target.value })}>
+          {TASK_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Priority</label>
+        <select aria-label="Priority" style={selectStyle} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+          {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Assignee</label>
+        <select aria-label="Assignee" style={selectStyle} value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}>
+          <option value="">-- Unassigned --</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Due Date</label>
+        <input type="date" aria-label="Due Date" style={inputStyle} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+      </div>
+      <div>
+        <label style={labelStyle}>Automation Mode</label>
+        <select aria-label="Automation Mode" style={selectStyle} value={form.automationMode} onChange={(e) => setForm({ ...form, automationMode: e.target.value })}>
+          {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+// The expanded row: read-only detail with a view/edit toggle. Edit flips the
+// SAME panel into the field grid and one Save writes PUT /governance-tasks/:id
+// — the row's own in-place editor (there's no separate edit form anymore).
+function ExpandedTask({ task, people, orgId, canEdit, onSaved }: {
+  task: GovernanceTask;
+  people: Person[];
+  orgId: string | null;
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
+  const m = useDetailEditMode<FormData>(
+    {
+      title: task.title,
+      description: task.description,
+      taskType: task.taskType,
+      priority: task.priority,
+      assigneeId: task.assigneeId || '',
+      dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
+      automationMode: task.automationMode,
+      linkedObjectType: task.linkedObjectType || '',
+      linkedObjectId: task.linkedObjectId || '',
+    },
+    async (draft) => {
+      if (!draft.title.trim()) { errorToast(null, 'Title is required'); throw new Error('no-title'); }
+      try {
+        await apiClient.put(`/governance-tasks/${task.id}`, {
+          ...draft,
+          assigneeId: draft.assigneeId || null,
+          dueDate: draft.dueDate || null,
+          linkedObjectType: draft.linkedObjectType || null,
+          linkedObjectId: draft.linkedObjectId || null,
+          ...(orgId ? { orgId } : {}),
+        });
+        successToast('Task updated');
+        onSaved();
+      } catch (err) { errorToast(err, 'Failed to update task'); throw err; }
+    },
+  );
+  return (
+    <div style={{ padding: '12px 16px 14px 48px', background: '#fafbfc' }}>
+      {canEdit && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
+          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+        </div>
+      )}
+      {m.isEditing ? (
+        <TaskFields form={m.draft} setForm={(next) => m.patch(next)} people={people} />
+      ) : (
+        <>
+          <SectionLabel marginBottom={6}>Description</SectionLabel>
+          <div style={{ fontSize: 12, color: task.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: task.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
+            {task.description || 'No description provided.'}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
+            {task.linkedObjectType && (
+              <div><span style={{ color: 'var(--color-text-muted)' }}>Linked to </span><span style={{ fontWeight: 500 }}>{task.linkedObjectType.replace(/_/g, ' ').toLowerCase()}</span></div>
+            )}
+            <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{fmtDate(task.createdAt)}</span></div>
+            <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{fmtDate(task.updatedAt)}</span></div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Component ──
 
 export default function GovernanceTasksPage({
@@ -154,7 +292,6 @@ export default function GovernanceTasksPage({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -230,32 +367,15 @@ export default function GovernanceTasksPage({
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
-    setEditingId(null);
-    setShowForm(true);
-  };
-
-  const openEdit = (task: GovernanceTask) => {
-    setForm({
-      title: task.title,
-      description: task.description,
-      taskType: task.taskType,
-      priority: task.priority,
-      assigneeId: task.assigneeId || '',
-      dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
-      automationMode: task.automationMode,
-      linkedObjectType: task.linkedObjectType || '',
-      linkedObjectId: task.linkedObjectId || '',
-    });
-    setEditingId(task.id);
     setShowForm(true);
   };
 
   const closeForm = () => {
     setShowForm(false);
-    setEditingId(null);
     setForm(emptyForm);
   };
 
+  // Create-only: existing tasks are edited inside their row's expanded detail.
   const handleSave = async () => {
     if (!form.title.trim()) return;
     try {
@@ -267,13 +387,8 @@ export default function GovernanceTasksPage({
         linkedObjectId: form.linkedObjectId || null,
         ...(activeOrgId ? { orgId: activeOrgId } : {}),
       };
-      if (editingId) {
-        await apiClient.put(`/governance-tasks/${editingId}`, payload);
-        addToast('success', 'Task updated');
-      } else {
-        await apiClient.post('/governance-tasks', payload);
-        addToast('success', 'Task created');
-      }
+      await apiClient.post('/governance-tasks', payload);
+      addToast('success', 'Task created');
       closeForm();
       fetchData();
     } catch (err) {
@@ -388,7 +503,6 @@ export default function GovernanceTasksPage({
               {tr.label}
             </button>
           ))}
-          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
           {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
         </div>
       ),
@@ -485,72 +599,12 @@ export default function GovernanceTasksPage({
       {/* Add/Edit Form */}
       {showForm && (
         <Card padding={20} marginBottom={20}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-            {editingId ? 'Edit Task' : 'Add New Task'}
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title *</label>
-              <input
-                autoFocus
-                aria-label="Title"
-                style={inputStyle}
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="e.g. Review customer data quality report"
-              />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <textarea
-                aria-label="Description"
-                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Describe the task in detail..."
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
-              <select aria-label="Type" style={selectStyle} value={form.taskType} onChange={(e) => setForm({ ...form, taskType: e.target.value })}>
-                {TASK_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Priority</label>
-              <select aria-label="Priority" style={selectStyle} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-                {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assignee</label>
-              <select aria-label="Assignee" style={selectStyle} value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}>
-                <option value="">-- Unassigned --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Due Date</label>
-              <input
-                type="date"
-                aria-label="Due Date"
-                style={inputStyle}
-                value={form.dueDate}
-                onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Automation Mode</label>
-              <select aria-label="Automation Mode" style={selectStyle} value={form.automationMode} onChange={(e) => setForm({ ...form, automationMode: e.target.value })}>
-                {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-            {/* Linked Object Type/ID inputs removed: the user-pickable
-                vocabulary was read by nothing — the values actually consumed
-                (dashboard / governance-calendar) are set programmatically with
-                their own types. The DB columns and that programmatic linkage
-                are retained. */}
-          </div>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add New Task</h3>
+          {/* Linked Object Type/ID inputs are intentionally absent: the
+              user-pickable vocabulary was read by nothing — the values actually
+              consumed (dashboard / governance-calendar) are set programmatically
+              with their own types. The DB columns + programmatic linkage stay. */}
+          <TaskFields form={form} setForm={setForm} people={people} />
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={closeForm}>Cancel</Button>
             <Button
@@ -558,7 +612,7 @@ export default function GovernanceTasksPage({
               disabled={!form.title.trim()}
               onClick={handleSave}
             >
-              {editingId ? 'Save Changes' : 'Add Task'}
+              Add Task
             </Button>
           </div>
         </Card>
@@ -591,19 +645,7 @@ export default function GovernanceTasksPage({
               onToggleExpanded: toggleExpand,
               trigger: 'row-click',
               renderExpandedRow: (t) => (
-                <div style={{ padding: '12px 16px 14px 48px', background: '#fafbfc' }}>
-                  <SectionLabel marginBottom={6}>Description</SectionLabel>
-                  <div style={{ fontSize: 12, color: t.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: t.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
-                    {t.description || 'No description provided.'}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
-                    {t.linkedObjectType && (
-                      <div><span style={{ color: 'var(--color-text-muted)' }}>Linked to </span><span style={{ fontWeight: 500 }}>{t.linkedObjectType.replace(/_/g, ' ').toLowerCase()}</span></div>
-                    )}
-                    <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{formatDate(t.createdAt)}</span></div>
-                    <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{formatDate(t.updatedAt)}</span></div>
-                  </div>
-                </div>
+                <ExpandedTask task={t} people={people} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchData} />
               ),
             }}
           />
