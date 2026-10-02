@@ -712,6 +712,56 @@ verbatim across 18 pages. Two of those properties (`#6b7280`,
 to `var(--color-text-secondary)` + `var(--color-border)`, identical
 today but coupled to the palette going forward.
 
+### Detail view/edit — `useDetailEditMode` + `<DetailEditActions>` + `<EditableField>`
+
+Every entity **detail surface** (a `/x/:id` detail page or a detail
+modal) opens **read-only** and flips the *same* layout into editable
+inputs when the user hits **Edit** — one **Save** writes the staged
+draft, **Cancel** discards it. Do NOT hand-roll this (and do NOT ship a
+detail page whose fields are always editable with per-field auto-save —
+that was the old Person-page outlier these primitives replace). The three
+pieces compose:
+
+- **`useDetailEditMode(initial, onSave)`** (hook) — owns `mode`
+  (`'view'|'edit'`), the `draft`, `dirty`, `saving`, and `enter` /
+  `cancel` / `save` / `set` / `patch`. Pass the **editable subset** of the
+  record as `initial` (it reseeds from fresh data after a re-fetch, only
+  while viewing); `onSave(draft)` does the PUT and re-fetches.
+- **`<DetailEditActions>`** — the header cluster. View → an `Edit`
+  button (hidden when `!canEdit`, or disabled with a `disabledHint` for
+  an inherited / locked record); edit → `Cancel` + `Save changes`
+  (disabled until `dirty`). `before` holds the `← Back to X` link so it
+  stays put across the mode swap. Drop it into the `PageHeader` /
+  `Modal` `actions` slot.
+- **`<EditableField>`** — one labelled field that renders its **value**
+  in view mode (pixel-identical to the old per-page `Field` helper) and
+  the matching **input** in edit mode, from one call site. Built-in
+  `text` / `textarea` / `number` / `select` (+ `options`); pass
+  `children` for a custom view (badges, links) and/or `renderEdit()` for
+  a custom editor (org / skill pickers).
+
+```tsx
+const m = useDetailEditMode(
+  { name: org.name, industry: org.industry, description: org.description },
+  (draft) => apiClient.put(`/organizations/${id}`, draft).then(fetchAll),
+);
+
+<PageHeader title={org.name} actions={
+  <DetailEditActions
+    editing={m.isEditing} canEdit={canWrite} dirty={m.dirty} saving={m.saving}
+    onEdit={m.enter} onCancel={m.cancel} onSave={m.save}
+    before={<Link to="/organizations">← Back to Organizations</Link>}
+  />
+} />
+
+<EditableField label="Industry" editing={m.isEditing}
+  value={m.draft.industry} onChange={(v) => m.set('industry', v)} emptyText="Not set" />
+```
+
+The relationship cards on a detail page (children, people, linked
+assets) stay read-only — only the record's own fields become editable.
+Reference: `pages/OrganizationDetailPage.tsx`.
+
 ### `<SearchInput>`
 
 The free-text list-filter box shared across the Data Assets hub tabs
