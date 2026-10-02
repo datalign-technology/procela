@@ -7,8 +7,36 @@ import Modal from './Modal';
 import WhereUsed, { WhereUsedGroup } from './WhereUsed';
 import CommentsPanel from './CommentsPanel';
 import ActivityFeed from './ActivityFeed';
+import EditableField from './EditableField';
+import DetailEditActions from './DetailEditActions';
+import SectionLabel from './SectionLabel';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import { successToast, errorToast } from '../lib/errorToast';
 import { useTierLabel } from '../lib/governanceTier';
 import { useTerm } from '../lib/terminology';
+
+const CRITICALITY_OPTS = [
+  { value: '', label: '— None —' },
+  { value: 'HIGH', label: 'High' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'LOW', label: 'Low' },
+];
+const CONNECTIVITY_OPTS = [
+  { value: 'INTEGRATED', label: 'Integrated' },
+  { value: 'MANUAL', label: 'Manual' },
+  { value: 'EXTERNAL', label: 'External' },
+];
+
+interface SystemEditable {
+  name: string;
+  description: string;
+  systemType: string;
+  businessCriticality: string;
+  vendor: string;
+  connectivity: string;
+  ownerPersonId: string;
+  deputyOwnerId: string;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // SystemDetailModal — the cross-layer view for a single System.
@@ -73,9 +101,17 @@ interface SystemThreeSixty {
 interface Props {
   systemId: string;
   onClose: () => void;
+  /** People for the owner / deputy selects (edit mode). */
+  people?: Array<{ id: string; name: string }>;
+  /** System-type options for the type select (edit mode). */
+  systemTypes?: string[];
+  /** Gate the in-modal Edit affordance. */
+  canWrite?: boolean;
+  /** Called after a successful save so the list behind can refresh. */
+  onSaved?: () => void;
 }
 
-export default function SystemDetailModal({ systemId, onClose }: Props) {
+export default function SystemDetailModal({ systemId, onClose, people = [], systemTypes = [], canWrite = false, onSaved }: Props) {
   useScrollLock(!!systemId);
   const navigate = useNavigate();
   const custodianLabel = useTerm('custodian');
@@ -98,6 +134,28 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
   }, [systemId]);
 
   useEffect(() => { fetchDetail(); }, [fetchDetail]);
+
+  const sys = data?.system;
+  const m = useDetailEditMode<SystemEditable>(
+    {
+      name: sys?.name ?? '',
+      description: sys?.description ?? '',
+      systemType: sys?.systemType ?? '',
+      businessCriticality: sys?.businessCriticality ?? '',
+      vendor: sys?.vendor ?? '',
+      connectivity: sys?.connectivity ?? 'INTEGRATED',
+      ownerPersonId: data?.ownership.owner?.id ?? '',
+      deputyOwnerId: data?.ownership.deputy?.id ?? '',
+    },
+    async (draft) => {
+      try {
+        await apiClient.put(`/systems/${systemId}`, draft);
+        successToast('System updated');
+        await fetchDetail();
+        onSaved?.();
+      } catch (err) { errorToast(err, 'Failed to update system'); throw err; }
+    },
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -195,7 +253,39 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
       title={data?.system.name || 'Loading…'}
       subtitle={metaSegments.length > 0 ? metaSegments.join(' · ') : undefined}
       ariaLabel={data ? `System: ${data.system.name}` : 'System details'}
+      actions={data ? (
+        <DetailEditActions
+          editing={m.isEditing}
+          canEdit={canWrite}
+          dirty={m.dirty}
+          saving={m.saving}
+          onEdit={m.enter}
+          onCancel={m.cancel}
+          onSave={m.save}
+        />
+      ) : undefined}
     >
+        {/* Edit mode replaces the read-only 360 with the system's own fields;
+            the relationships (where-used, integrations, discussion, history)
+            are read-only context and hidden while editing. */}
+        {m.isEditing && data ? (
+          <>
+            <SectionLabel style={{ marginBottom: 10 }}>Edit system</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="System name" />
+              <EditableField label="Type" editing value={m.draft.systemType} onChange={(v) => m.set('systemType', v)} type="select" options={[{ value: '', label: '— None —' }, ...Array.from(new Set([...systemTypes, m.draft.systemType].filter(Boolean))).map((t) => ({ value: t, label: t }))]} />
+              <EditableField label="Business criticality" editing value={m.draft.businessCriticality} onChange={(v) => m.set('businessCriticality', v)} type="select" options={CRITICALITY_OPTS} />
+              <EditableField label="Vendor" editing value={m.draft.vendor} onChange={(v) => m.set('vendor', v)} placeholder="e.g. SAP" />
+              <EditableField label="Connectivity" editing value={m.draft.connectivity} onChange={(v) => m.set('connectivity', v)} type="select" options={CONNECTIVITY_OPTS} />
+              <EditableField label="Owner" editing value={m.draft.ownerPersonId} onChange={(v) => m.set('ownerPersonId', v)} type="select" options={[{ value: '', label: '— Unassigned —' }, ...people.map((p) => ({ value: p.id, label: p.name }))]} />
+              <EditableField label="Deputy owner" editing value={m.draft.deputyOwnerId} onChange={(v) => m.set('deputyOwnerId', v)} type="select" options={[{ value: '', label: '— None —' }, ...people.map((p) => ({ value: p.id, label: p.name }))]} />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <EditableField label="Description" editing type="textarea" value={m.draft.description} onChange={(v) => m.set('description', v)} placeholder="What this system does" />
+            </div>
+          </>
+        ) : (
+          <>
         {data?.system.description && (
           <p style={{ fontSize: 13, color: 'var(--color-text)', marginTop: 0, marginBottom: 16, lineHeight: 1.5 }}>
             {data.system.description}
@@ -274,6 +364,8 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
               </h3>
               <ActivityFeed entityType="System" entityId={systemId} inline initialRows={5} />
             </div>
+          </>
+        )}
           </>
         )}
     </Modal>
