@@ -1222,6 +1222,7 @@ export default function ConnectionsPage({
             canWrite={canWrite}
             onClose={() => setViewingConnId(null)}
             onEdit={(c) => { setViewingConnId(null); openEdit(c); }}
+            onSaved={fetchData}
           />
         );
       })()}
