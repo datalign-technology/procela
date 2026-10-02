@@ -6,7 +6,6 @@ import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import FacetChips from '../components/FacetChips';
-import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -30,42 +29,22 @@ import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import ConnectionDetailModal from '../components/ConnectionDetailModal';
+import {
+  type ConnectionProfile,
+  type SystemEntity,
+  STATUS_BADGES,
+  TYPE_BADGES,
+  TYPE_LABELS,
+  formatBytes,
+  configSummary,
+  timeAgo,
+} from '../lib/connectionDisplay';
 
 // ---------------------------------------------------------------------------
-// Types
+// Types — ConnectionProfile / SystemEntity + the badge/summary helpers live in
+// lib/connectionDisplay so ConnectionDetailModal shares one source of truth.
 // ---------------------------------------------------------------------------
-
-interface ConnectionProfile {
-  id: string;
-  orgId: string;
-  /** All systems this connection serves (many-to-many). Populated by
-   *  the backend from the connectionSystemLinks join table. */
-  systemIds?: string[];
-  name: string;
-  connectionType: string;
-  config: Record<string, any> & {
-    // LOCAL file storage fields populated by the upload endpoint
-    localFilePath?: string;
-    originalFileName?: string;
-    fileSize?: number;
-    rowCount?: number;
-    columns?: string[];
-    lastUploadedAt?: string;
-  };
-  credentials: Record<string, any>;
-  status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNTESTED';
-  lastTestedAt: string | null;
-  lastTestResult: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface SystemEntity {
-  id: string;
-  name: string;
-  description: string;
-  systemType: string;
-}
 
 interface DiscoveredAsset {
   name: string;
@@ -86,35 +65,6 @@ const inputStyle: React.CSSProperties = {
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 
-
-
-// ---------------------------------------------------------------------------
-// Badge colors
-// ---------------------------------------------------------------------------
-
-const STATUS_BADGES: Record<string, { bg: string; color: string }> = {
-  CONNECTED: { bg: '#d1f0eb', color: '#0f4f46' },
-  DISCONNECTED: { bg: '#f1f5f9', color: '#64748b' },
-  ERROR: { bg: '#fce7f3', color: '#9d174d' },
-  UNTESTED: { bg: '#fef3c7', color: '#92400e' },
-};
-
-const TYPE_BADGES: Record<string, { bg: string; color: string }> = {
-  DATABASE: { bg: '#dbeafe', color: '#1e40af' },
-  FILE_STORAGE: { bg: '#fef3c7', color: '#92400e' },
-  API: { bg: '#d1f0eb', color: '#0f4f46' },
-  DATA_WAREHOUSE: { bg: '#ede9fe', color: '#5b21b6' },
-  SPREADSHEET: { bg: '#f1f5f9', color: '#64748b' },
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  DATABASE: 'Database',
-  FILE_STORAGE: 'File Storage',
-  API: 'API',
-  DATA_WAREHOUSE: 'Data Warehouse',
-  SPREADSHEET: 'Spreadsheet',
-};
-
 // ---------------------------------------------------------------------------
 // Form interface
 // ---------------------------------------------------------------------------
@@ -131,51 +81,6 @@ const emptyForm: FormData = {
   name: '', systemIds: [], connectionType: 'DATABASE',
   config: {}, credentials: {},
 };
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatBytes(bytes: number | undefined): string {
-  if (!bytes || bytes < 0) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
-
-function configSummary(conn: ConnectionProfile): string {
-  const c = conn.config;
-  if (conn.connectionType === 'DATABASE') {
-    const parts = [c.host, c.port ? `:${c.port}` : '', c.database ? `/${c.database}` : ''];
-    return parts.join('') || '--';
-  }
-  if (conn.connectionType === 'FILE_STORAGE') {
-    if (c.storageType === 'LOCAL') {
-      return c.originalFileName
-        ? `LOCAL://${c.originalFileName} (${formatBytes(c.fileSize)})`
-        : 'LOCAL (no file uploaded)';
-    }
-    return c.bucket ? `${c.storageType || ''}://${c.bucket}${c.path ? '/' + c.path : ''}` : '--';
-  }
-  if (conn.connectionType === 'API') return c.baseUrl || '--';
-  if (conn.connectionType === 'DATA_WAREHOUSE') {
-    return c.account ? `${c.warehouseType || ''}://${c.account}${c.warehouse ? '/' + c.warehouse : ''}` : '--';
-  }
-  if (conn.connectionType === 'SPREADSHEET') return c.documentUrl || '--';
-  return '--';
-}
-
-function timeAgo(iso: string | null): string {
-  if (!iso) return '--';
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -222,6 +127,9 @@ export default function ConnectionsPage({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Whole-row click opens a read-only detail modal (mirrors Systems / Data
+  // Assets); Edit inside it hands back to the inline editor below.
+  const [viewingConnId, setViewingConnId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   // Local-file upload staging — the File is attached to the form but not sent
@@ -925,7 +833,22 @@ export default function ConnectionsPage({
     },
     connCols.isVisible('name') && {
       key: 'name', header: 'Connection Name', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 260 },
-      render: (conn: ConnectionProfile) => <TruncatedText text={conn.name} />,
+      render: (conn: ConnectionProfile) => (
+        <button
+          type="button"
+          onClick={() => setViewingConnId(conn.id)}
+          title={conn.name}
+          style={{
+            background: 'none', border: 'none', padding: 0,
+            color: 'var(--color-text)', cursor: 'pointer',
+            font: 'inherit', fontWeight: 500, textAlign: 'left',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            minWidth: 0, maxWidth: '100%',
+          }}
+        >
+          {conn.name}
+        </button>
+      ),
     },
     connCols.isVisible('type') && {
       key: 'connectionType', header: 'Type', sortable: true,
@@ -1280,11 +1203,28 @@ export default function ConnectionsPage({
             rowKey={(c) => c.id}
             selection={canWrite ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
+            onRowClick={(c) => setViewingConnId(c.id)}
             selectAllLabel="Select all connections"
             emptyMessage="No connections match the current filters."
           />
         )}
       </div>
+
+      {/* Read-only detail modal — whole-row / name click. Edit hands back to
+          the inline editor above. */}
+      {viewingConnId && (() => {
+        const conn = connections.find((c) => c.id === viewingConnId);
+        if (!conn) return null;
+        return (
+          <ConnectionDetailModal
+            conn={conn}
+            systems={systems}
+            canWrite={canWrite}
+            onClose={() => setViewingConnId(null)}
+            onEdit={(c) => { setViewingConnId(null); openEdit(c); }}
+          />
+        );
+      })()}
 
       {/* Discover Modal */}
       {discoverModal && (
