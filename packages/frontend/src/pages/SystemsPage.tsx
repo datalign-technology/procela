@@ -36,7 +36,6 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
-import { activateOnKeyStop } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
@@ -204,65 +203,6 @@ const emptyForm: FormData = {
   connectionIds: [],
 };
 
-function InlineCellEdit({ value, onSave, type = 'text', options, display }: {
-  value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
-  // Optional resting-state renderer so an editable cell can display the same
-  // treatment (e.g. a badge) as its read-only counterpart on locked rows,
-  // keeping the column visually uniform. Falls back to dashed-underline text.
-  display?: (v: string) => React.ReactNode;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-
-  if (!editing) {
-    return (
-      <span
-        role="button"
-        tabIndex={0}
-        aria-label="Edit field"
-        onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
-        onKeyDown={activateOnKeyStop(() => { setDraft(value); setEditing(true); })}
-        style={display ? { cursor: 'pointer' } : { cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
-        title="Click to edit"
-      >
-        {display ? display(value) : (value || '—')}
-      </span>
-    );
-  }
-
-  if (type === 'select' && options) {
-    return (
-      <select
-        autoFocus
-        aria-label="Edit field"
-        value={draft}
-        onChange={(e) => { onSave(e.target.value); setEditing(false); }}
-        onBlur={() => setEditing(false)}
-        onClick={(e) => e.stopPropagation()}
-        style={{ fontSize: 'inherit', padding: '2px 4px', border: '1px solid var(--color-primary)', borderRadius: 3 }}
-      >
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    );
-  }
-
-  return (
-    <input
-      autoFocus
-      aria-label="Edit field"
-      type={type}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => { if (draft !== value) onSave(draft); setEditing(false); }}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') { if (draft !== value) onSave(draft); setEditing(false); }
-        if (e.key === 'Escape') setEditing(false);
-      }}
-      style={{ fontSize: 'inherit', padding: '2px 4px', width: type === 'number' ? 60 : '100%', border: '1px solid var(--color-primary)', borderRadius: 3 }}
-    />
-  );
-}
 
 // "+ Connect" CTA shares the badge's pill shape but uses the brand
 // primary colour — semantically a call-to-action, not a status, so it
@@ -720,16 +660,6 @@ export default function SystemsPage({
     }
   };
 
-  const inlineSaveField = async (systemId: string, field: string, value: string) => {
-    try {
-      await apiClient.put(`/systems/${systemId}`, { [field]: value });
-      addToast('success', `Updated ${field === 'systemType' ? 'system type' : field}`);
-      fetchData();
-    } catch {
-      addToast('error', `Failed to update ${field}`);
-    }
-  };
-
   const handleCancel = () => { confirmIfDirty(closeForm); };
 
   const handleImport = async () => {
@@ -891,22 +821,10 @@ export default function SystemsPage({
     },
     systemCols.isVisible('type') && {
       key: 'type', header: 'Type', sortable: true,
-      render: (sys: SystemEntity) => {
-        const inherited = isInheritedAsset(sys.orgId, activeOrgId);
-        const typeDisplay = (v: string) =>
-          v ? <span style={typeBadge}>{v}</span> : <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
-        return systemTypes.length > 0 && !inherited ? (
-          <InlineCellEdit
-            value={sys.systemType || ''}
-            onSave={(v) => inlineSaveField(sys.id, 'systemType', v)}
-            type="select"
-            options={systemTypes}
-            display={typeDisplay}
-          />
-        ) : (
-          typeDisplay(sys.systemType || '')
-        );
-      },
+      render: (sys: SystemEntity) =>
+        sys.systemType
+          ? <span style={typeBadge}>{sys.systemType}</span>
+          : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
     },
     systemCols.isVisible('criticality') && {
       key: 'criticality', header: 'Criticality', sortable: true, width: 120,
@@ -958,7 +876,6 @@ export default function SystemsPage({
         return (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
             <IconButton size="sm" icon="eye" label="View details" onClick={() => setViewingSystemId(sys.id)} />
-            {canWrite && <IconButton size="sm" icon="edit" label={hint || 'Edit'} disabled={inherited} onClick={() => openEdit(sys)} />}
             {canWrite && <IconButton size="sm" icon="trash" label={hint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
               try {
                 const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
@@ -1568,6 +1485,10 @@ export default function SystemsPage({
             systemTypes={systemTypes}
             canWrite={canWrite}
             onSaved={fetchData}
+            onEditFull={canWrite ? () => {
+              const sys = systems.find((s) => s.id === viewingSystemId);
+              if (sys) { setViewingSystemId(null); openEdit(sys); }
+            } : undefined}
           />
         </Suspense>
       )}
