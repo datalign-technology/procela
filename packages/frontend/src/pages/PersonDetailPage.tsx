@@ -89,6 +89,7 @@ interface FlatOrg { id: string; parentId: string | null; name: string; type: str
 const ROLES = ['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER'];
 
 interface PersonEditable {
+  name: string;
   role: string;
   email: string;
   title: string;
@@ -142,6 +143,7 @@ export default function PersonDetailPage() {
   // actions — see below.
   const m = useDetailEditMode<PersonEditable>(
     {
+      name: data?.person.name ?? '',
       role: data?.person.role ?? 'VIEWER',
       email: data?.person.email ?? '',
       title: data?.person.title ?? '',
@@ -150,6 +152,10 @@ export default function PersonDetailPage() {
     },
     async (draft) => {
       if (!data) return;
+      if (!draft.name.trim()) {
+        errorToast(null, 'Name is required.');
+        throw new Error('no-name');
+      }
       if (draft.orgIds.length === 0) {
         errorToast(null, 'A person must belong to at least one organization.');
         throw new Error('no-orgs');
@@ -335,6 +341,9 @@ export default function PersonDetailPage() {
       <div style={cardStyle}>
         <SectionLabel marginBottom={10}>Identity</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          {m.isEditing && (
+            <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="Full name" />
+          )}
           <EditableField
             label="Application role"
             editing={m.isEditing}

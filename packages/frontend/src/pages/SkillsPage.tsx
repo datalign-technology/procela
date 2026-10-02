@@ -99,7 +99,6 @@ export default function SkillsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -184,29 +183,19 @@ export default function SkillsPage() {
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
-    setEditingId(null);
     setShowForm(true);
   };
 
-  const openEdit = (s: Skill) => {
-    setForm({ name: s.name, category: s.category, description: s.description });
-    setEditingId(s.id);
-    setShowForm(true);
-  };
-
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); validation.clearErrors(); };
+  // Create-only: editing a skill (name, category, description) happens on
+  // the skill's detail page.
+  const handleCancel = () => { setShowForm(false); setForm(emptyForm); validation.clearErrors(); };
 
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!validation.validateAll(form)) return;
     try {
-      if (editingId) {
-        await apiClient.put(`/skills/${editingId}`, form);
-        addToast('success', 'Skill updated');
-      } else {
-        await apiClient.post('/skills', { ...form, orgId: activeOrgId });
-        addToast('success', 'Skill created');
-      }
+      await apiClient.post('/skills', { ...form, orgId: activeOrgId });
+      addToast('success', 'Skill created');
       handleCancel();
       fetchData();
     } catch (e) {
@@ -324,7 +313,6 @@ export default function SkillsPage() {
         if (!canWrite) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
         return (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            <IconButton size="sm" icon="edit" label={inherited ? `Switch scope to ${ownerName} to edit` : 'Edit'} onClick={() => openEdit(s)} disabled={inherited} />
             <IconButton size="sm" icon="trash" label={inherited ? `Switch scope to ${ownerName} to delete` : 'Delete'} variant="danger" onClick={() => setConfirmDelete(s.id)} disabled={inherited} />
           </div>
         );
@@ -443,7 +431,7 @@ export default function SkillsPage() {
       {/* Add / Edit form */}
       {showForm && (
         <Card padding={16} marginBottom={16}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit Skill' : 'Add Skill'}</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Add Skill</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
@@ -480,7 +468,7 @@ export default function SkillsPage() {
               disabled={!form.name.trim()}
               onClick={handleSave}
             >
-              {editingId ? 'Save' : 'Add'}
+              Add
             </Button>
           </div>
         </Card>
