@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
-import { errorMessage } from '../lib/errorToast';
+import { errorMessage, errorToast, successToast } from '../lib/errorToast';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import DetailEditActions from '../components/DetailEditActions';
 import PageHeader from '../components/PageHeader';
 import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import SectionLabel from '../components/SectionLabel';
@@ -268,6 +270,151 @@ const DECISION_COLUMN_DEFS: Array<{ id: DecisionColId; label: string; defaultVis
 
 // ── Component ──
 
+// The decision-right field grid — shared by the top "Add" form (create) and
+// the in-row edit (ExpandedDecisionRight). deciderOptions depends on the
+// chosen deciderType, so it's computed here from the current form value.
+function DecisionRightFields({ form, setForm, people, groups }: {
+  form: DecisionForm;
+  setForm: (next: DecisionForm) => void;
+  people: Person[];
+  groups: GovernanceGroup[];
+}) {
+  const deciderOptions = form.deciderType === 'PERSON'
+    ? people.map((p) => ({ value: p.id, label: p.name }))
+    : form.deciderType === 'GROUP'
+      ? groups.map((g) => ({ value: g.id, label: g.name }))
+      : DAMA_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] || r }));
+  const allParticipantOptions = [
+    ...DAMA_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] || r })),
+    ...people.map((p) => ({ value: p.id, label: p.name + ' (Person)' })),
+    ...groups.map((g) => ({ value: g.id, label: g.name + ' (Group)' })),
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Decision *</label>
+        <input aria-label="Decision" style={inputStyle} value={form.decision} onChange={(e) => setForm({ ...form, decision: e.target.value })} placeholder="e.g. Approve a new data policy" />
+      </div>
+      <div>
+        <label style={labelStyle}>Category</label>
+        <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as DecisionCategory })}>
+          {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Decider Type</label>
+        <div style={{ display: 'flex', gap: 12, paddingTop: 6 }}>
+          {(['PERSON', 'ROLE', 'GROUP'] as DeciderType[]).map((t) => (
+            <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+              <input type="radio" name={`deciderType-${form.decision}`} checked={form.deciderType === t} onChange={() => setForm({ ...form, deciderType: t, decider: '' })} />
+              {t.charAt(0) + t.slice(1).toLowerCase()}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Description</label>
+        <textarea aria-label="Description" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What this decision entails..." />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Decider ({form.deciderType.toLowerCase()})</label>
+        <select aria-label="Decider" style={selectStyle} value={form.decider} onChange={(e) => setForm({ ...form, decider: e.target.value })}>
+          <option value="">-- Select --</option>
+          {deciderOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Recommends</label>
+        <MultiSelect options={allParticipantOptions} value={form.recommends} onChange={(next) => setForm({ ...form, recommends: next })} />
+      </div>
+      <div>
+        <label style={labelStyle}>Approves</label>
+        <MultiSelect options={allParticipantOptions} value={form.approves} onChange={(next) => setForm({ ...form, approves: next })} />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Informed</label>
+        <MultiSelect options={allParticipantOptions} value={form.informed} onChange={(next) => setForm({ ...form, informed: next })} />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Escalation Path</label>
+        <textarea aria-label="Escalation Path" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.escalationPath} onChange={(e) => setForm({ ...form, escalationPath: e.target.value })} placeholder="Describe how this decision escalates if not resolved..." />
+      </div>
+    </div>
+  );
+}
+
+// The expanded row: read-only RACI detail with a view/edit toggle. Edit flips
+// the SAME panel into the field grid and one Save writes PUT /decision-rights/
+// :id — the row's own in-place editor (there's no separate edit form anymore).
+function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onSaved, showRecommends, showApproves, showInformed, showEscalation }: {
+  row: DecisionRight;
+  people: Person[];
+  groups: GovernanceGroup[];
+  orgId: string | null;
+  canEdit: boolean;
+  onSaved: () => void;
+  showRecommends: boolean;
+  showApproves: boolean;
+  showInformed: boolean;
+  showEscalation: boolean;
+}) {
+  const m = useDetailEditMode<DecisionForm>(
+    {
+      decision: row.decision,
+      category: row.category,
+      description: row.description,
+      decider: row.decider || '',
+      deciderType: row.deciderType,
+      recommends: [...row.recommends],
+      approves: [...row.approves],
+      informed: [...row.informed],
+      escalationPath: row.escalationPath,
+    },
+    async (draft) => {
+      if (!draft.decision.trim()) { errorToast(null, 'Decision is required'); throw new Error('no-decision'); }
+      try {
+        await apiClient.put(`/decision-rights/${row.id}`, {
+          ...draft,
+          decider: draft.decider || null,
+          ...(orgId ? { orgId } : {}),
+        });
+        successToast('Decision right updated');
+        onSaved();
+      } catch (err) { errorToast(err, 'Failed to update decision right'); throw err; }
+    },
+  );
+  return (
+    <div style={{ padding: '12px 18px 16px' }}>
+      {canEdit && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
+          <DetailEditActions
+            editing={m.isEditing}
+            canEdit
+            dirty={m.dirty}
+            saving={m.saving}
+            onEdit={m.enter}
+            onCancel={m.cancel}
+            onSave={m.save}
+          />
+        </div>
+      )}
+      {m.isEditing ? (
+        <DecisionRightFields form={m.draft} setForm={(next) => m.patch(next)} people={people} groups={groups} />
+      ) : (
+        <ExpandedRaciDetails
+          row={row}
+          people={people}
+          groups={groups}
+          showRecommends={showRecommends}
+          showApproves={showApproves}
+          showInformed={showInformed}
+          showEscalation={showEscalation}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function DecisionRightsPage() {
   const { activeOrgId } = useOrgContext();
   // Decision Rights is a governance surface: the backend gates every write
@@ -314,21 +461,6 @@ export default function DecisionRightsPage() {
 
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyForm); setEditingId(null); setShowForm(true); };
-  const openEdit = (r: DecisionRight) => {
-    setForm({
-      decision: r.decision,
-      category: r.category,
-      description: r.description,
-      decider: r.decider || '',
-      deciderType: r.deciderType,
-      recommends: [...r.recommends],
-      approves: [...r.approves],
-      informed: [...r.informed],
-      escalationPath: r.escalationPath,
-    });
-    setEditingId(r.id);
-    setShowForm(true);
-  };
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
 
   const handleSave = async () => {
@@ -439,24 +571,6 @@ export default function DecisionRightsPage() {
   for (const r of rows) categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
 
   // Build multi-select option list based on decider type (for recommends/approves/informed we allow any)
-  const allParticipantOptions: { value: string; label: string }[] = [
-    ...DAMA_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] || r })),
-    ...people.map((p) => ({ value: p.id, label: p.name + ' (Person)' })),
-    ...groups.map((g) => ({ value: g.id, label: g.name + ' (Group)' })),
-  ];
-
-  const deciderOptions = (() => {
-    switch (form.deciderType) {
-      case 'PERSON':
-        return people.map((p) => ({ value: p.id, label: p.name }));
-      case 'GROUP':
-        return groups.map((g) => ({ value: g.id, label: g.name }));
-      case 'ROLE':
-      default:
-        return DAMA_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] || r }));
-    }
-  })();
-
   const decisionColumns = ([
     decisionCols.isVisible('decision') && {
       key: 'decision', header: 'Decision', sortable: true, cellStyle: { fontWeight: 500, verticalAlign: 'top' },
@@ -502,7 +616,6 @@ export default function DecisionRightsPage() {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
       render: (r: DecisionRight) => (
         <div style={{ display: 'inline-flex', gap: 4 }}>
-          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(r)} />}
           {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />}
         </div>
       ),
@@ -580,105 +693,8 @@ export default function DecisionRightsPage() {
       {/* Add/Edit Form */}
       {showForm && (
         <Card padding={20} marginBottom={20}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Decision Right' : 'Add Decision Right'}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Decision *</label>
-              <input
-                autoFocus
-                aria-label="Decision"
-                style={inputStyle}
-                value={form.decision}
-                onChange={(e) => setForm({ ...form, decision: e.target.value })}
-                placeholder="e.g. Approve a new data policy"
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Category</label>
-              <select
-                aria-label="Category"
-                style={selectStyle}
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value as DecisionCategory })}
-              >
-                {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Decider Type</label>
-              <div style={{ display: 'flex', gap: 12, paddingTop: 6 }}>
-                {(['PERSON', 'ROLE', 'GROUP'] as DeciderType[]).map((t) => (
-                  <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
-                    <input
-                      type="radio"
-                      name="deciderType"
-                      checked={form.deciderType === t}
-                      onChange={() => setForm({ ...form, deciderType: t, decider: '' })}
-                    />
-                    {t.charAt(0) + t.slice(1).toLowerCase()}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Description</label>
-              <textarea
-                aria-label="Description"
-                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="What this decision entails..."
-              />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Decider ({form.deciderType.toLowerCase()})</label>
-              <select
-                aria-label="Decider"
-                style={selectStyle}
-                value={form.decider}
-                onChange={(e) => setForm({ ...form, decider: e.target.value })}
-              >
-                <option value="">-- Select --</option>
-                {deciderOptions.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Recommends</label>
-              <MultiSelect
-                options={allParticipantOptions}
-                value={form.recommends}
-                onChange={(next) => setForm({ ...form, recommends: next })}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Approves</label>
-              <MultiSelect
-                options={allParticipantOptions}
-                value={form.approves}
-                onChange={(next) => setForm({ ...form, approves: next })}
-              />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Informed</label>
-              <MultiSelect
-                options={allParticipantOptions}
-                value={form.informed}
-                onChange={(next) => setForm({ ...form, informed: next })}
-              />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Escalation Path</label>
-              <textarea
-                aria-label="Escalation Path"
-                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                value={form.escalationPath}
-                onChange={(e) => setForm({ ...form, escalationPath: e.target.value })}
-                placeholder="Describe how this decision escalates if not resolved..."
-              />
-            </div>
-          </div>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add Decision Right</h3>
+          <DecisionRightFields form={form} setForm={setForm} people={people} groups={groups} />
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={closeForm}>Cancel</Button>
             <Button
@@ -756,17 +772,18 @@ export default function DecisionRightsPage() {
                   onToggleExpanded: toggleExpand,
                   trigger: 'row-click',
                   renderExpandedRow: (r) => (
-                    <div style={{ padding: '12px 18px 16px' }}>
-                      <ExpandedRaciDetails
-                        row={r}
-                        people={people}
-                        groups={groups}
-                        showRecommends={decisionCols.isVisible('recommends')}
-                        showApproves={decisionCols.isVisible('approves')}
-                        showInformed={decisionCols.isVisible('informed')}
-                        showEscalation={decisionCols.isVisible('escalation')}
-                      />
-                    </div>
+                    <ExpandedDecisionRight
+                      row={r}
+                      people={people}
+                      groups={groups}
+                      orgId={activeOrgId}
+                      canEdit={isAdmin}
+                      onSaved={fetchData}
+                      showRecommends={decisionCols.isVisible('recommends')}
+                      showApproves={decisionCols.isVisible('approves')}
+                      showInformed={decisionCols.isVisible('informed')}
+                      showEscalation={decisionCols.isVisible('escalation')}
+                    />
                   ),
                 }}
                 selectAllLabel="Select all decision rights"
