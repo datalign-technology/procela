@@ -19,7 +19,9 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
-import { errorMessage } from '../lib/errorToast';
+import { errorMessage, successToast, errorToast } from '../lib/errorToast';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import DetailEditActions from '../components/DetailEditActions';
 import { renderNavIcon } from '../components/navIcons';
 import HelpPopover from '../components/HelpPopover';
 import ActiveFiltersBar from '../components/ActiveFiltersBar';
@@ -225,6 +227,166 @@ const DQ_COLUMN_DEFS: Array<{ id: DqColId; label: string; defaultVisible: boolea
   { id: 'lastMeasured',  label: 'Last Measured',  defaultVisible: true  },
 ];
 
+// The non-asset editable fields of a quality rule.
+interface RuleEditable {
+  dimension: string; name: string; description: string;
+  threshold: number; weight: number; ruleType: string;
+  parameters: Record<string, unknown>;
+}
+
+const ruleLabelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
+
+// Shared non-asset rule fields (dimension, type + type-specific params, name,
+// threshold, weight, description), used by both the top "Add" form and the
+// in-row editor. The asset/column binding lives only in the create form (it
+// needs the column loader) and stays fixed once a rule exists.
+function RuleFields({ form, onChange }: {
+  form: RuleEditable;
+  onChange: (patch: Partial<RuleEditable>) => void;
+}) {
+  const setParam = (key: string, value: unknown) => onChange({ parameters: { ...form.parameters, [key]: value } });
+  return (
+    <>
+      <div>
+        <label style={ruleLabelStyle}>Dimension</label>
+        <select aria-label="Dimension" style={selectStyle} value={form.dimension} onChange={(e) => onChange({ dimension: e.target.value })}>
+          {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={ruleLabelStyle}>Rule Type</label>
+        <select aria-label="Rule Type" style={selectStyle} value={form.ruleType} onChange={(e) => onChange({ ruleType: e.target.value })}>
+          {RULE_TYPE_OPTIONS.map((o) => <option key={o.value || 'none'} value={o.value}>{o.label}</option>)}
+        </select>
+        <div style={{ fontSize: 11, color: form.ruleType === '' ? 'var(--color-warning)' : 'var(--color-text-muted)', marginTop: 3 }}>
+          {form.ruleType === ''
+            ? 'Untyped rules are never measured by the connector — pick a type for a real pass rate.'
+            : RULE_TYPE_OPTIONS.find((o) => o.value === form.ruleType)?.measured
+              ? 'Measured for real by an on-prem connector (aggregate pushdown) or a CSV upload.'
+              : 'Simulated — returns a labelled result that does not count toward measured health.'}
+        </div>
+      </div>
+      {form.ruleType === 'IN_SET' && (
+        <div>
+          <label style={ruleLabelStyle}>Allowed values</label>
+          <input aria-label="Allowed values" style={inputStyle}
+            value={(Array.isArray(form.parameters.allowedValues) ? form.parameters.allowedValues as string[] : []).join(', ')}
+            onChange={(e) => setParam('allowedValues', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+            placeholder="e.g. residential, commercial, industrial" />
+        </div>
+      )}
+      {form.ruleType === 'NUMERIC_RANGE' && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={ruleLabelStyle}>Min</label>
+            <input type="number" aria-label="Minimum" style={inputStyle} value={form.parameters.min === undefined ? '' : Number(form.parameters.min)} onChange={(e) => setParam('min', e.target.value === '' ? undefined : Number(e.target.value))} /></div>
+          <div style={{ flex: 1 }}><label style={ruleLabelStyle}>Max</label>
+            <input type="number" aria-label="Maximum" style={inputStyle} value={form.parameters.max === undefined ? '' : Number(form.parameters.max)} onChange={(e) => setParam('max', e.target.value === '' ? undefined : Number(e.target.value))} /></div>
+        </div>
+      )}
+      {form.ruleType === 'LENGTH_RANGE' && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={ruleLabelStyle}>Min length</label>
+            <input type="number" aria-label="Minimum length" style={inputStyle} min={0} value={form.parameters.minLength === undefined ? '' : Number(form.parameters.minLength)} onChange={(e) => setParam('minLength', e.target.value === '' ? undefined : Number(e.target.value))} /></div>
+          <div style={{ flex: 1 }}><label style={ruleLabelStyle}>Max length</label>
+            <input type="number" aria-label="Maximum length" style={inputStyle} min={0} value={form.parameters.maxLength === undefined ? '' : Number(form.parameters.maxLength)} onChange={(e) => setParam('maxLength', e.target.value === '' ? undefined : Number(e.target.value))} /></div>
+        </div>
+      )}
+      {form.ruleType === 'REGEX_MATCH' && (
+        <div>
+          <label style={ruleLabelStyle}>Pattern</label>
+          <input aria-label="Pattern" style={inputStyle} value={typeof form.parameters.pattern === 'string' ? form.parameters.pattern : ''} onChange={(e) => setParam('pattern', e.target.value)} placeholder="e.g. ^[^@]+@[^@]+\.[^@]+$" />
+        </div>
+      )}
+      <div>
+        <label style={ruleLabelStyle}>Rule Name *</label>
+        <input aria-label="Rule Name" style={inputStyle} value={form.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="e.g. Email field completeness" />
+      </div>
+      <div>
+        <label style={ruleLabelStyle}>Threshold: {form.threshold}%</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="range" aria-label="Threshold" min={0} max={100} value={form.threshold} onChange={(e) => onChange({ threshold: Number(e.target.value) })} style={{ flex: 1 }} />
+          <input type="number" aria-label="Threshold" min={0} max={100} value={form.threshold} onChange={(e) => onChange({ threshold: Math.max(0, Math.min(100, Number(e.target.value))) })} style={{ ...inputStyle, width: 60, textAlign: 'center' }} />
+        </div>
+      </div>
+      <div>
+        <label style={ruleLabelStyle}>Weight: {form.weight}</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="range" aria-label="Weight" min={1} max={10} value={form.weight} onChange={(e) => onChange({ weight: Number(e.target.value) })} style={{ flex: 1 }} />
+          <input type="number" aria-label="Weight" min={1} max={10} value={form.weight} onChange={(e) => onChange({ weight: Math.max(1, Math.min(10, Number(e.target.value))) })} style={{ ...inputStyle, width: 60, textAlign: 'center' }} />
+        </div>
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={ruleLabelStyle}>Description</label>
+        <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => onChange({ description: e.target.value })} placeholder="Describe what this quality rule checks" />
+      </div>
+    </>
+  );
+}
+
+// The expanded row: read-only description with a view→Edit→Save toggle over
+// the rule's record fields. The target asset/column are shown but fixed (they
+// need the column loader — set at create time). Run / Schedule / Delete stay
+// on the row as exec/state actions. One Save writes PUT /data-quality/:id.
+function ExpandedRule({ rule, canWrite, onSaved }: {
+  rule: QualityRule;
+  canWrite: boolean;
+  onSaved: () => void;
+}) {
+  const m = useDetailEditMode<RuleEditable>(
+    {
+      dimension: rule.dimension,
+      name: rule.name,
+      description: rule.description,
+      threshold: rule.threshold,
+      weight: rule.weight,
+      ruleType: (rule as any).ruleType || '',
+      parameters: ((rule as any).parameters as Record<string, unknown>) || {},
+    },
+    async (draft) => {
+      if (!draft.name.trim()) { errorToast(null, 'Rule name is required'); throw new Error('no-name'); }
+      try {
+        await apiClient.put(`/data-quality/${rule.id}`, {
+          dataAssetId: rule.dataAssetId,
+          columnId: (rule as any).columnId || '',
+          dimension: draft.dimension,
+          name: draft.name,
+          description: draft.description,
+          threshold: draft.threshold,
+          weight: draft.weight,
+          ruleType: draft.ruleType,
+          parameters: draft.parameters,
+        });
+        successToast('Quality rule updated');
+        onSaved();
+      } catch (err) { errorToast(err, 'Failed to update quality rule'); throw err; }
+    },
+  );
+  const assetName = rule.dataAssetName || rule.dataAssetId;
+  const colName = (rule as any).columnName as string | undefined;
+  return (
+    <div style={{ padding: '12px 16px 16px 48px', background: '#fafbfc' }}>
+      {canWrite && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
+          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+        </div>
+      )}
+      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+        Target: <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{assetName}</span>
+        {colName ? <> · column <span style={{ fontFamily: 'var(--font-mono)' }}>{colName}</span></> : ' · whole asset'}
+      </div>
+      {m.isEditing ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <RuleFields form={m.draft} onChange={(p) => m.patch(p)} />
+        </div>
+      ) : (
+        <div style={{ fontSize: 13, color: rule.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: rule.description ? undefined : 'italic' }}>
+          {rule.description || 'No description provided.'}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DataQualityPage({
   embedded = false,
   actionsPortal,
@@ -247,8 +409,15 @@ export default function DataQualityPage({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  // Row-click expansion for the Rules list: open a rule's detail (description
+  // + a view→Edit→Save editor for its record fields) inline.
+  const [expandedRuleIds, setExpandedRuleIds] = useState<Set<string>>(new Set());
+  const toggleRuleExpand = (id: string) => setExpandedRuleIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   // Columns of the asset selected in the form, so a rule can target a specific
   // column (the bound/discovered set) instead of the asset as a whole.
   const [formColumns, setFormColumns] = useState<ColumnWithHealth[]>([]);
@@ -372,47 +541,20 @@ export default function DataQualityPage({
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
     setFormColumns([]);
-    setEditingId(null);
     setShowForm(true);
   };
 
-  const openEdit = (rule: QualityRule) => {
-    setForm({
-      dataAssetId: rule.dataAssetId,
-      columnId: (rule as any).columnId || '',
-      dimension: rule.dimension,
-      name: rule.name,
-      description: rule.description,
-      threshold: rule.threshold,
-      currentScore: rule.currentScore,
-      weight: rule.weight,
-      ruleType: (rule as any).ruleType || '',
-      parameters: ((rule as any).parameters as Record<string, unknown>) || {},
-    });
-    loadFormColumns(rule.dataAssetId);
-    setEditingId(rule.id);
-    setShowForm(true);
-  };
-
-  const updateParam = (key: string, value: unknown) => {
-    setForm((prev) => ({ ...prev, parameters: { ...prev.parameters, [key]: value } }));
-  };
-
+  // Create-only: an existing rule's record fields are edited in its row's
+  // expanded detail (ExpandedRule). Asset/column stay fixed after creation.
   const handleSave = async () => {
     if (!form.name.trim() || !form.dataAssetId) {
       addToast('error', 'Name and Data Asset are required');
       return;
     }
     try {
-      if (editingId) {
-        await apiClient.put(`/data-quality/${editingId}`, form);
-        addToast('success', 'Quality rule updated');
-      } else {
-        await apiClient.post('/data-quality', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
-        addToast('success', 'Quality rule created');
-      }
+      await apiClient.post('/data-quality', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+      addToast('success', 'Quality rule created');
       setShowForm(false);
-      setEditingId(null);
       setForm(emptyForm);
       fetchData();
     } catch {
@@ -489,7 +631,6 @@ export default function DataQualityPage({
 
   const handleCancel = () => {
     setShowForm(false);
-    setEditingId(null);
     setForm(emptyForm);
   };
 
@@ -647,7 +788,6 @@ export default function DataQualityPage({
               disabled={runningRuleId !== null}
             />
           )}
-          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(rule)} />}
           {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(rule.id)} />}
         </div>
       ),
@@ -823,9 +963,7 @@ export default function DataQualityPage({
       {/* Add/Edit Form */}
       {showForm && (
         <Card padding={20} marginBottom={20}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-            {editingId ? 'Edit Quality Rule' : 'Add New Quality Rule'}
-          </h3>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add New Quality Rule</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Asset *</label>
@@ -858,153 +996,8 @@ export default function DataQualityPage({
                     : 'Target a specific column so the rule measures just that field.'}
               </div>
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Dimension</label>
-              <select aria-label="Dimension" style={selectStyle} value={form.dimension} onChange={(e) => updateField('dimension', e.target.value)}>
-                {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Rule Type</label>
-              <select aria-label="Rule Type" style={selectStyle} value={form.ruleType} onChange={(e) => updateField('ruleType', e.target.value)}>
-                {RULE_TYPE_OPTIONS.map((o) => <option key={o.value || 'none'} value={o.value}>{o.label}</option>)}
-              </select>
-              <div style={{ fontSize: 11, color: form.ruleType === '' ? 'var(--color-warning)' : 'var(--color-text-muted)', marginTop: 3 }}>
-                {form.ruleType === ''
-                  ? 'Untyped rules are never measured by the connector — pick a type for a real pass rate.'
-                  : RULE_TYPE_OPTIONS.find((o) => o.value === form.ruleType)?.measured
-                    ? 'Measured for real by an on-prem connector (aggregate pushdown) or a CSV upload.'
-                    : 'Simulated — returns a labelled result that does not count toward measured health.'}
-              </div>
-            </div>
-            {form.ruleType === 'IN_SET' && (
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Allowed values</label>
-                <input
-                  aria-label="Allowed values"
-                  style={inputStyle}
-                  value={(Array.isArray(form.parameters.allowedValues) ? form.parameters.allowedValues as string[] : []).join(', ')}
-                  onChange={(e) => updateParam('allowedValues', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
-                  placeholder="e.g. residential, commercial, industrial"
-                />
-              </div>
-            )}
-            {form.ruleType === 'NUMERIC_RANGE' && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Min</label>
-                  <input type="number" aria-label="Minimum" style={inputStyle}
-                    value={form.parameters.min === undefined ? '' : Number(form.parameters.min)}
-                    onChange={(e) => updateParam('min', e.target.value === '' ? undefined : Number(e.target.value))} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Max</label>
-                  <input type="number" aria-label="Maximum" style={inputStyle}
-                    value={form.parameters.max === undefined ? '' : Number(form.parameters.max)}
-                    onChange={(e) => updateParam('max', e.target.value === '' ? undefined : Number(e.target.value))} />
-                </div>
-              </div>
-            )}
-            {form.ruleType === 'LENGTH_RANGE' && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Min length</label>
-                  <input type="number" aria-label="Minimum length" style={inputStyle} min={0}
-                    value={form.parameters.minLength === undefined ? '' : Number(form.parameters.minLength)}
-                    onChange={(e) => updateParam('minLength', e.target.value === '' ? undefined : Number(e.target.value))} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Max length</label>
-                  <input type="number" aria-label="Maximum length" style={inputStyle} min={0}
-                    value={form.parameters.maxLength === undefined ? '' : Number(form.parameters.maxLength)}
-                    onChange={(e) => updateParam('maxLength', e.target.value === '' ? undefined : Number(e.target.value))} />
-                </div>
-              </div>
-            )}
-            {form.ruleType === 'REGEX_MATCH' && (
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Pattern</label>
-                <input aria-label="Pattern" style={inputStyle}
-                  value={typeof form.parameters.pattern === 'string' ? form.parameters.pattern : ''}
-                  onChange={(e) => updateParam('pattern', e.target.value)}
-                  placeholder="e.g. ^[^@]+@[^@]+\.[^@]+$" />
-              </div>
-            )}
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Rule Name *</label>
-              <input
-                autoFocus
-                aria-label="Rule Name"
-                style={inputStyle}
-                value={form.name}
-                onChange={(e) => updateField('name', e.target.value)}
-                placeholder="e.g. Email field completeness"
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
-                Threshold: {form.threshold}%
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="range"
-                  aria-label="Threshold"
-                  min={0}
-                  max={100}
-                  value={form.threshold}
-                  onChange={(e) => updateField('threshold', Number(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  aria-label="Threshold"
-                  min={0}
-                  max={100}
-                  value={form.threshold}
-                  onChange={(e) => updateField('threshold', Math.max(0, Math.min(100, Number(e.target.value))))}
-                  style={{ ...inputStyle, width: 60, textAlign: 'center' }}
-                />
-              </div>
-            </div>
-            {/* Current Score is read-only: it's the measured pass rate set
-                by running the rule (or fabricated for untyped rules). The
-                editable slider was removed; the score shows read-only in the
-                list column and is populated by rule execution. */}
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
-                Weight: {form.weight}
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="range"
-                  aria-label="Weight"
-                  min={1}
-                  max={10}
-                  value={form.weight}
-                  onChange={(e) => updateField('weight', Number(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  aria-label="Weight"
-                  min={1}
-                  max={10}
-                  value={form.weight}
-                  onChange={(e) => updateField('weight', Math.max(1, Math.min(10, Number(e.target.value))))}
-                  style={{ ...inputStyle, width: 60, textAlign: 'center' }}
-                />
-              </div>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input
-                aria-label="Description"
-                style={inputStyle}
-                value={form.description}
-                onChange={(e) => updateField('description', e.target.value)}
-                placeholder="Describe what this quality rule checks"
-              />
-            </div>
+            {/* The non-asset fields are shared with the in-row editor. */}
+            <RuleFields form={form} onChange={(p) => setForm((prev) => ({ ...prev, ...p }))} />
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
@@ -1013,7 +1006,7 @@ export default function DataQualityPage({
               disabled={!form.name.trim() || !form.dataAssetId}
               onClick={handleSave}
             >
-              {editingId ? 'Save Changes' : 'Add Rule'}
+              Add Rule
             </Button>
           </div>
         </Card>
@@ -1066,6 +1059,14 @@ export default function DataQualityPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all rules"
             emptyMessage="No rules match the current filters."
+            expansion={{
+              expandedIds: expandedRuleIds,
+              onToggleExpanded: toggleRuleExpand,
+              trigger: 'row-click',
+              renderExpandedRow: (r) => (
+                <ExpandedRule rule={r} canWrite={canWrite} onSaved={fetchData} />
+              ),
+            }}
           />
         </Card>
       )}
