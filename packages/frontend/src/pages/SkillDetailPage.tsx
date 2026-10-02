@@ -5,9 +5,13 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import EmptyState from '../components/EmptyState';
+import EditableField from '../components/EditableField';
+import DetailEditActions from '../components/DetailEditActions';
 import { SkeletonRows } from '../components/Skeleton';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
-import { errorMessage } from '../lib/errorToast';
+import { usePermissions } from '../hooks/usePermissions';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SkillDetailPage — the full record for one skill at /skills/:id. The Skills
@@ -41,6 +45,9 @@ const CATEGORY_BADGES: Record<string, { bg: string; color: string }> = {
   COMMUNICATION: { bg: '#f1f5f9', color: '#64748b' },
 };
 const formatCategory = (c: string) => c.replace(/_/g, ' ');
+const CATEGORIES = ['DATA_QUALITY', 'METADATA', 'ARCHITECTURE', 'SECURITY', 'INTEGRATION', 'ANALYTICS', 'GOVERNANCE', 'COMMUNICATION'];
+
+interface SkillEditable { name: string; category: string; description: string }
 
 const backLinkStyle: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
@@ -67,6 +74,7 @@ function collectRequiringNodes(nodes: ProcessNode[], skillId: string, out: Proce
 export default function SkillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { canWrite } = usePermissions();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [people, setPeople] = useState<PersonRef[]>([]);
   const [agents, setAgents] = useState<AgentRef[]>([]);
@@ -98,6 +106,18 @@ export default function SkillDetailPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useBreadcrumbLeaf(skill?.name);
+
+  const m = useDetailEditMode<SkillEditable>(
+    { name: skill?.name ?? '', category: skill?.category ?? 'GOVERNANCE', description: skill?.description ?? '' },
+    async (draft) => {
+      if (!id) return;
+      try {
+        await apiClient.put(`/skills/${id}`, draft);
+        successToast('Skill updated');
+        await fetchAll();
+      } catch (err) { errorToast(err, 'Failed to update skill'); throw err; }
+    },
+  );
 
   if (loading) {
     return (
@@ -132,21 +152,50 @@ export default function SkillDetailPage() {
         copyId={skill.id}
         copyLabel="Copy skill ID"
         subtitle={<span>{formatCategory(skill.category)}</span>}
-        actions={<Link to="/skills" style={backLinkStyle}>{'←'} Back to Skills</Link>}
+        actions={
+          <DetailEditActions
+            editing={m.isEditing}
+            canEdit={canWrite}
+            dirty={m.dirty}
+            saving={m.saving}
+            onEdit={m.enter}
+            onCancel={m.cancel}
+            onSave={m.save}
+            before={<Link to="/skills" style={backLinkStyle}>{'←'} Back to Skills</Link>}
+          />
+        }
       />
 
       {/* Identity */}
       <Card marginBottom={16}>
         <SectionLabel marginBottom={10}>Identity</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Category</div>
+          {m.isEditing && (
+            <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="Skill name" />
+          )}
+          <EditableField
+            label="Category"
+            editing={m.isEditing}
+            value={m.draft.category}
+            onChange={(v) => m.set('category', v)}
+            type="select"
+            options={CATEGORIES.map((c) => ({ value: c, label: formatCategory(c) }))}
+          >
             <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: cb.bg, color: cb.color }}>{formatCategory(skill.category)}</span>
-          </div>
+          </EditableField>
         </div>
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</div>
-          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{skill.description || <span style={emptyStyle}>No description</span>}</div>
+          <EditableField
+            label="Description"
+            editing={m.isEditing}
+            type="textarea"
+            value={m.draft.description}
+            onChange={(v) => m.set('description', v)}
+            placeholder="What this skill covers"
+            emptyText="No description"
+          >
+            {skill.description ? <span style={{ color: 'var(--color-text-secondary)' }}>{skill.description}</span> : undefined}
+          </EditableField>
         </div>
       </Card>
 
