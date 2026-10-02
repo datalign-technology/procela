@@ -16,6 +16,9 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import SectionCard from '../components/SectionCard';
+import SectionLabel from '../components/SectionLabel';
+import DetailEditActions from '../components/DetailEditActions';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import { SkeletonRows } from '../components/Skeleton';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { clickable } from '../lib/a11y';
@@ -157,6 +160,212 @@ function formatDaysAway(days: number): string {
   return `in ${days} days`;
 }
 
+function eventToForm(e: CalendarEvent): EventForm {
+  return {
+    name: e.name,
+    description: e.description,
+    eventType: e.eventType,
+    cadence: e.cadence,
+    dayOfMonth: e.dayOfMonth == null ? '' : String(e.dayOfMonth),
+    dayOfWeek: e.dayOfWeek == null ? '' : String(e.dayOfWeek),
+    timeOfDay: e.timeOfDay || '14:00',
+    durationMinutes: String(e.durationMinutes || 60),
+    attendees: e.attendees || [],
+    agendaTemplate: e.agendaTemplate || '',
+    autoCreateTasks: !!e.autoCreateTasks,
+    status: e.status,
+  };
+}
+
+function formToPayload(form: EventForm, orgId: string | null) {
+  const dayOfMonthNum = form.dayOfMonth.trim() === '' ? null : parseInt(form.dayOfMonth, 10);
+  const dayOfWeekNum = form.dayOfWeek.trim() === '' ? null : parseInt(form.dayOfWeek, 10);
+  const durationNum = parseInt(form.durationMinutes, 10);
+  return {
+    name: form.name,
+    description: form.description,
+    eventType: form.eventType,
+    cadence: form.cadence,
+    dayOfMonth: Number.isFinite(dayOfMonthNum as number) ? dayOfMonthNum : null,
+    dayOfWeek: Number.isFinite(dayOfWeekNum as number) ? dayOfWeekNum : null,
+    timeOfDay: form.timeOfDay,
+    durationMinutes: Number.isFinite(durationNum) ? durationNum : 60,
+    attendees: form.attendees,
+    agendaTemplate: form.agendaTemplate,
+    autoCreateTasks: form.autoCreateTasks,
+    status: form.status,
+    ...(orgId ? { orgId } : {}),
+  };
+}
+
+// The event's own fields, shared by the create form and the in-row edit
+// panel. `onChange` merges a partial patch; the create form threads a name
+// validation error/blur, the edit panel does not.
+function EventFields({ form, onChange, people, nameError, onNameBlur }: {
+  form: EventForm;
+  onChange: (patch: Partial<EventForm>) => void;
+  people: Person[];
+  nameError?: string | null;
+  onNameBlur?: () => void;
+}) {
+  const toggleAttendee = (id: string) =>
+    onChange({ attendees: form.attendees.includes(id) ? form.attendees.filter((a) => a !== id) : [...form.attendees, id] });
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Name *</label>
+        <input
+          autoFocus
+          aria-label="Name"
+          style={{ ...inputStyle, border: nameError ? inputErrorBorder : inputStyle.border }}
+          value={form.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          onBlur={onNameBlur}
+          placeholder="e.g. Data Governance Council Meeting"
+        />
+        {nameError && <div style={fieldErrorStyle}>{nameError}</div>}
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Description</label>
+        <textarea aria-label="Description" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={(e) => onChange({ description: e.target.value })} />
+      </div>
+      <div>
+        <label style={labelStyle}>Event Type</label>
+        <select aria-label="Event Type" style={selectStyle} value={form.eventType} onChange={(e) => onChange({ eventType: e.target.value })}>
+          {EVENT_TYPES.map((t) => <option key={t} value={t}>{formatTypeLabel(t)}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Cadence</label>
+        <select aria-label="Cadence" style={selectStyle} value={form.cadence} onChange={(e) => onChange({ cadence: e.target.value })}>
+          {CADENCES.map((c) => <option key={c} value={c}>{formatTypeLabel(c)}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Day of Month (1-31)</label>
+        <input type="number" min={1} max={31} aria-label="Day of Month (1-31)" style={inputStyle} value={form.dayOfMonth} onChange={(e) => onChange({ dayOfMonth: e.target.value })} placeholder="For monthly+ cadences" />
+      </div>
+      <div>
+        <label style={labelStyle}>Day of Week (0=Sun)</label>
+        <input type="number" min={0} max={6} aria-label="Day of Week (0=Sun)" style={inputStyle} value={form.dayOfWeek} onChange={(e) => onChange({ dayOfWeek: e.target.value })} placeholder="For weekly cadences" />
+      </div>
+      <div>
+        <label style={labelStyle}>Time of Day (HH:MM)</label>
+        <input aria-label="Time of Day (HH:MM)" style={inputStyle} value={form.timeOfDay} onChange={(e) => onChange({ timeOfDay: e.target.value })} placeholder="14:00" />
+      </div>
+      <div>
+        <label style={labelStyle}>Duration (minutes)</label>
+        <input type="number" min={5} aria-label="Duration (minutes)" style={inputStyle} value={form.durationMinutes} onChange={(e) => onChange({ durationMinutes: e.target.value })} />
+      </div>
+      <div>
+        <label style={labelStyle}>Status</label>
+        <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => onChange({ status: e.target.value as 'ACTIVE' | 'PAUSED' })}>
+          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
+        <input type="checkbox" id={`autoCreateTasks-${form.name || 'new'}`} checked={form.autoCreateTasks} onChange={(e) => onChange({ autoCreateTasks: e.target.checked })} />
+        <label htmlFor={`autoCreateTasks-${form.name || 'new'}`} style={{ fontSize: 12, fontWeight: 500 }}>Auto-create governance tasks each occurrence</label>
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Attendees</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 8, border: '1px solid var(--color-border)', borderRadius: 4, maxHeight: 140, overflowY: 'auto', background: 'var(--color-surface)' }}>
+          {people.length === 0 && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No people defined yet.</span>}
+          {people.map((p) => {
+            const selected = form.attendees.includes(p.id);
+            return (
+              <button key={p.id} type="button" onClick={() => toggleAttendee(p.id)}
+                style={{ padding: '4px 10px', fontSize: 12, borderRadius: 12, cursor: 'pointer', border: '1px solid', borderColor: selected ? 'var(--color-primary)' : 'var(--color-border)', background: selected ? 'var(--color-primary)' : 'var(--color-bg)', color: selected ? '#fff' : 'var(--color-text)' }}>
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Agenda Template</label>
+        <textarea aria-label="Agenda Template" style={{ ...inputStyle, minHeight: 80, resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }} value={form.agendaTemplate} onChange={(e) => onChange({ agendaTemplate: e.target.value })} placeholder="1. Program status&#10;2. Open items&#10;3. Decisions" />
+      </div>
+    </div>
+  );
+}
+
+// The expanded detail row for one event. View mode summarises the schedule;
+// Edit flips the EventFields into a staged edit, one Save PUTs them. The
+// row's mark-done / .ics / delete quick-actions stay in the list row.
+function ExpandedEvent({ event, people, canWrite, orgId, onSaved }: {
+  event: CalendarEvent;
+  people: Person[];
+  canWrite: boolean;
+  orgId: string | null;
+  onSaved: () => void;
+}) {
+  const { addToast } = useToastStore();
+  const m = useDetailEditMode<EventForm>(
+    eventToForm(event),
+    async (draft) => {
+      if (!draft.name.trim()) { addToast('error', 'Event name is required.'); throw new Error('no-name'); }
+      try {
+        await apiClient.put(`/governance-calendar/${event.id}`, formToPayload(draft, orgId));
+        addToast('success', 'Event updated');
+        onSaved();
+      } catch (err) { addToast('error', errorMessage(err, 'Failed to save event')); throw err; }
+    },
+  );
+  const scheduleText = (() => {
+    if (event.cadence === 'WEEKLY' || event.cadence === 'BIWEEKLY') {
+      const dow = event.dayOfWeek == null ? null : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][event.dayOfWeek];
+      return dow ? `${formatTypeLabel(event.cadence)} on ${dow}` : formatTypeLabel(event.cadence);
+    }
+    return event.dayOfMonth != null ? `${formatTypeLabel(event.cadence)}, day ${event.dayOfMonth}` : formatTypeLabel(event.cadence);
+  })();
+  return (
+    <div style={{ padding: '12px 16px', background: '#fafbfc' }}>
+      {canWrite && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
+          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+        </div>
+      )}
+      {m.isEditing ? (
+        <EventFields form={m.draft} onChange={m.patch} people={people} />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+          <div>
+            <SectionLabel marginBottom={4}>Schedule</SectionLabel>
+            <div style={{ fontSize: 13 }}>{scheduleText} · {event.timeOfDay} · {event.durationMinutes} min</div>
+          </div>
+          <div>
+            <SectionLabel marginBottom={4}>Next occurrence</SectionLabel>
+            <div style={{ fontSize: 13 }}>{formatOccurrence(event.nextOccurrence)}</div>
+          </div>
+          <div>
+            <SectionLabel marginBottom={4}>Auto-create tasks</SectionLabel>
+            <div style={{ fontSize: 13 }}>{event.autoCreateTasks ? 'Yes' : 'No'}</div>
+          </div>
+          {event.description && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <SectionLabel marginBottom={4}>Description</SectionLabel>
+              <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{event.description}</div>
+            </div>
+          )}
+          {event.attendeeNames.length > 0 && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <SectionLabel marginBottom={4}>Attendees ({event.attendeeNames.length})</SectionLabel>
+              <div style={{ fontSize: 13 }}>{event.attendeeNames.join(', ')}</div>
+            </div>
+          )}
+          {event.agendaTemplate && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <SectionLabel marginBottom={4}>Agenda template</SectionLabel>
+              <pre style={{ fontSize: 12, fontFamily: 'monospace', whiteSpace: 'pre-wrap', margin: 0, color: 'var(--color-text-secondary)' }}>{event.agendaTemplate}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Component ──
 
 export default function GovernanceCalendarPage() {
@@ -171,8 +380,11 @@ export default function GovernanceCalendarPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<EventForm>(emptyForm);
+  // Row-click expansion for the events list: open one event's detail at a time.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpandedIds((prev) => (prev.has(id) ? new Set() : new Set([id])));
   const eventValidation = useFormValidation({
     name: (v: any) => !v?.trim() ? 'Event name is required.' : null,
   });
@@ -204,60 +416,17 @@ export default function GovernanceCalendarPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Create-only: editing an event happens in the row's expanded detail.
   const openAdd = () => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyForm); setEditingId(null); setShowForm(true); };
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyForm); setShowForm(true); };
 
-  const openEdit = (e: CalendarEvent) => {
-    setForm({
-      name: e.name,
-      description: e.description,
-      eventType: e.eventType,
-      cadence: e.cadence,
-      dayOfMonth: e.dayOfMonth == null ? '' : String(e.dayOfMonth),
-      dayOfWeek: e.dayOfWeek == null ? '' : String(e.dayOfWeek),
-      timeOfDay: e.timeOfDay || '14:00',
-      durationMinutes: String(e.durationMinutes || 60),
-      attendees: e.attendees || [],
-      agendaTemplate: e.agendaTemplate || '',
-      autoCreateTasks: !!e.autoCreateTasks,
-      status: e.status,
-    });
-    setEditingId(e.id);
-    setShowForm(true);
-  };
-
-  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const closeForm = () => { setShowForm(false); setForm(emptyForm); };
 
   const handleSave = async () => {
     if (!eventValidation.validateAll(form)) return;
     try {
-      const dayOfMonthNum = form.dayOfMonth.trim() === '' ? null : parseInt(form.dayOfMonth, 10);
-      const dayOfWeekNum = form.dayOfWeek.trim() === '' ? null : parseInt(form.dayOfWeek, 10);
-      const durationNum = parseInt(form.durationMinutes, 10);
-
-      const payload: any = {
-        name: form.name,
-        description: form.description,
-        eventType: form.eventType,
-        cadence: form.cadence,
-        dayOfMonth: Number.isFinite(dayOfMonthNum as number) ? dayOfMonthNum : null,
-        dayOfWeek: Number.isFinite(dayOfWeekNum as number) ? dayOfWeekNum : null,
-        timeOfDay: form.timeOfDay,
-        durationMinutes: Number.isFinite(durationNum) ? durationNum : 60,
-        attendees: form.attendees,
-        agendaTemplate: form.agendaTemplate,
-        autoCreateTasks: form.autoCreateTasks,
-        status: form.status,
-        ...(activeOrgId ? { orgId: activeOrgId } : {}),
-      };
-
-      if (editingId) {
-        await apiClient.put(`/governance-calendar/${editingId}`, payload);
-        addToast('success', 'Event updated');
-      } else {
-        await apiClient.post('/governance-calendar', payload);
-        addToast('success', 'Event created');
-      }
+      await apiClient.post('/governance-calendar', formToPayload(form, activeOrgId));
+      addToast('success', 'Event created');
       closeForm();
       fetchData();
     } catch (err) {
@@ -344,15 +513,6 @@ export default function GovernanceCalendarPage() {
     addToast('success', `Deleted ${ids.length} event${ids.length === 1 ? '' : 's'}`);
     sel.clear();
     fetchData();
-  };
-
-  const toggleAttendee = (id: string) => {
-    setForm((f) => ({
-      ...f,
-      attendees: f.attendees.includes(id)
-        ? f.attendees.filter((a) => a !== id)
-        : [...f.attendees, id],
-    }));
   };
 
   // ── Derived ──
@@ -456,7 +616,6 @@ export default function GovernanceCalendarPage() {
         <div style={{ display: 'inline-flex', gap: 4 }}>
           {isAdmin && <IconButton size="sm" icon="check" label="Mark occurrence done" onClick={() => handleRun(ev.id)} />}
           <IconButton size="sm" icon="download" label="Add to calendar (.ics)" onClick={() => downloadIcs(ev)} />
-          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(ev)} />}
           {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(ev.id)} />}
         </div>
       ),
@@ -501,165 +660,16 @@ export default function GovernanceCalendarPage() {
         onCancel={() => setConfirmDelete(null)}
       />
 
-      {/* Add/Edit Form */}
+      {/* Add Event form (editing an event happens in the row's expanded detail) */}
       {showForm && (
-        <SectionCard title={editingId ? 'Edit Event' : 'Add New Event'}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Name *</label>
-              <input
-                autoFocus
-                aria-label="Name"
-                style={{ ...inputStyle, border: eventValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                onBlur={() => { eventValidation.touch('name'); eventValidation.validateField('name', form.name, form); }}
-                placeholder="e.g. Data Governance Council Meeting"
-              />
-              {eventValidation.fieldError('name') && <div style={fieldErrorStyle}>{eventValidation.fieldError('name')}</div>}
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Description</label>
-              <textarea
-                aria-label="Description"
-                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Event Type</label>
-              <select
-                aria-label="Event Type"
-                style={selectStyle}
-                value={form.eventType}
-                onChange={(e) => setForm({ ...form, eventType: e.target.value })}
-              >
-                {EVENT_TYPES.map((t) => <option key={t} value={t}>{formatTypeLabel(t)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Cadence</label>
-              <select
-                aria-label="Cadence"
-                style={selectStyle}
-                value={form.cadence}
-                onChange={(e) => setForm({ ...form, cadence: e.target.value })}
-              >
-                {CADENCES.map((c) => <option key={c} value={c}>{formatTypeLabel(c)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Day of Month (1-31)</label>
-              <input
-                type="number"
-                min={1}
-                max={31}
-                aria-label="Day of Month (1-31)"
-                style={inputStyle}
-                value={form.dayOfMonth}
-                onChange={(e) => setForm({ ...form, dayOfMonth: e.target.value })}
-                placeholder="For monthly+ cadences"
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Day of Week (0=Sun)</label>
-              <input
-                type="number"
-                min={0}
-                max={6}
-                aria-label="Day of Week (0=Sun)"
-                style={inputStyle}
-                value={form.dayOfWeek}
-                onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}
-                placeholder="For weekly cadences"
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Time of Day (HH:MM)</label>
-              <input
-                aria-label="Time of Day (HH:MM)"
-                style={inputStyle}
-                value={form.timeOfDay}
-                onChange={(e) => setForm({ ...form, timeOfDay: e.target.value })}
-                placeholder="14:00"
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Duration (minutes)</label>
-              <input
-                type="number"
-                min={5}
-                aria-label="Duration (minutes)"
-                style={inputStyle}
-                value={form.durationMinutes}
-                onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Status</label>
-              <select
-                aria-label="Status"
-                style={selectStyle}
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as 'ACTIVE' | 'PAUSED' })}
-              >
-                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
-              <input
-                type="checkbox"
-                id="autoCreateTasks"
-                checked={form.autoCreateTasks}
-                onChange={(e) => setForm({ ...form, autoCreateTasks: e.target.checked })}
-              />
-              <label htmlFor="autoCreateTasks" style={{ fontSize: 12, fontWeight: 500 }}>
-                Auto-create governance tasks each occurrence
-              </label>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Attendees</label>
-              <div style={{
-                display: 'flex', flexWrap: 'wrap', gap: 6, padding: 8,
-                border: '1px solid var(--color-border)', borderRadius: 4,
-                maxHeight: 140, overflowY: 'auto', background: 'var(--color-surface)',
-              }}>
-                {people.length === 0 && (
-                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No people defined yet.</span>
-                )}
-                {people.map((p) => {
-                  const selected = form.attendees.includes(p.id);
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => toggleAttendee(p.id)}
-                      style={{
-                        padding: '4px 10px', fontSize: 12, borderRadius: 12, cursor: 'pointer',
-                        border: '1px solid',
-                        borderColor: selected ? 'var(--color-primary)' : 'var(--color-border)',
-                        background: selected ? 'var(--color-primary)' : 'var(--color-bg)',
-                        color: selected ? '#fff' : 'var(--color-text)',
-                      }}
-                    >
-                      {p.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Agenda Template</label>
-              <textarea
-                aria-label="Agenda Template"
-                style={{ ...inputStyle, minHeight: 80, resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }}
-                value={form.agendaTemplate}
-                onChange={(e) => setForm({ ...form, agendaTemplate: e.target.value })}
-                placeholder="1. Program status&#10;2. Open items&#10;3. Decisions"
-              />
-            </div>
-          </div>
+        <SectionCard title="Add New Event">
+          <EventFields
+            form={form}
+            onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+            people={people}
+            nameError={eventValidation.fieldError('name')}
+            onNameBlur={() => { eventValidation.touch('name'); eventValidation.validateField('name', form.name, form); }}
+          />
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={closeForm}>Cancel</Button>
             <Button
@@ -667,7 +677,7 @@ export default function GovernanceCalendarPage() {
               disabled={!form.name.trim()}
               onClick={handleSave}
             >
-              {editingId ? 'Save Changes' : 'Add Event'}
+              Add Event
             </Button>
           </div>
         </SectionCard>
@@ -785,7 +795,7 @@ export default function GovernanceCalendarPage() {
                           const colors = EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM;
                           return (
                             <div key={ev.id} title={`${ev.name} (${formatTypeLabel(ev.eventType)}) — ${ev.timeOfDay}`}
-                              {...clickable(() => openEdit(ev), { label: `Edit ${ev.name}` })}
+                              {...clickable(() => { setViewMode('list'); setExpandedIds(new Set([ev.id])); }, { label: `Open ${ev.name}` })}
                               style={{
                                 fontSize: 10, fontWeight: 500, padding: '1px 4px', borderRadius: 3, cursor: 'pointer',
                                 background: colors.bg, color: colors.color,
@@ -872,6 +882,14 @@ export default function GovernanceCalendarPage() {
                 selection={isAdmin ? sel : undefined}
                 selectAllLabel="Select all events"
                 emptyMessage="No events match the current filters."
+                expansion={{
+                  expandedIds,
+                  onToggleExpanded: toggleExpanded,
+                  trigger: 'row-click',
+                  renderExpandedRow: (ev) => (
+                    <ExpandedEvent event={ev} people={people} canWrite={isAdmin} orgId={activeOrgId} onSaved={fetchData} />
+                  ),
+                }}
               />
             )}
           </Card>
