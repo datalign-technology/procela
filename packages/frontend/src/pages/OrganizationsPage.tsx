@@ -113,9 +113,9 @@ function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>, all
 // Root org is system-protected — never selectable for bulk delete.
 
 
-function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect, onSelect, activeDetailId, isAdmin }: {
+function OrgTreeNode({ node, depth, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect, onSelect, activeDetailId, isAdmin }: {
   node: OrgNode; depth: number;
-  onEdit: (org: OrgFlat) => void; onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
+  onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
   expanded: Set<string>; toggleExpand: (id: string) => void; peopleCounts: Record<string, number>;
   accessibleOrgIds: Set<string>;
   allOrgs: OrgFlat[];
@@ -199,7 +199,6 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
           {canEdit && (
             <>
               <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => onAddChild(node.id)} />
-              <IconButton size="sm" icon="edit" label="Edit" onClick={() => onEdit(node)} />
               {!isRoot && (
                 <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />
               )}
@@ -212,7 +211,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
       </div>
       {isExpanded && node.children.map((child) => (
         <OrgTreeNode key={child.id} node={child} depth={depth + 1}
-          onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
+          onDelete={onDelete} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
           accessibleOrgIds={accessibleOrgIds} allOrgs={allOrgs}
           selectedIds={selectedIds} toggleSelect={toggleSelect}
@@ -242,7 +241,6 @@ export default function OrganizationsPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['00000000-0000-0000-0000-000000000010']));
   const [showOrgForm, setShowOrgForm] = useState(false);
-  const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [orgForm, setOrgForm] = useState<OrgFormData>(emptyOrgForm);
   const orgValidation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [showImport, setShowImport] = useState(false);
@@ -300,19 +298,19 @@ export default function OrganizationsPage() {
   const toggleExpand = (id: string) => setExpanded((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const expandAll = () => setExpanded(new Set(flatOrgs.map((o) => o.id)));
 
-  const openAddOrg = (parentId: string | null = null) => { setOrgForm({ ...emptyOrgForm, parentId }); setEditingOrgId(null); setShowOrgForm(true); };
-  const openEditOrg = (org: OrgFlat) => { setOrgForm({ name: org.name, parentId: org.parentId, type: org.type, industry: org.industry, description: org.description }); setEditingOrgId(org.id); setShowOrgForm(true); };
+  // Create-only: editing an organization (name, type, parent, industry,
+  // description) happens on its detail page at /organizations/:id.
+  const openAddOrg = (parentId: string | null = null) => { setOrgForm({ ...emptyOrgForm, parentId }); setShowOrgForm(true); };
   const handleSaveOrg = async () => {
     if (!orgValidation.validateAll(orgForm)) return;
     try {
-      if (editingOrgId) await apiClient.put(`/organizations/${editingOrgId}`, orgForm);
-      else await apiClient.post('/organizations', orgForm);
-      addToast('success', editingOrgId ? 'Organization updated' : 'Organization created');
+      await apiClient.post('/organizations', orgForm);
+      addToast('success', 'Organization created');
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Failed to save organization');
       return;
     }
-    setShowOrgForm(false); setEditingOrgId(null); setOrgForm(emptyOrgForm); fetchData(); triggerRefresh();
+    setShowOrgForm(false); setOrgForm(emptyOrgForm); fetchData(); triggerRefresh();
   };
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<string | null>(null);
   // Impact payload from GET /:id/impact. Counts are numbers on the
@@ -552,7 +550,7 @@ export default function OrganizationsPage() {
       {/* Add/Edit Org Form — shown in detail panel when master-detail is active, or full-width when tree is empty */}
       {showOrgForm && tree.length === 0 && (
         <Card marginBottom={12}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Add Organization</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
@@ -575,7 +573,7 @@ export default function OrganizationsPage() {
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent</label>
               <select aria-label="Parent" style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.parentId || ''} onChange={(e) => setOrgForm({ ...orgForm, parentId: e.target.value || null })}>
                 <option value="">-- No parent (top-level) --</option>
-                {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                {flatOrgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
             </div>
             <div>
@@ -599,9 +597,9 @@ export default function OrganizationsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setShowOrgForm(false); orgValidation.clearErrors(); }}>Cancel</Button>
             <Button variant="primary" disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
-              {editingOrgId ? 'Save' : 'Add'}
+              Add
             </Button>
           </div>
         </Card>
@@ -729,7 +727,7 @@ export default function OrganizationsPage() {
           ) : (
             tree.map((node) => (
               <OrgTreeNode key={node.id} node={node} depth={0}
-                onEdit={openEditOrg} onDelete={promptDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
+                onDelete={promptDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
                 expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
                 accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
                 selectedIds={selectedIds} toggleSelect={toggleOrgSelect}
@@ -744,7 +742,7 @@ export default function OrganizationsPage() {
         {tree.length > 0 && showOrgForm && (
           <Card padding={0} shadow="none" style={{ position: 'sticky', top: 16 }}>
               <div style={{ padding: 16 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Add Organization</h3>
                 <FieldStack>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
@@ -767,7 +765,7 @@ export default function OrganizationsPage() {
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent</label>
                     <select aria-label="Parent" style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.parentId || ''} onChange={(e) => setOrgForm({ ...orgForm, parentId: e.target.value || null })}>
                       <option value="">-- No parent (top-level) --</option>
-                      {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                      {flatOrgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
                     </select>
                   </div>
                   <div>
@@ -789,9 +787,9 @@ export default function OrganizationsPage() {
                   </div>
                 </FieldStack>
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-                  <Button variant="secondary" onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</Button>
+                  <Button variant="secondary" onClick={() => { setShowOrgForm(false); orgValidation.clearErrors(); }}>Cancel</Button>
                   <Button variant="primary" disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
-                    {editingOrgId ? 'Save' : 'Add'}
+                    Add
                   </Button>
                 </div>
               </div>
