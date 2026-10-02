@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { activateOnKeyStop } from '../lib/a11y';
@@ -196,6 +197,7 @@ export default function BusinessGlossaryPage() {
   const { activeOrgId, activeOrgName } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
+  const navigate = useNavigate();
 
   const glossaryCols = useColumnPicker<GlossaryColId>('procela.businessGlossary.visibleCols.v1', GLOSSARY_COLUMN_DEFS);
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
@@ -480,31 +482,23 @@ export default function BusinessGlossaryPage() {
       key: 'term', header: 'Term', sortable: true, cellStyle: { fontWeight: 500 },
       render: (t: GlossaryTerm) => (
         <div style={{ minWidth: 0 }}>
-          {/* Click opens the edit form so the term gets a
-           *  proper modal with definition / classification /
-           *  related-terms - the inline editor only let users
-           *  change the headword, missing the rest. Viewers
-           *  get a plain label since they can't edit. */}
-          {/* Definition isn't shown inline — rows stay single-line; hover the
-           *  term to read it (also searchable and editable via the Edit form). */}
-          {canWrite ? (
-            <button
-              type="button"
-              onClick={() => openEdit(t)}
-              title={t.definition || 'Click to edit term'}
-              style={{
-                background: 'none', border: 'none', padding: 0,
-                color: 'var(--color-primary)', cursor: 'pointer',
-                font: 'inherit', fontWeight: 500, textAlign: 'left',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-            >
-              {t.term}
-            </button>
-          ) : (
-            <span title={t.definition || undefined}>{t.term}</span>
-          )}
+          {/* The term name opens the term's detail page (view). Editing is
+           *  the row's pencil. Definition isn't shown inline — rows stay
+           *  single-line; hover the term to read it. */}
+          <button
+            type="button"
+            onClick={() => navigate(`/business-glossary/${t.id}`)}
+            title={t.definition || 'Click to view term'}
+            style={{
+              background: 'none', border: 'none', padding: 0,
+              color: 'var(--color-primary)', cursor: 'pointer',
+              font: 'inherit', fontWeight: 500, textAlign: 'left',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+          >
+            {t.term}
+          </button>
         </div>
       ),
     },
@@ -927,6 +921,7 @@ export default function BusinessGlossaryPage() {
                 emptyMessage="No terms match the current filters."
                 pageSize={20}
                 countNoun={['term', 'terms']}
+                onRowClick={(t) => navigate(`/business-glossary/${t.id}`)}
               />
             )}
           </Card>
