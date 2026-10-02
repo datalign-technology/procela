@@ -24,6 +24,7 @@ const DataAssetsHubPage          = lazy(() => import('@/pages/DataAssetsHubPage'
 const SystemsHubPage             = lazy(() => import('@/pages/SystemsHubPage'));
 const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
 const OrganizationsPage          = lazy(() => import('@/pages/OrganizationsPage'));
+const OrganizationDetailPage     = lazy(() => import('@/pages/OrganizationDetailPage'));
 const OrgVisualizationPage       = lazy(() => import('@/pages/OrgVisualizationPage'));
 const PeoplePage                 = lazy(() => import('@/pages/PeoplePage'));
 const PersonDetailPage           = lazy(() => import('@/pages/PersonDetailPage'));
@@ -98,6 +99,7 @@ export default function App() {
           <Route path="/gap-detection" element={<GapDetectionPage />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/organizations/visualization" element={<OrgVisualizationPage />} />
+          <Route path="/organizations/:id" element={<OrganizationDetailPage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/people/:id" element={<PersonDetailPage />} />
           <Route path="/agents" element={<AgentsPage />} />

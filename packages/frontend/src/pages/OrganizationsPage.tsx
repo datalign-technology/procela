@@ -255,8 +255,6 @@ export default function OrganizationsPage() {
   // People API in a single call — no full person records kept here.
   const [peopleCounts, setPeopleCounts] = useState<Record<string, number>>({});
 
-  const [detailOrgId, setDetailOrgId] = useState<string | null>(null);
-
   // Bulk select state for the tree.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -297,7 +295,6 @@ export default function OrganizationsPage() {
 
   const orgOptions = flattenTreeForSelect(tree);
   const accessibleOrgIds = new Set(accessibleOrgs.map((o) => o.id));
-  const detailOrg = detailOrgId ? flatOrgs.find((o) => o.id === detailOrgId) || null : null;
 
   // ── Org handlers ──
   const toggleExpand = (id: string) => setExpanded((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -696,8 +693,9 @@ export default function OrganizationsPage() {
         </Suspense>
       )}
 
-      {/* ══ MAIN BODY — master-detail: tree (left) + detail panel (right) ══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: tree.length > 0 ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
+      {/* ══ MAIN BODY — org tree (left); an add/edit form opens in a right
+          column when active. Clicking a node opens its full detail page. ══ */}
+      <div style={{ display: 'grid', gridTemplateColumns: (tree.length > 0 && showOrgForm) ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
         {/* Left: Org Tree */}
         <Card padding={0} shadow="none">
         {/* Tree toolbar — select-all, expand/collapse */}
@@ -735,16 +733,16 @@ export default function OrganizationsPage() {
                 expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
                 accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
                 selectedIds={selectedIds} toggleSelect={toggleOrgSelect}
-                onSelect={setDetailOrgId} activeDetailId={detailOrgId} isAdmin={isAdmin} />
+                onSelect={(oid) => navigate(`/organizations/${oid}`)} activeDetailId={null} isAdmin={isAdmin} />
             ))
           )}
         </div>
         </Card>
 
-        {/* Right: Detail Panel */}
-        {tree.length > 0 && (
+        {/* Right: add / edit form (shown only while a form is open; clicking a
+            node navigates to its full detail page instead of a side panel). */}
+        {tree.length > 0 && showOrgForm && (
           <Card padding={0} shadow="none" style={{ position: 'sticky', top: 16 }}>
-            {showOrgForm ? (
               <div style={{ padding: 16 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
                 <FieldStack>
@@ -797,50 +795,6 @@ export default function OrganizationsPage() {
                   </Button>
                 </div>
               </div>
-            ) : detailOrg ? (
-              <div style={{ padding: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={typeBadge(detailOrg.type)}>{detailOrg.type}</span>
-                      {detailOrg.industry && <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>{detailOrg.industry}</span>}
-                    </div>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{detailOrg.name}</h3>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {isAdmin && <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => openAddOrg(detailOrg.id)} />}
-                    {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditOrg(detailOrg)} />}
-                    {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => promptDeleteOrg(detailOrg.id)} />}
-                  </div>
-                </div>
-                {detailOrg.description && (
-                  <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: 12 }}>{detailOrg.description}</p>
-                )}
-                <FieldStack>
-                  {detailOrg.parentId && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                      <span style={{ color: 'var(--color-text-muted)' }}>Parent</span>
-                      <span style={{ fontWeight: 500, cursor: 'pointer', color: 'var(--color-primary)' }}
-                        {...clickable(() => setDetailOrgId(detailOrg.parentId), { label: 'Go to parent organization' })}>
-                        {flatOrgs.find((o) => o.id === detailOrg.parentId)?.name || '--'}
-                      </span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span style={{ color: 'var(--color-text-muted)' }}>People</span>
-                    <span style={{ fontWeight: 600, color: '#5b21b6' }}>{peopleCounts[detailOrg.id] || 0}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span style={{ color: 'var(--color-text-muted)' }}>Children</span>
-                    <span style={{ fontWeight: 500 }}>{flatOrgs.filter((o) => o.parentId === detailOrg.id).length}</span>
-                  </div>
-                </FieldStack>
-              </div>
-            ) : (
-              <div style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Click an organization name to see its details here.</p>
-              </div>
-            )}
           </Card>
         )}
       </div>
