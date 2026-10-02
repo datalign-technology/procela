@@ -293,10 +293,18 @@ The badge on the review screen says *Specialised: <Org>*.
 
 With *Working in…* on **Tidewater Electric**:
 
-- Expand a value stream → process → sub-process → activity.
-- Click an **Activity** node. The right panel shows level-specific
-  fields: Owner, Responsible Role, Responsible Person, Systems,
-  Required Skills, Inputs/Outputs, Status, Frequency, Risk Level.
+- The catalog is a **two-pane** layout: a navigation tree on the left,
+  the selected record's detail on the right. Use the caret (or **Expand
+  All**) to open a value stream → process → sub-process → activity in
+  the nav.
+- **Click an Activity row** in the left nav. Its record opens in the
+  **detail pane on the right**, with level-specific fields: Owner,
+  Responsible Role, Responsible Person, Systems, Required Skills,
+  Inputs/Outputs, Status, Frequency, Risk Level. Each nav row carries a
+  status dot and a required-fields completeness read-out (`✓` / `N/M` /
+  an amber ⚠ when Active but incomplete); the **filter pills** above the
+  nav (All levels / Active / Draft / Incomplete / Mine) and the **Needs
+  Attention** summary below it help you find what to work on.
 - Concrete example — on an **Outage Management → Outage triage**
   activity, set:
   - **Responsible Role** = `System Operator Lead`
@@ -441,6 +449,16 @@ Two things Procela enforces you'll want to demo:
 Switch back to **Simple** mode when you're done to keep the rest
 of the training uncluttered — the migration confirmation dialog
 walks any Pending Review rows back to Draft.
+
+**Require fields before activation (optional).** The same **Settings →
+Process & Asset Lifecycle** screen has an *Activation policy* toggle. Set
+it to **Enforced** and Procela won't let a node go **Active** (or
+**Approved**, under review mode) while any required field is blank —
+the status change is refused with the list of what's missing, so the
+required-field dots in the catalog become a real gate rather than a hint.
+Leave it **Advisory** (the default) to keep them informational. The
+policy resolves up the org tree, so setting it on the company applies to
+every division.
 
 ### 3.8 Phase 3 suggestion panels
 
