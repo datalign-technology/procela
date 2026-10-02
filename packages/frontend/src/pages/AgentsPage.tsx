@@ -146,12 +146,10 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [confirmAutoPause, setConfirmAutoPause] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
@@ -244,43 +242,9 @@ export default function AgentsPage() {
     const visibleIds = new Set(orgs.map((o) => o.id));
     const seed = selectedOrgId && visibleIds.has(selectedOrgId) ? [selectedOrgId] : [];
     setForm({ ...emptyForm, orgIds: seed });
-    setEditingId(null);
     setShowForm(true);
   };
-  const openEdit = (a: Agent) => {
-    // Pre-fill only with orgs the current user can see. Anything else —
-    // typically a deleted org id left on a legacy agent record, or a
-    // bogus seed value — would be invisible in the checkbox list but
-    // still ride along on save and trip the backend's "Organization X
-    // not found" guard. Drop those here, and tell the user.
-    const visibleIds = new Set(orgs.map((o) => o.id));
-    const valid = (a.orgIds || []).filter((id) => visibleIds.has(id));
-    const droppedCount = (a.orgIds || []).length - valid.length;
-    if (droppedCount > 0) {
-      addToast('info', `${droppedCount} previously-assigned organization${droppedCount === 1 ? '' : 's'} no longer exist${droppedCount === 1 ? 's' : ''} and ${droppedCount === 1 ? 'has' : 'have'} been cleared. Pick the current org(s) and save to repair this agent.`);
-    }
-    setForm({
-      name: a.name, orgIds: valid, agentType: a.agentType,
-      description: a.description, provider: a.provider,
-      status: a.status, ownerPersonId: a.ownerPersonId,
-      skillIds: a.skillIds || [],
-      instructions: a.instructions || '',
-    });
-    setEditingId(a.id);
-    setShowForm(true);
-  };
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); validation.clearErrors(); };
-
-  // True when the form is about to submit ACTIVE + no owner, but the
-  // agent as it exists on the server is currently ACTIVE + owned.
-  // That's the "user is unassigning an active agent" case — we ask
-  // for confirmation before the auto-pause fires server-side.
-  const editingAgent = editingId ? agents.find((a) => a.id === editingId) : null;
-  const willAutoPause = !!editingAgent
-    && editingAgent.status === 'ACTIVE'
-    && !!editingAgent.ownerPersonId
-    && form.status === 'ACTIVE'
-    && !form.ownerPersonId;
+  const handleCancel = () => { setShowForm(false); setForm(emptyForm); validation.clearErrors(); };
 
   const doSave = async () => {
     // The form's own "Assigned Organizations" picker (form.orgIds) is the
@@ -304,21 +268,8 @@ export default function AgentsPage() {
     }
     const payload = { ...form, orgIds: cleanOrgIds };
     try {
-      const resp = editingId
-        ? await apiClient.put<{ success: boolean; cascade?: { autoPaused?: boolean } | null }>(`/agents/${editingId}`, payload)
-        : await apiClient.post<{ success: boolean; cascade?: { autoPaused?: boolean } | null }>('/agents', payload);
-      // The PUT can carry a cascade signal — the caller cleared the
-      // owner on an active agent, so the backend auto-paused. Surface
-      // that instead of the plain "updated" toast so the user sees the
-      // state transition.
-      if (resp && resp.cascade && resp.cascade.autoPaused) {
-        addToast(
-          'info',
-          'Agent auto-paused. It had no responsible person while active, so a governance issue was opened.',
-        );
-      } else {
-        addToast('success', editingId ? 'Agent updated' : 'Agent created');
-      }
+      await apiClient.post<{ success: boolean }>('/agents', payload);
+      addToast('success', 'Agent created');
       handleCancel();
       fetchData();
     } catch (e) {
@@ -329,15 +280,10 @@ export default function AgentsPage() {
   const handleSave = async () => {
     // Client-side guardrail on the block-on-activate case, so the user
     // sees a friendly message rather than an eventual 400. The backend
-    // still enforces it.
+    // still enforces it. (Edits — including unassigning the owner of an
+    // active agent, which auto-pauses — happen on the agent detail page.)
     if (form.status === 'ACTIVE' && !form.ownerPersonId) {
       addToast('error', 'Assign a responsible person before setting an agent Active.');
-      return;
-    }
-    // Confirmation dialog before auto-pause. Backend will do it either
-    // way, but the user should acknowledge the state change.
-    if (willAutoPause) {
-      setConfirmAutoPause(true);
       return;
     }
     await doSave();
@@ -507,7 +453,6 @@ export default function AgentsPage() {
       render: (a: Agent) => (
         !isAdmin ? <span style={{ color: 'var(--color-text-muted)' }}>—</span> :
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(a)} />
           <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(a.id)} />
         </div>
       ),
@@ -659,10 +604,10 @@ export default function AgentsPage() {
         )}
       </div>
 
-      {/* Add / Edit form */}
+      {/* Add form (editing an agent happens on its detail page) */}
       {showForm && (
         <Card marginBottom={16}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit Agent' : 'Add Agent'}</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Add Agent</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
@@ -727,11 +672,6 @@ export default function AgentsPage() {
                 <option value="">-- Unassigned --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
-              {willAutoPause && (
-                <p style={{ fontSize: 10, color: 'var(--color-warning)', marginTop: 4 }}>
-                  Saving will pause this agent — it can't stay Active without a responsible person.
-                </p>
-              )}
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assigned Organizations *</label>
@@ -762,7 +702,7 @@ export default function AgentsPage() {
               disabled={!form.name.trim() || form.orgIds.length === 0}
               onClick={handleSave}
             >
-              {editingId ? 'Save' : 'Add'}
+              Add
             </Button>
           </div>
         </Card>
@@ -782,18 +722,6 @@ export default function AgentsPage() {
           await handleBulkDelete();
         }}
         onCancel={() => setConfirmBulkDelete(false)}
-      />
-
-      <ConfirmDialog
-        open={confirmAutoPause}
-        title="Pause this agent?"
-        message="An agent can't be Active without a responsible person. Saving will move this agent to Paused and open a governance issue so it re-surfaces for a lead."
-        confirmLabel="Save & Pause"
-        onConfirm={async () => {
-          setConfirmAutoPause(false);
-          await doSave();
-        }}
-        onCancel={() => setConfirmAutoPause(false)}
       />
 
       {/* Table */}

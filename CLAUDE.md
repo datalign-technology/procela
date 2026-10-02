@@ -550,7 +550,7 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   row's own controls work without each needing to `stopPropagation`.
   Keep the row's name a focusable `<button>` / `clickable()` element —
   it's the keyboard path to the detail. Lists with no row-level detail
-  (Skills, Tasks, Issues, Calendar, Mappings, Lineage, Connections,
+  (Tasks, Issues, Calendar, Mappings, Lineage, Connections,
   Audit Log) stay inert. Do NOT re-expose a teal name-link as the only
   way to open a row.
 - `useRowSelection` — the row-selection hook wired into `DataTable`'s

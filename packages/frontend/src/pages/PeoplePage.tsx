@@ -211,7 +211,6 @@ export default function PeoplePage() {
   const [roles, setRoles] = useState<string[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState('');
   const [showPersonForm, setShowPersonForm] = useState(false);
-  const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [personForm, setPersonForm] = useState<PersonFormData>(emptyPersonForm);
   const [showPeopleImport, setShowPeopleImport] = useState(false);
   const [showPeopleSync, setShowPeopleSync] = useState(false);
@@ -448,7 +447,7 @@ export default function PeoplePage() {
   };
 
   // ── People handlers ──
-  const openAddPerson = () => { setPersonForm({ ...emptyPersonForm, orgIds: selectedOrgId ? [selectedOrgId] : [] }); setEditingPersonId(null); setShowPersonForm(true); };
+  const openAddPerson = () => { setPersonForm({ ...emptyPersonForm, orgIds: selectedOrgId ? [selectedOrgId] : [] }); setShowPersonForm(true); };
 
   // Deep-link create intent: /people?new=1 (from the Setup Hub) opens the
   // add form, then strips the param so refresh/back doesn't re-open it.
@@ -460,39 +459,18 @@ export default function PeoplePage() {
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
-  const openEditPerson = (person: Person) => {
-    // Edit only allows name/email/title — orgs and role live under Manage.
-    // We still seed the full state from the existing record so the
-    // PersonFormData type stays uniform; the UI just hides the rest.
-    setPersonForm({
-      orgIds: person.orgIds || [], name: person.name, email: person.email,
-      role: person.role, title: person.title,
-    });
-    setEditingPersonId(person.id);
-    setShowPersonForm(true);
-  };
   const handleSavePerson = async () => {
     if (!personForm.name.trim()) return;
+    // Create-only: editing a person (identity fields, org assignments,
+    // roles, skills) happens on the person's detail page.
+    if (personForm.orgIds.length === 0) { setPersonFormSave('idle'); return; }
     setPersonFormSave('saving');
     try {
-      if (editingPersonId) {
-        // Edit: send only the identity fields. Skipping orgIds / role
-        // means the backend leaves them untouched, so changes made under
-        // Manage aren't clobbered.
-        await apiClient.put(`/people/${editingPersonId}`, {
-          name: personForm.name,
-          email: personForm.email,
-          title: personForm.title,
-        });
-      } else {
-        // Add still needs orgIds (backend requires non-empty) and role.
-        if (personForm.orgIds.length === 0) { setPersonFormSave('idle'); return; }
-        await apiClient.post('/people', personForm);
-      }
-      addToast('success', editingPersonId ? 'Person updated' : 'Person added');
+      await apiClient.post('/people', personForm);
+      addToast('success', 'Person added');
       setPersonFormSave('saved');
       setTimeout(() => {
-        setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm);
+        setShowPersonForm(false); setPersonForm(emptyPersonForm);
         setPersonFormSave('idle');
         fetchData();
       }, 600);
@@ -906,14 +884,12 @@ export default function PeoplePage() {
                 </div>
               </ConfirmDialog>
 
-              {/* Add/Edit Person Form */}
+              {/* Add Person Form (editing a person happens on their detail page) */}
               {showPersonForm && (
                 <Card marginBottom={10}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{editingPersonId ? 'Edit Person' : 'Add Person'}</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Add Person</h3>
                   <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10 }}>
-                    {editingPersonId
-                      ? 'Edit identity fields here. Org assignments and application role live under Manage.'
-                      : 'Create the person and assign them to an org. Refine details and governance roles via Manage afterwards.'}
+                    Create the person and assign them to an org. Refine details and governance roles on their detail page afterwards.
                   </p>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
@@ -928,49 +904,40 @@ export default function PeoplePage() {
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title</label>
                       <input aria-label="Title" style={inputStyle} value={personForm.title} onChange={(e) => setPersonForm({ ...personForm, title: e.target.value })} placeholder="e.g. Director of Operations" />
                     </div>
-                    {/* The Add form keeps an Assigned Organization picker so
+                    {/* The Add form carries an Assigned Organization picker so
                         the new person lands in at least one org and is
-                        immediately visible. Edit doesn't show this — those
-                        live under Manage now. */}
-                    {!editingPersonId && (
-                      <>
-                        <div style={{ gridColumn: '1 / -1' }}>
-                          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assign to Organizations *</label>
-                          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-                            Type to search — matches show their breadcrumb so same-named orgs are distinguishable.
-                          </div>
-                          <OrgChipInput
-                            orgs={flatOrgs}
-                            selectedIds={personForm.orgIds}
-                            onChange={(next) => setPersonForm({ ...personForm, orgIds: next })}
-                            scopeOrgId={activeOrgId || null}
-                            autoFocus
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Application Role</label>
-                          <select aria-label="Application Role" style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
-                            {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-                          </select>
-                          <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 2 }}>Controls platform permissions. Governance roles are assigned separately.</div>
-                        </div>
-                      </>
-                    )}
+                        immediately visible. */}
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assign to Organizations *</label>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                        Type to search — matches show their breadcrumb so same-named orgs are distinguishable.
+                      </div>
+                      <OrgChipInput
+                        orgs={flatOrgs}
+                        selectedIds={personForm.orgIds}
+                        onChange={(next) => setPersonForm({ ...personForm, orgIds: next })}
+                        scopeOrgId={activeOrgId || null}
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Application Role</label>
+                      <select aria-label="Application Role" style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
+                        {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                      </select>
+                      <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 2 }}>Controls platform permissions. Governance roles are assigned separately.</div>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
                     <SaveIndicator state={personFormSave} />
-                    <Button variant="secondary" onClick={() => { setShowPersonForm(false); setEditingPersonId(null); setPersonFormSave('idle'); }}>Cancel</Button>
-                    {(() => {
-                      // Add requires both a name and at least one org;
-                      // Edit only requires a non-empty name (orgs/role
-                      // are managed separately).
-                      const invalid = !personForm.name.trim() || (!editingPersonId && personForm.orgIds.length === 0) || personFormSave === 'saving';
-                      return (
-                        <Button variant="primary" disabled={invalid} onClick={handleSavePerson}>
-                          {editingPersonId ? 'Save' : 'Add'}
-                        </Button>
-                      );
-                    })()}
+                    <Button variant="secondary" onClick={() => { setShowPersonForm(false); setPersonFormSave('idle'); }}>Cancel</Button>
+                    <Button
+                      variant="primary"
+                      disabled={!personForm.name.trim() || personForm.orgIds.length === 0 || personFormSave === 'saving'}
+                      onClick={handleSavePerson}
+                    >
+                      Add
+                    </Button>
                   </div>
                 </Card>
               )}
@@ -1137,7 +1104,6 @@ export default function PeoplePage() {
                           )}
                           <td style={{ ...personRowTd, textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                              {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />}
                               {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
                                 try {
                                   const res = await apiClient.get<{ success: boolean; data: { ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number; activeAgents: number } }>(`/people/${person.id}/impact`);

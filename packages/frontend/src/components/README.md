@@ -317,8 +317,8 @@ through the focusable name control in the row, so keep the name a real
 The entity lists split cleanly: **Data Assets** and **Systems** open a modal
 on row-click; **Agents, Decision Rights, SOPs, Data Quality, Governance
 Policies** expand inline via `trigger:'row-click'`. Lists with no row-level
-detail (Skills, Tasks, Issues, Calendar, Mappings, Lineage, Connections,
-Audit Log) stay inert.
+detail (Tasks, Issues, Calendar, Mappings, Lineage, Connections,
+Audit Log) stay inert. **Skills** navigates to a detail page on row-click.
 
 **People is the one *entity* list deliberately left hand-rolled.** The
 reason is one specific shape: a **pinned quick-add row** — a persistent
