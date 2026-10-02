@@ -13,6 +13,9 @@ import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
+import EditableField from '../components/EditableField';
+import DetailEditActions from '../components/DetailEditActions';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { apiClient } from '../api/client';
@@ -1174,6 +1177,38 @@ export default function DataAssetsPage({
     finally { setLoading360(false); }
   };
 
+  // In-modal view/edit for the asset's core own-fields. Advanced fields
+  // (steward list, retention, source binding, domain, system-of-record) keep
+  // the full list editor via the "Edit all fields…" button.
+  const a360 = viewing360?.asset;
+  const assetEdit = useDetailEditMode<{
+    name: string; description: string; governanceTier: string;
+    systemId: string; ownerPersonId: string;
+  }>(
+    {
+      name: a360?.name ?? '',
+      description: a360?.description ?? '',
+      governanceTier: a360?.governanceTier ?? 'BRONZE',
+      systemId: a360?.systemId ?? '',
+      ownerPersonId: a360?.ownerPersonId ?? '',
+    },
+    async (draft) => {
+      if (!viewing360) return;
+      try {
+        await apiClient.put(`/data-assets/${viewing360.asset.id}`, {
+          name: draft.name,
+          description: draft.description,
+          governanceTier: draft.governanceTier,
+          systemId: draft.systemId,
+          ownerPersonId: draft.ownerPersonId || null,
+        });
+        addToast('success', 'Data asset updated');
+        await open360(viewing360.asset.id);
+        fetchData();
+      } catch (err) { errorToast(err, 'Failed to update data asset'); throw err; }
+    },
+  );
+
   const assetColumns = ([
     {
       key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 380 },
@@ -2306,29 +2341,22 @@ export default function DataAssetsPage({
         title={viewing360?.asset.name || 'Loading…'}
         subtitle={viewing360?.asset.description}
         ariaLabel={viewing360 ? `Data Asset: ${viewing360.asset.name}` : 'Data Asset details'}
-        actions={viewing360 && canWrite ? (() => {
+        actions={viewing360 ? (() => {
           const detailInherited = isInheritedAsset(viewing360.asset.orgId, activeOrgId);
           const ownerName = getOrgName(viewing360.asset.orgId);
           return (
             <>
               <OwnerBadge assetOrgId={viewing360.asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
-              <button
-                onClick={() => {
-                  const asset = assets.find((a) => a.id === viewing360.asset.id);
-                  if (asset) { setViewing360(null); openEdit(asset); }
-                }}
-                disabled={detailInherited}
-                title={detailInherited ? `Owned at ${ownerName}. Switch the "Working in..." scope to ${ownerName} to edit.` : undefined}
-                style={{
-                  background: detailInherited ? 'var(--color-bg)' : 'var(--color-primary)',
-                  color: detailInherited ? 'var(--color-text-muted)' : '#fff',
-                  border: detailInherited ? '1px solid var(--color-border)' : 'none',
-                  borderRadius: 4, padding: '6px 12px', fontSize: 13, fontWeight: 500,
-                  cursor: detailInherited ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Edit
-              </button>
+              <DetailEditActions
+                editing={assetEdit.isEditing}
+                canEdit={canWrite && !detailInherited}
+                dirty={assetEdit.dirty}
+                saving={assetEdit.saving}
+                onEdit={assetEdit.enter}
+                onCancel={assetEdit.cancel}
+                onSave={assetEdit.save}
+                disabledHint={detailInherited ? `Owned at ${ownerName}. Switch the "Working in..." scope to ${ownerName} to edit.` : undefined}
+              />
             </>
           );
         })() : undefined}
@@ -2351,6 +2379,28 @@ export default function DataAssetsPage({
         {loading360 ? (
           <Spinner center label="Loading…" />
         ) : viewing360 ? (
+          assetEdit.isEditing ? (
+            <>
+              <SectionLabel style={{ marginBottom: 10 }}>Edit data asset</SectionLabel>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <EditableField label="Name" editing value={assetEdit.draft.name} onChange={(v) => assetEdit.set('name', v)} placeholder="Asset name" />
+                <EditableField label="System" editing value={assetEdit.draft.systemId} onChange={(v) => assetEdit.set('systemId', v)} type="select" options={[{ value: '', label: '— None —' }, ...systems.map((s) => ({ value: s.id, label: s.name }))]} />
+                <EditableField label="Governance tier" editing value={assetEdit.draft.governanceTier} onChange={(v) => assetEdit.set('governanceTier', v)} type="select" options={TIER_VALUES.map((t) => ({ value: t, label: tierLabel(t) }))} />
+                <EditableField label="Owner" editing value={assetEdit.draft.ownerPersonId} onChange={(v) => assetEdit.set('ownerPersonId', v)} type="select" options={[{ value: '', label: '— Unassigned —' }, ...peopleList.map((p) => ({ value: p.id, label: p.name }))]} />
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <EditableField label="Description" editing type="textarea" value={assetEdit.draft.description} onChange={(v) => assetEdit.set('description', v)} placeholder="What this asset is" />
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <button
+                  onClick={() => { const asset = assets.find((x) => x.id === viewing360.asset.id); if (asset) { setViewing360(null); openEdit(asset); } }}
+                  style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-md)', padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  Edit steward &amp; all fields&hellip;
+                </button>
+              </div>
+            </>
+          ) : (
           <>
                 {/* Asset Info */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -2573,6 +2623,7 @@ export default function DataAssetsPage({
                 </div>
                 </FieldStack>
               </>
+          )
             ) : null}
       </Modal>
 
