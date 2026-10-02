@@ -168,8 +168,15 @@ interface GroupEditable {
   name: string;
   type: string;
   status: string;
+  parentId: string | null;
   description: string;
   charter: string;
+}
+
+interface GroupFlat {
+  id: string;
+  parentId: string | null;
+  name: string;
 }
 
 export default function GovernanceGroupDetailPage() {
@@ -181,6 +188,7 @@ export default function GovernanceGroupDetailPage() {
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
+  const [allGroups, setAllGroups] = useState<GroupFlat[]>([]);
   const [damaRoles, setDamaRoles] = useState<DamaRole[]>([]);
   const [decisionRights, setDecisionRights] = useState<DecisionRight[]>([]);
   const [policies, setPolicies] = useState<Policy[]>([]);
@@ -212,8 +220,9 @@ export default function GovernanceGroupDetailPage() {
     setError(null);
     try {
       const orgQuery = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [groupRes, damaRes, drRes, polRes, calRes, raciRes, agentsRes] = await Promise.all([
+      const [groupRes, listRes, damaRes, drRes, polRes, calRes, raciRes, agentsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GroupDetail }>(`/governance-groups/${id}`),
+        apiClient.get<{ success: boolean; data: GroupFlat[] }>(`/governance-groups${orgQuery}`).catch(() => ({ data: [] } as any)),
         apiClient.get<{ success: boolean; data: DamaRole[] }>(`/dama-roles${orgQuery}`),
         apiClient.get<{ success: boolean; data: DecisionRight[] }>(`/decision-rights${orgQuery}`),
         apiClient.get<{ success: boolean; data: Policy[] }>(`/governance-policies${orgQuery}`),
@@ -233,6 +242,7 @@ export default function GovernanceGroupDetailPage() {
         apiClient.get<{ success: boolean; data: AgentOption[] }>(`/agents${orgQuery}`).catch(() => ({ data: [] } as any)),
       ]);
       setGroup(groupRes.data);
+      setAllGroups(((listRes as any).data || []) as GroupFlat[]);
       setDamaRoles(damaRes.data || []);
       setDecisionRights(drRes.data || []);
       setPolicies(polRes.data || []);
@@ -285,6 +295,7 @@ export default function GovernanceGroupDetailPage() {
       name: group?.name ?? '',
       type: group?.type ?? 'COUNCIL',
       status: group?.status ?? 'ACTIVE',
+      parentId: group?.parentId ?? null,
       description: group?.description ?? '',
       charter: group?.charter ?? '',
     },
@@ -301,6 +312,29 @@ export default function GovernanceGroupDetailPage() {
       }
     },
   );
+
+  // Parent options for the re-parent select: every other group except this
+  // one and its descendants (choosing a descendant would make a cycle).
+  const parentOptions = useMemo(() => {
+    if (!group) return [] as GroupFlat[];
+    const childrenByParent = new Map<string | null, GroupFlat[]>();
+    for (const g of allGroups) {
+      const arr = childrenByParent.get(g.parentId) || [];
+      arr.push(g);
+      childrenByParent.set(g.parentId, arr);
+    }
+    const excluded = new Set<string>([group.id]);
+    const stack = [group.id];
+    while (stack.length) {
+      const pid = stack.pop() as string;
+      for (const c of childrenByParent.get(pid) || []) {
+        if (!excluded.has(c.id)) { excluded.add(c.id); stack.push(c.id); }
+      }
+    }
+    return allGroups
+      .filter((g) => !excluded.has(g.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [group, allGroups]);
 
   // ── Derived: per-member role assignments ──
   // Person-keyed set used by derived person views (DAMA roles,
@@ -540,6 +574,16 @@ export default function GovernanceGroupDetailPage() {
             options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
           >
             {group.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+          </EditableField>
+          <EditableField
+            label="Parent group"
+            editing={m.isEditing}
+            value={m.draft.parentId ?? ''}
+            onChange={(v) => m.set('parentId', v || null)}
+            type="select"
+            options={[{ value: '', label: '— None (top-level) —' }, ...parentOptions.map((g) => ({ value: g.id, label: g.name }))]}
+          >
+            {group.parentName || <span style={{ color: 'var(--color-text-muted)' }}>Top-level</span>}
           </EditableField>
         </div>
         {(m.isEditing || group.description) && (

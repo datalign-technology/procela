@@ -262,17 +262,6 @@ function collectAllIds(nodes: GovernanceGroup[]): string[] {
   return ids;
 }
 
-// Find a node anywhere in the tree by id (used to collect a group's own
-// subtree so it can't be reparented under itself or a descendant).
-function findNodeById(nodes: GovernanceGroup[], id: string): GovernanceGroup | null {
-  for (const node of nodes) {
-    if (node.id === id) return node;
-    const found = findNodeById(node.children, id);
-    if (found) return found;
-  }
-  return null;
-}
-
 // Returns which group types can be a valid parent of the given child type
 function findValidParentTypes(validChildren: Record<string, string[]>, childType: string): string[] {
   const result: string[] = [];
@@ -297,9 +286,8 @@ const emptyForm: GroupFormData = { name: '', type: 'COUNCIL', parentId: null, de
 
 // ── Tree Node Component ──
 
-function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, selectedId, expanded, toggleExpand, checkedIds, onToggleCheck, canEdit }: {
+function GroupTreeNode({ node, depth, onDelete, onAddChild, onSelect, selectedId, expanded, toggleExpand, checkedIds, onToggleCheck, canEdit }: {
   node: GovernanceGroup; depth: number;
-  onEdit: (group: GovernanceGroupFlat) => void;
   onDelete: (id: string) => void;
   onAddChild: (parentId: string, parentType: string) => void;
   onSelect: (id: string) => void;
@@ -353,14 +341,13 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
         {canEdit && (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
             <IconButton size="sm" icon="plus" label="Add child group" variant="primary" onClick={() => onAddChild(node.id, node.type)} />
-            <IconButton size="sm" icon="edit" label="Edit" onClick={() => onEdit(node)} />
             <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />
           </div>
         )}
       </div>
       {isExpanded && node.children.map((child) => (
         <GroupTreeNode key={child.id} node={child} depth={depth + 1}
-          onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
+          onDelete={onDelete} onAddChild={onAddChild}
           onSelect={onSelect} selectedId={selectedId}
           expanded={expanded} toggleExpand={toggleExpand}
           checkedIds={checkedIds} onToggleCheck={onToggleCheck} canEdit={canEdit} />
@@ -431,7 +418,6 @@ export default function GovernanceGroupsPage() {
 
   // Form state
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<GroupFormData>(emptyForm);
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   // When adding a child, restrict the type dropdown to valid child types
@@ -553,7 +539,6 @@ export default function GovernanceGroupsPage() {
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
-    setEditingId(null);
     setAllowedTypes(null); // all types allowed for top-level
     setShowForm(true);
   };
@@ -562,21 +547,12 @@ export default function GovernanceGroupsPage() {
     const recommended = validChildren[parentType] || [];
     const defaultType = recommended.length > 0 ? recommended[0] : groupTypes[0];
     setForm({ ...emptyForm, parentId, type: defaultType });
-    setEditingId(null);
     setAllowedTypes(null); // show all types — recommended ones will be highlighted
     setShowForm(true);
   };
 
-  const openEdit = (group: GovernanceGroupFlat) => {
-    setForm({
-      name: group.name, type: group.type, parentId: group.parentId,
-      description: group.description, charter: group.charter, status: group.status,
-    });
-    setEditingId(group.id);
-    setAllowedTypes(null); // all types in edit mode
-    setShowForm(true);
-  };
-
+  // Create-only: editing a governance group (name, type, parent, status,
+  // description, charter) happens on its detail page.
   const handleSave = async () => {
     if (!validation.validateAll(form) || !form.type) return;
     const payload = {
@@ -585,18 +561,13 @@ export default function GovernanceGroupsPage() {
     };
     let res: any;
     try {
-      if (editingId) {
-        res = await apiClient.put(`/governance-groups/${editingId}`, payload);
-        addToast('success', 'Governance group updated');
-      } else {
-        res = await apiClient.post('/governance-groups', payload);
-        addToast('success', 'Governance group created');
-      }
+      res = await apiClient.post('/governance-groups', payload);
+      addToast('success', 'Governance group created');
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Failed to save governance group');
       return;
     }
-    setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null);
+    setShowForm(false); setForm(emptyForm); setAllowedTypes(null);
     fetchGroups();
     if (selectedGroupId) fetchGroupDetail(selectedGroupId);
     // Show governance recommendation warning if returned
@@ -633,7 +604,7 @@ export default function GovernanceGroupsPage() {
     }
   };
 
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null); validation.clearErrors(); };
+  const handleCancel = () => { setShowForm(false); setForm(emptyForm); setAllowedTypes(null); validation.clearErrors(); };
 
   // ── Member handlers ──
 
@@ -784,14 +755,9 @@ export default function GovernanceGroupsPage() {
   // to the DAMA type hierarchy here — the backend accepts any parent, and the
   // advisory note below nudges toward best practice without blocking, so a
   // team can arrange their own hierarchy (e.g. nest a Council under an Office).
+  // Create-only form: any group can be the parent (no self/descendant to
+  // exclude, since the form never edits an existing node).
   const treeOptions = flattenTreeForSelect(tree);
-
-  const getValidParentOptions = () => {
-    if (!editingId) return treeOptions;
-    const editedNode = findNodeById(tree, editingId);
-    const excluded = new Set(editedNode ? collectAllIds([editedNode]) : [editingId]);
-    return treeOptions.filter((opt) => !excluded.has(opt.id));
-  };
 
   // Determine which types to show in the type dropdown
   const typeOptions = groupTypes; // always show all types
@@ -963,7 +929,7 @@ export default function GovernanceGroupsPage() {
       {showForm && (
         <Card marginBottom={12}>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-            {editingId ? 'Edit Governance Group' : allowedTypes ? 'Add Child Group' : 'Add New Governance Group'}
+            {allowedTypes ? 'Add Child Group' : 'Add New Governance Group'}
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
@@ -991,7 +957,7 @@ export default function GovernanceGroupsPage() {
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent Group</label>
               <select aria-label="Parent Group" style={selectStyle} value={form.parentId || ''} onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}>
                 <option value="">-- No parent (top-level) --</option>
-                {getValidParentOptions().map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                {treeOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
               </select>
               {parentPlacementNote && (
                 <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-warning)' }}>{parentPlacementNote}</div>
@@ -1015,7 +981,7 @@ export default function GovernanceGroupsPage() {
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
             <Button variant="primary" disabled={!form.name.trim() || !form.type} onClick={handleSave}>
-              {editingId ? 'Save Changes' : 'Add Group'}
+              Add Group
             </Button>
           </div>
         </Card>
@@ -1051,7 +1017,7 @@ export default function GovernanceGroupsPage() {
             ) : (
               tree.map((node) => (
                 <GroupTreeNode key={node.id} node={node} depth={0}
-                  onEdit={openEdit} onDelete={(id) => setConfirmDelete(id)} onAddChild={openAddChild}
+                  onDelete={(id) => setConfirmDelete(id)} onAddChild={openAddChild}
                   onSelect={handleSelect} selectedId={selectedGroupId}
                   expanded={expanded} toggleExpand={toggleExpand}
                   checkedIds={checkedIds} onToggleCheck={toggleCheck} canEdit={isAdmin} />
