@@ -1564,6 +1564,10 @@ export default function SystemsPage({
           <SystemDetailModal
             systemId={viewingSystemId}
             onClose={() => setViewingSystemId(null)}
+            people={peopleList}
+            systemTypes={systemTypes}
+            canWrite={canWrite}
+            onSaved={fetchData}
           />
         </Suspense>
       )}
