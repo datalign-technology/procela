@@ -5,9 +5,14 @@ import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import EmptyState from '../components/EmptyState';
+import EditableField from '../components/EditableField';
+import DetailEditActions from '../components/DetailEditActions';
 import { SkeletonRows } from '../components/Skeleton';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
-import { errorMessage } from '../lib/errorToast';
+import { usePermissions } from '../hooks/usePermissions';
+import { useOrgContext } from '../stores/orgContext';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GlossaryTermDetailPage — the full record for one business-glossary term at
@@ -27,9 +32,30 @@ interface GlossaryTerm {
   exampleValues: string;
   businessRules: string;
   sourceOfTruth: string;
+  domainId: string | null;
   domainName: string | null;
+  ownerAssignmentId: string | null;
   ownerName: string | null;
 }
+interface DomainRef { id: string; name: string }
+interface PersonRef { id: string; name: string }
+
+interface TermEditable {
+  term: string;
+  definition: string;
+  category: string;
+  status: string;
+  context: string;
+  synonyms: string;          // comma-separated in the draft; array on the record
+  exampleValues: string;
+  businessRules: string;
+  sourceOfTruth: string;
+  domainId: string;
+  ownerAssignmentId: string;
+}
+
+const CATEGORIES = ['BUSINESS', 'TECHNICAL', 'REGULATORY', 'METRIC', 'GENERAL'];
+const STATUSES = ['DRAFT', 'PROPOSED', 'APPROVED', 'DEPRECATED'];
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   DRAFT:      { bg: '#f3f4f6', color: '#6b7280' },
@@ -71,26 +97,65 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function GlossaryTermDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { canWrite } = usePermissions();
+  const { activeOrgId } = useOrgContext();
   const [term, setTerm] = useState<GlossaryTerm | null>(null);
+  const [domains, setDomains] = useState<DomainRef[]>([]);
+  const [people, setPeople] = useState<PersonRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchTerm = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.get<{ success: boolean; data: GlossaryTerm }>(`/business-glossary/${id}`);
+      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+      const [res, domRes, peopleRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: GlossaryTerm }>(`/business-glossary/${id}`),
+        apiClient.get<{ success: boolean; data: DomainRef[] }>(`/data-domains${query}`),
+        apiClient.get<{ success: boolean; data: PersonRef[] }>('/people'),
+      ]);
       setTerm(res.data);
+      setDomains(domRes.data || []);
+      setPeople(peopleRes.data || []);
     } catch (err) {
       setError(errorMessage(err, 'Could not load glossary term'));
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, activeOrgId]);
 
   useEffect(() => { fetchTerm(); }, [fetchTerm]);
   useBreadcrumbLeaf(term?.term);
+
+  const m = useDetailEditMode<TermEditable>(
+    {
+      term: term?.term ?? '',
+      definition: term?.definition ?? '',
+      category: term?.category ?? 'GENERAL',
+      status: term?.status ?? 'DRAFT',
+      context: term?.context ?? '',
+      synonyms: (term?.synonyms ?? []).join(', '),
+      exampleValues: term?.exampleValues ?? '',
+      businessRules: term?.businessRules ?? '',
+      sourceOfTruth: term?.sourceOfTruth ?? '',
+      domainId: term?.domainId ?? '',
+      ownerAssignmentId: term?.ownerAssignmentId ?? '',
+    },
+    async (draft) => {
+      if (!id) return;
+      try {
+        await apiClient.put(`/business-glossary/${id}`, {
+          ...draft,
+          synonyms: draft.synonyms.split(',').map((s) => s.trim()).filter(Boolean),
+          domainId: draft.domainId || null,
+          ownerAssignmentId: draft.ownerAssignmentId || null,
+        });
+        successToast('Glossary term updated');
+        await fetchTerm();
+      } catch (err) { errorToast(err, 'Failed to update term'); throw err; }
+    },
+  );
 
   if (loading) {
     return (
@@ -112,12 +177,19 @@ export default function GlossaryTermDetailPage() {
   }
 
   const t = term;
+  const editing = m.isEditing;
   const extras: Array<[string, string]> = [
     ['Context', t.context],
     ['Example values', t.exampleValues],
     ['Business rules', t.businessRules],
     ['Source of truth', t.sourceOfTruth],
   ].filter(([, v]) => v && v.trim()) as Array<[string, string]>;
+  const synInputStyle: React.CSSProperties = {
+    fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4,
+    padding: '5px 8px', width: '100%', background: 'var(--color-surface)',
+    color: 'var(--color-text)', boxSizing: 'border-box',
+  };
+  const draftSynonyms = m.draft.synonyms.split(',').map((s) => s.trim()).filter(Boolean);
 
   return (
     <div>
@@ -127,42 +199,90 @@ export default function GlossaryTermDetailPage() {
         copyId={t.id}
         copyLabel="Copy term ID"
         subtitle={<span style={badge(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>}
-        actions={<Link to="/business-glossary" style={backLinkStyle}>{'←'} Back to Glossary</Link>}
+        actions={
+          <DetailEditActions
+            editing={editing}
+            canEdit={canWrite}
+            dirty={m.dirty}
+            saving={m.saving}
+            onEdit={m.enter}
+            onCancel={m.cancel}
+            onSave={m.save}
+            before={<Link to="/business-glossary" style={backLinkStyle}>{'←'} Back to Glossary</Link>}
+          />
+        }
       />
 
       {/* Classification */}
       <Card marginBottom={16}>
         <SectionLabel marginBottom={10}>Classification</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-          <Field label="Category"><span style={badge(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span></Field>
-          <Field label="Status"><span style={badge(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span></Field>
-          <Field label="Primary domain">{t.domainName || <span style={emptyStyle}>None</span>}</Field>
-          <Field label="Owner">{t.ownerName || <span style={emptyStyle}>Unassigned</span>}</Field>
+          {editing && (
+            <EditableField label="Term" editing value={m.draft.term} onChange={(v) => m.set('term', v)} placeholder="Term" />
+          )}
+          <EditableField label="Category" editing={editing} value={m.draft.category} onChange={(v) => m.set('category', v)} type="select" options={CATEGORIES.map((c) => ({ value: c, label: c }))}>
+            <span style={badge(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
+          </EditableField>
+          <EditableField label="Status" editing={editing} value={m.draft.status} onChange={(v) => m.set('status', v)} type="select" options={STATUSES.map((s) => ({ value: s, label: s }))}>
+            <span style={badge(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
+          </EditableField>
+          <EditableField label="Primary domain" editing={editing} value={m.draft.domainId} onChange={(v) => m.set('domainId', v)} type="select" options={[{ value: '', label: 'None' }, ...domains.map((d) => ({ value: d.id, label: d.name }))]}>
+            {t.domainName || <span style={emptyStyle}>None</span>}
+          </EditableField>
+          <EditableField label="Owner" editing={editing} value={m.draft.ownerAssignmentId} onChange={(v) => m.set('ownerAssignmentId', v)} type="select" options={[{ value: '', label: 'Unassigned' }, ...people.map((p) => ({ value: p.id, label: p.name }))]}>
+            {t.ownerName || <span style={emptyStyle}>Unassigned</span>}
+          </EditableField>
         </div>
       </Card>
 
       {/* Definition */}
       <Card marginBottom={16}>
         <SectionLabel marginBottom={8}>Definition</SectionLabel>
-        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap' }}>
-          {t.definition || <span style={emptyStyle}>No definition</span>}
-        </div>
+        {editing ? (
+          <textarea
+            aria-label="Definition"
+            value={m.draft.definition}
+            onChange={(e) => m.set('definition', e.target.value)}
+            rows={4}
+            placeholder="What this term means"
+            style={{ ...synInputStyle, resize: 'vertical', font: 'inherit' }}
+          />
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap' }}>
+            {t.definition || <span style={emptyStyle}>No definition</span>}
+          </div>
+        )}
       </Card>
 
       {/* Synonyms */}
       <Card marginBottom={16}>
-        <SectionLabel marginBottom={8}>Synonyms ({(t.synonyms || []).length})</SectionLabel>
-        {(t.synonyms || []).length === 0 ? <div style={emptyStyle}>No synonyms</div> : (
+        <SectionLabel marginBottom={8}>Synonyms ({(editing ? draftSynonyms : (t.synonyms || [])).length})</SectionLabel>
+        {editing ? (
+          <input
+            aria-label="Synonyms"
+            value={m.draft.synonyms}
+            onChange={(e) => m.set('synonyms', e.target.value)}
+            placeholder="Comma-separated synonyms"
+            style={synInputStyle}
+          />
+        ) : (t.synonyms || []).length === 0 ? <div style={emptyStyle}>No synonyms</div> : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {t.synonyms.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
           </div>
         )}
       </Card>
 
-      {/* Additional detail (only non-empty fields) */}
-      {extras.length > 0 && (
-        <Card>
-          <SectionLabel marginBottom={10}>Detail</SectionLabel>
+      {/* Additional detail */}
+      <Card>
+        <SectionLabel marginBottom={10}>Detail</SectionLabel>
+        {editing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <EditableField label="Context" editing type="textarea" value={m.draft.context} onChange={(v) => m.set('context', v)} placeholder="Where/how this term is used" />
+            <EditableField label="Example values" editing type="textarea" value={m.draft.exampleValues} onChange={(v) => m.set('exampleValues', v)} />
+            <EditableField label="Business rules" editing type="textarea" value={m.draft.businessRules} onChange={(v) => m.set('businessRules', v)} />
+            <EditableField label="Source of truth" editing type="textarea" value={m.draft.sourceOfTruth} onChange={(v) => m.set('sourceOfTruth', v)} placeholder="System/owner of record" />
+          </div>
+        ) : extras.length === 0 ? <div style={emptyStyle}>No additional detail</div> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {extras.map(([label, value]) => (
               <Field key={label} label={label}>
@@ -170,8 +290,8 @@ export default function GlossaryTermDetailPage() {
               </Field>
             ))}
           </div>
-        </Card>
-      )}
+        )}
+      </Card>
     </div>
   );
 }
