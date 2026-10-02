@@ -30,6 +30,7 @@ const PersonDetailPage           = lazy(() => import('@/pages/PersonDetailPage')
 const AgentsPage                 = lazy(() => import('@/pages/AgentsPage'));
 const AgentDetailPage            = lazy(() => import('@/pages/AgentDetailPage'));
 const SkillsPage                 = lazy(() => import('@/pages/SkillsPage'));
+const SkillDetailPage            = lazy(() => import('@/pages/SkillDetailPage'));
 const GovernanceGroupsPage       = lazy(() => import('@/pages/GovernanceGroupsPage'));
 const GovernanceGroupDetailPage  = lazy(() => import('@/pages/GovernanceGroupDetailPage'));
 const GovernanceVisualizationPage= lazy(() => import('@/pages/GovernanceVisualizationPage'));
@@ -101,6 +102,7 @@ export default function App() {
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/skills" element={<SkillsPage />} />
+          <Route path="/skills/:id" element={<SkillDetailPage />} />
           <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
           <Route path="/governance-groups/:id" element={<GovernanceGroupDetailPage />} />
           <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />

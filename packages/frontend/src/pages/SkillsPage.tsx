@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { clickable } from '../lib/a11y';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -87,6 +89,7 @@ function formatCategory(cat: string): string {
 
 export default function SkillsPage() {
   const { activeOrgId, activeOrgName, activeOrgType, orgs, setActiveOrg } = useOrgContext();
+  const navigate = useNavigate();
   // /skills writes need skill:write (EDITOR+); gate write affordances so
   // Viewers/Contributors get a read-only catalog instead of 403 buttons.
   const { canWrite } = usePermissions();
@@ -279,7 +282,9 @@ export default function SkillsPage() {
       key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500 },
       render: (s) => (
         <>
-          {s.name}
+          <span {...clickable(() => navigate(`/skills/${s.id}`), { label: `View ${s.name}` })} style={{ cursor: 'pointer' }}>
+            {s.name}
+          </span>
           {isInherited(s) && (
             <span
               title={`Switch the Working in… scope to ${ownerNameFor(s)} to edit`}
@@ -519,6 +524,7 @@ export default function SkillsPage() {
             emptyMessage="No skills match the current filters."
             pageSize={20}
             countNoun={['skill', 'skills']}
+            onRowClick={(s) => navigate(`/skills/${s.id}`)}
           />
         )}
       </div>
