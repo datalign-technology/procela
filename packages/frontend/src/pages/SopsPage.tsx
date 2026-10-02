@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
-import { errorMessage } from '../lib/errorToast';
+import { errorMessage, successToast, errorToast } from '../lib/errorToast';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import DetailEditActions from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import OwnerCell from '../components/OwnerCell';
@@ -140,6 +142,183 @@ const SOP_COLUMN_DEFS: Array<{ id: SopColId; label: string; defaultVisible: bool
   { id: 'created',  label: 'Created',    defaultVisible: false },
 ];
 
+const sopLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 };
+
+// The record fields of an SOP (everything but the step list, which is managed
+// live in the row's expansion). Shared by the create form and the in-row
+// editor so the two never drift.
+interface SopScalarForm {
+  title: string;
+  purpose: string;
+  category: string;
+  applicableRoles: string[];
+  triggerEvent: string;
+  status: string;
+  ownerPersonId: string;
+  governancePolicyId: string;
+}
+
+function SopFields({ form, onChange, people, documents }: {
+  form: SopScalarForm;
+  onChange: (patch: Partial<SopScalarForm>) => void;
+  people: Person[];
+  documents: DocOption[];
+}) {
+  const toggleRole = (role: string) => {
+    const has = form.applicableRoles.includes(role);
+    onChange({ applicableRoles: has ? form.applicableRoles.filter((r) => r !== role) : [...form.applicableRoles, role] });
+  };
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div>
+        <label style={sopLabelStyle}>Title *</label>
+        <input aria-label="Title" style={inputStyle} value={form.title} onChange={(e) => onChange({ title: e.target.value })} placeholder="e.g. Onboard a new data asset" />
+      </div>
+      <div>
+        <label style={sopLabelStyle}>Category</label>
+        <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => onChange({ category: e.target.value })}>
+          {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+        </select>
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={sopLabelStyle}>Purpose</label>
+        <textarea aria-label="Purpose" style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit' }} value={form.purpose} onChange={(e) => onChange({ purpose: e.target.value })} placeholder="What this SOP achieves..." />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={sopLabelStyle}>Trigger Event</label>
+        <input aria-label="Trigger Event" style={inputStyle} value={form.triggerEvent} onChange={(e) => onChange({ triggerEvent: e.target.value })} placeholder="What triggers running this SOP..." />
+      </div>
+      <div>
+        <label style={sopLabelStyle}>Owner</label>
+        <select aria-label="Owner" style={selectStyle} value={form.ownerPersonId} onChange={(e) => onChange({ ownerPersonId: e.target.value })}>
+          <option value="">-- No owner --</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={sopLabelStyle}>Status</label>
+        <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => onChange({ status: e.target.value })}>
+          {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
+        </select>
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={sopLabelStyle}>Implements document</label>
+        <select aria-label="Implements document" style={selectStyle} value={form.governancePolicyId} onChange={(e) => onChange({ governancePolicyId: e.target.value })}>
+          <option value="">-- None (standalone procedure) --</option>
+          {documents.map((d) => (
+            <option key={d.id} value={d.id}>{d.code} — {d.name} ({DOCUMENT_TYPE_LABELS[d.documentType] || d.documentType})</option>
+          ))}
+        </select>
+        <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+          The governance document (charter / framework / standard / policy) this procedure carries out.
+        </div>
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={sopLabelStyle}>Applicable Roles</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {DAMA_ROLES.map((r) => (
+            <label key={r} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: form.applicableRoles.includes(r) ? 'var(--color-primary-light)' : 'var(--color-surface)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.applicableRoles.includes(r)} onChange={() => toggleRole(r)} style={{ cursor: 'pointer' }} />
+              {ROLE_LABELS[r]}
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The record-fields block at the top of a row's expansion: read-only Purpose /
+// Trigger / Implements-document, with a view/edit toggle. Edit flips it into
+// the SopFields grid and one Save writes PUT /sops/:id (record fields only —
+// the step list and linked documents below are managed live, not through this
+// save). Mirrors the Documents / Decision Rights in-row editors.
+function SopDetailsPanel({ sop, people, documents, orgId, canWrite, onSaved }: {
+  sop: Sop;
+  people: Person[];
+  documents: DocOption[];
+  orgId: string | null;
+  canWrite: boolean;
+  onSaved: () => void;
+}) {
+  const navigate = useNavigate();
+  const m = useDetailEditMode<SopScalarForm>(
+    {
+      title: sop.title,
+      purpose: sop.purpose,
+      category: sop.category,
+      applicableRoles: [...(sop.applicableRoles || [])],
+      triggerEvent: sop.triggerEvent,
+      status: sop.status,
+      ownerPersonId: sop.ownerPersonId || '',
+      governancePolicyId: sop.governancePolicyId || '',
+    },
+    async (draft) => {
+      if (!draft.title.trim()) { errorToast(null, 'Title is required'); throw new Error('no-title'); }
+      try {
+        await apiClient.put(`/sops/${sop.id}`, {
+          ...draft,
+          orgId,
+          ownerPersonId: draft.ownerPersonId || null,
+          governancePolicyId: draft.governancePolicyId || null,
+        });
+        successToast('SOP updated');
+        onSaved();
+      } catch (err) { errorToast(err, 'Failed to update SOP'); throw err; }
+    },
+  );
+  return (
+    <>
+      {canWrite && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
+          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+        </div>
+      )}
+      {m.isEditing ? (
+        <div style={{ marginBottom: 12 }}>
+          <SopFields form={m.draft} onChange={m.patch} people={people} documents={documents} />
+        </div>
+      ) : (
+        <>
+          {sop.purpose && (
+            <div style={{ marginBottom: 12 }}>
+              <SectionLabel marginBottom={4}>Purpose</SectionLabel>
+              <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>{sop.purpose}</div>
+            </div>
+          )}
+          {sop.triggerEvent && (
+            <div style={{ marginBottom: 12 }}>
+              <SectionLabel marginBottom={4}>Trigger</SectionLabel>
+              <div style={{ fontSize: 13 }}>{sop.triggerEvent}</div>
+            </div>
+          )}
+          {sop.document && (
+            <div style={{ marginBottom: 12 }}>
+              <SectionLabel marginBottom={4}>Implements document</SectionLabel>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); navigate('/governance-policies'); }}
+                title={`Open ${sop.document.code} on the Documents page`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4,
+                  padding: '6px 10px', cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-primary)',
+                }}
+              >
+                <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/governance-policies', { size: 13 })}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{sop.document.code}</span>
+                <span style={{ color: 'var(--color-text)' }}>{sop.document.name}</span>
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>({DOCUMENT_TYPE_LABELS[sop.document.documentType] || sop.document.documentType})</span>
+                <span aria-hidden="true">&rarr;</span>
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 export default function SopsPage({
   embedded = false,
   actionsPortal,
@@ -151,14 +330,12 @@ export default function SopsPage({
   const { canWrite } = usePermissions();
   const sopCols = useColumnPicker<SopColId>('procela.sops.visibleCols.v1', SOP_COLUMN_DEFS);
   const { addToast } = useToastStore();
-  const navigate = useNavigate();
   const [sops, setSops] = useState<Sop[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [documents, setDocuments] = useState<DocOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SopForm>(emptyForm);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState('');
@@ -191,26 +368,11 @@ export default function SopsPage({
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
-    setEditingId(null);
     setShowForm(true);
   };
 
-  const openEdit = (sop: Sop) => {
-    setForm({
-      title: sop.title,
-      purpose: sop.purpose,
-      category: sop.category,
-      applicableRoles: sop.applicableRoles || [],
-      triggerEvent: sop.triggerEvent,
-      steps: sop.steps.length > 0 ? sop.steps : [{ order: 1, title: '', description: '', estimatedMinutes: 15 }],
-      status: sop.status,
-      ownerPersonId: sop.ownerPersonId || '',
-      governancePolicyId: sop.governancePolicyId || '',
-    });
-    setEditingId(sop.id);
-    setShowForm(true);
-  };
-
+  // Create-only: an existing SOP's record fields are edited inside its row's
+  // expanded detail (SopDetailsPanel); its steps are managed live there too.
   const handleSave = async () => {
     if (!form.title.trim()) return;
     const payload = {
@@ -221,14 +383,9 @@ export default function SopsPage({
       steps: form.steps.filter((s) => s.title.trim().length > 0).map((s, i) => ({ ...s, order: i + 1 })),
     };
     try {
-      if (editingId) {
-        await apiClient.put(`/sops/${editingId}`, payload);
-        addToast('success', 'SOP updated');
-      } else {
-        await apiClient.post('/sops', payload);
-        addToast('success', 'SOP created');
-      }
-      setShowForm(false); setEditingId(null); setForm(emptyForm);
+      await apiClient.post('/sops', payload);
+      addToast('success', 'SOP created');
+      setShowForm(false); setForm(emptyForm);
       fetchData();
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } } };
@@ -251,15 +408,6 @@ export default function SopsPage({
       fetchData();
     } catch { addToast('error', 'Failed to seed SOPs'); }
     finally { setSeeding(false); }
-  };
-
-  const toggleRole = (role: string) => {
-    setForm((f) => ({
-      ...f,
-      applicableRoles: f.applicableRoles.includes(role)
-        ? f.applicableRoles.filter((r) => r !== role)
-        : [...f.applicableRoles, role],
-    }));
   };
 
   const addStep = () => {
@@ -397,7 +545,6 @@ export default function SopsPage({
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
       render: (sop: Sop) => (
         <div style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sop)} />}
           {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(sop.id)} />}
         </div>
       ),
@@ -406,39 +553,7 @@ export default function SopsPage({
 
   const renderExpandedRow = (sop: Sop) => (
     <div style={{ maxWidth: 800, padding: 16 }}>
-      {sop.purpose && (
-        <div style={{ marginBottom: 12 }}>
-          <SectionLabel marginBottom={4}>Purpose</SectionLabel>
-          <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>{sop.purpose}</div>
-        </div>
-      )}
-      {sop.triggerEvent && (
-        <div style={{ marginBottom: 12 }}>
-          <SectionLabel marginBottom={4}>Trigger</SectionLabel>
-          <div style={{ fontSize: 13 }}>{sop.triggerEvent}</div>
-        </div>
-      )}
-      {sop.document && (
-        <div style={{ marginBottom: 12 }}>
-          <SectionLabel marginBottom={4}>Implements document</SectionLabel>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); navigate('/governance-policies'); }}
-            title={`Open ${sop.document.code} on the Documents page`}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4,
-              padding: '6px 10px', cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-primary)',
-            }}
-          >
-            <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/governance-policies', { size: 13 })}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{sop.document.code}</span>
-            <span style={{ color: 'var(--color-text)' }}>{sop.document.name}</span>
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>({DOCUMENT_TYPE_LABELS[sop.document.documentType] || sop.document.documentType})</span>
-            <span aria-hidden="true">&rarr;</span>
-          </button>
-        </div>
-      )}
+      <SopDetailsPanel sop={sop} people={people} documents={documents} orgId={activeOrgId} canWrite={canWrite} onSaved={fetchData} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <SectionLabel marginBottom={0}>Steps</SectionLabel>
         {canWrite && (
@@ -565,62 +680,9 @@ export default function SopsPage({
       {/* Add/Edit Form */}
       {showForm && (
         <Card padding={20} marginBottom={16} shadow="none">
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit SOP' : 'Add New SOP'}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title *</label>
-              <input aria-label="Title" style={inputStyle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Onboard a new data asset" />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>
-              <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
-              </select>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Purpose</label>
-              <textarea aria-label="Purpose" style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit' }} value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} placeholder="What this SOP achieves..." />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Trigger Event</label>
-              <input aria-label="Trigger Event" style={inputStyle} value={form.triggerEvent} onChange={(e) => setForm({ ...form, triggerEvent: e.target.value })} placeholder="What triggers running this SOP..." />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
-              <select aria-label="Owner" style={selectStyle} value={form.ownerPersonId} onChange={(e) => setForm({ ...form, ownerPersonId: e.target.value })}>
-                <option value="">-- No owner --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
-              </select>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Implements document</label>
-              <select aria-label="Implements document" style={selectStyle} value={form.governancePolicyId} onChange={(e) => setForm({ ...form, governancePolicyId: e.target.value })}>
-                <option value="">-- None (standalone procedure) --</option>
-                {documents.map((d) => (
-                  <option key={d.id} value={d.id}>{d.code} — {d.name} ({DOCUMENT_TYPE_LABELS[d.documentType] || d.documentType})</option>
-                ))}
-              </select>
-              <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                The governance document (charter / framework / standard / policy) this procedure carries out.
-              </div>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Applicable Roles</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {DAMA_ROLES.map((r) => (
-                  <label key={r} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: form.applicableRoles.includes(r) ? 'var(--color-primary-light)' : 'var(--color-surface)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.applicableRoles.includes(r)} onChange={() => toggleRole(r)} style={{ cursor: 'pointer' }} />
-                    {ROLE_LABELS[r]}
-                  </label>
-                ))}
-              </div>
-            </div>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Add New SOP</h3>
+          <div style={{ marginBottom: 12 }}>
+            <SopFields form={form} onChange={(p) => setForm({ ...form, ...p })} people={people} documents={documents} />
           </div>
 
           {/* Steps editor */}
@@ -650,9 +712,9 @@ export default function SopsPage({
           </div>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
             <Button variant="primary" disabled={!form.title.trim()} onClick={handleSave}>
-              {editingId ? 'Save Changes' : 'Create SOP'}
+              Create SOP
             </Button>
           </div>
         </Card>
