@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
-import { errorMessage } from '../lib/errorToast';
+import { errorMessage, errorToast, successToast } from '../lib/errorToast';
+import { useDetailEditMode } from '../hooks/useDetailEditMode';
+import DetailEditActions from '../components/DetailEditActions';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -29,7 +31,7 @@ import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
-import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
+import { useFormValidation } from '../hooks/useFormValidation';
 
 // ── Types ──
 
@@ -148,6 +150,123 @@ const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible
 
 // ── Component ──
 
+// The document field grid — shared by the top "Add" form (create) and the
+// in-row editor (PolicyDetailsPanel).
+function PolicyFields({ form, setForm, people }: {
+  form: PolicyForm;
+  setForm: (next: PolicyForm) => void;
+  people: Person[];
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Name *</label>
+        <input aria-label="Name" style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Data Classification Policy" />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label style={labelStyle}>Description</label>
+        <textarea aria-label="Description" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+      </div>
+      <div>
+        <label style={labelStyle}>Document Type</label>
+        <select aria-label="Document Type" style={selectStyle} value={form.documentType} onChange={(e) => setForm({ ...form, documentType: e.target.value as DocumentType })}>
+          {DOCUMENT_TYPES.map((t) => <option key={t} value={t}>{DOCUMENT_TYPE_LABEL[t]}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Category</label>
+        <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+          {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Status</label>
+        <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>Owner</label>
+        <select aria-label="Owner" style={selectStyle} value={form.ownerAssignmentId} onChange={(e) => setForm({ ...form, ownerAssignmentId: e.target.value })}>
+          <option value="">-- Unassigned --</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+// The document-details panel at the top of a policy's expansion: read-only
+// fields with a view/edit toggle. Edit flips to PolicyFields in place and one
+// Save writes PUT /governance-policies/:id (round-tripping the stored content /
+// reviewFrequency that the form doesn't surface). Replaces the per-row Edit
+// icon → top-of-page form.
+function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved }: {
+  policy: Policy;
+  people: Person[];
+  canEdit: boolean;
+  orgId: string | null;
+  onSaved: () => void;
+}) {
+  const m = useDetailEditMode<PolicyForm>(
+    {
+      name: policy.name,
+      description: policy.description,
+      category: policy.category,
+      status: policy.status,
+      ownerAssignmentId: policy.ownerAssignmentId || '',
+      reviewFrequency: policy.reviewFrequency,
+      content: policy.content,
+      documentType: policy.documentType || 'POLICY',
+    },
+    async (draft) => {
+      if (!draft.name.trim()) { errorToast(null, 'Name is required'); throw new Error('no-name'); }
+      try {
+        await apiClient.put(`/governance-policies/${policy.id}`, {
+          ...draft,
+          ownerAssignmentId: draft.ownerAssignmentId || null,
+          ...(orgId ? { orgId } : {}),
+        });
+        successToast(`${DOCUMENT_TYPE_LABEL[draft.documentType] || 'Document'} updated`);
+        onSaved();
+      } catch (err) { errorToast(err, 'Failed to update document'); throw err; }
+    },
+  );
+  const typeColors = DOCUMENT_TYPE_COLORS[policy.documentType || 'POLICY'];
+  const catColors = CATEGORY_COLORS[policy.category] || CATEGORY_COLORS.GENERAL;
+  const statusColors = STATUS_COLORS[policy.status] || STATUS_COLORS.DRAFT;
+  const metaItem = (label: string, node: React.ReactNode) => (
+    <div>
+      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+      <div style={{ fontSize: 13 }}>{node}</div>
+    </div>
+  );
+  const emptyEm = <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
+  return (
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: m.isEditing ? 12 : 10 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Document details</h3>
+        {canEdit && (
+          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+        )}
+      </div>
+      {m.isEditing ? (
+        <PolicyFields form={m.draft} setForm={(next) => m.patch(next)} people={people} />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+            {metaItem('Type', <span style={badgeStyle(typeColors)}>{DOCUMENT_TYPE_LABEL[policy.documentType || 'POLICY']}</span>)}
+            {metaItem('Category', <span style={badgeStyle(catColors)}>{policy.category.replace(/_/g, ' ')}</span>)}
+            {metaItem('Status', <span style={badgeStyle(statusColors)}>{policy.status.replace(/_/g, ' ')}</span>)}
+            {metaItem('Owner', policy.ownerName || emptyEm)}
+          </div>
+          {metaItem('Description', policy.description ? <span style={{ color: 'var(--color-text-secondary)' }}>{policy.description}</span> : emptyEm)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GovernancePoliciesPage() {
   const { activeOrgId } = useOrgContext();
   // Governance CRUD (policies + controls) needs governance:write = admins.
@@ -245,12 +364,6 @@ export default function GovernancePoliciesPage() {
 
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyPolicyForm); setEditingId(null); setShowForm(true); };
-  const openEdit = (p: Policy) => {
-    setForm({ name: p.name, description: p.description, category: p.category, status: p.status,
-      ownerAssignmentId: p.ownerAssignmentId || '', reviewFrequency: p.reviewFrequency, content: p.content,
-      documentType: p.documentType || 'POLICY' });
-    setEditingId(p.id); setShowForm(true);
-  };
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyPolicyForm); validation.clearErrors(); };
 
   const handleSave = async () => {
@@ -426,7 +539,6 @@ export default function GovernancePoliciesPage() {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
       render: (pol: Policy) => (
         <div style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(pol)} />}
           {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(pol.id)} />}
         </div>
       ),
@@ -444,6 +556,9 @@ export default function GovernancePoliciesPage() {
     const docType = pol.documentType || 'POLICY';
     return (
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Document's own fields — read-only with an in-place Edit toggle. */}
+        <PolicyDetailsPanel policy={pol} people={people} canEdit={isAdmin} orgId={activeOrgId} onSaved={fetchData} />
+
         {/* Source / provenance — shown for ANY documentType promoted from an
             agent draft, so the round-trip to the source activity is reachable. */}
         {promo && (
@@ -689,57 +804,12 @@ export default function GovernancePoliciesPage() {
       {/* Add/Edit Document Form */}
       {showForm && (
         <Card padding={20} marginBottom={20}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? `Edit ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}` : `Add New ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}`}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Name *</label>
-              <input autoFocus
-                aria-label="Name"
-                style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
-                value={form.name}
-                onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
-                onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
-                placeholder="e.g. Data Classification Policy" />
-              {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Description</label>
-              <textarea aria-label="Description" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </div>
-            <div>
-              <label style={labelStyle}>Document Type</label>
-              <select aria-label="Document Type" style={selectStyle} value={form.documentType} onChange={(e) => setForm({ ...form, documentType: e.target.value as DocumentType })}>
-                {DOCUMENT_TYPES.map((t) => <option key={t} value={t}>{DOCUMENT_TYPE_LABEL[t]}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Category</label>
-              <select aria-label="Category" style={selectStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Status</label>
-              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Owner</label>
-              <select aria-label="Owner" style={selectStyle} value={form.ownerAssignmentId} onChange={(e) => setForm({ ...form, ownerAssignmentId: e.target.value })}>
-                <option value="">-- Unassigned --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
-            </div>
-            {/* Review Frequency and Content removed: Review Frequency drove
-                nothing (nextReviewDate was never computed from it, so the
-                Review Due column always read "--"), and Content ("full policy
-                text") had no read surface. Stored values are retained. */}
-          </div>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add New {DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}</h3>
+          <PolicyFields form={form} setForm={setForm} people={people} />
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={closeForm}>Cancel</Button>
             <Button variant="primary" disabled={!form.name.trim()} onClick={handleSave}>
-              {editingId ? 'Save Changes' : `Add ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}`}
+              Add {DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}
             </Button>
           </div>
         </Card>
