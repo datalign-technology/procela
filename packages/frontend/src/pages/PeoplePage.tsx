@@ -5,10 +5,7 @@ import { thStyle, tdStyle } from '../lib/tableStyles';
 import { clickable } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
-import SectionLabel from '../components/SectionLabel';
-import Spinner from '../components/Spinner';
 import Button from '../components/Button';
-import FieldStack from '../components/FieldStack';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -77,18 +74,6 @@ interface Person {
    *  field directly. */
   skillIds?: string[];
 }
-interface Person360Data {
-  person: Person;
-  orgAssignments: { id: string; name: string; type: string }[];
-  damaRoles: { id: string; roleType: string; scopeType: string; scopeId: string; scopeName: string; since: string }[];
-  governanceGroups: { groupId: string; groupName: string; groupType: string; groupRole: string; since: string }[];
-  ownedProcessNodes: { id: string; name: string; level: string; status: string }[];
-  dataAssets: { id: string; name: string; governanceTier: string; relation: string }[];
-  allGroups: { id: string; name: string; type: string }[];
-  allDomains: { id: string; name: string; ownerId: string | null; stewardIds: string[] }[];
-  allDamaRoleTypes: string[];
-}
-
 interface GovernanceGroupFull {
   id: string; name: string; type: string;
   members: { personId: string; groupRole: string; since: string }[];
@@ -236,9 +221,6 @@ export default function PeoplePage() {
   // <currently-filtered org>" is a single click, but the user can change it
   // to any org they have access to in the dropdown.
   const [peopleImportOrgId, setPeopleImportOrgId] = useState('');
-  const [previewPersonId, setPreviewPersonId] = useState<string | null>(null);
-  const [previewData, setPreviewData] = useState<Person360Data | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
   const [deletePersonImpact, setDeletePersonImpact] = useState<{ ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number; activeAgents: number } | null>(null);
@@ -457,17 +439,6 @@ export default function PeoplePage() {
     clearParam();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addToOrgParam, flatOrgs]);
-
-  useEffect(() => {
-    if (!previewPersonId) { setPreviewData(null); return; }
-    let cancelled = false;
-    setPreviewLoading(true);
-    apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${previewPersonId}/360`)
-      .then((res) => { if (!cancelled) setPreviewData(res.data || null); })
-      .catch(() => { if (!cancelled) setPreviewData(null); })
-      .finally(() => { if (!cancelled) setPreviewLoading(false); });
-    return () => { cancelled = true; };
-  }, [previewPersonId]);
 
   const applyOrgFilter = (id: string) => {
     setSelectedOrgId(id);
@@ -743,7 +714,7 @@ export default function PeoplePage() {
       </PageHeader>
 
       {/* Side-by-side: Org tree (left) + People list (center) + Preview (right) */}
-      <div style={{ display: 'grid', gridTemplateColumns: previewPersonId ? '260px 1fr 340px' : '260px 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Org tree sidebar */}
         <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>Organizations</div>
@@ -1129,7 +1100,8 @@ export default function PeoplePage() {
                           : null;
                         const isSelected = sel.isSelected(person.id);
                         return (
-                        <tr key={person.id} id={`row-${person.id}`} style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '' }}
+                        <tr key={person.id} id={`row-${person.id}`} style={{ transition: 'background 0.1s', background: isSelected ? 'var(--color-primary-light)' : '', cursor: 'pointer' }}
+                          onClick={(e) => { if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, [role="button"]')) return; navigate(`/people/${person.id}`); }}
                           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
                           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
                           <td style={{ ...personRowTd, textAlign: 'center', width: 32 }}>
@@ -1139,8 +1111,8 @@ export default function PeoplePage() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <Avatar name={person.name} />
                               <span
-                                {...clickable(() => setPreviewPersonId(previewPersonId === person.id ? null : person.id), { label: `Preview ${person.name}`, pressed: previewPersonId === person.id })}
-                                style={{ cursor: 'pointer', color: previewPersonId === person.id ? 'var(--color-primary)' : undefined }}
+                                {...clickable(() => navigate(`/people/${person.id}`), { label: `View ${person.name}` })}
+                                style={{ cursor: 'pointer' }}
                               >
                                 {person.name}
                               </span>
@@ -1165,7 +1137,6 @@ export default function PeoplePage() {
                           )}
                           <td style={{ ...personRowTd, textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                              <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => navigate(`/people/${person.id}`)} />
                               {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />}
                               {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
                                 try {
@@ -1187,123 +1158,6 @@ export default function PeoplePage() {
           </>
         </div>
 
-        {/* Person Preview Sidebar */}
-        {previewPersonId && (
-          <Card padding={0} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}>
-            {previewLoading ? (
-              <Spinner center label="Loading…" />
-            ) : previewData ? (
-              <div style={{ padding: 16 }}>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{previewData.person.name}</h3>
-                    {previewData.person.title && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>{previewData.person.title}</div>}
-                    {previewData.person.email && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{previewData.person.email}</div>}
-                  </div>
-                  <button type="button" onClick={() => setPreviewPersonId(null)} aria-label="Close person preview" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--color-text-muted)', padding: '0 4px' }}><span aria-hidden="true">&times;</span></button>
-                </div>
-                <div style={{ marginBottom: 12 }}>
-                  <span style={roleBadge(previewData.person.role)}>{ROLE_LABELS[previewData.person.role] || previewData.person.role}</span>
-                </div>
-
-                {/* Preview sections + CTA share one section-level rhythm
-                   (--space-section) via FieldStack, so the gaps stay
-                   uniform no matter which sections this person has. */}
-                <FieldStack gap="section">
-                {/* Organizations */}
-                {previewData.orgAssignments.length > 0 && (
-                  <div>
-                    <SectionLabel marginBottom={6}>Organizations</SectionLabel>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {previewData.orgAssignments.map((o) => (
-                        <span key={o.id} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>{o.name}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Governance Roles */}
-                {previewData.damaRoles.length > 0 && (
-                  <div>
-                    <SectionLabel marginBottom={6}>Governance Roles</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {previewData.damaRoles.map((r) => (
-                        <div key={r.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 500 }}>{DAMA_ROLE_LABELS[r.roleType] || r.roleType}</span>
-                          <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{r.scopeName}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Governance Groups */}
-                {previewData.governanceGroups.length > 0 && (
-                  <div>
-                    <SectionLabel marginBottom={6}>Groups</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {previewData.governanceGroups.map((g) => (
-                        <div key={g.groupId} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 500 }}>{g.groupName}</span>
-                          <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{g.groupRole.replace(/_/g, ' ')}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Owned Processes */}
-                {previewData.ownedProcessNodes.length > 0 && (
-                  <div>
-                    <SectionLabel marginBottom={6}>Owned Processes</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {previewData.ownedProcessNodes.slice(0, 8).map((p) => (
-                        <div key={p.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
-                          <span>{p.name}</span>
-                          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{p.level}</span>
-                        </div>
-                      ))}
-                      {previewData.ownedProcessNodes.length > 8 && (
-                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>+{previewData.ownedProcessNodes.length - 8} more</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Data Assets */}
-                {previewData.dataAssets.length > 0 && (
-                  <div>
-                    <SectionLabel marginBottom={6}>Data Assets</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {previewData.dataAssets.slice(0, 6).map((a) => (
-                        <div key={a.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
-                          <span>{a.name}</span>
-                          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{a.relation}</span>
-                        </div>
-                      ))}
-                      {previewData.dataAssets.length > 6 && (
-                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>+{previewData.dataAssets.length - 6} more</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Full detail link */}
-                <Button
-                  variant="primary"
-                  fullWidth
-                  onClick={() => navigate(`/people/${previewPersonId}`)}
-                >
-                  Open Full Detail
-                </Button>
-                </FieldStack>
-              </div>
-            ) : (
-              <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>Person not found.</div>
-            )}
-          </Card>
-        )}
       </div>
 
       {showPeopleSync && (
