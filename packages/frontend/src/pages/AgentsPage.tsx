@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
-import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import OrgSidebarTree, { type OrgTreeNode } from '../components/OrgSidebarTree';
 import { clickable } from '../lib/a11y';
@@ -10,7 +9,6 @@ import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Button from '../components/Button';
 import Card from '../components/Card';
-import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -131,6 +129,7 @@ const AGENT_COLUMN_DEFS: Array<{ id: AgentColId; label: string; defaultVisible: 
 
 export default function AgentsPage() {
   const { activeOrgId } = useOrgContext();
+  const navigate = useNavigate();
   // /agents is agent:* (admin-only, like agent:read). Gate every write
   // affordance on isAdmin so non-admins get a read-only agent list.
   const { isAdmin } = usePermissions();
@@ -161,16 +160,6 @@ export default function AgentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [agentRoles, setAgentRoles] = useState<DamaRoleAssignment[]>([]);
   const [agentExecutions, setAgentExecutions] = useState<AgentExecution[]>([]);
-  // Multi-expand: agents open independently so their roles / execution
-  // history can be compared side-by-side, and the Expand All / Collapse
-  // All controls flip the whole (filtered) list at once — matching the
-  // convention on Process Catalog, Organizations, Governance Groups, etc.
-  const [expandedAgentIds, setExpandedAgentIds] = useState<Set<string>>(new Set());
-  const toggleAgentExpanded = (id: string) => setExpandedAgentIds((prev) => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
   const confirmDeleteRef = useRef<HTMLDivElement>(null);
   useFocusTrap(confirmDeleteRef, !!confirmDelete);
   useEffect(() => {
@@ -467,7 +456,7 @@ export default function AgentsPage() {
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span
-              {...clickable(() => toggleAgentExpanded(a.id), { label: `Expand ${a.name}` })}
+              {...clickable(() => navigate(`/agents/${a.id}`), { label: `View ${a.name}` })}
               title={a.description || undefined}
               style={{ cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
             >
@@ -668,14 +657,6 @@ export default function AgentsPage() {
             </span>
           </>
         )}
-        {filtered.length > 0 && (
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            <ExpandCollapseControls
-              onExpandAll={() => setExpandedAgentIds(new Set(filtered.map((a) => a.id)))}
-              onCollapseAll={() => setExpandedAgentIds(new Set())}
-            />
-          </div>
-        )}
       </div>
 
       {/* Add / Edit form */}
@@ -836,61 +817,7 @@ export default function AgentsPage() {
             emptyMessage="No agents match the current filters."
             pageSize={20}
             countNoun={['agent', 'agents']}
-            expansion={{
-              expandedIds: expandedAgentIds,
-              onToggleExpanded: toggleAgentExpanded,
-              trigger: 'row-click',
-              renderExpandedRow: (a) => {
-                const roles = agentRoles.filter((r) => r.agentId === a.id);
-                const execs = agentExecutions.filter((e) => e.agentId === a.id);
-                return (
-                  <div style={{ padding: '12px 16px 12px 48px', background: '#fafbfc' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                      {/* DAMA Roles */}
-                      <div>
-                        <SectionLabel marginBottom={6}>
-                          Assigned DAMA Roles
-                        </SectionLabel>
-                        {roles.length === 0 ? (
-                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No roles assigned</div>
-                        ) : (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                            {roles.map((r) => (
-                              <StatusBadge key={r.id} variant="agent" size="md">
-                                {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
-                              </StatusBadge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {/* Execution History */}
-                      <div>
-                        <SectionLabel marginBottom={6}>
-                          Execution History ({execs.length})
-                        </SectionLabel>
-                        {execs.length === 0 ? (
-                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No executions yet</div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                            {execs.slice(0, 5).map((ex) => (
-                              <div key={ex.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11 }}>
-                                <StatusBadge variant={ex.status === 'SUCCESS' ? 'success' : ex.status === 'FAILED' ? 'danger' : 'warning'}>
-                                  {ex.status}
-                                </StatusBadge>
-                                <span style={{ color: 'var(--color-text-muted)' }}>
-                                  {ex.completedAt ? new Date(ex.completedAt).toLocaleString() : 'Pending'}
-                                </span>
-                              </div>
-                            ))}
-                            {execs.length > 5 && <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>...and {execs.length - 5} more</div>}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              },
-            }}
+            onRowClick={(a) => navigate(`/agents/${a.id}`)}
           />
         )}
       </Card>
