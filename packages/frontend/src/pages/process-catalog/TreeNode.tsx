@@ -93,7 +93,6 @@ function ActivityRollup({ node, systemsList }: { node: ProcessNode; systemsList:
   if (activityCount === 0) return null;
   return (
     <>
-      <SectionLabel>Rolled up from activities</SectionLabel>
       <DocCalculated label="Systems involved" chips={systems} emptyText="No systems on the activities yet" />
       <DocCalculated label="Roles involved" chips={roles} emptyText="No roles on the activities yet" />
       <DocCalculated label="Data elements" chips={dataElements} emptyText="No data elements captured yet" />
