@@ -22,6 +22,7 @@ import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import NotInSourceBadge from '../components/NotInSourceBadge';
 import Button from '../components/Button';
 import PersonPicker from '../components/PersonPicker';
 import EmptyState from '../components/EmptyState';
@@ -120,6 +121,7 @@ interface SystemEntity {
   // "Working in..." scope; otherwise the row renders an OwnerBadge
   // and gates every edit surface with isInheritedAsset.
   orgId?: string;
+  syncStatus?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -809,6 +811,7 @@ export default function SystemsPage({
               {sys.name}
             </button>
             <OwnerBadge assetOrgId={sys.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+            <NotInSourceBadge syncStatus={sys.syncStatus} />
           </div>
           {/* Description isn't shown inline — rows stay single-line; hover the
               name to read it (full text also in the system detail view). */}

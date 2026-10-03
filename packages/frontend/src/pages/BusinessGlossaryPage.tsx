@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { activateOnKeyStop } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
+import NotInSourceBadge from '../components/NotInSourceBadge';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import FacetChips from '../components/FacetChips';
@@ -49,6 +50,7 @@ interface GlossaryTerm {
   domainName: string | null;
   ownerAssignmentId: string | null;
   ownerName: string | null;
+  syncStatus?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -481,7 +483,7 @@ export default function BusinessGlossaryPage() {
     glossaryCols.isVisible('term') && {
       key: 'term', header: 'Term', sortable: true, cellStyle: { fontWeight: 500 },
       render: (t: GlossaryTerm) => (
-        <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           {/* The term name opens the term's detail page (view). Editing is
            *  the row's pencil. Definition isn't shown inline — rows stay
            *  single-line; hover the term to read it. */}
@@ -497,6 +499,7 @@ export default function BusinessGlossaryPage() {
           >
             {t.term}
           </button>
+          <NotInSourceBadge syncStatus={t.syncStatus} />
         </div>
       ),
     },

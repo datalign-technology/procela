@@ -17,6 +17,7 @@ import { renderNavIcon } from '../components/navIcons';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import NotInSourceBadge from '../components/NotInSourceBadge';
 import Avatar from '../components/Avatar';
 import { errorToast, errorMessage } from '../lib/errorToast';
 import OrgSidebarTree from '../components/OrgSidebarTree';
@@ -1083,9 +1084,7 @@ export default function PeoplePage() {
                               >
                                 {person.name}
                               </span>
-                              {person.syncStatus === 'MISSING_FROM_SOURCE' && (
-                                <span title="No longer found in the connected data source" style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: '#fef3c7', color: '#92400e' }}>NOT IN SOURCE</span>
-                              )}
+                              <NotInSourceBadge syncStatus={person.syncStatus} />
                             </div>
                           </td>
                           <td style={personRowTd}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
