@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
+import NotInSourceBadge from '../components/NotInSourceBadge';
 import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -34,10 +35,12 @@ import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/u
 interface OrgNode {
   id: string; parentId: string | null; name: string; type: string;
   industry: string; description: string; headCount: number; children: OrgNode[];
+  syncStatus?: string | null;
 }
 interface OrgFlat {
   id: string; parentId: string | null; name: string; type: string;
   industry: string; description: string; headCount: number;
+  syncStatus?: string | null;
 }
 // ── Styles ──
 
@@ -173,6 +176,7 @@ function OrgTreeNode({ node, depth, onDelete, onAddChild, expanded, toggleExpand
             <span
               style={{ fontWeight: 500, fontSize: 13, color: isActive ? 'var(--color-primary)' : undefined }}>{node.name}</span>
             <span style={typeBadge(node.type)}>{node.type}</span>
+            <NotInSourceBadge syncStatus={node.syncStatus} />
             {node.industry && (
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>
                 {node.industry}
