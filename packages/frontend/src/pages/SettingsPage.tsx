@@ -12,6 +12,7 @@ import Spinner from '../components/Spinner';
 import SectionLabel from '../components/SectionLabel';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
+import SyncConnectionsSection from '../components/SyncConnectionsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
 import McpAccessPanel from '../components/McpAccessPanel';
 import { useAiEnabled } from '../stores/aiConfigStore';
@@ -929,6 +930,13 @@ export default function SettingsPage() {
       <div style={{ height: '1.5rem' }} />
 
       <ConnectorsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
+
+      {/* Spacer */}
+      <div style={{ height: '1.5rem' }} />
+
+      {/* Directory & data sync — status + manual run for the scheduled imports
+          created in the Sync wizard on the entity pages. */}
+      <SyncConnectionsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
