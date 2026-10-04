@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import Card from '../components/Card';
 import IconButton, { Icon } from '../components/IconButton';
 import SecondaryButton from '../components/SecondaryButton';
+import Button from '../components/Button';
 import TruncatedText from '../components/TruncatedText';
 import { renderNavIcon } from '../components/navIcons';
 import { useSortedList } from '../hooks/useSortedList';
@@ -41,6 +42,28 @@ interface RunResult {
   rows: Array<Record<string, unknown>>;
   totalMatched: number;
 }
+
+// The stored report definition (GET /reports/:id → data.definition), used by
+// the detail modal to show what the report selects without opening the Builder.
+interface ReportColumn { field: string; label?: string }
+interface ReportFilter { field: string; op: string; value?: string | number | boolean }
+interface ReportDefinition {
+  entity: string;
+  columns: ReportColumn[];
+  filters: ReportFilter[];
+  sort?: { field: string; direction: 'asc' | 'desc' };
+  limit?: number;
+}
+interface ReportDetail {
+  definition: ReportDefinition;
+  schedule?: { frequency?: string } | null;
+}
+
+const FILTER_OP_LABELS: Record<string, string> = {
+  eq: '=', neq: '≠', gt: '>', gte: '≥', lt: '<', lte: '≤',
+  contains: 'contains', startsWith: 'starts with', endsWith: 'ends with',
+  in: 'in', notIn: 'not in', isNull: 'is empty', isNotNull: 'is not empty',
+};
 
 // Download formats offered in the results modal (Print is a separate action,
 // so PDF is not listed here — see the decoupled Print button).
@@ -121,8 +144,8 @@ function FolderRailRow({ folder, active, count, onSelect, onEdit, onReorder }: {
       {...(isUser ? rowProps : {})}
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-        fontWeight: active ? 600 : 400,
+        padding: '6px 10px', fontSize: 13, borderRadius: 6, cursor: 'pointer', marginBottom: 2,
+        fontWeight: 600,
         background: active ? 'var(--color-primary-light)' : 'transparent',
         color: active ? 'var(--color-primary)' : 'var(--color-text)',
         ...(isUser ? sortableIndicatorStyle(dropMode, dragging) : {}),
@@ -175,6 +198,12 @@ function UserReportsTab() {
   // The produced report shown in the results modal — the result of a Run.
   // Download/Print in the modal act on this cached data, never re-running.
   const [result, setResult] = useState<{ report: UserReportSummary; data: RunResult } | null>(null);
+  // Row click opens a read-only detail "window" for the report definition,
+  // with Run + Edit (→ Builder) in the header — the Data Assets / Systems
+  // detail-modal pattern. `detail` holds the fetched definition + schedule.
+  const [viewingReport, setViewingReport] = useState<UserReportSummary | null>(null);
+  const [detail, setDetail] = useState<ReportDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // Folder rail: the org's folders, the selected filter, and the two folder
   // dialogs (create/edit a folder; move a report into a folder).
@@ -199,6 +228,20 @@ function UserReportsTab() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadFolders(); }, [loadFolders]);
+
+  // Fetch the full definition (columns / filters / sort / schedule) when a
+  // report's detail window opens.
+  useEffect(() => {
+    if (!viewingReport) { setDetail(null); return; }
+    let cancelled = false;
+    setDetailLoading(true);
+    setDetail(null);
+    apiClient.get<{ success: boolean; data: ReportDetail }>(`/reports/${viewingReport.id}`)
+      .then((r) => { if (!cancelled) setDetail(r.data); })
+      .catch(() => { if (!cancelled) setDetail(null); })
+      .finally(() => { if (!cancelled) setDetailLoading(false); });
+    return () => { cancelled = true; };
+  }, [viewingReport]);
 
   const folderName = (id: string | null): string | null =>
     (id ? folders.find((f) => f.id === id)?.name ?? null : null);
@@ -357,7 +400,14 @@ function UserReportsTab() {
       render: (r) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)' }}>{renderNavIcon('/reports', { size: 16 })}</span>
-          <TruncatedText text={r.name} style={{ fontWeight: 600 }} />
+          <button
+            type="button"
+            onClick={() => setViewingReport(r)}
+            title={r.name}
+            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 600, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+          >
+            {r.name}
+          </button>
           {r.visibility === 'org'
             ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>SHARED</span>
             : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
@@ -409,7 +459,6 @@ function UserReportsTab() {
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap' }}>
           <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => runReport(r)} />
           <IconButton size="sm" icon="folder" label="Move to folder" onClick={() => { setMoveReport(r); setMoveTarget(r.folderId || ''); }} />
-          <IconButton size="sm" icon="edit" label="Edit report" onClick={() => navigate(`/reports/builder/${r.id}`)} />
           <IconButton size="sm" icon="trash" label="Delete report" variant="danger" onClick={() => remove(r.id, r.name)} />
         </div>
       ),
@@ -439,7 +488,7 @@ function UserReportsTab() {
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFolder(key); } }}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
-          padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+          padding: '6px 10px', fontSize: 13, borderRadius: 6, cursor: 'pointer', marginBottom: 2,
           fontWeight: active ? 600 : 400,
           background: active ? 'var(--color-primary-light)' : 'transparent',
           color: active ? 'var(--color-primary)' : 'var(--color-text)',
@@ -521,6 +570,7 @@ function UserReportsTab() {
               rowKey={(r) => r.id}
               sort={{ sortKey, sortDir, onSort: toggleSort }}
               emptyMessage="No reports in this folder."
+              onRowClick={(r) => setViewingReport(r)}
             />
           )}
         </div>
@@ -594,6 +644,112 @@ function UserReportsTab() {
           </div>
         </Modal>
       )}
+
+      {/* Report detail "window" — opened on row click. Read-only view of what
+          the report selects, with Run and Edit (→ Builder, the real editor)
+          in the header. Matches the Data Assets / Systems detail-modal
+          pattern; a report's query is edited in the Builder, not inline. */}
+      {viewingReport && (() => {
+        const r = viewingReport;
+        const fname = folderName(r.folderId);
+        const labelStyle: React.CSSProperties = { fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' };
+        const cols = detail?.definition.columns || [];
+        const filters = detail?.definition.filters || [];
+        const sort = detail?.definition.sort;
+        return (
+          <Modal
+            open
+            onClose={() => setViewingReport(null)}
+            size="lg"
+            kicker={r.primaryEntity}
+            title={r.name}
+            ariaLabel={`Report: ${r.name}`}
+            subtitle={
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                {r.visibility === 'org'
+                  ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>SHARED</span>
+                  : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
+                {fname && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="folder" size={12} />{fname}</span>}
+              </span>
+            }
+            actions={
+              <>
+                <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => { setViewingReport(null); runReport(r); }} />
+                <Button size="sm" leadingIcon={<Icon name="edit" size={13} />} onClick={() => navigate(`/reports/builder/${r.id}`)}>Edit</Button>
+              </>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {/* Description */}
+              <div>
+                <div style={labelStyle}>Description</div>
+                <div style={{ fontSize: 13, color: r.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: r.description ? undefined : 'italic', whiteSpace: 'pre-wrap' }}>
+                  {r.description || 'No description'}
+                </div>
+              </div>
+
+              {/* Meta grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+                <div><div style={labelStyle}>Source</div><div style={{ fontSize: 13 }}>{r.primaryEntity}</div></div>
+                <div><div style={labelStyle}>Columns</div><div style={{ fontSize: 13 }}>{r.columnCount}</div></div>
+                <div><div style={labelStyle}>Schedule</div><div style={{ fontSize: 13 }}>{r.scheduleFrequency === 'off' ? 'Not scheduled' : r.scheduleFrequency.charAt(0).toUpperCase() + r.scheduleFrequency.slice(1)}</div></div>
+                <div>
+                  <div style={labelStyle}>Last run</div>
+                  <div style={{ fontSize: 13 }}>
+                    {r.lastRunAt
+                      ? <>{timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
+                      : <span style={{ color: 'var(--color-text-muted)' }}>Never run</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Columns */}
+              <div>
+                <div style={labelStyle}>Columns ({detailLoading ? '…' : cols.length})</div>
+                {detailLoading ? (
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</div>
+                ) : cols.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No columns selected</div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {cols.map((c) => (
+                      <span key={c.field} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: 'var(--color-text)' }}>
+                        {c.label || c.field}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Filters */}
+              {!detailLoading && filters.length > 0 && (
+                <div>
+                  <div style={labelStyle}>Filters ({filters.length})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {filters.map((f, i) => (
+                      <div key={i} style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)' }}>{f.field}</span>{' '}
+                        <span style={{ color: 'var(--color-text-muted)' }}>{FILTER_OP_LABELS[f.op] || f.op}</span>
+                        {f.op !== 'isNull' && f.op !== 'isNotNull' && f.value !== undefined && f.value !== '' && <> <span style={{ fontWeight: 500 }}>{String(f.value)}</span></>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sort */}
+              {!detailLoading && sort && (
+                <div>
+                  <div style={labelStyle}>Sort</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>{sort.field}</span>{' · '}{sort.direction === 'asc' ? 'ascending' : 'descending'}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* Create / rename+re-share a folder. A folder's shared flag drives the
           audience of every report inside it. */}
