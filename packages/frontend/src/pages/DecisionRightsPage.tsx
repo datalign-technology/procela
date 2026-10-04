@@ -4,7 +4,7 @@ import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import DetailEditActions from '../components/DetailEditActions';
 import PageHeader from '../components/PageHeader';
-import ExpandCollapseControls from '../components/ExpandCollapseControls';
+import Modal from '../components/Modal';
 import SectionLabel from '../components/SectionLabel';
 import FacetChips from '../components/FacetChips';
 import Card from '../components/Card';
@@ -384,7 +384,7 @@ function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onSaved, s
     },
   );
   return (
-    <div style={{ padding: '12px 18px 16px' }}>
+    <div>
       {canEdit && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
           <DetailEditActions
@@ -433,7 +433,7 @@ export default function DecisionRightsPage() {
 
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | DecisionCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<DecisionForm>(emptyForm);
@@ -556,16 +556,6 @@ export default function DecisionRightsPage() {
 
   const sel = useRowSelection(sorted, (r) => r.id);
 
-  const toggleExpand = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const expandAll = () => setExpandedIds(new Set(filteredRows.map((r) => r.id)));
-  const collapseAll = () => setExpandedIds(new Set());
-
   const categoryCounts: Record<DecisionCategory | 'ALL', number> = { ALL: rows.length } as any;
   for (const c of CATEGORIES) categoryCounts[c] = 0;
   for (const r of rows) categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
@@ -579,7 +569,7 @@ export default function DecisionRightsPage() {
         // decision to read it (full text also in the expanded row + edit form).
         <button
           type="button"
-          onClick={() => toggleExpand(r.id)}
+          onClick={() => setViewingId(r.id)}
           title={r.description || undefined}
           style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
         >
@@ -671,9 +661,6 @@ export default function DecisionRightsPage() {
               background: 'var(--color-surface)',
             }}
           />
-          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', fontSize: 12 }}>
-            <ExpandCollapseControls onExpandAll={expandAll} onCollapseAll={collapseAll} />
-          </div>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
             {filteredRows.length} of {rows.length} decisions
             {categoryFilter !== 'ALL' && ` · ${CATEGORY_LABELS[categoryFilter]}`}
@@ -767,25 +754,7 @@ export default function DecisionRightsPage() {
                 // editors get no checkboxes (read-only governance view).
                 selection={isAdmin ? sel : undefined}
                 sort={{ sortKey, sortDir, onSort: toggleSort }}
-                expansion={{
-                  expandedIds,
-                  onToggleExpanded: toggleExpand,
-                  trigger: 'row-click',
-                  renderExpandedRow: (r) => (
-                    <ExpandedDecisionRight
-                      row={r}
-                      people={people}
-                      groups={groups}
-                      orgId={activeOrgId}
-                      canEdit={isAdmin}
-                      onSaved={fetchData}
-                      showRecommends={decisionCols.isVisible('recommends')}
-                      showApproves={decisionCols.isVisible('approves')}
-                      showInformed={decisionCols.isVisible('informed')}
-                      showEscalation={decisionCols.isVisible('escalation')}
-                    />
-                  ),
-                }}
+                onRowClick={(r) => setViewingId(r.id)}
                 selectAllLabel="Select all decision rights"
                 emptyMessage="No decisions match the current filters."
               />
@@ -793,6 +762,37 @@ export default function DecisionRightsPage() {
           )}
         </div>
       </div>
+
+      {/* Detail modal — opened on row click; the clicked decision's RACI
+       *  detail with a view→Edit→Save toggle. Looked up fresh from `rows`
+       *  so it stays current after a save→refetch. */}
+      {(() => {
+        const row = viewingId ? rows.find((r) => r.id === viewingId) : null;
+        if (!row) return null;
+        return (
+          <Modal
+            open
+            onClose={() => setViewingId(null)}
+            kicker="Decision right"
+            title={row.decision}
+            subtitle={CATEGORY_LABELS[row.category]}
+            size="lg"
+          >
+            <ExpandedDecisionRight
+              row={row}
+              people={people}
+              groups={groups}
+              orgId={activeOrgId}
+              canEdit={isAdmin}
+              onSaved={fetchData}
+              showRecommends
+              showApproves
+              showInformed
+              showEscalation
+            />
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
