@@ -317,15 +317,15 @@ through the focusable name control in the row, so keep the name a real
 
 The entity lists split cleanly: **Data Assets, Systems, Decision Rights,
 SOPs, Data Quality (rules), Governance Documents, Governance Roles,
-Governance Calendar, and Data Lineage (flows)** open a **detail modal** on
-row-click — each renders its existing view→Edit→Save detail body inside
-`<Modal>`, looked up fresh from state by id. The only remaining inline
-`expansion` is the per-row **drill-down** kind (Data Assets' bound columns,
-the Data Quality assets tab) — a parent row you expand to browse and act on
-its children, which is not an entity-record detail and so stays inline.
-Lists with no row-level detail (Tasks, Issues, Mappings, Connections,
-Audit Log) stay inert. **Agents** and **Skills** navigate to a detail page
-on row-click.
+Governance Calendar, Data Lineage (flows), Governance Tasks, and
+Governance Issues** open a **detail modal** on row-click — each renders its
+existing view→Edit→Save detail body inside `<Modal>`, looked up fresh from
+state by id. The only remaining inline `expansion` is the per-row
+**drill-down** kind (Data Assets' bound columns, the Data Quality assets
+tab) — a parent row you expand to browse and act on its children, which is
+not an entity-record detail and so stays inline. Lists with no row-level
+detail (Mappings, Connections, Audit Log) stay inert. **Agents** and
+**Skills** navigate to a detail page on row-click.
 
 **People is the one *entity* list deliberately left hand-rolled.** The
 reason is one specific shape: a **pinned quick-add row** — a persistent
