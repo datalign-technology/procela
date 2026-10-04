@@ -544,9 +544,10 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   detail opens in a **detail `<Modal>`** via `onRowClick(row)` (Data
   Assets → the 360 modal, Systems → the system modal, and Decision
   Rights, SOPs, Data Quality rules, Governance Documents, Governance
-  Roles, Governance Calendar, Data Lineage flows → a `<Modal>` wrapping
-  the existing view→Edit→Save detail body, looked up fresh from state by
-  id). `expansion` with `trigger:'row-click'` is now reserved for a
+  Roles, Governance Calendar, Data Lineage flows, Governance Tasks,
+  Governance Issues → a `<Modal>` wrapping the existing view→Edit→Save
+  detail body, looked up fresh from state by id). `expansion` with
+  `trigger:'row-click'` is now reserved for a
   per-row **drill-down** — a parent you expand to browse/act on its
   children (Data Assets' bound columns, the Data Quality assets tab) —
   not an entity-record detail. Both paths share one guarded handler that
@@ -555,9 +556,9 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   row's own controls work without each needing to `stopPropagation`.
   Keep the row's name a focusable `<button>` / `clickable()` element —
   it's the keyboard path to the detail. Lists with no row-level detail
-  (Tasks, Issues, Mappings, Connections, Audit Log) stay inert; Agents
-  and Skills navigate to a detail page. Do NOT re-expose a teal
-  name-link as the only way to open a row.
+  (Mappings, Connections, Audit Log) stay inert; Agents and Skills
+  navigate to a detail page. Do NOT re-expose a teal name-link as the
+  only way to open a row.
 - `useRowSelection` — the row-selection hook wired into `DataTable`'s
   `selection` prop. Build it over the *filtered* rows so select-all
   matches what's visible. Do NOT hand-roll a `selectedIds` Set +

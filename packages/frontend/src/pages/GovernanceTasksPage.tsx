@@ -4,6 +4,7 @@ import { errorMessage, successToast, errorToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import DetailEditActions from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
+import Modal from '../components/Modal';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import Button from '../components/Button';
@@ -246,7 +247,7 @@ function ExpandedTask({ task, people, orgId, canEdit, onSaved }: {
     },
   );
   return (
-    <div style={{ padding: '12px 16px 14px 48px', background: '#fafbfc' }}>
+    <div>
       {canEdit && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
           <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
@@ -295,15 +296,10 @@ export default function GovernanceTasksPage({
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  // Row-click expansion: open a task's full detail (description + metadata
-  // that doesn't fit the columns) inline, matching the other governance
-  // work-item lists (Policies, SOPs, Decision Rights).
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const toggleExpand = (id: string) => setExpandedIds((prev) => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  // Row click opens a task's full detail (description + metadata that doesn't
+  // fit the columns) in a modal, matching the other governance work-item
+  // lists (Policies, SOPs, Decision Rights).
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   // Filters
   const [filterStatus, setFilterStatus] = useState('');
@@ -450,7 +446,13 @@ export default function GovernanceTasksPage({
       key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
       render: (t: GovernanceTask) => (
         <>
-          <span>{t.title}</span>
+          <button
+            type="button"
+            onClick={() => setViewingId(t.id)}
+            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
+          >
+            {t.title}
+          </button>
           {isOverdue(t) && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-error)', fontWeight: 600 }}>OVERDUE</span>}
         </>
       ),
@@ -640,17 +642,30 @@ export default function GovernanceTasksPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all tasks"
             emptyMessage="No tasks match the current filters."
-            expansion={{
-              expandedIds,
-              onToggleExpanded: toggleExpand,
-              trigger: 'row-click',
-              renderExpandedRow: (t) => (
-                <ExpandedTask task={t} people={people} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchData} />
-              ),
-            }}
+            onRowClick={(t) => setViewingId(t.id)}
           />
         )}
       </div>
+
+      {/* Task detail modal — opened on row click; the task's description +
+       *  metadata with a view→Edit→Save editor. Looked up fresh from state so
+       *  it stays current after a save/refetch. */}
+      {(() => {
+        const task = viewingId ? tasks.find((t) => t.id === viewingId) : null;
+        if (!task) return null;
+        return (
+          <Modal
+            open
+            onClose={() => setViewingId(null)}
+            kicker="Governance task"
+            title={task.title}
+            subtitle={task.taskType.replace(/_/g, ' ')}
+            size="lg"
+          >
+            <ExpandedTask task={task} people={people} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchData} />
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
