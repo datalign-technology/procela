@@ -6,6 +6,7 @@ import { errorMessage, successToast, errorToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import DetailEditActions from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
+import Modal from '../components/Modal';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import OwnerCell from '../components/OwnerCell';
 import { relativeTime, absoluteTime } from '../lib/relativeTime';
@@ -337,7 +338,7 @@ export default function SopsPage({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<SopForm>(emptyForm);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterOwner, setFilterOwner] = useState('');
@@ -496,7 +497,15 @@ export default function SopsPage({
     },
     sopCols.isVisible('title') && {
       key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
-      render: (sop: Sop) => sop.title,
+      render: (sop: Sop) => (
+        <button
+          type="button"
+          onClick={() => setViewingId(sop.id)}
+          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
+        >
+          {sop.title}
+        </button>
+      ),
     },
     sopCols.isVisible('category') && {
       key: 'category', header: 'Category', sortable: true,
@@ -551,8 +560,8 @@ export default function SopsPage({
     },
   ].filter(Boolean) as DataTableColumn<Sop>[]);
 
-  const renderExpandedRow = (sop: Sop) => (
-    <div style={{ maxWidth: 800, padding: 16 }}>
+  const renderSopDetail = (sop: Sop) => (
+    <div>
       <SopDetailsPanel sop={sop} people={people} documents={documents} orgId={activeOrgId} canWrite={canWrite} onSaved={fetchData} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <SectionLabel marginBottom={0}>Steps</SectionLabel>
@@ -756,17 +765,32 @@ export default function SopsPage({
             rowKey={(s) => s.id}
             selection={canWrite ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
-            expansion={{
-              expandedIds: expandedId ? new Set([expandedId]) : new Set(),
-              onToggleExpanded: (id) => setExpandedId((prev) => prev === id ? null : id),
-              renderExpandedRow,
-              trigger: 'row-click',
-            }}
+            onRowClick={(s) => setViewingId(s.id)}
             selectAllLabel="Select all SOPs"
             emptyMessage="No SOPs match the current filters."
           />
         </Card>
       )}
+
+      {/* Detail modal — opened on row click; the clicked procedure's record
+       *  fields (view→Edit→Save), its live step editor and linked documents.
+       *  Looked up fresh from `sops` so it stays current after a save/refetch. */}
+      {(() => {
+        const sop = viewingId ? sops.find((s) => s.id === viewingId) : null;
+        if (!sop) return null;
+        return (
+          <Modal
+            open
+            onClose={() => setViewingId(null)}
+            kicker="Standard operating procedure"
+            title={sop.title}
+            subtitle={sop.code}
+            size="lg"
+          >
+            {renderSopDetail(sop)}
+          </Modal>
+        );
+      })()}
 
       <ConfirmDialog
         open={confirmDelete !== null}
