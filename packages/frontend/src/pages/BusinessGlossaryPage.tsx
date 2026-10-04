@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { activateOnKeyStop } from '../lib/a11y';
@@ -26,6 +25,8 @@ import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 // Lazy: only renders when the user opens the connection picker.
 const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
+// Lazy: only renders when the user opens a term's detail.
+const GlossaryTermDetailModal = lazy(() => import('../components/GlossaryTermDetailModal'));
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -199,7 +200,6 @@ export default function BusinessGlossaryPage() {
   const { activeOrgId, activeOrgName } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
-  const navigate = useNavigate();
 
   const glossaryCols = useColumnPicker<GlossaryColId>('procela.businessGlossary.visibleCols.v1', GLOSSARY_COLUMN_DEFS);
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
@@ -209,9 +209,11 @@ export default function BusinessGlossaryPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<TermForm>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // Row click opens the term's detail in a modal (view→Edit→Save), matching
+  // Data Assets / Systems. Editing happens there — the list has no edit form.
+  const [viewingTermId, setViewingTermId] = useState<string | null>(null);
 
   // Bulk selection
   const [bulkUpdates, setBulkUpdates] = useState<{ status: string; category: string; ownerPersonId: string; domainId: string }>({ status: '', category: '', ownerPersonId: '', domainId: '' });
@@ -323,21 +325,13 @@ export default function BusinessGlossaryPage() {
   };
 
   // ── CRUD ──
+  // Create-only: an existing term is edited inside its detail modal
+  // (GlossaryTermDetailModal, view→Edit→Save).
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    setForm(emptyForm); setEditingId(null); setShowForm(true);
+    setForm(emptyForm); setShowForm(true);
   };
-  const openEdit = (t: GlossaryTerm) => {
-    setForm({
-      term: t.term, definition: t.definition, category: t.category, status: t.status,
-      context: t.context || '', synonyms: (t.synonyms || []).join(', '),
-      exampleValues: t.exampleValues || '', businessRules: t.businessRules || '',
-      sourceOfTruth: t.sourceOfTruth || '', domainId: t.domainId || '',
-      ownerAssignmentId: t.ownerAssignmentId || '',
-    });
-    setEditingId(t.id); setShowForm(true);
-  };
-  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const closeForm = () => { setShowForm(false); setForm(emptyForm); };
 
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
@@ -352,13 +346,8 @@ export default function BusinessGlossaryPage() {
         domainId: form.domainId || null, ownerAssignmentId: form.ownerAssignmentId || null,
         ...(activeOrgId ? { orgId: activeOrgId } : {}),
       };
-      if (editingId) {
-        await apiClient.put(`/business-glossary/${editingId}`, payload);
-        addToast('success', 'Term updated');
-      } else {
-        await apiClient.post('/business-glossary', payload);
-        addToast('success', 'Term added');
-      }
+      await apiClient.post('/business-glossary', payload);
+      addToast('success', 'Term added');
       closeForm(); fetchData();
     } catch (err) {
       const e = err as { response?: { data?: { error?: string } } };
@@ -484,12 +473,12 @@ export default function BusinessGlossaryPage() {
       key: 'term', header: 'Term', sortable: true, cellStyle: { fontWeight: 500 },
       render: (t: GlossaryTerm) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          {/* The term name opens the term's detail page (view). Editing is
-           *  the row's pencil. Definition isn't shown inline — rows stay
-           *  single-line; hover the term to read it. */}
+          {/* The term name opens the term's detail modal (view→Edit→Save).
+           *  Definition isn't shown inline — rows stay single-line; hover the
+           *  term to read it. */}
           <button
             type="button"
-            onClick={() => navigate(`/business-glossary/${t.id}`)}
+            onClick={() => setViewingTermId(t.id)}
             title={t.definition || 'View term'}
             style={{
               background: 'none', border: 'none', padding: 0,
@@ -559,7 +548,6 @@ export default function BusinessGlossaryPage() {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 80,
       render: (t: GlossaryTerm) => (
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
           {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
         </div>
       ),
@@ -741,10 +729,10 @@ export default function BusinessGlossaryPage() {
           {/* Add/Edit Form */}
           {showForm && (
             <Card padding={20} marginBottom={16}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Term' : 'Add New Term'}</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Add New Term</h3>
               {(() => {
                 const trimmed = form.term.trim().toLowerCase();
-                const isDuplicate = !!trimmed && terms.some((t) => t.id !== editingId && t.term.trim().toLowerCase() === trimmed);
+                const isDuplicate = !!trimmed && terms.some((t) => t.term.trim().toLowerCase() === trimmed);
                 return (
                   <>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -816,7 +804,7 @@ export default function BusinessGlossaryPage() {
                       disabled={!form.term.trim() || !form.definition.trim() || isDuplicate}
                       onClick={handleSave}
                     >
-                      {editingId ? 'Save Changes' : 'Add Term'}
+                      Add Term
                     </Button>
                   </div>
                 </>
@@ -922,12 +910,25 @@ export default function BusinessGlossaryPage() {
                 emptyMessage="No terms match the current filters."
                 pageSize={20}
                 countNoun={['term', 'terms']}
-                onRowClick={(t) => navigate(`/business-glossary/${t.id}`)}
+                onRowClick={(t) => setViewingTermId(t.id)}
               />
             )}
           </Card>
         </div>
       </div>
+
+      {/* Term detail modal — opened on row click; view→Edit→Save over the
+       *  term's full record (Data Assets / Systems pattern). */}
+      {viewingTermId && (
+        <Suspense fallback={null}>
+          <GlossaryTermDetailModal
+            termId={viewingTermId}
+            onClose={() => setViewingTermId(null)}
+            canWrite={canWrite}
+            onSaved={fetchData}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
