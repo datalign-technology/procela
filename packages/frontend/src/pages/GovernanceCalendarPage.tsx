@@ -13,6 +13,7 @@ import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import PageHeader from '../components/PageHeader';
+import Modal from '../components/Modal';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import SectionCard from '../components/SectionCard';
@@ -320,7 +321,7 @@ function ExpandedEvent({ event, people, canWrite, orgId, onSaved }: {
     return event.dayOfMonth != null ? `${formatTypeLabel(event.cadence)}, day ${event.dayOfMonth}` : formatTypeLabel(event.cadence);
   })();
   return (
-    <div style={{ padding: '12px 16px', background: '#fafbfc' }}>
+    <div>
       {canWrite && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
           <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
@@ -381,10 +382,8 @@ export default function GovernanceCalendarPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EventForm>(emptyForm);
-  // Row-click expansion for the events list: open one event's detail at a time.
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const toggleExpanded = (id: string) =>
-    setExpandedIds((prev) => (prev.has(id) ? new Set() : new Set([id])));
+  // Row click opens one event's detail in a modal.
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const eventValidation = useFormValidation({
     name: (v: any) => !v?.trim() ? 'Event name is required.' : null,
   });
@@ -582,7 +581,13 @@ export default function GovernanceCalendarPage() {
       key: 'name', header: 'Name', cellStyle: { fontWeight: 500 },
       render: (ev) => (
         <>
-          {ev.name}
+          <button
+            type="button"
+            onClick={() => setViewingId(ev.id)}
+            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
+          >
+            {ev.name}
+          </button>
           {ev.attendeeNames.length > 0 && (
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2 }}>
               {ev.attendeeNames.slice(0, 3).join(', ')}
@@ -795,7 +800,7 @@ export default function GovernanceCalendarPage() {
                           const colors = EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM;
                           return (
                             <div key={ev.id} title={`${ev.name} (${formatTypeLabel(ev.eventType)}) — ${ev.timeOfDay}`}
-                              {...clickable(() => { setViewMode('list'); setExpandedIds(new Set([ev.id])); }, { label: `Open ${ev.name}` })}
+                              {...clickable(() => setViewingId(ev.id), { label: `Open ${ev.name}` })}
                               style={{
                                 fontSize: 10, fontWeight: 500, padding: '1px 4px', borderRadius: 3, cursor: 'pointer',
                                 background: colors.bg, color: colors.color,
@@ -882,19 +887,32 @@ export default function GovernanceCalendarPage() {
                 selection={isAdmin ? sel : undefined}
                 selectAllLabel="Select all events"
                 emptyMessage="No events match the current filters."
-                expansion={{
-                  expandedIds,
-                  onToggleExpanded: toggleExpanded,
-                  trigger: 'row-click',
-                  renderExpandedRow: (ev) => (
-                    <ExpandedEvent event={ev} people={people} canWrite={isAdmin} orgId={activeOrgId} onSaved={fetchData} />
-                  ),
-                }}
+                onRowClick={(ev) => setViewingId(ev.id)}
               />
             )}
           </Card>
         </div>
       )}
+
+      {/* Event detail modal — opened on row click (list) or event-chip click
+       *  (calendar). The event's schedule summary with a view→Edit→Save editor.
+       *  Looked up fresh from state so it stays current after a save/refetch. */}
+      {(() => {
+        const ev = viewingId ? events.find((e) => e.id === viewingId) : null;
+        if (!ev) return null;
+        return (
+          <Modal
+            open
+            onClose={() => setViewingId(null)}
+            kicker="Calendar event"
+            title={ev.name}
+            subtitle={formatTypeLabel(ev.eventType)}
+            size="lg"
+          >
+            <ExpandedEvent event={ev} people={people} canWrite={isAdmin} orgId={activeOrgId} onSaved={fetchData} />
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

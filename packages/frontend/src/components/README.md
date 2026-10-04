@@ -274,30 +274,30 @@ DataTable computes the detail row's `colSpan` internally (retiring every
 hardcoded `colSpan={8}`). Everything *inside* the expanded region is
 page-owned — DataTable owns only the caret column and the detail row's
 `colSpan`, and never fetches. `renderExpandedRow` holds arbitrarily
-complex content; the migrated pages exercise the full range:
+complex content; the pages that keep inline expansion exercise the range:
 
 - **Lazy-fetch-on-expand** with a spinner — Data Quality assets tab, Data
   Assets (fetch in `onToggleExpanded`, render `loading ? spinner : …`).
-- **Nested sub-tables** — the per-policy Controls table (Governance
-  Policies), the per-asset columns table (Data Assets).
-- **An add/edit form + nested CRUD** — the control form + Controls sub-table
-  (Governance Policies), kept page-owned; single-open pages can share one
-  form-state set because only one detail row exists at a time.
+- **Nested sub-tables** — the per-asset columns table (Data Assets), the
+  per-asset column/rules table (Data Quality assets tab). These stay inline
+  because they're a per-row *drill-down* (expand a parent to browse and act
+  on its children), not a single entity's record detail.
 - **Two-level expansion** — Data Assets nests a per-column rules expansion
   (its own `Set` + toggle) *inside* the per-asset `renderExpandedRow`; the
   inner level is plain markup, not a second `DataTable`.
-- **Quick-add rows** — the "+ Add Step" / reorder controls (SOPs).
 
 `trigger` controls how a row expands. Default `'caret'`: only the leading
 caret button toggles. `'row-click'`: clicking anywhere on the row toggles,
 and the caret stays a keyboard-focusable affordance.
 
-**`onRowClick` — whole-row click opens the row's detail.** When a list's
-"detail" is a modal / viewer rather than an inline expansion (Data Assets →
-the 360 modal, Systems → the system detail modal), pass `onRowClick(row)` to
-make the whole `<tr>` a pointer target. It coexists with `expansion` — the
-caret column can still expand inline detail (Data Assets does both: row-click
-opens the 360 modal, the caret expands bound columns).
+**`onRowClick` — whole-row click opens the row's detail.** A single entity's
+record detail opens in a **detail `<Modal>`**, not an inline expansion: pass
+`onRowClick(row)` to make the whole `<tr>` a pointer target, look the row up
+fresh from list state by id (so the body stays current after a save→refetch),
+and render the detail body inside `<Modal>`. `onRowClick` coexists with
+`expansion` — the caret column can still expand a per-row drill-down (Data
+Assets does both: row-click opens the 360 modal, the caret expands bound
+columns).
 
 Both whole-row behaviours (`onRowClick` **and** `trigger:'row-click'`) run
 through **one guarded handler**: a click whose target is inside an
@@ -312,13 +312,20 @@ through the focusable name control in the row, so keep the name a real
 ```tsx
 <DataTable … onRowClick={(asset) => open360(asset.id)} />   {/* Data Assets */}
 <DataTable … onRowClick={(sys) => setViewingSystemId(sys.id)} />  {/* Systems */}
+<DataTable … onRowClick={(r) => setViewingId(r.id)} />  {/* Decision Rights, SOPs, … */}
 ```
 
-The entity lists split cleanly: **Data Assets** and **Systems** open a modal
-on row-click; **Agents, Decision Rights, SOPs, Data Quality, Governance
-Policies** expand inline via `trigger:'row-click'`. Lists with no row-level
-detail (Tasks, Issues, Calendar, Mappings, Lineage, Connections,
-Audit Log) stay inert. **Skills** navigates to a detail page on row-click.
+The entity lists split cleanly: **Data Assets, Systems, Decision Rights,
+SOPs, Data Quality (rules), Governance Documents, Governance Roles,
+Governance Calendar, and Data Lineage (flows)** open a **detail modal** on
+row-click — each renders its existing view→Edit→Save detail body inside
+`<Modal>`, looked up fresh from state by id. The only remaining inline
+`expansion` is the per-row **drill-down** kind (Data Assets' bound columns,
+the Data Quality assets tab) — a parent row you expand to browse and act on
+its children, which is not an entity-record detail and so stays inline.
+Lists with no row-level detail (Tasks, Issues, Mappings, Connections,
+Audit Log) stay inert. **Agents** and **Skills** navigate to a detail page
+on row-click.
 
 **People is the one *entity* list deliberately left hand-rolled.** The
 reason is one specific shape: a **pinned quick-add row** — a persistent
