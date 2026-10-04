@@ -2,6 +2,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import Modal from '../components/Modal';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
@@ -354,7 +355,7 @@ function ExpandedFlow({ link, systemsList, assetsList, canWrite, onSaved }: {
     },
   );
   return (
-    <div style={{ padding: '12px 16px', background: '#fafbfc' }}>
+    <div>
       {canWrite && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
           <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
@@ -421,10 +422,8 @@ export default function DataLineagePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
-  // Row-click expansion for the flows list: open one flow's detail at a time.
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const toggleExpanded = (id: string) =>
-    setExpandedIds((prev) => (prev.has(id) ? new Set() : new Set([id])));
+  // Row click opens one flow's detail in a modal.
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmDeleteDbtConn, setConfirmDeleteDbtConn] = useState<DbtCloudConnectionRow | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'visualization'>('table');
@@ -685,7 +684,15 @@ export default function DataLineagePage() {
   const lineageColumns = ([
     lineageCols.isVisible('source') && {
       key: 'source', header: 'Source System', sortable: true,
-      render: (link: LineageLink) => link.sourceSystemName || link.sourceSystemId,
+      render: (link: LineageLink) => (
+        <button
+          type="button"
+          onClick={() => setViewingId(link.id)}
+          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
+        >
+          {link.sourceSystemName || link.sourceSystemId}
+        </button>
+      ),
     },
     lineageCols.isVisible('target') && {
       key: 'target', header: 'Target System', sortable: true,
@@ -873,14 +880,7 @@ export default function DataLineagePage() {
                 sort={{ sortKey, sortDir, onSort: toggleSort }}
                 selectAllLabel="Select all flows"
                 emptyMessage="No flows match the current filters."
-                expansion={{
-                  expandedIds,
-                  onToggleExpanded: toggleExpanded,
-                  trigger: 'row-click',
-                  renderExpandedRow: (link) => (
-                    <ExpandedFlow link={link} systemsList={systemsList} assetsList={assetsList} canWrite={canWrite} onSaved={fetchData} />
-                  ),
-                }}
+                onRowClick={(l) => setViewingId(l.id)}
               />
             </Card>
           )}
@@ -1261,6 +1261,26 @@ export default function DataLineagePage() {
           </div>
         </div>
       )}
+
+      {/* Flow detail modal — opened on row click; the flow's summary with a
+       *  view→Edit→Save editor. Looked up fresh from state so it stays current
+       *  after a save/refetch. */}
+      {(() => {
+        const link = viewingId ? links.find((l) => l.id === viewingId) : null;
+        if (!link) return null;
+        return (
+          <Modal
+            open
+            onClose={() => setViewingId(null)}
+            kicker="Lineage flow"
+            title={`${link.sourceSystemName || link.sourceSystemId} → ${link.targetSystemName || link.targetSystemId}`}
+            subtitle={link.flowType.replace(/_/g, ' ')}
+            size="lg"
+          >
+            <ExpandedFlow link={link} systemsList={systemsList} assetsList={assetsList} canWrite={canWrite} onSaved={fetchData} />
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

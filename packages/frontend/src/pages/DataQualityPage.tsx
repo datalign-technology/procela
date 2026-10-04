@@ -30,6 +30,7 @@ import type { RulesModalAsset } from '../components/DataQualityRulesModal';
 // Lazy: only renders when the user clicks the rules icon on a row.
 const DataQualityRulesModal = lazy(() => import('../components/DataQualityRulesModal'));
 import { useSortedList } from '../hooks/useSortedList';
+import Modal from '../components/Modal';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -364,7 +365,7 @@ function ExpandedRule({ rule, canWrite, onSaved }: {
   const assetName = rule.dataAssetName || rule.dataAssetId;
   const colName = (rule as any).columnName as string | undefined;
   return (
-    <div style={{ padding: '12px 16px 16px 48px', background: '#fafbfc' }}>
+    <div>
       {canWrite && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
           <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
@@ -410,14 +411,9 @@ export default function DataQualityPage({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
-  // Row-click expansion for the Rules list: open a rule's detail (description
-  // + a view→Edit→Save editor for its record fields) inline.
-  const [expandedRuleIds, setExpandedRuleIds] = useState<Set<string>>(new Set());
-  const toggleRuleExpand = (id: string) => setExpandedRuleIds((prev) => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  // Row click on the Rules list opens the rule's detail (description + a
+  // view→Edit→Save editor for its record fields) in a modal.
+  const [viewingRuleId, setViewingRuleId] = useState<string | null>(null);
   // Columns of the asset selected in the form, so a rule can target a specific
   // column (the bound/discovered set) instead of the asset as a whole.
   const [formColumns, setFormColumns] = useState<ColumnWithHealth[]>([]);
@@ -704,7 +700,15 @@ export default function DataQualityPage({
     },
     dqCols.isVisible('name') && {
       key: 'name', header: 'Rule Name', sortable: true,
-      render: (rule: QualityRule) => rule.name,
+      render: (rule: QualityRule) => (
+        <button
+          type="button"
+          onClick={() => setViewingRuleId(rule.id)}
+          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
+        >
+          {rule.name}
+        </button>
+      ),
     },
     dqCols.isVisible('dimension') && {
       key: 'dimension', header: 'Dimension', sortable: true,
@@ -1059,17 +1063,30 @@ export default function DataQualityPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all rules"
             emptyMessage="No rules match the current filters."
-            expansion={{
-              expandedIds: expandedRuleIds,
-              onToggleExpanded: toggleRuleExpand,
-              trigger: 'row-click',
-              renderExpandedRow: (r) => (
-                <ExpandedRule rule={r} canWrite={canWrite} onSaved={fetchData} />
-              ),
-            }}
+            onRowClick={(r) => setViewingRuleId(r.id)}
           />
         </Card>
       )}
+
+      {/* Rule detail modal — opened on row click; the rule's description with a
+       *  view→Edit→Save editor for its record fields. Looked up fresh from
+       *  state so it stays current after a save/refetch. */}
+      {(() => {
+        const rule = viewingRuleId ? rules.find((r) => r.id === viewingRuleId) : null;
+        if (!rule) return null;
+        return (
+          <Modal
+            open
+            onClose={() => setViewingRuleId(null)}
+            kicker="Quality rule"
+            title={rule.name}
+            subtitle={rule.dataAssetName || rule.dataAssetId}
+            size="lg"
+          >
+            <ExpandedRule rule={rule} canWrite={canWrite} onSaved={fetchData} />
+          </Modal>
+        );
+      })()}
       </>)}
     </div>
   );

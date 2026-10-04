@@ -540,19 +540,24 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   entry), and non-entity-list tables
   (reports, the RACI matrix, the audit log, static reference tables,
   nested detail sub-tables).
-  **Whole-row click opens the row's detail** — a list whose detail is a
-  modal / viewer passes `onRowClick(row)` (Data Assets → the 360 modal,
-  Systems → the system modal); a list whose detail is inline passes
-  `expansion` with `trigger:'row-click'` (Agents, Decision Rights, SOPs,
-  Data Quality, Policies). Both paths share one guarded handler that
+  **Whole-row click opens the row's detail** — a single entity's record
+  detail opens in a **detail `<Modal>`** via `onRowClick(row)` (Data
+  Assets → the 360 modal, Systems → the system modal, and Decision
+  Rights, SOPs, Data Quality rules, Governance Documents, Governance
+  Roles, Governance Calendar, Data Lineage flows → a `<Modal>` wrapping
+  the existing view→Edit→Save detail body, looked up fresh from state by
+  id). `expansion` with `trigger:'row-click'` is now reserved for a
+  per-row **drill-down** — a parent you expand to browse/act on its
+  children (Data Assets' bound columns, the Data Quality assets tab) —
+  not an entity-record detail. Both paths share one guarded handler that
   ignores clicks originating inside an interactive descendant
   (`button, a, input, select, textarea, label, [role="button"]`), so a
   row's own controls work without each needing to `stopPropagation`.
   Keep the row's name a focusable `<button>` / `clickable()` element —
   it's the keyboard path to the detail. Lists with no row-level detail
-  (Tasks, Issues, Calendar, Mappings, Lineage, Connections,
-  Audit Log) stay inert. Do NOT re-expose a teal name-link as the only
-  way to open a row.
+  (Tasks, Issues, Mappings, Connections, Audit Log) stay inert; Agents
+  and Skills navigate to a detail page. Do NOT re-expose a teal
+  name-link as the only way to open a row.
 - `useRowSelection` — the row-selection hook wired into `DataTable`'s
   `selection` prop. Build it over the *filtered* rows so select-all
   matches what's visible. Do NOT hand-roll a `selectedIds` Set +
