@@ -44,7 +44,6 @@ const GovernancePoliciesPage     = lazy(() => import('@/pages/GovernancePolicies
 const GovernanceCalendarPage     = lazy(() => import('@/pages/GovernanceCalendarPage'));
 const DecisionRightsPage         = lazy(() => import('@/pages/DecisionRightsPage'));
 const BusinessGlossaryPage       = lazy(() => import('@/pages/BusinessGlossaryPage'));
-const GlossaryTermDetailPage     = lazy(() => import('@/pages/GlossaryTermDetailPage'));
 const GovernanceFoundationPage   = lazy(() => import('@/pages/GovernanceFoundationPage'));
 const EnterpriseViewPage         = lazy(() => import('@/pages/EnterpriseViewPage'));
 const AnalysisPage               = lazy(() => import('@/pages/AnalysisPage'));
@@ -140,7 +139,6 @@ export default function App() {
           <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
           <Route path="/decision-rights" element={<DecisionRightsPage />} />
           <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
-          <Route path="/business-glossary/:id" element={<GlossaryTermDetailPage />} />
           {/* The program has no page of its own — its scope, principles, and
               operating model live on Governance → Foundation. (The former
               phase tracker / lifecycle were retired with Get Started.) */}

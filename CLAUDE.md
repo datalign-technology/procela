@@ -545,8 +545,9 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   Assets → the 360 modal, Systems → the system modal, and Decision
   Rights, SOPs, Data Quality rules, Governance Documents, Governance
   Roles, Governance Calendar, Data Lineage flows, Governance Tasks,
-  Governance Issues → a `<Modal>` wrapping the existing view→Edit→Save
-  detail body, looked up fresh from state by id). `expansion` with
+  Governance Issues, Business Glossary → a `<Modal>` wrapping the
+  existing view→Edit→Save detail body, looked up fresh from state by
+  id). `expansion` with
   `trigger:'row-click'` is now reserved for a
   per-row **drill-down** — a parent you expand to browse/act on its
   children (Data Assets' bound columns, the Data Quality assets tab) —

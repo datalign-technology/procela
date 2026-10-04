@@ -317,8 +317,9 @@ through the focusable name control in the row, so keep the name a real
 
 The entity lists split cleanly: **Data Assets, Systems, Decision Rights,
 SOPs, Data Quality (rules), Governance Documents, Governance Roles,
-Governance Calendar, Data Lineage (flows), Governance Tasks, and
-Governance Issues** open a **detail modal** on row-click — each renders its
+Governance Calendar, Data Lineage (flows), Governance Tasks,
+Governance Issues, and Business Glossary** open a **detail modal** on
+row-click — each renders its
 existing view→Edit→Save detail body inside `<Modal>`, looked up fresh from
 state by id. The only remaining inline `expansion` is the per-row
 **drill-down** kind (Data Assets' bound columns, the Data Quality assets
