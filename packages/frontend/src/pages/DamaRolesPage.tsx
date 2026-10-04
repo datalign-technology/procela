@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, Fragment } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { renderNavIcon } from '../components/navIcons';
 import { apiClient } from '../api/client';
@@ -13,6 +13,7 @@ import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
+import Modal from '../components/Modal';
 import Button from '../components/Button';
 import SectionCard from '../components/SectionCard';
 import PersonPicker from '../components/PersonPicker';
@@ -888,36 +889,46 @@ export default function DamaRolesPage({
                 dataAssets={dataAssets}
                 personById={personById}
                 previewRoleType={previewRoleType}
-                onSelectRole={(rt) => setPreviewRoleType(prev => prev === rt ? null : rt)}
+                onSelectRole={(rt) => setPreviewRoleType(rt)}
                 onAssign={openAddForRole}
                 programInUse={roles.length > 0}
                 canEdit={isAdmin}
-                renderExpanded={(rt) => (
-                  <RolePreviewPane
-                    inline
-                    roleType={rt}
-                    dama={filteredRoles.filter((r) => r.roleType === rt)}
-                    domains={domains}
-                    systems={systems}
-                    dataAssets={dataAssets}
-                    personById={personById}
-                    manuals={manualsByRole.get(rt) || []}
-                    roleBadge={roleBadge}
-                    resolveScope={resolveScope}
-                    onClose={() => setPreviewRoleType(null)}
-                    onAssign={() => openAddForRole(rt)}
-                    onAssignToEntity={openAddForEntity}
-                    navigateToEntity={navigateToEntity}
-                    onOpenDrawer={openRoleDrawer}
-                    setConfirmDelete={setConfirmDelete}
-                    canEdit={isAdmin}
-                  />
-                )}
               />
             )}
           </Card>
         </div>
       </div>
+
+      {/* Role detail opens in a modal window on row click. */}
+      {previewRoleType && (
+        <Modal
+          open
+          onClose={() => setPreviewRoleType(null)}
+          kicker="Governance role"
+          title={ROLE_TYPE_LABELS[previewRoleType] || previewRoleType}
+          size="lg"
+        >
+          <RolePreviewPane
+            bare
+            roleType={previewRoleType}
+            dama={filteredRoles.filter((r) => r.roleType === previewRoleType)}
+            domains={domains}
+            systems={systems}
+            dataAssets={dataAssets}
+            personById={personById}
+            manuals={manualsByRole.get(previewRoleType) || []}
+            roleBadge={roleBadge}
+            resolveScope={resolveScope}
+            onClose={() => setPreviewRoleType(null)}
+            onAssign={() => openAddForRole(previewRoleType)}
+            onAssignToEntity={openAddForEntity}
+            navigateToEntity={navigateToEntity}
+            onOpenDrawer={openRoleDrawer}
+            setConfirmDelete={setConfirmDelete}
+            canEdit={isAdmin}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1197,7 +1208,7 @@ const tableTdStyle: React.CSSProperties = {
 // columns for Role, Holders, Status, Action. Clicking a row opens the
 // role's detail in the right preview pane (matrix / holders list /
 // purpose). Replaces the previous nested-cards layout.
-function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, dataAssets, personById, previewRoleType, onSelectRole, onAssign, programInUse, canEdit, renderExpanded }: {
+function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, dataAssets, personById, previewRoleType, onSelectRole, onAssign, programInUse, canEdit }: {
   canEdit: boolean;
   catalog: string[];
   damaRoles: DamaRoleAssignment[];
@@ -1210,8 +1221,6 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
   onSelectRole: (rt: string) => void;
   onAssign: (rt: string) => void;
   programInUse: boolean;
-  /** The clicked role's detail, rendered inline beneath its row. */
-  renderExpanded: (rt: string) => React.ReactNode;
 }) {
   // Same role-set as the old ByRoleView: backend catalogue plus
   // entity-storage roles that render from local state.
@@ -1282,8 +1291,8 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
           const holderCount = allNames.length;
 
           return (
-            <Fragment key={rt}>
             <tr
+              key={rt}
               onClick={() => onSelectRole(rt)}
               style={{
                 cursor: 'pointer',
@@ -1365,14 +1374,6 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
                 ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
               </td>
             </tr>
-            {isSelected && (
-              <tr>
-                <td colSpan={4} style={{ padding: 0, background: '#fafbfc', borderBottom: '1px solid var(--color-border)' }}>
-                  {renderExpanded(rt)}
-                </td>
-              </tr>
-            )}
-            </Fragment>
           );
         })}
       </tbody>
@@ -1389,11 +1390,14 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
 function RolePreviewPane({
   roleType, dama, domains, systems, dataAssets, personById, manuals,
   roleBadge, resolveScope, onClose, onAssign, onAssignToEntity,
-  navigateToEntity, onOpenDrawer, setConfirmDelete, canEdit, inline = false,
+  navigateToEntity, onOpenDrawer, setConfirmDelete, canEdit, inline = false, bare = false,
 }: {
   canEdit: boolean;
   /** Rendered inline beneath the clicked row (no sticky rail, no close ×). */
   inline?: boolean;
+  /** Rendered inside a <Modal> body — drop the card chrome and the close ×
+   *  (the modal supplies both). */
+  bare?: boolean;
   roleType: string;
   dama: DamaRoleAssignment[];
   domains: DomainOption[];
@@ -1418,7 +1422,7 @@ function RolePreviewPane({
   const openManual = () => navigate('/documentation?tab=manual');
 
   return (
-    <Card padding={0} shadow="none" style={inline ? { margin: 12 } : { position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
+    <Card padding={0} shadow="none" borderColor={bare ? 'transparent' : undefined} style={bare ? { margin: 0, border: 'none', background: 'transparent' } : inline ? { margin: 12 } : { position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
       <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <button
           type="button"
@@ -1437,7 +1441,7 @@ function RolePreviewPane({
           }}>Required</span>
         )}
         <CardinalityChip roleType={roleType} />
-        {!inline && (
+        {!inline && !bare && (
           <button
             type="button"
             onClick={onClose}

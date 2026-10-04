@@ -29,6 +29,7 @@ import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import Modal from '../components/Modal';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { useFormValidation } from '../hooks/useFormValidation';
@@ -493,7 +494,13 @@ export default function GovernancePoliciesPage() {
         const promo = promotionsByPolicy[pol.id];
         return (
           <>
-            <span>{pol.name}</span>
+            <button
+              type="button"
+              onClick={() => { setExpandedPolicyId(pol.id); closeControlForm(); }}
+              style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer', textAlign: 'left' }}
+            >
+              {pol.name}
+            </button>
             <span style={{ ...badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY), marginLeft: 8 }}>{DOCUMENT_TYPE_LABEL[docType]}</span>
             {promo && (
               <StatusBadge
@@ -549,13 +556,11 @@ export default function GovernancePoliciesPage() {
   // documents" panel (point at the real file on SharePoint, a web page, a file
   // server, or upload a copy), plus Controls (POLICY docType) and a Source
   // panel (promoted from an agent draft) when those apply.
-  const isPolicyExpandable = (_p: Policy) => true;
-
   const renderPolicyExpansion = (pol: Policy) => {
     const promo = promotionsByPolicy[pol.id];
     const docType = pol.documentType || 'POLICY';
     return (
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Document's own fields — read-only with an in-place Edit toggle. */}
         <PolicyDetailsPanel policy={pol} people={people} canEdit={isAdmin} orgId={activeOrgId} onSaved={fetchData} />
 
@@ -847,19 +852,28 @@ export default function GovernancePoliciesPage() {
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all documents"
             emptyMessage="No documents match the current filters."
-            expansion={{
-              expandedIds: expandedPolicyId ? new Set([expandedPolicyId]) : new Set(),
-              onToggleExpanded: (id) => {
-                setExpandedPolicyId((prev) => (prev === id ? null : id));
-                closeControlForm();
-              },
-              getRowExpandable: isPolicyExpandable,
-              renderExpandedRow: renderPolicyExpansion,
-              trigger: 'row-click',
-            }}
+            onRowClick={(p) => { setExpandedPolicyId(p.id); closeControlForm(); }}
           />
         )}
       </div>
+
+      {/* Document detail opens in a modal window on row click. */}
+      {(() => {
+        const pol = expandedPolicyId ? policies.find((p) => p.id === expandedPolicyId) : null;
+        if (!pol) return null;
+        return (
+          <Modal
+            open
+            onClose={() => { setExpandedPolicyId(null); closeControlForm(); }}
+            kicker="Governance document"
+            title={pol.name}
+            subtitle={pol.code}
+            size="lg"
+          >
+            {renderPolicyExpansion(pol)}
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
