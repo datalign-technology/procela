@@ -56,6 +56,7 @@ const GovernanceFoundationPage   = lazy(() => import('@/pages/GovernanceFoundati
 const EnterpriseViewPage         = lazy(() => import('@/pages/EnterpriseViewPage'));
 const AnalysisPage               = lazy(() => import('@/pages/AnalysisPage'));
 const ReportsPage                = lazy(() => import('@/pages/ReportsPage'));
+const ReportDetailPage           = lazy(() => import('@/pages/ReportDetailPage'));
 const ReportBuilderPage          = lazy(() => import('@/pages/ReportBuilderPage'));
 const CouncilPage                = lazy(() => import('@/pages/CouncilPage'));
 const GovernanceExceptionsPage   = lazy(() => import('@/pages/GovernanceExceptionsPage'));
@@ -164,6 +165,7 @@ export default function App() {
           <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/reports/:id" element={<ReportDetailPage />} />
           {/* The Council Dashboard + Scorecard are now one page. Old links redirect. */}
           <Route path="/council" element={<CouncilPage />} />
           <Route path="/council-dashboard" element={<Navigate to="/council" replace />} />
