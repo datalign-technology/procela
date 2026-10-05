@@ -425,9 +425,14 @@ const SYSTEM_COLUMN_DEFS: Array<{ id: SystemColId; label: string; defaultVisible
 export default function SystemsPage({
   embedded = false,
   actionsPortal,
+  focusSystemId,
 }: {
   embedded?: boolean;
   actionsPortal?: HTMLElement | null;
+  /** When set, the page renders the single system's detail on its own route
+   *  (/systems/:id), matching the People detail-page family — instead of the
+   *  list + detail modal. */
+  focusSystemId?: string;
 } = {}) {
   const { activeOrgId, canCreateValueStreams } = useOrgContext();
   // Governance-scope membership for the "in scope / not governed" row badge —
@@ -476,7 +481,6 @@ export default function SystemsPage({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; connections: number; mappings: number } | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [viewingSystemId, setViewingSystemId] = useState<string | null>(null);
   const custodiansLabel = useTerm('custodians');
   const custodianLabel = useTerm('custodian');
 
@@ -798,7 +802,7 @@ export default function SystemsPage({
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <button
               type="button"
-              onClick={() => setViewingSystemId(sys.id)}
+              onClick={() => navigate(`/systems/${sys.id}`)}
               title={sys.description || sys.name}
               style={{
                 background: 'none', border: 'none', padding: 0,
@@ -878,7 +882,7 @@ export default function SystemsPage({
         const hint = inheritedHintFor(sys);
         return (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            <IconButton size="sm" icon="eye" label="View details" onClick={() => setViewingSystemId(sys.id)} />
+            <IconButton size="sm" icon="eye" label="View details" onClick={() => navigate(`/systems/${sys.id}`)} />
             {canWrite && <IconButton size="sm" icon="trash" label={hint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
               try {
                 const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
@@ -891,6 +895,30 @@ export default function SystemsPage({
       },
     },
   ].filter(Boolean) as DataTableColumn<SystemEntity>[]);
+
+  // ── Single-system detail (the /systems/:id route) ──
+  // Renders the shared SystemDetailModal in page mode (PageHeader + Back),
+  // reusing the page's data, people/type options, and the full-editor escape
+  // hatch. The full-editor form still overlays when "Edit integrations…" is hit.
+  if (focusSystemId) {
+    return (
+      <Suspense fallback={null}>
+        <SystemDetailModal
+          asPage
+          systemId={focusSystemId}
+          onClose={() => navigate('/systems')}
+          people={peopleList}
+          systemTypes={systemTypes}
+          canWrite={canWrite}
+          onSaved={fetchData}
+          onEditFull={canWrite ? () => {
+            const sys = systems.find((s) => s.id === focusSystemId);
+            if (sys) openEdit(sys);
+          } : undefined}
+        />
+      </Suspense>
+    );
+  }
 
   return (
     <div>
@@ -1468,7 +1496,7 @@ export default function SystemsPage({
             emptyMessage="No systems match the current filters."
             pageSize={20}
             countNoun={['system', 'systems']}
-            onRowClick={(s) => setViewingSystemId(s.id)}
+            onRowClick={(s) => navigate(`/systems/${s.id}`)}
           />
         )}
       </div>
@@ -1477,22 +1505,6 @@ export default function SystemsPage({
       {showSync && (
         <Suspense fallback={null}>
           <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
-        </Suspense>
-      )}
-      {viewingSystemId && (
-        <Suspense fallback={null}>
-          <SystemDetailModal
-            systemId={viewingSystemId}
-            onClose={() => setViewingSystemId(null)}
-            people={peopleList}
-            systemTypes={systemTypes}
-            canWrite={canWrite}
-            onSaved={fetchData}
-            onEditFull={canWrite ? () => {
-              const sys = systems.find((s) => s.id === viewingSystemId);
-              if (sys) { setViewingSystemId(null); openEdit(sys); }
-            } : undefined}
-          />
         </Suspense>
       )}
       {connectingSystem && (

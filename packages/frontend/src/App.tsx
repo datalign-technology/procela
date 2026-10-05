@@ -21,7 +21,9 @@ const ComparisonPage             = lazy(() => import('@/pages/ComparisonPage'));
 const SystemsAndDataPage         = lazy(() => import('@/pages/SystemsAndDataPage'));
 const AnalyzePage                = lazy(() => import('@/pages/AnalyzePage'));
 const DataAssetsHubPage          = lazy(() => import('@/pages/DataAssetsHubPage'));
+const DataAssetDetailPage        = lazy(() => import('@/pages/DataAssetDetailPage'));
 const SystemsHubPage             = lazy(() => import('@/pages/SystemsHubPage'));
+const SystemDetailPage           = lazy(() => import('@/pages/SystemDetailPage'));
 const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
 const OrganizationsPage          = lazy(() => import('@/pages/OrganizationsPage'));
 const OrganizationDetailPage     = lazy(() => import('@/pages/OrganizationDetailPage'));
@@ -97,7 +99,9 @@ export default function App() {
           {/* Orphan Assets folded into Data Assets as the "Unmapped" mapping
               filter. Redirect preserves old links (digest, AI, bookmarks). */}
           <Route path="/data-assets/orphans" element={<Navigate to="/data-assets?mapping=unmapped" replace />} />
+          <Route path="/data-assets/:id" element={<DataAssetDetailPage />} />
           <Route path="/systems" element={<SystemsHubPage />} />
+          <Route path="/systems/:id" element={<SystemDetailPage />} />
           {/* Data Mapping folded into the Process ↔ Data map as its Table
               view. Redirect preserves old links (dashboard, deep links). */}
           <Route path="/mappings" element={<Navigate to="/processes/data-map?view=table" replace />} />

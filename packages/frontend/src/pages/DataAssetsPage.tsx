@@ -10,8 +10,8 @@ import Card from '../components/Card';
 import OrgSidebarTree, { type OrgTreeNode } from '../components/OrgSidebarTree';
 import FieldStack from '../components/FieldStack';
 import Spinner from '../components/Spinner';
-import Modal from '../components/Modal';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import EditableField from '../components/EditableField';
 import DetailEditActions from '../components/DetailEditActions';
@@ -382,14 +382,24 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
 // the wider v1 layout.
 const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v2';
 
+const backLinkStyle: React.CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
+};
+
 export default function DataAssetsPage({
   embedded = false,
   actionsPortal,
+  focusAssetId,
 }: {
   embedded?: boolean;
   /** When embedded in the Data Assets hub, the toolbar renders into this
    *  slot (the tab-bar row) instead of a strip below the tabs. */
   actionsPortal?: HTMLElement | null;
+  /** When set, the page renders the single asset's 360° detail on its own
+   *  route (/data-assets/:id), matching the People detail-page family —
+   *  instead of the list + 360 modal. */
+  focusAssetId?: string;
 } = {}) {
   const { activeOrgId, canCreateValueStreams } = useOrgContext();
   // Governance-scope membership for the "in scope / not governed" row badge —
@@ -872,6 +882,21 @@ export default function DataAssetsPage({
     setSearchParams(next, { replace: true });
   }, [searchParams, activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ?edit=<id> opens the full add/edit form on the list — the escape hatch the
+  // detail page's "Edit all fields…" button links back to (the detail's own
+  // quick-edit covers the common fields; steward / retention / source binding
+  // live only in the full form).
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || showForm) return;
+    const asset = assets.find((a) => a.id === editId);
+    if (!asset) return;
+    openEdit(asset);
+    const next = new URLSearchParams(searchParams);
+    next.delete('edit');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, assets]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const domainForAsset = (assetId: string) => domainsList.find((d) => d.dataAssetIds?.includes(assetId));
 
   const openEdit = (asset: DataAssetEntity) => {
@@ -1177,6 +1202,12 @@ export default function DataAssetsPage({
     finally { setLoading360(false); }
   };
 
+  // Detail route (/data-assets/:id): load the 360 for the focused asset and
+  // end the breadcrumb on its name. Re-fetches when the id changes (navigating
+  // between assets from the Impact / Where-used panels).
+  useEffect(() => { if (focusAssetId) void open360(focusAssetId); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [focusAssetId]);
+  useBreadcrumbLeaf(focusAssetId ? viewing360?.asset.name : undefined);
+
   // In-modal view/edit for the asset's core own-fields. Advanced fields
   // (steward list, retention, source binding, domain, system-of-record) keep
   // the full list editor via the "Edit all fields…" button.
@@ -1221,7 +1252,7 @@ export default function DataAssetsPage({
               *  Renaming happens via the row's Edit pencil. */}
             <button
               type="button"
-              onClick={() => open360(asset.id)}
+              onClick={() => navigate(`/data-assets/${asset.id}`)}
               title="View details"
               style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
             >
@@ -1583,6 +1614,8 @@ export default function DataAssetsPage({
   return (
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
+      {/* List body — hidden on the single-asset /data-assets/:id detail route. */}
+      {!focusAssetId && (<>
       {/* Header. When embedded in the Data Assets hub the parent owns the
           page title, so we render just the action strip (mirroring the
           MappingsPage embedded pattern) instead of a second PageHeader. */}
@@ -2319,7 +2352,7 @@ export default function DataAssetsPage({
             emptyMessage="No data assets match the current filters."
             pageSize={20}
             countNoun={['data asset', 'data assets']}
-            onRowClick={(a) => { void open360(a.id); }}
+            onRowClick={(a) => navigate(`/data-assets/${a.id}`)}
             expansion={{
               expandedIds: expandedAssetId ? new Set([expandedAssetId]) : new Set(),
               onToggleExpanded: toggleExpandColumns,
@@ -2330,51 +2363,41 @@ export default function DataAssetsPage({
       </div>
         </div>
       </div>
+      </>)}
 
-      {/* Data Asset 360 View Modal */}
-      <Modal
-        open={!!(viewing360 || loading360)}
-        onClose={() => { if (!loading360) setViewing360(null); }}
-        size="lg"
-        kicker="DATA ASSET"
-        title={viewing360?.asset.name || 'Loading…'}
-        subtitle={viewing360?.asset.description}
-        ariaLabel={viewing360 ? `Data Asset: ${viewing360.asset.name}` : 'Data Asset details'}
-        actions={viewing360 ? (() => {
-          const detailInherited = isInheritedAsset(viewing360.asset.orgId, activeOrgId);
-          const ownerName = getOrgName(viewing360.asset.orgId);
-          return (
-            <>
-              <OwnerBadge assetOrgId={viewing360.asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
-              <DetailEditActions
-                editing={assetEdit.isEditing}
-                canEdit={canWrite && !detailInherited}
-                dirty={assetEdit.dirty}
-                saving={assetEdit.saving}
-                onEdit={assetEdit.enter}
-                onCancel={assetEdit.cancel}
-                onSave={assetEdit.save}
-                disabledHint={detailInherited ? `Owned at ${ownerName}. Switch the "Working in..." scope to ${ownerName} to edit.` : undefined}
-              />
-            </>
-          );
-        })() : undefined}
-        footer={viewing360 ? (
-          // Explicit footer Close — keyboard / mobile users may not
-          // discover the header X or backdrop click; the predictable
-          // button-shaped affordance lives here.
-          <button
-            onClick={() => setViewing360(null)}
-            style={{
-              padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-              fontSize: 13, fontWeight: 500, cursor: 'pointer',
-            }}
-          >
-            Close
-          </button>
-        ) : undefined}
-      >
+      {/* Data Asset 360° detail — the /data-assets/:id route renders the same
+          body the modal used, as the page content with People-style chrome. */}
+      {focusAssetId && (
+      <div>
+        <PageHeader
+          kicker="DATA ASSET"
+          title={viewing360?.asset.name || 'Loading…'}
+          copyId={viewing360?.asset.id}
+          copyLabel="Copy asset ID"
+          subtitle={viewing360?.asset.description}
+          actions={<>
+            {viewing360 && (() => {
+              const detailInherited = isInheritedAsset(viewing360.asset.orgId, activeOrgId);
+              const ownerName = getOrgName(viewing360.asset.orgId);
+              return (
+                <>
+                  <OwnerBadge assetOrgId={viewing360.asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+                  <DetailEditActions
+                    editing={assetEdit.isEditing}
+                    canEdit={canWrite && !detailInherited}
+                    dirty={assetEdit.dirty}
+                    saving={assetEdit.saving}
+                    onEdit={assetEdit.enter}
+                    onCancel={assetEdit.cancel}
+                    onSave={assetEdit.save}
+                    disabledHint={detailInherited ? `Owned at ${ownerName}. Switch the "Working in..." scope to ${ownerName} to edit.` : undefined}
+                  />
+                </>
+              );
+            })()}
+            <Link to="/data-assets" style={backLinkStyle}>{'←'} Back to Data Assets</Link>
+          </>}
+        />
         {loading360 ? (
           <Spinner center label="Loading…" />
         ) : viewing360 ? (
@@ -2392,7 +2415,7 @@ export default function DataAssetsPage({
               </div>
               <div style={{ marginTop: 14 }}>
                 <button
-                  onClick={() => { const asset = assets.find((x) => x.id === viewing360.asset.id); if (asset) { setViewing360(null); openEdit(asset); } }}
+                  onClick={() => navigate(`/data-assets?edit=${viewing360.asset.id}`)}
                   style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-md)', padding: '5px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
                 >
                   Edit steward &amp; all fields&hellip;
@@ -2491,9 +2514,9 @@ export default function DataAssetsPage({
                     stays as the general-purpose informational lookup. */}
                 <ImpactAnalysisPanel
                   assetId={viewing360.asset.id}
-                  onNavigateToActivity={(nodeId) => { setViewing360(null); navigate(`/processes?node=${encodeURIComponent(nodeId)}`); }}
-                  onNavigateToPerson={(personId) => { setViewing360(null); navigate(`/people/${encodeURIComponent(personId)}`); }}
-                  onNavigateToAsset={(id) => { void open360(id); }}
+                  onNavigateToActivity={(nodeId) => { navigate(`/processes?node=${encodeURIComponent(nodeId)}`); }}
+                  onNavigateToPerson={(personId) => { navigate(`/people/${encodeURIComponent(personId)}`); }}
+                  onNavigateToAsset={(id) => navigate(`/data-assets/${id}`)}
                 />
 
                 {/* Cross-layer view — same WhereUsed shape used on Systems,
@@ -2624,7 +2647,8 @@ export default function DataAssetsPage({
               </>
           )
             ) : null}
-      </Modal>
+      </div>
+      )}
 
       {linkModalAsset && (
         <Suspense fallback={null}>

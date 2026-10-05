@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { CSSProperties } from 'react';
 import { useScrollLock } from '../hooks/useScrollLock';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import Modal from './Modal';
+import PageHeader from './PageHeader';
+import { useBreadcrumbLeaf } from './BreadcrumbContext';
 import WhereUsed, { WhereUsedGroup } from './WhereUsed';
 import CommentsPanel from './CommentsPanel';
 import ActivityFeed from './ActivityFeed';
@@ -112,10 +114,18 @@ interface Props {
   /** Escape hatch to the full editor (integrations, custodians, connections)
    *  that the in-modal quick-edit doesn't cover. */
   onEditFull?: () => void;
+  /** Render as a routed detail page (PageHeader + Back) instead of a modal —
+   *  the /systems/:id surface. Same body either way. */
+  asPage?: boolean;
 }
 
-export default function SystemDetailModal({ systemId, onClose, people = [], systemTypes = [], canWrite = false, onSaved, onEditFull }: Props) {
-  useScrollLock(!!systemId);
+const backLinkStyle: CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
+};
+
+export default function SystemDetailModal({ systemId, onClose, people = [], systemTypes = [], canWrite = false, onSaved, onEditFull, asPage = false }: Props) {
+  useScrollLock(!!systemId && !asPage);
   const navigate = useNavigate();
   const custodianLabel = useTerm('custodian');
   const tierLabel = useTierLabel();
@@ -247,27 +257,23 @@ export default function SystemDetailModal({ systemId, onClose, people = [], syst
       ].filter(Boolean)
     : [];
 
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      size="lg"
-      kicker="SYSTEM"
-      title={data?.system.name || 'Loading…'}
-      subtitle={metaSegments.length > 0 ? metaSegments.join(' · ') : undefined}
-      ariaLabel={data ? `System: ${data.system.name}` : 'System details'}
-      actions={data ? (
-        <DetailEditActions
-          editing={m.isEditing}
-          canEdit={canWrite}
-          dirty={m.dirty}
-          saving={m.saving}
-          onEdit={m.enter}
-          onCancel={m.cancel}
-          onSave={m.save}
-        />
-      ) : undefined}
-    >
+  // On the /systems/:id route the trail ends on the system's name.
+  useBreadcrumbLeaf(asPage ? data?.system.name : undefined);
+
+  const editActions = data ? (
+    <DetailEditActions
+      editing={m.isEditing}
+      canEdit={canWrite}
+      dirty={m.dirty}
+      saving={m.saving}
+      onEdit={m.enter}
+      onCancel={m.cancel}
+      onSave={m.save}
+    />
+  ) : undefined;
+
+  const detailBody = (
+    <>
         {/* Edit mode replaces the read-only 360 with the system's own fields;
             the relationships (where-used, integrations, discussion, history)
             are read-only context and hidden while editing. */}
@@ -384,6 +390,40 @@ export default function SystemDetailModal({ systemId, onClose, people = [], syst
         )}
           </>
         )}
+    </>
+  );
+
+  if (asPage) {
+    return (
+      <div>
+        <PageHeader
+          kicker="SYSTEM"
+          title={data?.system.name || 'Loading…'}
+          copyId={data?.system.id}
+          copyLabel="Copy system ID"
+          subtitle={metaSegments.length > 0 ? metaSegments.join(' · ') : undefined}
+          actions={<>
+            {editActions}
+            <Link to="/systems" style={backLinkStyle}>{'←'} Back to Systems</Link>
+          </>}
+        />
+        {detailBody}
+      </div>
+    );
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      kicker="SYSTEM"
+      title={data?.system.name || 'Loading…'}
+      subtitle={metaSegments.length > 0 ? metaSegments.join(' · ') : undefined}
+      ariaLabel={data ? `System: ${data.system.name}` : 'System details'}
+      actions={editActions}
+    >
+      {detailBody}
     </Modal>
   );
 }
