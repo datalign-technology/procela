@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { renderNavIcon } from '../components/navIcons';
+import PageHeader from '../components/PageHeader';
+import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -13,10 +15,11 @@ import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
-import Modal from '../components/Modal';
 import Button from '../components/Button';
 import SectionCard from '../components/SectionCard';
 import PersonPicker from '../components/PersonPicker';
+// Modal import removed: the single-role detail now opens on its own route
+// (/dama-roles/:roleType) via RolePreviewPane rendered as the page body.
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { SkeletonRows } from '../components/Skeleton';
@@ -273,12 +276,22 @@ interface AgentOption { id: string; name: string; status: string; orgIds: string
 
 const emptyForm: FormData = { assigneeType: 'person', personId: '', agentId: '', roleType: 'CDO', scopeType: 'ORG', scopeId: '' };
 
+const backLinkStyle: React.CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
+};
+
 export default function DamaRolesPage({
   embedded = false,
   actionsPortal,
+  focusRoleType,
 }: {
   embedded?: boolean;
   actionsPortal?: HTMLElement | null;
+  // When set, the page renders the single role's detail (holders / matrix /
+  // assign) on its own route (/dama-roles/:roleType), matching the People
+  // detail-page family — instead of the list + preview modal.
+  focusRoleType?: string;
 } = {}) {
   const { activeOrgId } = useOrgContext();
   // /dama-roles writes are governance:write = admin-only. Gate assignment /
@@ -319,11 +332,9 @@ export default function DamaRolesPage({
   // preview (previewRoleType), independent of this filter.
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  // Which role's detail pane is open on the right. Mirrors the People
-  // page's preview-on-click pattern — click any row in the table to
-  // open the role's holders/matrix in the right rail; click again to
-  // close.
-  const [previewRoleType, setPreviewRoleType] = useState<string | null>(null);
+  // On the detail route (/dama-roles/:roleType) the trail ends on the role's
+  // name ("Dashboard › Roles › Data Owner"); the list route registers no leaf.
+  useBreadcrumbLeaf(focusRoleType ? (ROLE_TYPE_LABELS[focusRoleType] || focusRoleType) : undefined);
 
   const fetchData = useCallback(async () => {
     try {
@@ -540,59 +551,70 @@ export default function DamaRolesPage({
 
   return (
     <div>
-      <EmbeddablePageHeader
-        embedded={embedded}
-        actionsPortal={actionsPortal}
-        title="Governance Roles"
-        subtitle="Assign data management governance roles to people across organizations and data domains."
-        actions={<>
-          <SavedViewsMenu
-            pageKey="dama-roles"
-            currentFilters={{ filterCategory, searchQuery }}
-            onApply={(f) => {
-              setFilterCategory((f.filterCategory as string | null) ?? null);
-              setSearchQuery((f.searchQuery as string) || '');
-            }}
-          />
-          {roles.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'governance-roles',
-              sheetName: 'Governance Roles',
-              headers: ['Holder', 'Type', 'Governance Role', 'Organization', 'Since'],
-              rows: roles.map((r) => [
-                r.agentId ? (r.agentName || '') : (r.personName || ''),
-                r.agentId ? 'Agent' : 'Person',
-                ROLE_TYPE_LABELS[r.roleType] || r.roleType,
-                scopeName(r.scopeId),
-                new Date(r.since).toLocaleDateString(),
-              ]),
-            })} />
-          )}
-          {isAdmin && <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />}
-        </>}
-      >
-      </EmbeddablePageHeader>
+      {focusRoleType ? (
+        <PageHeader
+          kicker="Governance role"
+          title={ROLE_TYPE_LABELS[focusRoleType] || focusRoleType}
+          subtitle={ROLE_CATEGORIES[focusRoleType] ? `${ROLE_CATEGORIES[focusRoleType]} role` : undefined}
+          actions={<Link to="/dama-roles" style={backLinkStyle}>{'←'} Back to Roles</Link>}
+        />
+      ) : (
+        <>
+          <EmbeddablePageHeader
+            embedded={embedded}
+            actionsPortal={actionsPortal}
+            title="Governance Roles"
+            subtitle="Assign data management governance roles to people across organizations and data domains."
+            actions={<>
+              <SavedViewsMenu
+                pageKey="dama-roles"
+                currentFilters={{ filterCategory, searchQuery }}
+                onApply={(f) => {
+                  setFilterCategory((f.filterCategory as string | null) ?? null);
+                  setSearchQuery((f.searchQuery as string) || '');
+                }}
+              />
+              {roles.length > 0 && (
+                <ExportMenu build={() => ({
+                  filenameBase: 'governance-roles',
+                  sheetName: 'Governance Roles',
+                  headers: ['Holder', 'Type', 'Governance Role', 'Organization', 'Since'],
+                  rows: roles.map((r) => [
+                    r.agentId ? (r.agentName || '') : (r.personName || ''),
+                    r.agentId ? 'Agent' : 'Person',
+                    ROLE_TYPE_LABELS[r.roleType] || r.roleType,
+                    scopeName(r.scopeId),
+                    new Date(r.since).toLocaleDateString(),
+                  ]),
+                })} />
+              )}
+              {isAdmin && <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />}
+            </>}
+          >
+          </EmbeddablePageHeader>
 
-      {!loading && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            type="search"
-            aria-label="Search roles" placeholder="Search by person, organization, or role..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              flex: '1 1 280px', maxWidth: 420,
-              fontSize: 13, padding: '6px 10px',
-              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-              background: 'var(--color-surface)',
-            }}
-          />
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-            {filterCategory
-              ? `${filterCategory} roles`
-              : `${roles.length} assignment${roles.length === 1 ? '' : 's'} across ${Object.keys(ROLE_TYPE_LABELS).length} roles`}
-          </div>
-        </div>
+          {!loading && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="search"
+                aria-label="Search roles" placeholder="Search by person, organization, or role..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  flex: '1 1 280px', maxWidth: 420,
+                  fontSize: 13, padding: '6px 10px',
+                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface)',
+                }}
+              />
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+                {filterCategory
+                  ? `${filterCategory} roles`
+                  : `${roles.length} assignment${roles.length === 1 ? '' : 's'} across ${Object.keys(ROLE_TYPE_LABELS).length} roles`}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Assign Form */}
@@ -824,12 +846,11 @@ export default function DamaRolesPage({
         onCancel={() => setConfirmDelete(null)}
       />
 
-      {/* Two-column layout: role-type sidebar on the left, role catalog
-       *  on the right. Same scan pattern as /data-assets, /systems, and
-       *  /decision-rights. The sidebar mirrors the main panel's
-       *  category structure (Executive / Business / Technical /
-       *  Entity-attached) and shows a fill summary per section so
-       *  staffing coverage is visible at a glance. */}
+      {/* ── List body (hidden on the single-role detail route) ──
+       *  Same scan pattern as /data-assets, /systems, and /decision-rights:
+       *  category filter chips above a flat role catalog. Clicking a row
+       *  navigates to that role's detail route. */}
+      {!focusRoleType && (
       <div>
         <div>
           {/* Category filter chips. Previously a pill per role stacked
@@ -888,8 +909,8 @@ export default function DamaRolesPage({
                 systems={systems}
                 dataAssets={dataAssets}
                 personById={personById}
-                previewRoleType={previewRoleType}
-                onSelectRole={(rt) => setPreviewRoleType(rt)}
+                previewRoleType={null}
+                onSelectRole={(rt) => navigate(`/dama-roles/${rt}`)}
                 onAssign={openAddForRole}
                 programInUse={roles.length > 0}
                 canEdit={isAdmin}
@@ -898,36 +919,38 @@ export default function DamaRolesPage({
           </Card>
         </div>
       </div>
+      )}
 
-      {/* Role detail opens in a modal window on row click. */}
-      {previewRoleType && (
-        <Modal
-          open
-          onClose={() => setPreviewRoleType(null)}
-          kicker="Governance role"
-          title={ROLE_TYPE_LABELS[previewRoleType] || previewRoleType}
-          size="lg"
-        >
-          <RolePreviewPane
-            bare
-            roleType={previewRoleType}
-            dama={filteredRoles.filter((r) => r.roleType === previewRoleType)}
-            domains={domains}
-            systems={systems}
-            dataAssets={dataAssets}
-            personById={personById}
-            manuals={manualsByRole.get(previewRoleType) || []}
-            roleBadge={roleBadge}
-            resolveScope={resolveScope}
-            onClose={() => setPreviewRoleType(null)}
-            onAssign={() => openAddForRole(previewRoleType)}
-            onAssignToEntity={openAddForEntity}
-            navigateToEntity={navigateToEntity}
-            onOpenDrawer={openRoleDrawer}
-            setConfirmDelete={setConfirmDelete}
-            canEdit={isAdmin}
-          />
-        </Modal>
+      {/* ── Single-role detail (the /dama-roles/:roleType route) ──
+       *  Reuses the same RolePreviewPane the modal used, rendered as the
+       *  page body inside a Card. Assign / remove actions reuse the shared
+       *  assign form + confirm dialog above. */}
+      {focusRoleType && (
+        loading ? (
+          <Card><SkeletonRows rows={4} columns={2} /></Card>
+        ) : (
+          <Card padding={0}>
+            <RolePreviewPane
+              bare
+              roleType={focusRoleType}
+              dama={roles.filter((r) => r.roleType === focusRoleType)}
+              domains={domains}
+              systems={systems}
+              dataAssets={dataAssets}
+              personById={personById}
+              manuals={manualsByRole.get(focusRoleType) || []}
+              roleBadge={roleBadge}
+              resolveScope={resolveScope}
+              onClose={() => navigate('/dama-roles')}
+              onAssign={() => openAddForRole(focusRoleType)}
+              onAssignToEntity={openAddForEntity}
+              navigateToEntity={navigateToEntity}
+              onOpenDrawer={openRoleDrawer}
+              setConfirmDelete={setConfirmDelete}
+              canEdit={isAdmin}
+            />
+          </Card>
+        )
       )}
     </div>
   );
