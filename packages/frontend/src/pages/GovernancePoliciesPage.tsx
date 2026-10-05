@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Bot } from 'lucide-react';
+import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import { apiClient } from '../api/client';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
@@ -29,7 +30,6 @@ import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
-import Modal from '../components/Modal';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { useFormValidation } from '../hooks/useFormValidation';
@@ -137,6 +137,11 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
 }
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
+
+const backLinkStyle: React.CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
+};
 
 type PolicyColId = 'code' | 'name' | 'category' | 'status' | 'owner' | 'controls' | 'created';
 const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible: boolean }> = [
@@ -268,7 +273,7 @@ function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved }: {
   );
 }
 
-export default function GovernancePoliciesPage() {
+export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyId?: string } = {}) {
   const { activeOrgId } = useOrgContext();
   // Governance CRUD (policies + controls) needs governance:write = admins.
   // Attachments go through the collaboration:write route (editors too), so
@@ -360,6 +365,13 @@ export default function GovernancePoliciesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useRefreshOnFocus(fetchData);
+
+  // On the detail route (/governance-policies/:id) the control CRUD handlers
+  // target `expandedPolicyId`, so point it at the focused document; the trail
+  // ends on the document name ("Dashboard › Documents › Data Classification").
+  useEffect(() => { if (focusPolicyId) setExpandedPolicyId(focusPolicyId); }, [focusPolicyId]);
+  const focusedPolicy = focusPolicyId ? policies.find((p) => p.id === focusPolicyId) : null;
+  useBreadcrumbLeaf(focusedPolicy?.name);
 
   // ── Policy CRUD ──
 
@@ -496,7 +508,7 @@ export default function GovernancePoliciesPage() {
           <>
             <button
               type="button"
-              onClick={() => { setExpandedPolicyId(pol.id); closeControlForm(); }}
+              onClick={() => navigate(`/governance-policies/${pol.id}`)}
               style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer', textAlign: 'left' }}
             >
               {pol.name}
@@ -735,6 +747,50 @@ export default function GovernancePoliciesPage() {
     );
   };
 
+  // ── Single-document detail (the /governance-policies/:id route) ──
+  // Reuses the same body the modal rendered (details + source + controls +
+  // procedures + linked docs), as the page content with People-style chrome.
+  if (focusPolicyId) {
+    const backLink = <Link to="/governance-policies" style={backLinkStyle}>{'←'} Back to Documents</Link>;
+    if (loadError) {
+      return <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />;
+    }
+    if (loading) {
+      return (
+        <div>
+          <PageHeader kicker="Governance document" title="Loading…" actions={backLink} />
+          <Card><SkeletonRows rows={4} columns={2} /></Card>
+        </div>
+      );
+    }
+    if (!focusedPolicy) {
+      return (
+        <EmptyState
+          title="Couldn't load this document"
+          description="It may have been deleted, or belongs to a different organization."
+          action={{ label: 'Back to Documents', onClick: () => navigate('/governance-policies') }}
+        />
+      );
+    }
+    return (
+      <div>
+        <PageHeader
+          kicker="Governance document"
+          title={focusedPolicy.name}
+          copyId={focusedPolicy.id}
+          copyLabel="Copy document ID"
+          subtitle={focusedPolicy.code}
+          actions={backLink}
+        />
+        <ConfirmDialog open={confirmDeleteControl !== null} title="Delete Control?"
+          message="This will permanently delete this control." confirmLabel="Delete"
+          onConfirm={async () => { const id = confirmDeleteControl; setConfirmDeleteControl(null); if (id) await handleDeleteControl(id); }}
+          onCancel={() => setConfirmDeleteControl(null)} />
+        {renderPolicyExpansion(focusedPolicy)}
+      </div>
+    );
+  }
+
   return (
     <div>
       <DependencyBanner phase="Governance documents should follow governance structure and domain definition." checks={[
@@ -852,28 +908,10 @@ export default function GovernancePoliciesPage() {
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all documents"
             emptyMessage="No documents match the current filters."
-            onRowClick={(p) => { setExpandedPolicyId(p.id); closeControlForm(); }}
+            onRowClick={(p) => navigate(`/governance-policies/${p.id}`)}
           />
         )}
       </div>
-
-      {/* Document detail opens in a modal window on row click. */}
-      {(() => {
-        const pol = expandedPolicyId ? policies.find((p) => p.id === expandedPolicyId) : null;
-        if (!pol) return null;
-        return (
-          <Modal
-            open
-            onClose={() => { setExpandedPolicyId(null); closeControlForm(); }}
-            kicker="Governance document"
-            title={pol.name}
-            subtitle={pol.code}
-            size="lg"
-          >
-            {renderPolicyExpansion(pol)}
-          </Modal>
-        );
-      })()}
     </div>
   );
 }

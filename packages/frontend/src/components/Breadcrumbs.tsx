@@ -34,7 +34,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'data-lineage': 'Lineage',
   'data-quality': 'Data Quality',
   'control-tower': 'Control Tower',
-  'governance-policies': 'Policies',
+  'governance-policies': 'Documents',
   'governance-work': 'Tasks & Issues',
   'enterprise-view': 'Enterprise View',
   'reports': 'Reports',

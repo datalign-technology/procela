@@ -46,6 +46,8 @@ const GovernancePoliciesPage     = lazy(() => import('@/pages/GovernancePolicies
 const GovernanceCalendarPage     = lazy(() => import('@/pages/GovernanceCalendarPage'));
 const DecisionRightsPage         = lazy(() => import('@/pages/DecisionRightsPage'));
 const DecisionRightDetailPage    = lazy(() => import('@/pages/DecisionRightDetailPage'));
+const GovernanceRoleDetailPage   = lazy(() => import('@/pages/GovernanceRoleDetailPage'));
+const GovernanceDocumentDetailPage = lazy(() => import('@/pages/GovernanceDocumentDetailPage'));
 const BusinessGlossaryPage       = lazy(() => import('@/pages/BusinessGlossaryPage'));
 const GlossaryTermDetailPage     = lazy(() => import('@/pages/GlossaryTermDetailPage'));
 const GovernanceFoundationPage   = lazy(() => import('@/pages/GovernanceFoundationPage'));
@@ -118,6 +120,7 @@ export default function App() {
           <Route path="/operations-manual" element={<Navigate to="/documentation?tab=manual" replace />} />
           <Route path="/sops" element={<Navigate to="/documentation?tab=procedures" replace />} />
           <Route path="/dama-roles" element={<RolesPage />} />
+          <Route path="/dama-roles/:roleType" element={<GovernanceRoleDetailPage />} />
           <Route path="/roles" element={<Navigate to="/dama-roles" replace />} />
           <Route path="/raci" element={<Navigate to="/dama-roles?tab=raci" replace />} />
           <Route path="/control-tower" element={<Navigate to="/enterprise-view" replace />} />
@@ -136,6 +139,8 @@ export default function App() {
           <Route path="/governance-work/tasks/:id" element={<GovernanceTaskDetailPage />} />
           <Route path="/governance-work/issues/:id" element={<GovernanceIssueDetailPage />} />
           <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
+          <Route path="/governance-policies/:id" element={<GovernanceDocumentDetailPage />} />
+          <Route path="/governance-documents/:id" element={<GovernanceDocumentDetailPage />} />
           {/* Canonical alias — the page now covers Charter / Framework /
               Standard / Policy, so the broader URL reads honestly. The
               /governance-policies path is kept indefinitely as a
