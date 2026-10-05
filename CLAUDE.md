@@ -540,14 +540,27 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   entry), and non-entity-list tables
   (reports, the RACI matrix, the audit log, static reference tables,
   nested detail sub-tables).
-  **Whole-row click opens the row's detail** — a single entity's record
-  detail opens in a **detail `<Modal>`** via `onRowClick(row)` (Data
-  Assets → the 360 modal, Systems → the system modal, and Decision
-  Rights, SOPs, Data Quality rules, Governance Documents, Governance
-  Roles, Governance Calendar, Data Lineage flows, Governance Tasks,
-  Governance Issues, Business Glossary → a `<Modal>` wrapping the
-  existing view→Edit→Save detail body, looked up fresh from state by
-  id). `expansion` with
+  **Whole-row click opens the row's detail.** The richer entity lists
+  now **navigate to a dedicated `/x/:id` detail page** (the People
+  pattern — breadcrumb + Back + a `<PageHeader>` with kicker / title /
+  copy-ID), not a modal: People, Organizations, Agents, Skills,
+  Governance Groups, **Data Assets** (`/data-assets/:id`, the 360° body),
+  **Systems** (`/systems/:id`), **Business Glossary**
+  (`/business-glossary/:id`), **Decision Rights** (`/decision-rights/:id`),
+  **Governance Documents** (`/governance-policies/:id`), **Governance
+  Roles** (`/dama-roles/:roleType` — keyed by role type, no DB id),
+  **Governance Tasks** (`/governance-work/tasks/:id`), **Governance
+  Issues** (`/governance-work/issues/:id`), and **Reports**
+  (`/reports/:id`). A list page reuses its own data + detail body for the
+  page via a `focus*` prop (`focusAssetId` / `focusSystemId` /
+  `focusPolicyId` / `focusRoleType` / `focusReportId`) or, for the
+  smaller bodies, a thin wrapper renders an exported `ExpandedX` under a
+  `<PageHeader>`; either way a `XDetailPage` wrapper reads the route param
+  and the list's own row-click `navigate()`s to it. A still-small set of
+  lists keep the **detail `<Modal>`** via `onRowClick(row)` (a `<Modal>`
+  wrapping the view→Edit→Save body, looked up fresh from state by id):
+  SOPs, Data Quality rules, Governance Calendar, Data Lineage flows.
+  `expansion` with
   `trigger:'row-click'` is now reserved for a
   per-row **drill-down** — a parent you expand to browse/act on its
   children (Data Assets' bound columns, the Data Quality assets tab) —
@@ -557,9 +570,8 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   row's own controls work without each needing to `stopPropagation`.
   Keep the row's name a focusable `<button>` / `clickable()` element —
   it's the keyboard path to the detail. Lists with no row-level detail
-  (Mappings, Connections, Audit Log) stay inert; Agents and Skills
-  navigate to a detail page. Do NOT re-expose a teal name-link as the
-  only way to open a row.
+  (Mappings, Connections, Audit Log) stay inert. Do NOT re-expose a teal
+  name-link as the only way to open a row.
 - `useRowSelection` — the row-selection hook wired into `DataTable`'s
   `selection` prop. Build it over the *filtered* rows so select-all
   matches what's visible. Do NOT hand-roll a `selectedIds` Set +

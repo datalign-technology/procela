@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
+import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import ExportMenu from '../components/ExportMenu';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
+import EmptyState from '../components/EmptyState';
 import IconButton, { Icon } from '../components/IconButton';
 import SecondaryButton from '../components/SecondaryButton';
 import Button from '../components/Button';
@@ -117,6 +119,11 @@ const badgeStyle = (bg: string, color: string): React.CSSProperties => ({
   marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: bg, color, whiteSpace: 'nowrap',
 });
 
+const backLinkStyle: React.CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
+};
+
 // A folder row in the rail. A module-level component (not an inline render
 // function) so its useSortable state survives a parent re-render mid-drag.
 // User folders get a drag handle and are reorder targets; the system Public
@@ -179,7 +186,7 @@ function FolderRailRow({ folder, active, count, onSelect, onEdit, onReorder }: {
 
 // ── User Reports — saved Report Builder definitions ────────────────────────
 
-function UserReportsTab() {
+function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
@@ -242,6 +249,15 @@ function UserReportsTab() {
       .finally(() => { if (!cancelled) setDetailLoading(false); });
     return () => { cancelled = true; };
   }, [viewingReport]);
+
+  // Detail route (/reports/:id): once the list has loaded, select the focused
+  // report so the definition-fetch effect above runs; end the trail on its name.
+  useEffect(() => {
+    if (!focusReportId || !reports) return;
+    const r = reports.find((x) => x.id === focusReportId);
+    if (r) setViewingReport(r);
+  }, [focusReportId, reports]);
+  useBreadcrumbLeaf(focusReportId ? viewingReport?.name : undefined);
 
   const folderName = (id: string | null): string | null =>
     (id ? folders.find((f) => f.id === id)?.name ?? null : null);
@@ -402,7 +418,7 @@ function UserReportsTab() {
           <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)' }}>{renderNavIcon('/reports', { size: 16 })}</span>
           <button
             type="button"
-            onClick={() => setViewingReport(r)}
+            onClick={() => navigate(`/reports/${r.id}`)}
             title={r.name}
             style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 600, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
           >
@@ -554,6 +570,8 @@ function UserReportsTab() {
 
   return (
     <>
+      {/* List body — hidden on the single-report /reports/:id detail route. */}
+      {!focusReportId && (
       <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16, alignItems: 'start' }}>
         {rail}
         <div>
@@ -570,11 +588,12 @@ function UserReportsTab() {
               rowKey={(r) => r.id}
               sort={{ sortKey, sortDir, onSort: toggleSort }}
               emptyMessage="No reports in this folder."
-              onRowClick={(r) => setViewingReport(r)}
+              onRowClick={(r) => navigate(`/reports/${r.id}`)}
             />
           )}
         </div>
       </div>
+      )}
 
       {result && (
         <Modal
@@ -645,11 +664,15 @@ function UserReportsTab() {
         </Modal>
       )}
 
-      {/* Report detail "window" — opened on row click. Read-only view of what
-          the report selects, with Run and Edit (→ Builder, the real editor)
-          in the header. Matches the Data Assets / Systems detail-modal
-          pattern; a report's query is edited in the Builder, not inline. */}
-      {viewingReport && (() => {
+      {/* Report detail — the /reports/:id route. Read-only view of what the
+          report selects, with Run and Edit (→ Builder, the real editor) in the
+          header; the report's query is edited in the Builder, not inline. */}
+      {focusReportId && !viewingReport && (
+        reports === null
+          ? <div><PageHeader kicker="Report" title="Loading…" actions={<Link to="/reports" style={backLinkStyle}>{'←'} Back to Reports</Link>} /><SkeletonRows rows={3} columnWidths={[200, null]} /></div>
+          : <EmptyState title="Couldn't load this report" description="It may have been deleted, or you don't have access to it." action={{ label: 'Back to Reports', onClick: () => navigate('/reports') }} />
+      )}
+      {focusReportId && viewingReport && (() => {
         const r = viewingReport;
         const fname = folderName(r.folderId);
         const labelStyle: React.CSSProperties = { fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' };
@@ -657,28 +680,29 @@ function UserReportsTab() {
         const filters = detail?.definition.filters || [];
         const sort = detail?.definition.sort;
         return (
-          <Modal
-            open
-            onClose={() => setViewingReport(null)}
-            size="lg"
-            kicker={r.primaryEntity}
-            title={r.name}
-            ariaLabel={`Report: ${r.name}`}
-            subtitle={
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                {r.visibility === 'org'
-                  ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>SHARED</span>
-                  : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
-                {fname && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="folder" size={12} />{fname}</span>}
-              </span>
-            }
-            actions={
-              <>
-                <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => { setViewingReport(null); runReport(r); }} />
-                <Button size="sm" leadingIcon={<Icon name="edit" size={13} />} onClick={() => navigate(`/reports/builder/${r.id}`)}>Edit</Button>
-              </>
-            }
-          >
+          <div>
+            <PageHeader
+              kicker={r.primaryEntity}
+              title={r.name}
+              copyId={r.id}
+              copyLabel="Copy report ID"
+              subtitle={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {r.visibility === 'org'
+                    ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>SHARED</span>
+                    : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
+                  {fname && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="folder" size={12} />{fname}</span>}
+                </span>
+              }
+              actions={
+                <>
+                  <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => runReport(r)} />
+                  <Button size="sm" leadingIcon={<Icon name="edit" size={13} />} onClick={() => navigate(`/reports/builder/${r.id}`)}>Edit</Button>
+                  <Link to="/reports" style={backLinkStyle}>{'←'} Back to Reports</Link>
+                </>
+              }
+            />
+            <Card>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {/* Description */}
               <div>
@@ -747,7 +771,8 @@ function UserReportsTab() {
                 </div>
               )}
             </div>
-          </Modal>
+            </Card>
+          </div>
         );
       })()}
 
@@ -838,10 +863,15 @@ function UserReportsTab() {
   );
 }
 
-export default function ReportsPage() {
+export default function ReportsPage({ focusReportId }: { focusReportId?: string } = {}) {
   const navigate = useNavigate();
   // Reports is the report catalog + Builder. The Executive Report and
   // Governance Maturity Scorecard tabs were removed, so there's no tab bar.
+  // On the /reports/:id detail route the tab renders its own detail header,
+  // so the list's "Reports" PageHeader is suppressed.
+  if (focusReportId) {
+    return <div><UserReportsTab focusReportId={focusReportId} /></div>;
+  }
   return (
     <div>
       <PageHeader
