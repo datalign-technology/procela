@@ -40,10 +40,14 @@ const DocumentationPage          = lazy(() => import('@/pages/DocumentationPage'
 const RolesPage                  = lazy(() => import('@/pages/RolesPage'));
 const DataLineagePage            = lazy(() => import('@/pages/DataLineagePage'));
 const GovernanceWorkPage         = lazy(() => import('@/pages/GovernanceWorkPage'));
+const GovernanceTaskDetailPage   = lazy(() => import('@/pages/GovernanceTaskDetailPage'));
+const GovernanceIssueDetailPage  = lazy(() => import('@/pages/GovernanceIssueDetailPage'));
 const GovernancePoliciesPage     = lazy(() => import('@/pages/GovernancePoliciesPage'));
 const GovernanceCalendarPage     = lazy(() => import('@/pages/GovernanceCalendarPage'));
 const DecisionRightsPage         = lazy(() => import('@/pages/DecisionRightsPage'));
+const DecisionRightDetailPage    = lazy(() => import('@/pages/DecisionRightDetailPage'));
 const BusinessGlossaryPage       = lazy(() => import('@/pages/BusinessGlossaryPage'));
+const GlossaryTermDetailPage     = lazy(() => import('@/pages/GlossaryTermDetailPage'));
 const GovernanceFoundationPage   = lazy(() => import('@/pages/GovernanceFoundationPage'));
 const EnterpriseViewPage         = lazy(() => import('@/pages/EnterpriseViewPage'));
 const AnalysisPage               = lazy(() => import('@/pages/AnalysisPage'));
@@ -129,6 +133,8 @@ export default function App() {
               Redirect preserves old links (Settings connector panel, bookmarks). */}
           <Route path="/connections" element={<Navigate to="/systems?tab=connections" replace />} />
           <Route path="/governance-work" element={<GovernanceWorkPage />} />
+          <Route path="/governance-work/tasks/:id" element={<GovernanceTaskDetailPage />} />
+          <Route path="/governance-work/issues/:id" element={<GovernanceIssueDetailPage />} />
           <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
           {/* Canonical alias — the page now covers Charter / Framework /
               Standard / Policy, so the broader URL reads honestly. The
@@ -138,7 +144,9 @@ export default function App() {
           <Route path="/governance-documents" element={<GovernancePoliciesPage />} />
           <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
           <Route path="/decision-rights" element={<DecisionRightsPage />} />
+          <Route path="/decision-rights/:id" element={<DecisionRightDetailPage />} />
           <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
+          <Route path="/business-glossary/:id" element={<GlossaryTermDetailPage />} />
           {/* The program has no page of its own — its scope, principles, and
               operating model live on Governance → Foundation. (The former
               phase tracker / lifecycle were retired with Get Started.) */}

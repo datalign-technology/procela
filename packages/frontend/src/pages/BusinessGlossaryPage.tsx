@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { activateOnKeyStop } from '../lib/a11y';
@@ -25,8 +26,6 @@ import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 // Lazy: only renders when the user opens the connection picker.
 const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
-// Lazy: only renders when the user opens a term's detail.
-const GlossaryTermDetailModal = lazy(() => import('../components/GlossaryTermDetailModal'));
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -200,6 +199,7 @@ export default function BusinessGlossaryPage() {
   const { activeOrgId, activeOrgName } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
+  const navigate = useNavigate();
 
   const glossaryCols = useColumnPicker<GlossaryColId>('procela.businessGlossary.visibleCols.v1', GLOSSARY_COLUMN_DEFS);
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
@@ -211,9 +211,6 @@ export default function BusinessGlossaryPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<TermForm>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  // Row click opens the term's detail in a modal (view→Edit→Save), matching
-  // Data Assets / Systems. Editing happens there — the list has no edit form.
-  const [viewingTermId, setViewingTermId] = useState<string | null>(null);
 
   // Bulk selection
   const [bulkUpdates, setBulkUpdates] = useState<{ status: string; category: string; ownerPersonId: string; domainId: string }>({ status: '', category: '', ownerPersonId: '', domainId: '' });
@@ -325,8 +322,8 @@ export default function BusinessGlossaryPage() {
   };
 
   // ── CRUD ──
-  // Create-only: an existing term is edited inside its detail modal
-  // (GlossaryTermDetailModal, view→Edit→Save).
+  // Create-only: an existing term is edited on its detail page
+  // (GlossaryTermDetailPage, view→Edit→Save).
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm); setShowForm(true);
@@ -473,12 +470,12 @@ export default function BusinessGlossaryPage() {
       key: 'term', header: 'Term', sortable: true, cellStyle: { fontWeight: 500 },
       render: (t: GlossaryTerm) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          {/* The term name opens the term's detail modal (view→Edit→Save).
+          {/* The term name opens the term's detail page (view→Edit→Save).
            *  Definition isn't shown inline — rows stay single-line; hover the
            *  term to read it. */}
           <button
             type="button"
-            onClick={() => setViewingTermId(t.id)}
+            onClick={() => navigate(`/business-glossary/${t.id}`)}
             title={t.definition || 'View term'}
             style={{
               background: 'none', border: 'none', padding: 0,
@@ -910,25 +907,12 @@ export default function BusinessGlossaryPage() {
                 emptyMessage="No terms match the current filters."
                 pageSize={20}
                 countNoun={['term', 'terms']}
-                onRowClick={(t) => setViewingTermId(t.id)}
+                onRowClick={(t) => navigate(`/business-glossary/${t.id}`)}
               />
             )}
           </Card>
         </div>
       </div>
-
-      {/* Term detail modal — opened on row click; view→Edit→Save over the
-       *  term's full record (Data Assets / Systems pattern). */}
-      {viewingTermId && (
-        <Suspense fallback={null}>
-          <GlossaryTermDetailModal
-            termId={viewingTermId}
-            onClose={() => setViewingTermId(null)}
-            canWrite={canWrite}
-            onSaved={fetchData}
-          />
-        </Suspense>
-      )}
     </div>
   );
 }

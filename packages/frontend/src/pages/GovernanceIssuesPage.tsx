@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage, successToast, errorToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import DetailEditActions from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
-import Modal from '../components/Modal';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import { useOrgContext } from '../stores/orgContext';
@@ -35,7 +35,7 @@ import Button from '../components/Button';
 
 // ── Types ──
 
-interface GovernanceIssue {
+export interface GovernanceIssue {
   id: string;
   orgId: string;
   title: string;
@@ -220,7 +220,7 @@ function IssueFields({ form, setForm, people, domains, showStatus }: {
 // The expanded row: read-only detail with a view/edit toggle. Edit flips the
 // SAME panel into the field grid and one Save writes PUT /governance-issues/
 // :id — the row's own in-place editor (there's no separate edit form anymore).
-function ExpandedIssue({ issue, people, domains, orgId, canEdit, onSaved }: {
+export function ExpandedIssue({ issue, people, domains, orgId, canEdit, onSaved }: {
   issue: GovernanceIssue;
   people: Person[];
   domains: DataDomain[];
@@ -289,6 +289,7 @@ export default function GovernanceIssuesPage({
   embedded?: boolean;
   actionsPortal?: HTMLElement | null;
 } = {}) {
+  const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
@@ -303,10 +304,8 @@ export default function GovernanceIssuesPage({
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  // Row click opens an issue's full detail (description + metadata that doesn't
-  // fit the columns) in a modal, matching the other governance work-item lists
-  // (Policies, SOPs, Decision Rights).
-  const [viewingId, setViewingId] = useState<string | null>(null);
+  // Row click opens an issue's full detail on its own page (/governance-work/
+  // issues/:id), matching the People detail-page family.
 
   // Filters
   const [filterStatus, setFilterStatus] = useState('');
@@ -437,7 +436,7 @@ export default function GovernanceIssuesPage({
       render: (i: GovernanceIssue) => (
         <button
           type="button"
-          onClick={() => setViewingId(i.id)}
+          onClick={() => navigate(`/governance-work/issues/${i.id}`)}
           style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
         >
           {i.title}
@@ -583,30 +582,10 @@ export default function GovernanceIssuesPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all issues"
             emptyMessage="No issues match the current filters."
-            onRowClick={(i) => setViewingId(i.id)}
+            onRowClick={(i) => navigate(`/governance-work/issues/${i.id}`)}
           />
         )}
       </div>
-
-      {/* Issue detail modal — opened on row click; the issue's description +
-       *  metadata with a view→Edit→Save editor. Looked up fresh from state so
-       *  it stays current after a save/refetch. */}
-      {(() => {
-        const issue = viewingId ? issues.find((i) => i.id === viewingId) : null;
-        if (!issue) return null;
-        return (
-          <Modal
-            open
-            onClose={() => setViewingId(null)}
-            kicker="Governance issue"
-            title={issue.title}
-            subtitle={issue.issueType.replace(/_/g, ' ')}
-            size="lg"
-          >
-            <ExpandedIssue issue={issue} people={people} domains={domains} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchData} />
-          </Modal>
-        );
-      })()}
     </div>
   );
 }
