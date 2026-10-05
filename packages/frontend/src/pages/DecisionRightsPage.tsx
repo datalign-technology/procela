@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import DetailEditActions from '../components/DetailEditActions';
 import PageHeader from '../components/PageHeader';
-import Modal from '../components/Modal';
 import SectionLabel from '../components/SectionLabel';
 import FacetChips from '../components/FacetChips';
 import Card from '../components/Card';
@@ -34,7 +34,7 @@ type DecisionCategory =
   | 'POLICY' | 'EXCEPTION' | 'ISSUE' | 'CLASSIFICATION'
   | 'ACCESS' | 'SCOPE' | 'ROLE' | 'OTHER';
 
-interface DecisionRight {
+export interface DecisionRight {
   id: string;
   orgId: string;
   decision: string;
@@ -51,9 +51,11 @@ interface DecisionRight {
   updatedAt: string;
 }
 
-interface Person { id: string; name: string; }
+export interface DecisionPerson { id: string; name: string; }
+interface Person extends DecisionPerson {}
 
-interface GovernanceGroup { id: string; name: string; }
+export interface DecisionGroup { id: string; name: string; }
+interface GovernanceGroup extends DecisionGroup {}
 
 interface DecisionForm {
   decision: string;
@@ -83,7 +85,7 @@ const CATEGORIES: DecisionCategory[] = [
   'POLICY', 'EXCEPTION', 'ISSUE', 'CLASSIFICATION', 'ACCESS', 'SCOPE', 'ROLE', 'OTHER',
 ];
 
-const CATEGORY_LABELS: Record<DecisionCategory, string> = {
+export const CATEGORY_LABELS: Record<DecisionCategory, string> = {
   POLICY: 'Policy',
   EXCEPTION: 'Exception',
   ISSUE: 'Issue',
@@ -346,7 +348,7 @@ function DecisionRightFields({ form, setForm, people, groups }: {
 // The expanded row: read-only RACI detail with a view/edit toggle. Edit flips
 // the SAME panel into the field grid and one Save writes PUT /decision-rights/
 // :id — the row's own in-place editor (there's no separate edit form anymore).
-function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onSaved, showRecommends, showApproves, showInformed, showEscalation }: {
+export function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onSaved, showRecommends, showApproves, showInformed, showEscalation }: {
   row: DecisionRight;
   people: Person[];
   groups: GovernanceGroup[];
@@ -416,6 +418,7 @@ function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onSaved, s
 }
 
 export default function DecisionRightsPage() {
+  const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   // Decision Rights is a governance surface: the backend gates every write
   // (seed / add / edit / delete) on `governance:write`, which only admins
@@ -433,7 +436,6 @@ export default function DecisionRightsPage() {
 
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | DecisionCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewingId, setViewingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<DecisionForm>(emptyForm);
@@ -569,7 +571,7 @@ export default function DecisionRightsPage() {
         // decision to read it (full text also in the expanded row + edit form).
         <button
           type="button"
-          onClick={() => setViewingId(r.id)}
+          onClick={() => navigate(`/decision-rights/${r.id}`)}
           title={r.description || undefined}
           style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
         >
@@ -754,7 +756,7 @@ export default function DecisionRightsPage() {
                 // editors get no checkboxes (read-only governance view).
                 selection={isAdmin ? sel : undefined}
                 sort={{ sortKey, sortDir, onSort: toggleSort }}
-                onRowClick={(r) => setViewingId(r.id)}
+                onRowClick={(r) => navigate(`/decision-rights/${r.id}`)}
                 selectAllLabel="Select all decision rights"
                 emptyMessage="No decisions match the current filters."
               />
@@ -762,37 +764,6 @@ export default function DecisionRightsPage() {
           )}
         </div>
       </div>
-
-      {/* Detail modal — opened on row click; the clicked decision's RACI
-       *  detail with a view→Edit→Save toggle. Looked up fresh from `rows`
-       *  so it stays current after a save→refetch. */}
-      {(() => {
-        const row = viewingId ? rows.find((r) => r.id === viewingId) : null;
-        if (!row) return null;
-        return (
-          <Modal
-            open
-            onClose={() => setViewingId(null)}
-            kicker="Decision right"
-            title={row.decision}
-            subtitle={CATEGORY_LABELS[row.category]}
-            size="lg"
-          >
-            <ExpandedDecisionRight
-              row={row}
-              people={people}
-              groups={groups}
-              orgId={activeOrgId}
-              canEdit={isAdmin}
-              onSaved={fetchData}
-              showRecommends
-              showApproves
-              showInformed
-              showEscalation
-            />
-          </Modal>
-        );
-      })()}
     </div>
   );
 }

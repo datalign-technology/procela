@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage, successToast, errorToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import DetailEditActions from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
-import Modal from '../components/Modal';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import Button from '../components/Button';
@@ -34,7 +34,7 @@ import ColumnPicker from '../components/ColumnPicker';
 
 // ── Types ──
 
-interface GovernanceTask {
+export interface GovernanceTask {
   id: string;
   orgId: string;
   title: string;
@@ -211,7 +211,7 @@ function TaskFields({ form, setForm, people }: {
 // The expanded row: read-only detail with a view/edit toggle. Edit flips the
 // SAME panel into the field grid and one Save writes PUT /governance-tasks/:id
 // — the row's own in-place editor (there's no separate edit form anymore).
-function ExpandedTask({ task, people, orgId, canEdit, onSaved }: {
+export function ExpandedTask({ task, people, orgId, canEdit, onSaved }: {
   task: GovernanceTask;
   people: Person[];
   orgId: string | null;
@@ -283,6 +283,7 @@ export default function GovernanceTasksPage({
   embedded?: boolean;
   actionsPortal?: HTMLElement | null;
 } = {}) {
+  const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
@@ -296,10 +297,8 @@ export default function GovernanceTasksPage({
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  // Row click opens a task's full detail (description + metadata that doesn't
-  // fit the columns) in a modal, matching the other governance work-item
-  // lists (Policies, SOPs, Decision Rights).
-  const [viewingId, setViewingId] = useState<string | null>(null);
+  // Row click opens a task's full detail on its own page (/governance-work/
+  // tasks/:id), matching the People detail-page family.
 
   // Filters
   const [filterStatus, setFilterStatus] = useState('');
@@ -448,7 +447,7 @@ export default function GovernanceTasksPage({
         <>
           <button
             type="button"
-            onClick={() => setViewingId(t.id)}
+            onClick={() => navigate(`/governance-work/tasks/${t.id}`)}
             style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
           >
             {t.title}
@@ -642,30 +641,10 @@ export default function GovernanceTasksPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all tasks"
             emptyMessage="No tasks match the current filters."
-            onRowClick={(t) => setViewingId(t.id)}
+            onRowClick={(t) => navigate(`/governance-work/tasks/${t.id}`)}
           />
         )}
       </div>
-
-      {/* Task detail modal — opened on row click; the task's description +
-       *  metadata with a view→Edit→Save editor. Looked up fresh from state so
-       *  it stays current after a save/refetch. */}
-      {(() => {
-        const task = viewingId ? tasks.find((t) => t.id === viewingId) : null;
-        if (!task) return null;
-        return (
-          <Modal
-            open
-            onClose={() => setViewingId(null)}
-            kicker="Governance task"
-            title={task.title}
-            subtitle={task.taskType.replace(/_/g, ' ')}
-            size="lg"
-          >
-            <ExpandedTask task={task} people={people} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchData} />
-          </Modal>
-        );
-      })()}
     </div>
   );
 }
