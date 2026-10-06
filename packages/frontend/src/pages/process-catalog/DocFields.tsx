@@ -43,7 +43,7 @@ export function DocCalculated({ label, chips, text, emptyText = 'None yet', requ
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, minHeight: 24 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}{required && <RequiredDot />}:</span>
-      <div style={{ flex: 1, maxWidth: 420 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
           background: 'var(--color-calc-fill)', border: '1px solid var(--color-border-subtle)',
