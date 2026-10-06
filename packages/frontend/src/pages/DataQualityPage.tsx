@@ -1,6 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -21,7 +22,7 @@ import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { errorMessage, successToast, errorToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
-import DetailEditActions from '../components/DetailEditActions';
+import { HeaderEditActions } from '../components/DetailEditActions';
 import { renderNavIcon } from '../components/navIcons';
 import HelpPopover from '../components/HelpPopover';
 import ActiveFiltersBar from '../components/ActiveFiltersBar';
@@ -30,7 +31,6 @@ import type { RulesModalAsset } from '../components/DataQualityRulesModal';
 // Lazy: only renders when the user clicks the rules icon on a row.
 const DataQualityRulesModal = lazy(() => import('../components/DataQualityRulesModal'));
 import { useSortedList } from '../hooks/useSortedList';
-import Modal from '../components/Modal';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -62,7 +62,7 @@ interface SystemRef {
 
 type ScheduleFrequency = 'NEVER' | 'HOURLY' | 'DAILY' | 'WEEKLY';
 
-interface QualityRule {
+export interface QualityRule {
   id: string;
   orgId: string;
   dataAssetId: string;
@@ -328,10 +328,13 @@ function RuleFields({ form, onChange }: {
 // the rule's record fields. The target asset/column are shown but fixed (they
 // need the column loader — set at create time). Run / Schedule / Delete stay
 // on the row as exec/state actions. One Save writes PUT /data-quality/:id.
-function ExpandedRule({ rule, canWrite, onSaved }: {
+export function ExpandedRule({ rule, canWrite, onSaved, actionsSlot }: {
   rule: QualityRule;
   canWrite: boolean;
   onSaved: () => void;
+  /** When set, the Edit / Save·Cancel cluster portals into this header slot
+   *  (the detail-page layout). Undefined ⇒ rendered inline. */
+  actionsSlot?: HTMLElement | null;
 }) {
   const m = useDetailEditMode<RuleEditable>(
     {
@@ -366,11 +369,8 @@ function ExpandedRule({ rule, canWrite, onSaved }: {
   const colName = (rule as any).columnName as string | undefined;
   return (
     <div>
-      {canWrite && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
-          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
-        </div>
-      )}
+      <HeaderEditActions slot={actionsSlot} editing={m.isEditing} canEdit={canWrite} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+
       <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
         Target: <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{assetName}</span>
         {colName ? <> · column <span style={{ fontFamily: 'var(--font-mono)' }}>{colName}</span></> : ' · whole asset'}
@@ -401,6 +401,7 @@ export default function DataQualityPage({
   tab?: 'assets' | 'rules';
   onTabChange?: (tab: 'assets' | 'rules') => void;
 } = {}) {
+  const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
@@ -411,9 +412,8 @@ export default function DataQualityPage({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
-  // Row click on the Rules list opens the rule's detail (description + a
-  // view→Edit→Save editor for its record fields) in a modal.
-  const [viewingRuleId, setViewingRuleId] = useState<string | null>(null);
+  // Row click on the Rules list navigates to the rule's detail page
+  // (/data-assets/rules/:id) — the People detail-page family.
   // Columns of the asset selected in the form, so a rule can target a specific
   // column (the bound/discovered set) instead of the asset as a whole.
   const [formColumns, setFormColumns] = useState<ColumnWithHealth[]>([]);
@@ -703,7 +703,7 @@ export default function DataQualityPage({
       render: (rule: QualityRule) => (
         <button
           type="button"
-          onClick={() => setViewingRuleId(rule.id)}
+          onClick={() => navigate(`/data-assets/rules/${rule.id}`)}
           style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
         >
           {rule.name}
@@ -1063,30 +1063,10 @@ export default function DataQualityPage({
             sort={{ sortKey, sortDir, onSort: toggleSort }}
             selectAllLabel="Select all rules"
             emptyMessage="No rules match the current filters."
-            onRowClick={(r) => setViewingRuleId(r.id)}
+            onRowClick={(r) => navigate(`/data-assets/rules/${r.id}`)}
           />
         </Card>
       )}
-
-      {/* Rule detail modal — opened on row click; the rule's description with a
-       *  view→Edit→Save editor for its record fields. Looked up fresh from
-       *  state so it stays current after a save/refetch. */}
-      {(() => {
-        const rule = viewingRuleId ? rules.find((r) => r.id === viewingRuleId) : null;
-        if (!rule) return null;
-        return (
-          <Modal
-            open
-            onClose={() => setViewingRuleId(null)}
-            kicker="Quality rule"
-            title={rule.name}
-            subtitle={rule.dataAssetName || rule.dataAssetId}
-            size="lg"
-          >
-            <ExpandedRule rule={rule} canWrite={canWrite} onSaved={fetchData} />
-          </Modal>
-        );
-      })()}
       </>)}
     </div>
   );

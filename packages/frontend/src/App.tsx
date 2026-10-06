@@ -22,6 +22,7 @@ const SystemsAndDataPage         = lazy(() => import('@/pages/SystemsAndDataPage
 const AnalyzePage                = lazy(() => import('@/pages/AnalyzePage'));
 const DataAssetsHubPage          = lazy(() => import('@/pages/DataAssetsHubPage'));
 const DataAssetDetailPage        = lazy(() => import('@/pages/DataAssetDetailPage'));
+const DataQualityRuleDetailPage  = lazy(() => import('@/pages/DataQualityRuleDetailPage'));
 const SystemsHubPage             = lazy(() => import('@/pages/SystemsHubPage'));
 const SystemDetailPage           = lazy(() => import('@/pages/SystemDetailPage'));
 const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
@@ -100,6 +101,12 @@ export default function App() {
           {/* Orphan Assets folded into Data Assets as the "Unmapped" mapping
               filter. Redirect preserves old links (digest, AI, bookmarks). */}
           <Route path="/data-assets/orphans" element={<Navigate to="/data-assets?mapping=unmapped" replace />} />
+          {/* Quality-rule detail page — the Rules tab opens a record here, the
+              same way the Registry tab opens an asset at /data-assets/:id. The
+              bare /rules path redirects to the hub's Rules tab so the breadcrumb
+              trail links back up. */}
+          <Route path="/data-assets/rules" element={<Navigate to="/data-assets?tab=rules" replace />} />
+          <Route path="/data-assets/rules/:id" element={<DataQualityRuleDetailPage />} />
           <Route path="/data-assets/:id" element={<DataAssetDetailPage />} />
           <Route path="/systems" element={<SystemsHubPage />} />
           <Route path="/systems/:id" element={<SystemDetailPage />} />
