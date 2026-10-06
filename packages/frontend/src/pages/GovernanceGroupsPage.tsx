@@ -1,18 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
-import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
 import Button from '../components/Button';
-import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
-import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
 import { useToastStore } from '../stores/toastStore';
-import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { activateOnKeyStop, clickable } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import ExportMenu from '../components/ExportMenu';
@@ -20,10 +15,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
-import IconButton, { Icon } from '../components/IconButton';
+import IconButton from '../components/IconButton';
 import { SkeletonRows } from '../components/Skeleton';
-import { formatPersonLabel } from '../lib/personLabel';
-import PersonPicker from '../components/PersonPicker';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ── Types ──
@@ -64,100 +57,6 @@ interface GovernanceGroupFlat {
   updatedAt: string;
 }
 
-interface Person {
-  id: string;
-  name: string;
-}
-
-interface DamaRoleAssignment {
-  id: string;
-  personId: string | null;
-  agentId: string | null;
-  personName: string | null;
-  agentName: string | null;
-  roleType: string;
-  scopeType: string;
-  scopeId: string;
-  since: string;
-}
-
-interface DataDomain {
-  id: string;
-  name: string;
-  ownerId: string | null;
-  stewardIds: string[];
-}
-
-// Roles where "which data domain(s) does this person own / steward" is
-// a meaningful question. For these, the Expected Roles panel shows a
-// sub-line under each holder listing their domain assignments — or
-// "(no domains assigned)" so the gap is visible. Driven by reads from
-// the DataDomain entity, not by a separate per-role mapping.
-const DOMAIN_SCOPED_ROLE_TYPES = new Set<string>([
-  'DATA_OWNER',
-  'DATA_DOMAIN_OWNER',
-  'DATA_STEWARD',
-  'DATA_DOMAIN_STEWARD',
-  'BUSINESS_DATA_STEWARD',
-  'DATA_ARCHITECT',
-]);
-
-interface Agent {
-  id: string;
-  name: string;
-  agentType: string;
-  status: string;
-  skillIds: string[];
-}
-
-// ── Constants ──
-
-const DAMA_ROLE_LABELS: Record<string, string> = {
-  CDO: 'Chief Data Officer',
-  DATA_GOVERNANCE_LEAD: 'Data Governance Lead',
-  DATA_OWNER: 'Data Owner',
-  BUSINESS_DATA_STEWARD: 'Business Data Steward',
-  DATA_QUALITY_ANALYST: 'Data Quality Analyst',
-  TECHNICAL_DATA_STEWARD: 'Technical Data Steward',
-  DATA_CUSTODIAN: 'Data Custodian',
-  DATA_ARCHITECT: 'Data Architect',
-  DATA_ENGINEER: 'Data Engineer',
-  DATABASE_ADMINISTRATOR: 'Database Administrator',
-};
-
-// Role chip colours collapsed to three category palettes (Executive
-// / Business / Technical) instead of one hex pair per role. Ten
-// distinct colours encoded nothing the role name didn't already say
-// — the slate read as confetti. Three palettes carry actual signal
-// ("this is a business role") and let any future critical / status
-// colour budget land separately. Same approach the Governance Roles
-// page took for its role badges.
-const ROLE_CATEGORY: Record<string, 'Executive' | 'Business' | 'Technical'> = {
-  CDO: 'Executive',
-  DATA_GOVERNANCE_LEAD: 'Executive',
-  DATA_OWNER: 'Business',
-  BUSINESS_DATA_STEWARD: 'Business',
-  DATA_QUALITY_ANALYST: 'Business',
-  TECHNICAL_DATA_STEWARD: 'Technical',
-  DATA_CUSTODIAN: 'Technical',
-  DATA_ARCHITECT: 'Technical',
-  DATA_ENGINEER: 'Technical',
-  DATABASE_ADMINISTRATOR: 'Technical',
-};
-
-const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
-  Executive: { bg: '#ede9fe', color: '#5b21b6' },  // purple
-  Business:  { bg: '#dbeafe', color: '#1e40af' },  // blue
-  Technical: { bg: '#fef3c7', color: '#92400e' },  // amber
-};
-
-const NEUTRAL_PALETTE = { bg: '#f1f5f9', color: '#64748b' };
-
-function roleChipColors(roleType: string): { bg: string; color: string } {
-  const cat = ROLE_CATEGORY[roleType];
-  return (cat && CATEGORY_COLORS[cat]) || NEUTRAL_PALETTE;
-}
-
 const GROUP_TYPE_LABELS: Record<string, string> = {
   COUNCIL: 'Data Governance Council',
   OFFICE: 'Data Governance Office',
@@ -176,21 +75,6 @@ const GROUP_TYPE_SHORT: Record<string, string> = {
   COMMUNITY_OF_PRACTICE: 'CoP',
 };
 
-const EXPECTED_ROLES_BY_GROUP: Record<string, typeof GOVERNANCE_ROLES> = Object.fromEntries(
-  GOVERNANCE_GROUP_ROLES.map((g) => [
-    g.groupType,
-    GOVERNANCE_ROLES.filter((r) => g.roleTypes.includes(r.roleType)),
-  ]),
-);
-
-const ROLE_LABELS: Record<string, string> = {
-  CHAIR: 'Chair',
-  VICE_CHAIR: 'Vice Chair',
-  MEMBER: 'Member',
-  SECRETARY: 'Secretary',
-  ADVISOR: 'Advisor',
-};
-
 // ── Badge colors (Governance) ──
 
 const typeBadgeColors: Record<string, { bg: string; color: string }> = {
@@ -202,14 +86,6 @@ const typeBadgeColors: Record<string, { bg: string; color: string }> = {
   COMMUNITY_OF_PRACTICE: { bg: '#f1f5f9', color: '#64748b' },
 };
 
-const roleBadgeColors: Record<string, { bg: string; color: string }> = {
-  CHAIR: { bg: '#fce7f3', color: '#9d174d' },
-  VICE_CHAIR: { bg: '#ede9fe', color: '#5b21b6' },
-  MEMBER: { bg: '#f1f5f9', color: '#64748b' },
-  SECRETARY: { bg: '#dbeafe', color: '#1e40af' },
-  ADVISOR: { bg: '#fef3c7', color: '#92400e' },
-};
-
 // ── Styles ──
 
 const inputStyle: React.CSSProperties = {
@@ -218,13 +94,6 @@ const inputStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
-
-const btnIcon: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
-};
-
-
 
 const makeBadge = (colors: { bg: string; color: string }): React.CSSProperties => ({
   display: 'inline-block', padding: '1px 6px', borderRadius: 3,
@@ -361,7 +230,6 @@ function GroupTreeNode({ node, depth, onDelete, onAddChild, onSelect, selectedId
 export default function GovernanceGroupsPage() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
-  const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
 
@@ -371,50 +239,12 @@ export default function GovernanceGroupsPage() {
   const [groupTypes, setGroupTypes] = useState<string[]>([]);
   const [groupTypeLabels, setGroupTypeLabels] = useState<Record<string, string>>({});
   const [validChildren, setValidChildren] = useState<Record<string, string[]>>({});
-  const [groupRoles, setGroupRoles] = useState<string[]>([]);
+  const [, setGroupRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Tree state
+  // Tree state. Clicking a group navigates to its detail page
+  // (/governance-groups/:id) — the list no longer keeps an inline detail pane.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-
-  // Detail state (for members panel)
-  const [selectedGroupDetail, setSelectedGroupDetail] = useState<any>(null);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [memberPersonId, setMemberPersonId] = useState('');
-  const [memberRole, setMemberRole] = useState('MEMBER');
-  const [showAddMember, setShowAddMember] = useState(false);
-
-  // DAMA roles for the members of the selected group
-  const [memberDamaRoles, setMemberDamaRoles] = useState<DamaRoleAssignment[]>([]);
-  // All governance-role assignments in the active org (the same scope
-  // the Governance Roles page writes at). The Expected Roles panel uses
-  // this so a role assigned org-wide is recognised here even if that
-  // person isn't (yet) a member of this group — keeps the two pages
-  // consistent.
-  const [orgDamaRoles, setOrgDamaRoles] = useState<DamaRoleAssignment[]>([]);
-  // Data domains in the active org. Used to look up which domains each
-  // domain-scoped role holder owns or stewards, so the Expected Roles
-  // chips can show that gap inline.
-  const [dataDomains, setDataDomains] = useState<DataDomain[]>([]);
-  const [agentsList, setAgentsList] = useState<Agent[]>([]);
-  const [assignRolePersonId, setAssignRolePersonId] = useState('');
-  const [assignRoleAgentId, setAssignRoleAgentId] = useState('');
-  const [assignRoleType, setAssignRoleType] = useState('');
-
-  // Recommendations for selected group
-  interface GroupRecommendation {
-    name: string;
-    type: string;
-    typeLabel: string;
-    description: string;
-    charter: string;
-    reason: string;
-    exists: boolean;
-  }
-  const [recommendations, setRecommendations] = useState<GroupRecommendation[]>([]);
-  const [showRecommendations, setShowRecommendations] = useState(false);
-  const [creatingRec, setCreatingRec] = useState<string | null>(null);
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -424,7 +254,6 @@ export default function GovernanceGroupsPage() {
   const [allowedTypes, setAllowedTypes] = useState<string[] | null>(null);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [confirmRemoveMember, setConfirmRemoveMember] = useState<{ personId: string; personName: string } | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
@@ -463,63 +292,9 @@ export default function GovernanceGroupsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrgId]);
 
-  const fetchGroupDetail = useCallback(async (id: string) => {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: any }>(`/governance-groups/${id}`);
-      const detail = res.data || null;
-      setSelectedGroupDetail(detail);
-
-      // Fetch DAMA roles and agents
-      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [rolesRes, agentsRes, domainsRes] = await Promise.all([
-        apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
-        // agent:read is admin-only; for non-admins this returns 403, so degrade
-        // to an empty agent list rather than failing the whole page load.
-        apiClient.get<{ success: boolean; data: Agent[] }>(`/agents${query}`).catch(() => ({ success: true, data: [] as Agent[] })),
-        apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
-      ]);
-      const allRoles = rolesRes.data || [];
-      setOrgDamaRoles(allRoles);
-      setAgentsList(Array.isArray(agentsRes.data) ? agentsRes.data.filter((a) => a.status === 'ACTIVE') : []);
-      setDataDomains(Array.isArray(domainsRes.data) ? domainsRes.data : []);
-
-      if (detail?.members?.length > 0) {
-        const memberIds = new Set(detail.members.map((m: GroupMember) => m.personId));
-        // Include both person-based and agent-based roles relevant to this group's members or agents
-        setMemberDamaRoles(allRoles.filter((r) => (r.personId && memberIds.has(r.personId)) || r.agentId));
-      } else {
-        // Still show agent-based roles even when there are no person members
-        setMemberDamaRoles(allRoles.filter((r) => r.agentId));
-      }
-
-      // Fetch recommendations for this group
-      try {
-        const recRes = await apiClient.get<{ success: boolean; data: GroupRecommendation[] }>(`/governance-groups/${id}/recommendations`);
-        setRecommendations(recRes.data || []);
-      } catch { setRecommendations([]); }
-    } catch { /* */ }
-  }, [activeOrgId]);
-
-  const fetchPeople = useCallback(async () => {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: Person[] }>('/people');
-      setPeople(res.data || []);
-    } catch { /* */ }
-  }, []);
-
   useEffect(() => { fetchGroups(); }, [fetchGroups]);
   useRefreshOnFocus(fetchGroups);
 
-  useEffect(() => {
-    if (selectedGroupId) {
-      fetchGroupDetail(selectedGroupId);
-      fetchPeople();
-      setShowRecommendations(false);
-    } else {
-      setSelectedGroupDetail(null);
-      setRecommendations([]);
-    }
-  }, [selectedGroupId, fetchGroupDetail, fetchPeople]);
 
   // ── Tree handlers ──
 
@@ -528,11 +303,6 @@ export default function GovernanceGroupsPage() {
   });
   const expandAll = () => setExpanded(new Set(collectAllIds(tree)));
   const collapseAll = () => setExpanded(new Set());
-
-  const handleSelect = (id: string) => {
-    setSelectedGroupId(selectedGroupId === id ? null : id);
-    setMemberPersonId(''); setMemberRole('MEMBER');
-  };
 
   // ── Form handlers ──
 
@@ -569,7 +339,6 @@ export default function GovernanceGroupsPage() {
     }
     setShowForm(false); setForm(emptyForm); setAllowedTypes(null);
     fetchGroups();
-    if (selectedGroupId) fetchGroupDetail(selectedGroupId);
     // Show governance recommendation warning if returned
     if (res?.warning) {
       addToast('info', res.warning);
@@ -579,7 +348,6 @@ export default function GovernanceGroupsPage() {
   const handleDelete = async (id: string) => {
     try {
       await apiClient.delete(`/governance-groups/${id}`);
-      if (selectedGroupId === id) { setSelectedGroupId(null); setSelectedGroupDetail(null); }
       addToast('success', 'Governance group deleted');
       fetchGroups();
     } catch (e) {
@@ -593,10 +361,6 @@ export default function GovernanceGroupsPage() {
       await Promise.all(ids.map((id) => apiClient.delete(`/governance-groups/${id}`)));
       addToast('success', `Deleted ${ids.length} governance group${ids.length === 1 ? '' : 's'}`);
       setCheckedIds(new Set());
-      if (selectedGroupId && checkedIds.has(selectedGroupId)) {
-        setSelectedGroupId(null);
-        setSelectedGroupDetail(null);
-      }
       fetchGroups();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
@@ -606,149 +370,9 @@ export default function GovernanceGroupsPage() {
 
   const handleCancel = () => { setShowForm(false); setForm(emptyForm); setAllowedTypes(null); validation.clearErrors(); };
 
-  // ── Member handlers ──
-
-  const handleAddMember = async () => {
-    if (!selectedGroupId || !memberPersonId || !memberRole) return;
-    try {
-      await apiClient.post(`/governance-groups/${selectedGroupId}/members`, { personId: memberPersonId, groupRole: memberRole });
-      setMemberPersonId(''); setMemberRole('MEMBER');
-      fetchGroupDetail(selectedGroupId);
-      fetchGroups();
-    } catch (e) {
-      addToast('error', e instanceof Error ? e.message : 'Failed to add member');
-    }
-  };
-
-  // Add a specific person to the selected group (used by the Expected
-  // Roles panel's "Add to group" on an org-level role holder who isn't
-  // a member yet — the bridge between the Roles page and this page).
-  const addMemberById = async (personId: string) => {
-    if (!selectedGroupId || !personId) return;
-    try {
-      await apiClient.post(`/governance-groups/${selectedGroupId}/members`, { personId, groupRole: 'MEMBER' });
-      fetchGroupDetail(selectedGroupId);
-      fetchGroups();
-    } catch (e) {
-      addToast('error', e instanceof Error ? e.message : 'Failed to add member');
-    }
-  };
-
-  const handleRemoveMember = async (personId: string) => {
-    if (!selectedGroupId) return;
-    await apiClient.delete(`/governance-groups/${selectedGroupId}/members/${personId}`);
-    fetchGroupDetail(selectedGroupId);
-    fetchGroups();
-  };
-
-  const handleAssignDamaRole = async (assignType: 'person' | 'agent' = 'person') => {
-    const candidateId = assignType === 'person' ? assignRolePersonId : assignRoleAgentId;
-    if (!candidateId || !assignRoleType || !activeOrgId) return;
-    try {
-      const payload: Record<string, string> = {
-        roleType: assignRoleType,
-        scopeType: 'ORG',
-        scopeId: activeOrgId,
-      };
-      if (assignType === 'person') payload.personId = candidateId;
-      else payload.agentId = candidateId;
-
-      // Optimistic update so the chip and counter both move instantly
-      // instead of waiting on the round-trip. Reconciled below by
-      // fetchGroupDetail using server-authoritative data.
-      const optimisticRole: DamaRoleAssignment = {
-        id: `optimistic-${Date.now()}`,
-        personId: assignType === 'person' ? candidateId : null,
-        agentId: assignType === 'agent' ? candidateId : null,
-        personName: assignType === 'person'
-          ? (people.find((p) => p.id === candidateId)?.name || 'Unknown')
-          : null,
-        agentName: assignType === 'agent'
-          ? (agentsList.find((a) => a.id === candidateId)?.name || 'Agent')
-          : null,
-        roleType: assignRoleType,
-        scopeType: 'ORG',
-        scopeId: activeOrgId,
-        since: new Date().toISOString(),
-      } as DamaRoleAssignment;
-      setMemberDamaRoles((prev) => [...prev, optimisticRole]);
-
-      await apiClient.post('/dama-roles', payload);
-      // Auto-add as group member if person and not already a member
-      if (assignType === 'person' && selectedGroupId && selectedGroupDetail) {
-        const isMember = (selectedGroupDetail.members || []).some((m: GroupMember) => m.personId === candidateId);
-        if (!isMember) {
-          try {
-            await apiClient.post(`/governance-groups/${selectedGroupId}/members`, {
-              personId: candidateId,
-              groupRole: 'MEMBER',
-            });
-          } catch { /* may already be a member */ }
-        }
-      }
-      addToast('success', `Assigned ${DAMA_ROLE_LABELS[assignRoleType] || assignRoleType} to ${assignType}`);
-      setAssignRolePersonId('');
-      setAssignRoleAgentId('');
-      setAssignRoleType('');
-      // Reconcile right panel (memberDamaRoles + selectedGroupDetail) AND
-      // the left tree (member counts) - both got stale before because the
-      // assign path only refreshed the right panel.
-      if (selectedGroupId) await fetchGroupDetail(selectedGroupId);
-      fetchGroups();
-    } catch (e: any) {
-      const msg = e?.response?.data?.error || 'Failed to assign role';
-      addToast('error', msg);
-      // Roll back the optimistic insert by reconciling with the server.
-      if (selectedGroupId) await fetchGroupDetail(selectedGroupId);
-    }
-  };
-
-  const handleRemoveDamaRole = async (roleId: string) => {
-    // Optimistically strip the role so chip + counter update without
-    // waiting on the network. Reconciled below.
-    const prevRoles = memberDamaRoles;
-    setMemberDamaRoles((rs) => rs.filter((r) => r.id !== roleId));
-    try {
-      await apiClient.delete(`/dama-roles/${roleId}`);
-      addToast('success', 'Role removed');
-      if (selectedGroupId) await fetchGroupDetail(selectedGroupId);
-      fetchGroups();
-    } catch {
-      addToast('error', 'Failed to remove role');
-      // Server rejected the delete - put the role back so the UI matches.
-      setMemberDamaRoles(prevRoles);
-    }
-  };
-
-  const handleCreateRecommended = async (rec: GroupRecommendation) => {
-    if (!selectedGroupId) return;
-    setCreatingRec(rec.name);
-    try {
-      await apiClient.post('/governance-groups', {
-        name: rec.name,
-        type: rec.type,
-        description: rec.description,
-        charter: rec.charter,
-        status: 'ACTIVE',
-        orgId: activeOrgId || undefined,
-        parentId: selectedGroupId,
-      });
-      const parentName = selectedGroupDetail?.name;
-      addToast('success', parentName ? `Created "${rec.name}" under "${parentName}"` : `Created "${rec.name}"`);
-      fetchGroups();
-      fetchGroupDetail(selectedGroupId);
-    } catch (e: any) {
-      const msg = e?.response?.data?.error || 'Failed to create group';
-      addToast('error', msg);
-    } finally {
-      setCreatingRec(null);
-    }
-  };
 
   // ── Computed values ──
 
-  const existingMemberIds = new Set(selectedGroupDetail?.members?.map((m: GroupMember) => m.personId) || []);
-  const availablePeople = people.filter((p) => !existingMemberIds.has(p.id));
 
   // Parent dropdown options: any group EXCEPT the one being edited and its own
   // descendants (which would create a cycle). We deliberately do NOT restrict
@@ -785,6 +409,66 @@ export default function GovernanceGroupsPage() {
         <SkeletonRows rows={5} columns={4} />
       </Card>
     </div>
+  );
+
+  // Add-group form — rendered in the right panel when the tree has nodes, or
+  // full-width when the tree is still empty (mirrors the Organizations page).
+  const formCard = (
+    <Card marginBottom={12}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+        {allowedTypes ? 'Add Child Group' : 'Add New Governance Group'}
+      </h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
+          <input autoFocus
+            aria-label="Name"
+            style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+            value={form.name}
+            onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
+            onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
+            placeholder="e.g. Data Governance Council" />
+          {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
+        </div>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type *</label>
+          <select aria-label="Type" style={selectStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, parentId: form.parentId })}>
+            {typeOptions.map((t) => {
+              const isRecommended = recommendedTypes.length > 0 && recommendedTypes.includes(t);
+              const label = groupTypeLabels[t] || GROUP_TYPE_LABELS[t] || t;
+              return <option key={t} value={t}>{label}{isRecommended ? ' (recommended)' : ''}</option>;
+            })}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent Group</label>
+          <select aria-label="Parent Group" style={selectStyle} value={form.parentId || ''} onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}>
+            <option value="">-- No parent (top-level) --</option>
+            {treeOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+          </select>
+          {parentPlacementNote && (
+            <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-warning)' }}>{parentPlacementNote}</div>
+          )}
+        </div>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
+          <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
+          <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of this group's purpose" />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
+        <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
+        <Button variant="primary" disabled={!form.name.trim() || !form.type} onClick={handleSave}>
+          Add Group
+        </Button>
+      </div>
+    </Card>
   );
 
   return (
@@ -867,18 +551,6 @@ export default function GovernanceGroupsPage() {
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
-      <ConfirmDialog
-        open={confirmRemoveMember !== null}
-        title={`Remove ${confirmRemoveMember?.personName || 'member'} from this group?`}
-        message="They will no longer be a member of this group. Their governance role assignments (Data Owner, Steward, etc.) are NOT deleted — they keep those roles at the organization level and can be re-added to the group later. To remove a governance role specifically, click the × next to the role chip instead."
-        confirmLabel="Remove from group"
-        onConfirm={async () => {
-          const m = confirmRemoveMember;
-          setConfirmRemoveMember(null);
-          if (m) await handleRemoveMember(m.personId);
-        }}
-        onCancel={() => setConfirmRemoveMember(null)}
-      />
 
       {/* Governance Hierarchy Guidance */}
       {flatGroups.length === 0 ? (
@@ -925,79 +597,49 @@ export default function GovernanceGroupsPage() {
         </div>
       )}
 
-      {/* Add/Edit Form */}
-      {showForm && (
-        <Card marginBottom={12}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-            {allowedTypes ? 'Add Child Group' : 'Add New Governance Group'}
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus
-                aria-label="Name"
-                style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
-                value={form.name}
-                onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
-                onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
-                placeholder="e.g. Data Governance Council" />
-              {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type *</label>
-              <select aria-label="Type" style={selectStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, parentId: form.parentId })}>
-                {typeOptions.map((t) => {
-                  const isRecommended = recommendedTypes.length > 0 && recommendedTypes.includes(t);
-                  const label = groupTypeLabels[t] || GROUP_TYPE_LABELS[t] || t;
-                  return <option key={t} value={t}>{label}{isRecommended ? ' (recommended)' : ''}</option>;
-                })}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent Group</label>
-              <select aria-label="Parent Group" style={selectStyle} value={form.parentId || ''} onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}>
-                <option value="">-- No parent (top-level) --</option>
-                {treeOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
-              </select>
-              {parentPlacementNote && (
-                <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-warning)' }}>{parentPlacementNote}</div>
-              )}
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              <select aria-label="Status" style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input aria-label="Description" style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of this group's purpose" />
-            </div>
-            {/* Charter removed: write-only — editable but rendered on no
-                detail panel or export. Description covers the group's
-                purpose. Stored values are retained on the record. */}
+      {/* Summary stats — counts by group type, mirrors the Organizations page
+          so the shape of the governance structure reads at a glance. */}
+      {flatGroups.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {groupTypes.map((t) => {
+            const count = flatGroups.filter((g) => g.type === t).length;
+            if (count === 0) return null;
+            const c = typeBadgeColors[t] || typeBadgeColors.COMMUNITY_OF_PRACTICE;
+            return (
+              <div key={t} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: c.bg, color: c.color,
+                borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500,
+              }}>
+                <span style={{ fontWeight: 700 }}>{count}</span>
+                <span>{GROUP_TYPE_LABELS[t] || t}{count === 1 ? '' : 's'}</span>
+              </div>
+            );
+          })}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: '#ede9fe', color: '#5b21b6',
+            borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500,
+            marginLeft: 'auto',
+          }}>
+            <span style={{ fontWeight: 700 }}>{flatGroups.reduce((a, g) => a + (g.members?.length || 0), 0)}</span>
+            <span>Members</span>
           </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
-            <Button variant="primary" disabled={!form.name.trim() || !form.type} onClick={handleSave}>
-              Add Group
-            </Button>
-          </div>
-        </Card>
+        </div>
       )}
+
+      {/* Add form full-width when the tree is still empty (right-panel otherwise). */}
+      {showForm && tree.length === 0 && formCard}
 
       <BulkActionBar count={checkedIds.size} onClear={() => setCheckedIds(new Set())}>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
       </BulkActionBar>
 
-      {/* Master-Detail Layout: Tree (left) + Detail (right). The left
-          panel grows on wider screens so long group names (e.g.
-          "Customer Data Stewardship Team") aren't truncated. It floors
-          at 460px so action icons stay reachable on smaller laptops
-          and caps at 640px so the detail pane keeps room to breathe. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) minmax(0, 1fr)', gap: 16 }}>
-        {/* Left Panel — Tree View */}
+      {/* Full-width group hierarchy — clicking a group opens its detail page
+          (/governance-groups/:id), matching the Organizations page. An Add
+          form opens in a 340px right panel while adding. */}
+      <div style={{ display: 'grid', gridTemplateColumns: (tree.length > 0 && showForm) ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
+        {/* Left — Tree */}
         <Card padding={0} shadow="none" style={{ alignSelf: 'start' }}>
           {/* Tree toolbar */}
           <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
@@ -1018,7 +660,7 @@ export default function GovernanceGroupsPage() {
               tree.map((node) => (
                 <GroupTreeNode key={node.id} node={node} depth={0}
                   onDelete={(id) => setConfirmDelete(id)} onAddChild={openAddChild}
-                  onSelect={handleSelect} selectedId={selectedGroupId}
+                  onSelect={(id) => navigate(`/governance-groups/${id}`)} selectedId={null}
                   expanded={expanded} toggleExpand={toggleExpand}
                   checkedIds={checkedIds} onToggleCheck={toggleCheck} canEdit={isAdmin} />
               ))
@@ -1026,495 +668,10 @@ export default function GovernanceGroupsPage() {
           </div>
         </Card>
 
-        {/* Right Panel — Detail. Grows with its content (e.g. the expanded
-            recommendations list) and lets the page scroll, rather than
-            capping height and showing an inner scrollbar. */}
-        <div style={{ alignSelf: 'start' }}>
-          {selectedGroupId && selectedGroupDetail ? (
-            <Card>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <h3 style={{ fontSize: 15, fontWeight: 600 }}>Members of "{selectedGroupDetail.name}"</h3>
-                    <span style={makeBadge(typeBadgeColors[selectedGroupDetail.type] || typeBadgeColors.COMMUNITY_OF_PRACTICE)}>{GROUP_TYPE_SHORT[selectedGroupDetail.type] || selectedGroupDetail.type}</span>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{selectedGroupDetail.members?.length || 0} {(selectedGroupDetail.members?.length || 0) === 1 ? 'member' : 'members'}</span>
-                  </div>
-                  {selectedGroupDetail.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedGroupDetail.description}</p>}
-                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>Tip: You can also manage group memberships from Organizations {'→'} click "Manage" on any person.</p>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {/* Surface the full Composition view as the primary action — it
-                      covers everything this side panel does and adds decisions,
-                      policies, calendar, and a RACI snapshot. The side panel
-                      stays for the quick scan use case. */}
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => navigate(`/governance-groups/${selectedGroupDetail.id}`)}
-                  >
-                    Open full composition →
-                  </Button>
-                  <button style={{ ...btnIcon, fontSize: 12 }} onClick={() => { setSelectedGroupId(null); setSelectedGroupDetail(null); }}>Close</button>
-                </div>
-              </div>
-
-              {/* Expected Governance Roles */}
-              {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type] && (() => {
-                const expectedRoles = EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type];
-                const requiredCount = expectedRoles.filter((r) => r.required).length;
-                // "Filled" = the role is held anywhere in the org (same
-                // scope the Roles page assigns at), not just by a current
-                // member of this group. That's what makes assigning on
-                // the Roles page show up here.
-                const memberIdSet = new Set((selectedGroupDetail.members || []).map((m: GroupMember) => m.personId));
-                const requiredFilled = expectedRoles.filter((r) => r.required && orgDamaRoles.some((d) => d.roleType === r.roleType)).length;
-                return (
-                  <div style={{ marginBottom: 16, padding: 14, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        Governance Roles
-                      </div>
-                      <span style={{ fontSize: 11, color: requiredFilled === requiredCount ? '#16a34a' : '#dc2626' }}>
-                        {requiredFilled} of {requiredCount} required roles filled
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
-                      Governance roles are <strong>org-wide</strong>. Assigning one here is the
-                      same assignment shown on the Governance Roles page and the Group
-                      Composition view — not a separate, group-only role.
-                      Agents (<span style={{ color: '#5b21b6', display: 'inline-flex', verticalAlign: 'middle' }}>{renderNavIcon('/agents', { size: 12, strokeWidth: 2 })}</span>) appear here when they hold a role this group expects;
-                      they are <strong>not group members</strong> — group membership is people only.
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {expectedRoles.map((expected) => {
-                        const assigned = orgDamaRoles.filter((r) => r.roleType === expected.roleType);
-                        // The single-slot rule is about *human accountability* —
-                        // it doesn't apply to agent capabilities. So a single-
-                        // assign role can hold one person AND any number of
-                        // agents in parallel. "Filled" reflects whether the
-                        // human seat is taken; agents are shown as separate
-                        // chips with the agent icon marker.
-                        const peopleAssigned = assigned.filter((a) => !a.agentId).length;
-                        const agentsAssigned = assigned.filter((a) => !!a.agentId).length;
-                        const isFilled = peopleAssigned > 0;
-                        // Assigning a governance role is governance:write (admins).
-                        // Non-admins see the read-only roster with no assign forms.
-                        const canAddPerson = isAdmin && (expected.multiAssign || peopleAssigned === 0);
-                        // Accountability roles (CDO, Governance Lead,
-                        // Data Owner, Business Steward) keep the agent
-                        // path visible-but-disabled with a tooltip
-                        // *only while the role still has an empty seat
-                        // to fill*. Once a person has taken the seat,
-                        // the whole assign panel collapses — the rule
-                        // has nothing left to explain and a disabled
-                        // picker on every satisfied row is pure noise.
-                        const isPeopleOnly = PEOPLE_ONLY_ROLE_TYPES.has(expected.roleType);
-                        const canAddAgent = isAdmin && !isPeopleOnly && (expected.multiAssign || agentsAssigned === 0);
-                        const canAddMore = canAddPerson || canAddAgent;
-                        return (
-                          <div key={expected.roleType} style={{
-                            padding: '10px 14px',
-                            background: 'var(--color-surface)',
-                            border: `1px solid ${isFilled ? '#bbf7d0' : expected.required ? '#fecaca' : 'var(--color-border)'}`,
-                            borderLeft: `3px solid ${isFilled ? '#22c55e' : expected.required ? '#ef4444' : '#d1d5db'}`,
-                            borderRadius: 'var(--radius-md)',
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                              <span style={{
-                                width: 18, height: 18, borderRadius: '50%', marginTop: 1,
-                                background: isFilled ? '#22c55e' : 'transparent',
-                                border: isFilled ? 'none' : '1.5px solid #d1d5db',
-                                color: '#fff',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: 10, fontWeight: 700, flexShrink: 0,
-                              }}>
-                                {isFilled ? '✓' : ''}
-                              </span>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => openRoleDrawer(expected.roleType)}
-                                    title="Learn about this role"
-                                    style={{
-                                      background: 'none', border: 'none', padding: 0,
-                                      fontSize: 13, fontWeight: 600,
-                                      color: isFilled ? 'var(--color-text)' : 'var(--color-text-muted)',
-                                      cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted',
-                                      textUnderlineOffset: 3, fontFamily: 'inherit',
-                                    }}
-                                  >
-                                    {expected.label}
-                                  </button>
-                                  <StatusBadge variant={expected.required ? 'danger' : 'info'}>
-                                    {expected.required ? 'Required' : 'Optional'}
-                                  </StatusBadge>
-                                  <StatusBadge variant={expected.multiAssign ? 'info' : 'neutral'}>
-                                    {expected.multiAssign ? 'Multiple' : 'Single'}
-                                  </StatusBadge>
-                                  {!expected.multiAssign && peopleAssigned > 0 && (
-                                    <span style={{ fontSize: 11, color: 'var(--color-success)', marginLeft: 'auto' }}>✓ Filled</span>
-                                  )}
-                                </div>
-                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{expected.purpose}</div>
-                                {assigned.length > 0 && (
-                                  <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                    {assigned.map((a) => {
-                                      const isAgent = !!a.agentId;
-                                      const displayName = isAgent ? (a.agentName || 'Agent') : (a.personName || 'Unknown');
-                                      // Does this org-level role holder also sit on
-                                      // THIS group? If not, offer to add them so the
-                                      // body actually has the role represented.
-                                      const inThisGroup = isAgent || (a.personId ? memberIdSet.has(a.personId) : false);
-                                      return (
-                                        <span key={a.id} title={inThisGroup ? undefined : 'Holds this role in the org but is not a member of this group'}
-                                          style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : inThisGroup ? '#d1f0eb' : '#fef3c7', color: isAgent ? '#5b21b6' : inThisGroup ? '#0f4f46' : '#92400e', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                          {isAgent && <span title="AI Agent" style={{ display: 'inline-flex' }}><Bot size={11} strokeWidth={2.4} /></span>}
-                                          {displayName}
-                                          {!inThisGroup && isAdmin && (
-                                            <button
-                                              onClick={() => a.personId && addMemberById(a.personId)}
-                                              title="Add to this group"
-                                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 10, fontWeight: 700, padding: 0, lineHeight: 1, textDecoration: 'underline' }}
-                                            >
-                                              + add to group
-                                            </button>
-                                          )}
-                                          {isAdmin && <button type="button" onClick={() => handleRemoveDamaRole(a.id)} aria-label="Remove role assignment" title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}><span aria-hidden="true">&times;</span></button>}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                                {/* Domain assignments — only for roles
-                                    where this question is meaningful
-                                    (Data Owner, Domain Owner, Steward,
-                                    Architect, etc.). Reads straight
-                                    from the DataDomain entity; nothing
-                                    domain-related is duplicated onto
-                                    the role assignment. Agents are
-                                    skipped — domain ownership /
-                                    stewardship is people-only today. */}
-                                {DOMAIN_SCOPED_ROLE_TYPES.has(expected.roleType) && assigned.length > 0 && (
-                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    {assigned.filter((a) => !a.agentId && a.personId).map((a) => {
-                                      const isOwnerRole = expected.roleType === 'DATA_OWNER' || expected.roleType === 'DATA_DOMAIN_OWNER';
-                                      const isStewardRole = expected.roleType === 'DATA_STEWARD'
-                                        || expected.roleType === 'DATA_DOMAIN_STEWARD'
-                                        || expected.roleType === 'BUSINESS_DATA_STEWARD';
-                                      // Architect / unspecified: surface anywhere they're attached.
-                                      const ownedDomains = dataDomains.filter((d) => d.ownerId === a.personId);
-                                      const stewardedDomains = dataDomains.filter((d) => (d.stewardIds || []).includes(a.personId!));
-                                      const showOwned = isOwnerRole || (!isOwnerRole && !isStewardRole);
-                                      const showStewarded = isStewardRole || (!isOwnerRole && !isStewardRole);
-                                      const ownedNames = showOwned ? ownedDomains.map((d) => d.name) : [];
-                                      const stewardedNames = showStewarded ? stewardedDomains.map((d) => d.name) : [];
-                                      const noAssignments = ownedNames.length === 0 && stewardedNames.length === 0;
-                                      const parts: string[] = [];
-                                      if (ownedNames.length) parts.push(`owns ${ownedNames.join(', ')}`);
-                                      if (stewardedNames.length) parts.push(`stewards ${stewardedNames.join(', ')}`);
-                                      return (
-                                        <div key={`dom-${a.id}`} style={{
-                                          fontSize: 11, color: noAssignments ? '#b91c1c' : 'var(--color-text-secondary)',
-                                          paddingLeft: 6,
-                                        }}>
-                                          <strong style={{ fontWeight: 600, color: 'var(--color-text)' }}>{a.personName || 'Unknown'}:</strong>{' '}
-                                          {noAssignments
-                                            ? <em>no data domains assigned</em>
-                                            : parts.join(' · ')}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                                {canAddMore && (
-                                  <div style={{ marginTop: 8, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                                    {canAddPerson && (
-                                      <>
-                                        {/* Shared PersonPicker (search / org tree / by-group),
-                                            not a flat native <select>, so assigning a role holder
-                                            looks and works like every other person selector in the
-                                            app. Gated to people not already holding this role. */}
-                                        <div style={{ minWidth: 190, maxWidth: 260 }}>
-                                          <PersonPicker
-                                            mode="single"
-                                            valueMode="id"
-                                            orgId={activeOrgId || undefined}
-                                            value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
-                                            onChange={(id: string | null) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(id || ''); if (id) setAssignRoleAgentId(''); }}
-                                            placeholder="Person…"
-                                            eligibleKeys={new Set(people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => p.id))}
-                                          />
-                                        </div>
-                                        <Button
-                                          variant="primary"
-                                          size="sm"
-                                          disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
-                                          onClick={() => handleAssignDamaRole('person')}
-                                        >
-                                          Assign
-                                        </Button>
-                                      </>
-                                    )}
-                                    {canAddPerson && canAddAgent && (
-                                      <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
-                                    )}
-                                    {canAddAgent && (
-                                      <>
-                                        <select
-                                          aria-label="Agent"
-                                          style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: '#c4b5fd' }}
-                                          value={assignRoleType === expected.roleType ? assignRoleAgentId : ''}
-                                          onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRoleAgentId(e.target.value); if (e.target.value) setAssignRolePersonId(''); }}
-                                        >
-                                          <option value="">Agent…</option>
-                                          {agentsList.filter((a) => !assigned.some((d) => d.agentId === a.id)).map((a) => (
-                                            <option key={a.id} value={a.id}>{a.name}</option>
-                                          ))}
-                                        </select>
-                                        <Button
-                                          variant="primary"
-                                          size="sm"
-                                          style={{ background: '#7c3aed', borderColor: '#7c3aed' }}
-                                          disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
-                                          onClick={() => handleAssignDamaRole('agent')}
-                                        >
-                                          Assign
-                                        </Button>
-                                      </>
-                                    )}
-                                    {isPeopleOnly && canAddPerson && (
-                                      <>
-                                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
-                                        <select
-                                          aria-label="Agent"
-                                          aria-disabled="true"
-                                          disabled
-                                          title={PEOPLE_ONLY_REASON}
-                                          style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-muted)', cursor: 'not-allowed' }}
-                                          value=""
-                                        >
-                                          <option value="">Agent…</option>
-                                        </select>
-                                        <Button
-                                          type="button"
-                                          variant="primary"
-                                          size="sm"
-                                          disabled
-                                          aria-disabled="true"
-                                          title={PEOPLE_ONLY_REASON}
-                                          style={{ background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}
-                                        >
-                                          Assign
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Add Member (collapsed by default) — admin-only write. */}
-              {isAdmin && (
-              <div style={{ marginBottom: 12 }}>
-                {!showAddMember ? (
-                  <button onClick={() => setShowAddMember(true)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: 0 }}>
-                    + Add member without governance role
-                  </button>
-                ) : (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-                    <div style={{ flex: 2 }}>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
-                      <select aria-label="Person" style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
-                        <option value="">-- Select person --</option>
-                        {availablePeople.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Group Role</label>
-                      <select aria-label="Group Role" style={selectStyle} value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
-                        {groupRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-                      </select>
-                    </div>
-                    <Button variant="secondary" onClick={() => { setShowAddMember(false); setMemberPersonId(''); setMemberRole('MEMBER'); }}>Cancel</Button>
-                    <Button
-                      variant="primary"
-                      style={{ whiteSpace: 'nowrap' }}
-                      disabled={!memberPersonId}
-                      onClick={() => { handleAddMember(); setShowAddMember(false); }}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                )}
-              </div>
-              )}
-
-              {/* Members Table */}
-              {(!selectedGroupDetail.members || selectedGroupDetail.members.length === 0) ? (
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 12, textAlign: 'center', padding: '1.5rem' }}>
-                  No members yet. Assign governance roles above to add people to this group.
-                </p>
-              ) : (
-                <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                  <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--color-bg)' }}>
-                        <th scope="col" style={thStyle}>Person Name</th>
-                        <th scope="col" style={thStyle}>Group Role</th>
-                        <th scope="col" style={thStyle}>DAMA Roles</th>
-                        <th scope="col" style={thStyle}>Since</th>
-                        <th scope="col" style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedGroupDetail.members.map((member: GroupMember) => {
-                        const personRoles = memberDamaRoles.filter((r) => r.personId === member.personId);
-                        return (
-                          <tr key={member.personId}
-                            style={{ transition: 'background 0.1s' }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = '')}
-                          >
-                            <td style={{ ...tdStyle, fontWeight: 500 }}>{member.personName}</td>
-                            <td style={tdStyle}>
-                              <span style={makeBadge(roleBadgeColors[member.groupRole] || roleBadgeColors.MEMBER)}>
-                                {ROLE_LABELS[member.groupRole] || member.groupRole}
-                              </span>
-                            </td>
-                            <td style={tdStyle}>
-                              {personRoles.length > 0 ? (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                                  {personRoles.map((r) => (
-                                    <span key={r.id} style={{ ...makeBadge(roleChipColors(r.roleType)), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                                      {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
-                                      {isAdmin && <button
-                                        onClick={() => handleRemoveDamaRole(r.id)}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: 'inherit', padding: 0, lineHeight: 1, opacity: 0.7 }}
-                                        title="Remove role"
-                                      >&times;</button>}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>None assigned</span>
-                              )}
-                            </td>
-                            <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>
-                              {new Date(member.since).toLocaleDateString()}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'center' }}>
-                              {isAdmin ? (
-                              <button
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11, padding: '2px 6px' }}
-                                onClick={() => setConfirmRemoveMember({ personId: member.personId, personName: member.personName || 'this member' })}
-                                title="Remove this person from the group (their governance role assignments stay)"
-                              >
-                                Remove from group
-                              </button>
-                              ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-              )}
-
-
-              {/* Recommended Child Groups */}
-              {isAdmin && recommendations.length > 0 && !showRecommendations && (
-                <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button
-                    onClick={() => setShowRecommendations(true)}
-                    style={{
-                      padding: '6px 14px', fontSize: 12, fontWeight: 500,
-                      background: 'var(--color-surface)', color: 'var(--color-primary)',
-                      border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-                    }}
-                  >
-                    <Icon name="wand" size={14} />
-                    Explore Recommendations ({recommendations.length})
-                  </button>
-                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                    DAMA best practices suggest additional groups under this one
-                  </span>
-                </div>
-              )}
-              {isAdmin && showRecommendations && recommendations.length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ display: 'inline-flex', color: 'var(--color-primary)' }}><Icon name="wand" size={14} /></span>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>Recommended Groups</div>
-                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        Added under "{selectedGroupDetail.name}" · based on DAMA best practices{selectedGroupDetail.type === 'COMMITTEE' || selectedGroupDetail.type === 'OFFICE' ? ' and your data domains' : ''}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setShowRecommendations(false)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-text-muted)' }}
-                    >
-                      Hide
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {recommendations.map((rec) => (
-                      <div key={rec.name} style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '10px 14px',
-                        background: 'var(--color-primary-light)',
-                        border: '1px solid var(--color-primary)',
-                        borderRadius: 'var(--radius-md)',
-                      }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600 }}>{rec.name}</span>
-                            <span style={makeBadge(typeBadgeColors[rec.type] || typeBadgeColors.COMMUNITY_OF_PRACTICE)}>
-                              {GROUP_TYPE_SHORT[rec.type] || rec.typeLabel}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{rec.reason}</div>
-                        </div>
-                        <button
-                          onClick={() => handleCreateRecommended(rec)}
-                          disabled={creatingRec !== null}
-                          style={{
-                            padding: '5px 14px', fontSize: 11, fontWeight: 500,
-                            background: '#fff', color: 'var(--color-primary)',
-                            border: '1px solid var(--color-primary)', borderRadius: 4,
-                            cursor: creatingRec ? 'not-allowed' : 'pointer',
-                            opacity: creatingRec ? 0.6 : 1,
-                            whiteSpace: 'nowrap', flexShrink: 0,
-                          }}
-                        >
-                          {creatingRec === rec.name ? 'Creating...' : 'Create'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Card>
-          ) : (
-            <Card padding={32} shadow="none" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200, color: 'var(--color-text-muted)', textAlign: 'center' }}>
-              <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.4 }}>{'←'}</div>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Select a group</div>
-              <div style={{ fontSize: 12 }}>Click on a governance group in the tree to view its members, roles, and recommendations.</div>
-            </Card>
-          )}
-        </div>
+        {/* Right — Add form (only while adding, with a populated tree). */}
+        {showForm && tree.length > 0 && (
+          <div style={{ alignSelf: 'start' }}>{formCard}</div>
+        )}
       </div>
     </div>
   );
