@@ -696,9 +696,9 @@ function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
               }
               actions={
                 <>
+                  <Link to="/reports" style={backLinkStyle}>{'←'} Back to Reports</Link>
                   <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => runReport(r)} />
                   <Button size="sm" leadingIcon={<Icon name="edit" size={13} />} onClick={() => navigate(`/reports/builder/${r.id}`)}>Edit</Button>
-                  <Link to="/reports" style={backLinkStyle}>{'←'} Back to Reports</Link>
                 </>
               }
             />

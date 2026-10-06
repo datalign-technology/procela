@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage, successToast, errorToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
-import DetailEditActions from '../components/DetailEditActions';
+import { HeaderEditActions } from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
@@ -211,12 +211,15 @@ function TaskFields({ form, setForm, people }: {
 // The expanded row: read-only detail with a view/edit toggle. Edit flips the
 // SAME panel into the field grid and one Save writes PUT /governance-tasks/:id
 // — the row's own in-place editor (there's no separate edit form anymore).
-export function ExpandedTask({ task, people, orgId, canEdit, onSaved }: {
+export function ExpandedTask({ task, people, orgId, canEdit, onSaved, actionsSlot }: {
   task: GovernanceTask;
   people: Person[];
   orgId: string | null;
   canEdit: boolean;
   onSaved: () => void;
+  /** When set, the Edit / Save·Cancel cluster renders into the page header's
+   *  actions slot (the detail-page placement) instead of inline. */
+  actionsSlot?: HTMLElement | null;
 }) {
   const m = useDetailEditMode<FormData>(
     {
@@ -248,11 +251,7 @@ export function ExpandedTask({ task, people, orgId, canEdit, onSaved }: {
   );
   return (
     <div>
-      {canEdit && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
-          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
-        </div>
-      )}
+      <HeaderEditActions slot={actionsSlot} editing={m.isEditing} canEdit={canEdit} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
       {m.isEditing ? (
         <TaskFields form={m.draft} setForm={(next) => m.patch(next)} people={people} />
       ) : (

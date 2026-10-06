@@ -747,7 +747,19 @@ pieces compose:
   an inherited / locked record); edit → `Cancel` + `Save changes`
   (disabled until `dirty`). `before` holds the `← Back to X` link so it
   stays put across the mode swap. Drop it into the `PageHeader` /
-  `Modal` `actions` slot.
+  `Modal` `actions` slot. The Edit cluster always lives in the header
+  next to Back — never inside the body card.
+- **`<HeaderEditActions slot={…} …/>`** — use this instead of
+  `<DetailEditActions>` when the `useDetailEditMode` state lives in a
+  **reused detail body** (an `ExpandedX` / panel shared with another
+  surface) rather than the page itself. The detail-page wrapper exposes a
+  header slot — `actions={<><Link…>← Back</Link><span ref={setSlot}/></>}`
+  with `const [slot, setSlot] = useState<HTMLElement|null>(null)` — and
+  passes it to the body; `HeaderEditActions` **portals** the cluster into
+  that slot so Edit sits in the header, while the body keeps owning the
+  edit state. Portaling (not lifting the controller) keeps the cluster
+  re-rendering with the body, so `Save` always writes the latest draft.
+  With no `slot` it falls back to the body's own right-aligned inline row.
 - **`<EditableField>`** — one labelled field that renders its **value**
   in view mode (pixel-identical to the old per-page `Field` helper) and
   the matching **input** in edit mode, from one call site. Built-in

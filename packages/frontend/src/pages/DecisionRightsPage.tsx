@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
-import DetailEditActions from '../components/DetailEditActions';
+import { HeaderEditActions } from '../components/DetailEditActions';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import FacetChips from '../components/FacetChips';
@@ -348,7 +348,7 @@ function DecisionRightFields({ form, setForm, people, groups }: {
 // The expanded row: read-only RACI detail with a view/edit toggle. Edit flips
 // the SAME panel into the field grid and one Save writes PUT /decision-rights/
 // :id — the row's own in-place editor (there's no separate edit form anymore).
-export function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onSaved, showRecommends, showApproves, showInformed, showEscalation }: {
+export function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onSaved, showRecommends, showApproves, showInformed, showEscalation, actionsSlot }: {
   row: DecisionRight;
   people: Person[];
   groups: GovernanceGroup[];
@@ -359,6 +359,9 @@ export function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onS
   showApproves: boolean;
   showInformed: boolean;
   showEscalation: boolean;
+  /** When set, the Edit / Save·Cancel cluster renders into the page header's
+   *  actions slot (the detail-page placement) instead of inline. */
+  actionsSlot?: HTMLElement | null;
 }) {
   const m = useDetailEditMode<DecisionForm>(
     {
@@ -387,19 +390,16 @@ export function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onS
   );
   return (
     <div>
-      {canEdit && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
-          <DetailEditActions
-            editing={m.isEditing}
-            canEdit
-            dirty={m.dirty}
-            saving={m.saving}
-            onEdit={m.enter}
-            onCancel={m.cancel}
-            onSave={m.save}
-          />
-        </div>
-      )}
+      <HeaderEditActions
+        slot={actionsSlot}
+        editing={m.isEditing}
+        canEdit={canEdit}
+        dirty={m.dirty}
+        saving={m.saving}
+        onEdit={m.enter}
+        onCancel={m.cancel}
+        onSave={m.save}
+      />
       {m.isEditing ? (
         <DecisionRightFields form={m.draft} setForm={(next) => m.patch(next)} people={people} groups={groups} />
       ) : (
