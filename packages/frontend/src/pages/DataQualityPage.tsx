@@ -1,12 +1,11 @@
 import { SkeletonRows } from '../components/Skeleton';
-import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import StatTile from '../components/StatTile';
-import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -27,9 +26,6 @@ import { renderNavIcon } from '../components/navIcons';
 import HelpPopover from '../components/HelpPopover';
 import ActiveFiltersBar from '../components/ActiveFiltersBar';
 import SearchInput from '../components/SearchInput';
-import type { RulesModalAsset } from '../components/DataQualityRulesModal';
-// Lazy: only renders when the user clicks the rules icon on a row.
-const DataQualityRulesModal = lazy(() => import('../components/DataQualityRulesModal'));
 import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
@@ -433,7 +429,6 @@ export default function DataQualityPage({
   const setTab = (t: 'assets' | 'rules') => { setInternalTab(t); onTabChange?.(t); };
   const [fullAssets, setFullAssets] = useState<DataAssetFull[]>([]);
   const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
-  const [rulesModalAsset, setRulesModalAsset] = useState<RulesModalAsset | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -826,21 +821,9 @@ export default function DataQualityPage({
           assets={fullAssets}
           rulesByAsset={rulesByAsset}
           systemNameById={systemNameById}
-          activeOrgId={activeOrgId}
           onRefreshAll={fetchData}
-          onManageRules={(a, colName) => setRulesModalAsset({ id: a.id, name: a.name, sourceAsset: a.sourceAsset, sourceColumn: colName || a.sourceColumn })}
           actionsPortal={actionsPortal}
         />
-      )}
-
-      {rulesModalAsset && (
-        <Suspense fallback={null}>
-          <DataQualityRulesModal
-            asset={rulesModalAsset}
-            onClose={() => setRulesModalAsset(null)}
-            onAfterChange={fetchData}
-          />
-        </Suspense>
       )}
 
       {tab === 'rules' && (<>
@@ -1093,23 +1076,19 @@ interface ColumnWithHealth {
   healthScore?: number | null;
 }
 
-function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefreshAll, onManageRules, actionsPortal }: {
+function AssetsTab({ assets, rulesByAsset, systemNameById, onRefreshAll, actionsPortal }: {
   assets: DataAssetFull[];
   rulesByAsset: Map<string, QualityRule[]>;
   systemNameById: Record<string, string>;
-  activeOrgId: string;
   onRefreshAll: () => void | Promise<void>;
-  onManageRules: (asset: DataAssetFull, columnName?: string) => void;
   // Tab-strip slot (from the Data Assets hub) to portal this tab's toolbar
   // into, so the Quality tab carries the same Export + Columns controls the
   // Registry and Rules tabs do.
   actionsPortal?: HTMLElement | null;
 }) {
+  const navigate = useNavigate();
   const { addToast } = useToastStore();
   const assetCols = useColumnPicker<AssetColId>('procela.dataQuality.assetsCols.v1', ASSET_COLUMN_DEFS);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [columnsMap, setColumnsMap] = useState<Record<string, ColumnWithHealth[]>>({});
-  const [loadingCols, setLoadingCols] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState<string | null>(null);
   const [filterSystem, setFilterSystem] = useState('');
   const [filterOwner, setFilterOwner] = useState('');
@@ -1162,51 +1141,6 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     'asset',
   );
 
-  const thLocal: React.CSSProperties = {
-    textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-    color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-  };
-
-  const toggleExpand = async (assetId: string) => {
-    if (expandedId === assetId) { setExpandedId(null); return; }
-    setExpandedId(assetId);
-    setLoadingCols(assetId);
-    try {
-      const res = await apiClient.get<{ success: boolean; data: ColumnWithHealth[] }>(`/data-assets/${assetId}/columns`);
-      setColumnsMap((prev) => ({ ...prev, [assetId]: res.data || [] }));
-    } catch { /* */ }
-    finally { setLoadingCols(null); }
-  };
-
-  const refreshColumns = async (assetId: string) => {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: ColumnWithHealth[] }>(`/data-assets/${assetId}/columns`);
-      setColumnsMap((prev) => ({ ...prev, [assetId]: res.data || [] }));
-    } catch { /* */ }
-  };
-
-  const quickAddRule = async (assetId: string, col: ColumnWithHealth, ruleType: string) => {
-    const dimensions: Record<string, string> = { NOT_NULL: 'COMPLETENESS', UNIQUE: 'UNIQUENESS' };
-    try {
-      await apiClient.post('/data-quality', {
-        dataAssetId: assetId,
-        columnId: col.id,
-        name: `${col.columnName}: ${ruleType.replace('_', ' ')}`,
-        dimension: dimensions[ruleType] || 'VALIDITY',
-        ruleType,
-        parameters: {},
-        threshold: 95,
-        ...(activeOrgId ? { orgId: activeOrgId } : {}),
-      });
-      // Recompute the asset's health so the Rules column / health bar
-      // reflect the new rule immediately.
-      try { await apiClient.post(`/data-quality/compute-health/${assetId}`); } catch { /* */ }
-      addToast('success', `Added ${ruleType.replace('_', ' ')} rule for ${col.columnName}`);
-      await refreshColumns(assetId);
-      await onRefreshAll();
-    } catch { addToast('error', 'Failed to add rule'); }
-  };
-
   const runAllRules = async (e: React.MouseEvent, assetId: string, assetName: string) => {
     e.stopPropagation();
     setRunningAll(assetId);
@@ -1222,7 +1156,6 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
           `${assetName}: ran ${d.ran} rules \u2014 health ${d.assetHealth}%`,
         );
       }
-      if (expandedId === assetId) await refreshColumns(assetId);
       await onRefreshAll();
     } catch {
       addToast('error', `Failed to run rules for ${assetName}`);
@@ -1352,76 +1285,6 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     </>
   );
 
-  // Expanded region is page-owned: DataTable never fetches. Columns are
-  // lazy-loaded into columnsMap by toggleExpand.
-  const renderExpandedRow = (a: DataAssetFull) => {
-    const cols = columnsMap[a.id] || [];
-    return (
-      <div style={{ padding: '12px 20px 12px 50px' }}>
-        {loadingCols === a.id ? (
-          <Spinner label="Loading…" />
-        ) : cols.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
-            No columns defined. Auto-discover them from the Data Assets page.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Column</th>
-                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Type</th>
-                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Health</th>
-                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Rules</th>
-                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cols.map((col) => {
-                const h = col.healthScore;
-                const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? 'var(--color-success)' : h >= 50 ? 'var(--color-warning)' : 'var(--color-error)';
-                return (
-                  <tr key={col.id}>
-                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
-                      {col.columnName}
-                    </td>
-                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>{col.dataType || '—'}</td>
-                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)' }}>
-                      {h != null ? (
-                        <span style={{ fontWeight: 600, fontSize: 12, color: hc }}>{h}%</span>
-                      ) : (
-                        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{(col.rulesCount || 0) > 0 ? 'Not run' : '—'}</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontSize: 11 }}>
-                      {(col.rulesCount || 0) > 0 ? (
-                        <span>
-                          {col.rulesCount}
-                          {(col.rulesPassing || 0) > 0 && <span style={{ color: 'var(--color-success)', marginLeft: 4 }}>{'✔'}{col.rulesPassing}</span>}
-                          {(col.rulesFailing || 0) > 0 && <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>{'✖'}{col.rulesFailing}</span>}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--color-text-muted)' }}>None</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddRule(a.id, col, 'NOT_NULL')} />
-                        <IconButton size="sm" icon="check" label="Add UNIQUE rule" onClick={() => quickAddRule(a.id, col, 'UNIQUE')} />
-                        <IconButton size="sm" icon="settings" label="Manage rules for this column" onClick={() => onManageRules(a, col.columnName)} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div>
       {actionsPortal && createPortal(qualityActions, actionsPortal)}
@@ -1465,12 +1328,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
           columns={assetColumns}
           rowKey={(a) => a.id}
           sort={{ sortKey, sortDir, onSort: toggleSort }}
-          expansion={{
-            expandedIds: expandedId ? new Set([expandedId]) : new Set<string>(),
-            onToggleExpanded: toggleExpand,
-            renderExpandedRow,
-            trigger: 'row-click',
-          }}
+          onRowClick={(a) => navigate(`/data-assets/${a.id}`)}
           emptyMessage="No assets match the current filters."
         />
       </Card>

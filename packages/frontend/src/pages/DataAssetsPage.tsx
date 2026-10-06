@@ -55,6 +55,9 @@ import { errorMessage, errorToast } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
 // Lazy: only renders when the user clicks "Link to connection" on a row.
 const LinkConnectionModal = lazy(() => import('../components/LinkConnectionModal'));
+// Lazy: the quality-rules editor opened from a bound column on the 360 detail.
+const DataQualityRulesModal = lazy(() => import('../components/DataQualityRulesModal'));
+import type { RulesModalAsset } from '../components/DataQualityRulesModal';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SectionCard from '../components/SectionCard';
@@ -1200,6 +1203,32 @@ export default function DataAssetsPage({
       setViewing360(res.data || null);
     } catch { /* */ }
     finally { setLoading360(false); }
+  };
+
+  // Data-quality rules for a bound column, managed in-line on the 360 detail
+  // (the Quality tab's per-column rule actions moved here when that tab became
+  // a navigation into this page). The "Manage rules" modal opens pre-scoped;
+  // the quick-add buttons post a NOT_NULL / UNIQUE rule and re-fetch the 360
+  // so the column's rule count + health update.
+  const [dqRulesScope, setDqRulesScope] = useState<RulesModalAsset | null>(null);
+  const quickAddColumnRule = async (col: Asset360Column, ruleType: 'NOT_NULL' | 'UNIQUE') => {
+    if (!viewing360) return;
+    const dims: Record<string, string> = { NOT_NULL: 'COMPLETENESS', UNIQUE: 'UNIQUENESS' };
+    try {
+      await apiClient.post('/data-quality', {
+        dataAssetId: viewing360.asset.id,
+        columnId: col.id,
+        name: `${col.columnName}: ${ruleType.replace('_', ' ')}`,
+        dimension: dims[ruleType],
+        ruleType,
+        parameters: {},
+        threshold: 95,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
+      });
+      try { await apiClient.post(`/data-quality/compute-health/${viewing360.asset.id}`); } catch { /* */ }
+      addToast('success', `Added ${ruleType.replace('_', ' ')} rule for ${col.columnName}`);
+      await open360(viewing360.asset.id);
+    } catch (err) { addToast('error', errorMessage(err, 'Failed to add rule')); }
   };
 
   // Detail route (/data-assets/:id): load the 360 for the focused asset and
@@ -2459,6 +2488,9 @@ export default function DataAssetsPage({
                             <th style={{ padding: '4px 8px', fontWeight: 600 }}>Type</th>
                             <th style={{ padding: '4px 8px', fontWeight: 600 }}>Rules</th>
                             <th style={{ padding: '4px 8px', fontWeight: 600 }}>Health</th>
+                            {canWrite && !isInheritedAsset(viewing360.asset.orgId, activeOrgId) && (
+                              <th style={{ padding: '4px 8px', fontWeight: 600, textAlign: 'center' }}>Actions</th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -2481,6 +2513,15 @@ export default function DataAssetsPage({
                                 <td style={{ padding: '5px 8px', fontWeight: 600, color: hColor }}>
                                   {h == null ? '—' : `${h}%`}
                                 </td>
+                                {canWrite && !isInheritedAsset(viewing360.asset.orgId, activeOrgId) && (
+                                  <td style={{ padding: '5px 8px', textAlign: 'center' }}>
+                                    <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                                      <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddColumnRule(col, 'NOT_NULL')} />
+                                      <IconButton size="sm" icon="check" label="Add UNIQUE rule" onClick={() => quickAddColumnRule(col, 'UNIQUE')} />
+                                      <IconButton size="sm" icon="settings" label="Manage rules for this column" onClick={() => setDqRulesScope({ id: viewing360.asset.id, name: viewing360.asset.name, sourceAsset: viewing360.binding?.sourceAsset, sourceColumn: col.columnName })} />
+                                    </div>
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}
@@ -2661,6 +2702,16 @@ export default function DataAssetsPage({
             })() : undefined}
             onClose={() => setLinkModalAsset(null)}
             onLinked={fetchData}
+          />
+        </Suspense>
+      )}
+
+      {dqRulesScope && (
+        <Suspense fallback={null}>
+          <DataQualityRulesModal
+            asset={dqRulesScope}
+            onClose={() => setDqRulesScope(null)}
+            onAfterChange={() => { if (viewing360) void open360(viewing360.asset.id); }}
           />
         </Suspense>
       )}
