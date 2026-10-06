@@ -517,6 +517,15 @@ export default function GovernanceGroupDetailPage() {
         actions={
           <>
             <Button size="sm" onClick={() => navigate('/governance-groups')}>← Back to list</Button>
+            <DetailEditActions
+              editing={m.isEditing}
+              canEdit={isAdmin}
+              dirty={m.dirty}
+              saving={m.saving}
+              onEdit={m.enter}
+              onCancel={m.cancel}
+              onSave={m.save}
+            />
             {isAdmin && <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>}
           </>
         }
@@ -539,17 +548,8 @@ export default function GovernanceGroupDetailPage() {
           description / charter) with a view→Edit→Save toggle, matching every
           other detail surface. Membership & roles below stay live. */}
       <Card marginBottom={16}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ marginBottom: 12 }}>
           <SectionLabel marginBottom={0}>Details</SectionLabel>
-          <DetailEditActions
-            editing={m.isEditing}
-            canEdit={isAdmin}
-            dirty={m.dirty}
-            saving={m.saving}
-            onEdit={m.enter}
-            onCancel={m.cancel}
-            onSave={m.save}
-          />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
           {m.isEditing && (
