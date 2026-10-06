@@ -399,7 +399,17 @@ router.get('/:id', async (req: Request, res: Response) => {
   const rule = await dataQualityRulesRepo.get(String(req.params.id));
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
   if (!assertOrgAccess(req, res, rule.orgId, 'Quality rule not found')) return;
-  res.json({ success: true, data: rule });
+  // Enrich with the owning asset's name and a human-readable definition, the
+  // same shape the list endpoint returns, so the rule detail page can render
+  // its target + description from a single fetch.
+  const [allAssets, allConns, allBindings] = await Promise.all([
+    dataAssetsRepo.list(), connectionsRepo.list(), dataAssetBindingsRepo.list(),
+  ]);
+  const asset = allAssets.find((a) => a.id === rule.dataAssetId);
+  const definition = rule.ruleType
+    ? describeRule(rule.ruleType, rule.parameters || {}, contextForRule(rule, allAssets, allConns, allBindings))
+    : null;
+  res.json({ success: true, data: { ...rule, dataAssetName: asset?.name || '', definition } });
 });
 
 /** POST /api/v1/data-quality — create rule */

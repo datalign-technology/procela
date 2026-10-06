@@ -85,6 +85,39 @@ describe('/data-quality routing', () => {
     assert.strictEqual(res.status, 404);
   });
 
+  it('GET /:id enriches the rule with its owning asset name', async () => {
+    // The rule detail page fetches a single rule and renders its target from
+    // dataAssetName, so GET /:id must join the asset the way the list does.
+    const now = new Date().toISOString();
+    const seedAsset = {
+      id: 'test-dq-detail-asset', orgId: 'test-org',
+      name: 'Detail-target asset', description: '', systemId: '',
+      owner: '', steward: '', governanceTier: 'BRONZE', healthScore: 0,
+      createdAt: now, updatedAt: now,
+    };
+    pruneRulesForAsset(seedAsset.id);
+    for (let i = dataAssets.length - 1; i >= 0; i--) {
+      if (dataAssets[i].id === seedAsset.id) dataAssets.splice(i, 1);
+    }
+    dataAssets.push(seedAsset);
+    try {
+      const created = await request(port, 'POST', '/data-quality', {
+        dataAssetId: seedAsset.id, name: 'Detail test', ruleType: 'NOT_NULL',
+        threshold: 95, weight: 5,
+      });
+      assert.strictEqual(created.status, 201);
+      const got = await request(port, 'GET', `/data-quality/${created.body.data.id}`);
+      assert.strictEqual(got.status, 200);
+      assert.strictEqual(got.body.data.dataAssetName, 'Detail-target asset');
+      // ruleType rules also carry a human-readable definition.
+      assert.ok(got.body.data.definition, 'expected a derived definition');
+    } finally {
+      const ai = dataAssets.indexOf(seedAsset);
+      if (ai !== -1) dataAssets.splice(ai, 1);
+      pruneRulesForAsset(seedAsset.id);
+    }
+  });
+
   it('POST / persists templateId and scheduleFrequency', async () => {
     // Need an asset to attach the rule to.
     const now = new Date().toISOString();
