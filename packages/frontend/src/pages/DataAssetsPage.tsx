@@ -2376,6 +2376,7 @@ export default function DataAssetsPage({
           copyLabel="Copy asset ID"
           subtitle={viewing360?.asset.description}
           actions={<>
+            <Link to="/data-assets" style={backLinkStyle}>{'←'} Back to Data Assets</Link>
             {viewing360 && (() => {
               const detailInherited = isInheritedAsset(viewing360.asset.orgId, activeOrgId);
               const ownerName = getOrgName(viewing360.asset.orgId);
@@ -2395,7 +2396,6 @@ export default function DataAssetsPage({
                 </>
               );
             })()}
-            <Link to="/data-assets" style={backLinkStyle}>{'←'} Back to Data Assets</Link>
           </>}
         />
         {loading360 ? (

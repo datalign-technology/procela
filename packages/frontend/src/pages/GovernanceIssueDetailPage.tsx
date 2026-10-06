@@ -36,6 +36,9 @@ export default function GovernanceIssueDetailPage() {
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Header slot the detail body portals its Edit / Save·Cancel cluster into,
+  // so it sits in the PageHeader next to Back (the People detail-page layout).
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
 
   const fetchIssue = useCallback(async () => {
     if (!id) return;
@@ -87,10 +90,13 @@ export default function GovernanceIssueDetailPage() {
         copyId={issue.id}
         copyLabel="Copy issue ID"
         subtitle={issue.issueType.replace(/_/g, ' ')}
-        actions={<Link to={BACK} style={backLinkStyle}>{'←'} Back to Governance Work</Link>}
+        actions={<>
+          <Link to={BACK} style={backLinkStyle}>{'←'} Back to Governance Work</Link>
+          <span ref={setActionsSlot} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }} />
+        </>}
       />
       <Card>
-        <ExpandedIssue issue={issue} people={people} domains={domains} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchIssue} />
+        <ExpandedIssue issue={issue} people={people} domains={domains} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchIssue} actionsSlot={actionsSlot} />
       </Card>
     </div>
   );

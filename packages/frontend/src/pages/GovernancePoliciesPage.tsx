@@ -5,7 +5,7 @@ import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import { apiClient } from '../api/client';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
-import DetailEditActions from '../components/DetailEditActions';
+import { HeaderEditActions } from '../components/DetailEditActions';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -207,12 +207,15 @@ function PolicyFields({ form, setForm, people }: {
 // Save writes PUT /governance-policies/:id (round-tripping the stored content /
 // reviewFrequency that the form doesn't surface). Replaces the per-row Edit
 // icon → top-of-page form.
-function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved }: {
+function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved, actionsSlot }: {
   policy: Policy;
   people: Person[];
   canEdit: boolean;
   orgId: string | null;
   onSaved: () => void;
+  /** When set, the Edit / Save·Cancel cluster renders into the page header's
+   *  actions slot (the detail-page placement) instead of in the card header. */
+  actionsSlot?: HTMLElement | null;
 }) {
   const m = useDetailEditMode<PolicyForm>(
     {
@@ -252,9 +255,7 @@ function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved }: {
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: m.isEditing ? 12 : 10 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600 }}>Document details</h3>
-        {canEdit && (
-          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
-        )}
+        <HeaderEditActions slot={actionsSlot} editing={m.isEditing} canEdit={canEdit} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
       </div>
       {m.isEditing ? (
         <PolicyFields form={m.draft} setForm={(next) => m.patch(next)} people={people} />
@@ -315,6 +316,9 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   const [form, setForm] = useState<PolicyForm>(emptyPolicyForm);
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [expandedPolicyId, setExpandedPolicyId] = useState<string | null>(null);
+  // Header slot the document detail panel portals its Edit / Save·Cancel
+  // cluster into on the /governance-policies/:id route (People-style header).
+  const [docActionsSlot, setDocActionsSlot] = useState<HTMLElement | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
@@ -568,13 +572,14 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   // documents" panel (point at the real file on SharePoint, a web page, a file
   // server, or upload a copy), plus Controls (POLICY docType) and a Source
   // panel (promoted from an agent draft) when those apply.
-  const renderPolicyExpansion = (pol: Policy) => {
+  const renderPolicyExpansion = (pol: Policy, detailActionsSlot?: HTMLElement | null) => {
     const promo = promotionsByPolicy[pol.id];
     const docType = pol.documentType || 'POLICY';
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Document's own fields — read-only with an in-place Edit toggle. */}
-        <PolicyDetailsPanel policy={pol} people={people} canEdit={isAdmin} orgId={activeOrgId} onSaved={fetchData} />
+        {/* Document's own fields — read-only with an in-place Edit toggle. On
+            the detail route the toggle portals up to the page header. */}
+        <PolicyDetailsPanel policy={pol} people={people} canEdit={isAdmin} orgId={activeOrgId} onSaved={fetchData} actionsSlot={detailActionsSlot} />
 
         {/* Source / provenance — shown for ANY documentType promoted from an
             agent draft, so the round-trip to the source activity is reachable. */}
@@ -780,13 +785,16 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
           copyId={focusedPolicy.id}
           copyLabel="Copy document ID"
           subtitle={focusedPolicy.code}
-          actions={backLink}
+          actions={<>
+            {backLink}
+            <span ref={setDocActionsSlot} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }} />
+          </>}
         />
         <ConfirmDialog open={confirmDeleteControl !== null} title="Delete Control?"
           message="This will permanently delete this control." confirmLabel="Delete"
           onConfirm={async () => { const id = confirmDeleteControl; setConfirmDeleteControl(null); if (id) await handleDeleteControl(id); }}
           onCancel={() => setConfirmDeleteControl(null)} />
-        {renderPolicyExpansion(focusedPolicy)}
+        {renderPolicyExpansion(focusedPolicy, docActionsSlot)}
       </div>
     );
   }

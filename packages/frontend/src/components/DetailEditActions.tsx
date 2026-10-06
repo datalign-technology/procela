@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import Button from './Button';
 import SecondaryButton from './SecondaryButton';
 
@@ -55,4 +56,27 @@ export default function DetailEditActions({
       ) : null}
     </div>
   );
+}
+
+// HeaderEditActions — renders a DetailEditActions cluster into a detail page's
+// PageHeader `actions` slot (via `slot`, a DOM node the page exposes) so the
+// Edit / Save·Cancel buttons sit in the header next to Back — the People
+// detail-page placement — even when the reused detail *body* owns the
+// view/edit state. Portaling (rather than lifting the controller) keeps the
+// buttons re-rendering with the body, so Save always writes the latest draft.
+//
+// `slot === undefined` means no header slot was wired: fall back to the body's
+// own right-aligned inline row (legacy placement). `slot === null` means the
+// page's slot ref hasn't mounted yet — render nothing until it does.
+export function HeaderEditActions({ slot, ...props }: Props & { slot?: HTMLElement | null }) {
+  const cluster = <DetailEditActions {...props} />;
+  if (slot === undefined) {
+    if (!props.editing && !props.canEdit && !props.disabledHint) return null;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: props.editing ? 12 : 8 }}>
+        {cluster}
+      </div>
+    );
+  }
+  return slot ? createPortal(cluster, slot) : null;
 }

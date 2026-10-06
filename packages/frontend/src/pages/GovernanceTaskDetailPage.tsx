@@ -34,6 +34,9 @@ export default function GovernanceTaskDetailPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Header slot the detail body portals its Edit / Save·Cancel cluster into,
+  // so it sits in the PageHeader next to Back (the People detail-page layout).
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
 
   const fetchTask = useCallback(async () => {
     if (!id) return;
@@ -82,10 +85,13 @@ export default function GovernanceTaskDetailPage() {
         copyId={task.id}
         copyLabel="Copy task ID"
         subtitle={task.taskType.replace(/_/g, ' ')}
-        actions={<Link to={BACK} style={backLinkStyle}>{'←'} Back to Governance Work</Link>}
+        actions={<>
+          <Link to={BACK} style={backLinkStyle}>{'←'} Back to Governance Work</Link>
+          <span ref={setActionsSlot} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }} />
+        </>}
       />
       <Card>
-        <ExpandedTask task={task} people={people} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchTask} />
+        <ExpandedTask task={task} people={people} orgId={activeOrgId} canEdit={isAdmin} onSaved={fetchTask} actionsSlot={actionsSlot} />
       </Card>
     </div>
   );

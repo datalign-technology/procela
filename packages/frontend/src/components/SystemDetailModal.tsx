@@ -403,8 +403,8 @@ export default function SystemDetailModal({ systemId, onClose, people = [], syst
           copyLabel="Copy system ID"
           subtitle={metaSegments.length > 0 ? metaSegments.join(' · ') : undefined}
           actions={<>
-            {editActions}
             <Link to="/systems" style={backLinkStyle}>{'←'} Back to Systems</Link>
+            {editActions}
           </>}
         />
         {detailBody}
