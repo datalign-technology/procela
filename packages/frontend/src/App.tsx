@@ -25,6 +25,7 @@ const DataAssetDetailPage        = lazy(() => import('@/pages/DataAssetDetailPag
 const DataQualityRuleDetailPage  = lazy(() => import('@/pages/DataQualityRuleDetailPage'));
 const SystemsHubPage             = lazy(() => import('@/pages/SystemsHubPage'));
 const SystemDetailPage           = lazy(() => import('@/pages/SystemDetailPage'));
+const ConnectionDetailPage       = lazy(() => import('@/pages/ConnectionDetailPage'));
 const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
 const OrganizationsPage          = lazy(() => import('@/pages/OrganizationsPage'));
 const OrganizationDetailPage     = lazy(() => import('@/pages/OrganizationDetailPage'));
@@ -147,6 +148,7 @@ export default function App() {
           {/* Connections folded into the Systems hub as its second tab.
               Redirect preserves old links (Settings connector panel, bookmarks). */}
           <Route path="/connections" element={<Navigate to="/systems?tab=connections" replace />} />
+          <Route path="/connections/:id" element={<ConnectionDetailPage />} />
           <Route path="/governance-work" element={<GovernanceWorkPage />} />
           <Route path="/governance-work/tasks/:id" element={<GovernanceTaskDetailPage />} />
           <Route path="/governance-work/issues/:id" element={<GovernanceIssueDetailPage />} />

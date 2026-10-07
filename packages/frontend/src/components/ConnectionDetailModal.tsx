@@ -1,5 +1,8 @@
 import type { CSSProperties } from 'react';
+import { Link } from 'react-router-dom';
 import Modal from './Modal';
+import PageHeader from './PageHeader';
+import { useBreadcrumbLeaf } from './BreadcrumbContext';
 import Button from './Button';
 import SectionLabel from './SectionLabel';
 import EditableField from './EditableField';
@@ -39,7 +42,15 @@ interface Props {
   onEdit: (conn: ConnectionProfile) => void;
   /** Called after an in-modal save so the list refreshes. */
   onSaved?: () => void;
+  /** Render as a routed detail page (PageHeader + Back) instead of a modal —
+   *  the /connections/:id route, matching the Systems detail page. */
+  asPage?: boolean;
 }
+
+const backLinkStyle: CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
+};
 
 const badgeStyle = (palette: { bg: string; color: string }): CSSProperties => ({
   display: 'inline-block', padding: '2px 8px', borderRadius: 4,
@@ -74,7 +85,7 @@ function configEntries(conn: ConnectionProfile): Array<{ label: string; value: s
   return out;
 }
 
-export default function ConnectionDetailModal({ conn, systems, canWrite, onClose, onEdit, onSaved }: Props) {
+export default function ConnectionDetailModal({ conn, systems, canWrite, onClose, onEdit, onSaved, asPage = false }: Props) {
   const systemNameMap: Record<string, string> = {};
   systems.forEach((s) => { systemNameMap[s.id] = s.name; });
 
@@ -104,30 +115,26 @@ export default function ConnectionDetailModal({ conn, systems, canWrite, onClose
   };
   const dtStyle: CSSProperties = { color: 'var(--color-text-muted)', minWidth: 140, flexShrink: 0 };
 
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      size="md"
-      kicker="CONNECTION"
-      title={conn.name}
-      subtitle={TYPE_LABELS[conn.connectionType] || conn.connectionType}
-      ariaLabel={`Connection: ${conn.name}`}
-      actions={
-        <>
-          <span style={badgeStyle(statusBadge)}>{conn.status}</span>
-          <DetailEditActions
-            editing={m.isEditing}
-            canEdit={canWrite}
-            dirty={m.dirty}
-            saving={m.saving}
-            onEdit={m.enter}
-            onCancel={m.cancel}
-            onSave={m.save}
-          />
-        </>
-      }
-    >
+  // On the /connections/:id route the trail ends on the connection's name.
+  useBreadcrumbLeaf(asPage ? conn.name : undefined);
+
+  const editActions = (
+    <>
+      <span style={badgeStyle(statusBadge)}>{conn.status}</span>
+      <DetailEditActions
+        editing={m.isEditing}
+        canEdit={canWrite}
+        dirty={m.dirty}
+        saving={m.saving}
+        onEdit={m.enter}
+        onCancel={m.cancel}
+        onSave={m.save}
+      />
+    </>
+  );
+
+  const detailBody = (
+    <>
       {/* Overview */}
       <SectionLabel style={{ marginBottom: 10 }}>Overview</SectionLabel>
       {m.isEditing && (
@@ -258,6 +265,40 @@ export default function ConnectionDetailModal({ conn, systems, canWrite, onClose
         </div>
       </div>
       </>)}
+    </>
+  );
+
+  if (asPage) {
+    return (
+      <div>
+        <PageHeader
+          kicker="CONNECTION"
+          title={conn.name}
+          copyId={conn.id}
+          copyLabel="Copy connection ID"
+          subtitle={TYPE_LABELS[conn.connectionType] || conn.connectionType}
+          actions={<>
+            <Link to="/systems?tab=connections" style={backLinkStyle}>{'←'} Back to Connections</Link>
+            {editActions}
+          </>}
+        />
+        {detailBody}
+      </div>
+    );
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="md"
+      kicker="CONNECTION"
+      title={conn.name}
+      subtitle={TYPE_LABELS[conn.connectionType] || conn.connectionType}
+      ariaLabel={`Connection: ${conn.name}`}
+      actions={editActions}
+    >
+      {detailBody}
     </Modal>
   );
 }
