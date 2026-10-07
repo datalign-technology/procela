@@ -876,7 +876,6 @@ export default function DamaRolesPage({
             </button>
             {populatedCategories.map((cat) => {
               const isActive = filterCategory === cat;
-              const c = CATEGORY_COLORS[cat] || NEUTRAL_PALETTE;
               return (
                 <button
                   key={cat}
@@ -890,7 +889,6 @@ export default function DamaRolesPage({
                     cursor: 'pointer',
                   }}
                 >
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color, display: 'inline-block' }} />
                   {cat} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({categoryCounts[cat] || 0})</span>
                 </button>
               );
