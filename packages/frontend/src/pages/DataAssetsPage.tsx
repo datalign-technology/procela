@@ -501,7 +501,6 @@ export default function DataAssetsPage({
   const [sourceDiscoverError, setSourceDiscoverError] = useState<string | null>(null);
 
   // Column state — expandable per-asset
-  const [expandedAssetId, setExpandedAssetId] = useState<string | null>(null);
   const [columnsMap, setColumnsMap] = useState<Record<string, DataAssetColumn[]>>({});
   const [columnsLoading, setColumnsLoading] = useState<string | null>(null);
   const [discovering, setDiscovering] = useState<string | null>(null);
@@ -788,10 +787,9 @@ export default function DataAssetsPage({
   const sel = useRowSelection(selectableAssets, (a) => a.id);
 
   // Column management
-  const toggleExpandColumns = async (assetId: string) => {
-    if (expandedAssetId === assetId) { setExpandedAssetId(null); return; }
-    setExpandedAssetId(assetId);
-    // Fetch columns if we haven't already (or refresh)
+  // Fetch (or refresh) an asset's columns into columnsMap. Driven by the
+  // /data-assets/:id detail page, which hosts the columns editor + auto-discover.
+  const loadColumns = async (assetId: string) => {
     setColumnsLoading(assetId);
     try {
       const res = await apiClient.get<{ success: boolean; data: DataAssetColumn[] }>(`/data-assets/${assetId}/columns`);
@@ -1211,7 +1209,7 @@ export default function DataAssetsPage({
   // the quick-add buttons post a NOT_NULL / UNIQUE rule and re-fetch the 360
   // so the column's rule count + health update.
   const [dqRulesScope, setDqRulesScope] = useState<RulesModalAsset | null>(null);
-  const quickAddColumnRule = async (col: Asset360Column, ruleType: 'NOT_NULL' | 'UNIQUE') => {
+  const quickAddColumnRule = async (col: { id: string; columnName: string }, ruleType: 'NOT_NULL' | 'UNIQUE') => {
     if (!viewing360) return;
     const dims: Record<string, string> = { NOT_NULL: 'COMPLETENESS', UNIQUE: 'UNIQUENESS' };
     try {
@@ -1227,14 +1225,14 @@ export default function DataAssetsPage({
       });
       try { await apiClient.post(`/data-quality/compute-health/${viewing360.asset.id}`); } catch { /* */ }
       addToast('success', `Added ${ruleType.replace('_', ' ')} rule for ${col.columnName}`);
-      await open360(viewing360.asset.id);
+      await Promise.all([open360(viewing360.asset.id), loadColumns(viewing360.asset.id)]);
     } catch (err) { addToast('error', errorMessage(err, 'Failed to add rule')); }
   };
 
   // Detail route (/data-assets/:id): load the 360 for the focused asset and
   // end the breadcrumb on its name. Re-fetches when the id changes (navigating
   // between assets from the Impact / Where-used panels).
-  useEffect(() => { if (focusAssetId) void open360(focusAssetId); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [focusAssetId]);
+  useEffect(() => { if (focusAssetId) { void open360(focusAssetId); void loadColumns(focusAssetId); } /* eslint-disable-line react-hooks/exhaustive-deps */ }, [focusAssetId]);
   useBreadcrumbLeaf(focusAssetId ? viewing360?.asset.name : undefined);
 
   // In-modal view/edit for the asset's core own-fields. Advanced fields
@@ -1456,17 +1454,22 @@ export default function DataAssetsPage({
     },
   ].filter(Boolean) as DataTableColumn<DataAssetEntity>[]);
 
-  const renderAssetExpansion = (asset: DataAssetEntity) => {
+  // The columns editor — rendered on the /data-assets/:id detail page (the
+  // Registry list no longer expands inline). Auto-discover, per-column
+  // type / PK / FK / delete, data-quality rule actions, and the rules the
+  // column already carries.
+  const renderColumnsEditor = (asset: DataAssetEntity) => {
     const binding = primaryBindingOf(asset.id);
     const cols = columnsMap[asset.id] || [];
+    const canManageCols = canWrite && !isInheritedAsset(asset.orgId, activeOrgId);
     return (
-      <div style={{ background: '#fafbfc', padding: '12px 20px 12px 60px' }}>
+      <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <SectionLabel marginBottom={0}>
             Columns ({cols.length})
           </SectionLabel>
           <div style={{ display: 'flex', gap: 6 }}>
-            {binding && (
+            {binding && canManageCols && (
               <button
                 onClick={() => autoDiscoverColumns(asset.id)}
                 disabled={discovering === asset.id}
@@ -1541,9 +1544,14 @@ export default function DataAssetsPage({
                     <span style={{ fontSize: 11, color: 'var(--color-text-muted)', minWidth: 60, textAlign: 'right' }}>
                       {colRules.length > 0 ? `${colRules.length} rule${colRules.length === 1 ? '' : 's'}` : ''}
                     </span>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => requestDeleteColumn(asset.id, col)} />
-                    </div>
+                    {canManageCols && (
+                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddColumnRule(col, 'NOT_NULL')} />
+                        <IconButton size="sm" icon="check" label="Add UNIQUE rule" onClick={() => quickAddColumnRule(col, 'UNIQUE')} />
+                        <IconButton size="sm" icon="settings" label="Manage rules for this column" onClick={() => setDqRulesScope({ id: asset.id, name: asset.name, sourceAsset: binding?.sourceAsset, sourceColumn: col.columnName })} />
+                        <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => requestDeleteColumn(asset.id, col)} />
+                      </div>
+                    )}
                   </div>
                   {/* Key relationship (FK) editor — always available when the
                       column is expanded. */}
@@ -2382,11 +2390,6 @@ export default function DataAssetsPage({
             pageSize={20}
             countNoun={['data asset', 'data assets']}
             onRowClick={(a) => navigate(`/data-assets/${a.id}`)}
-            expansion={{
-              expandedIds: expandedAssetId ? new Set([expandedAssetId]) : new Set(),
-              onToggleExpanded: toggleExpandColumns,
-              renderExpandedRow: renderAssetExpansion,
-            }}
           />
         )}
       </div>
@@ -2467,73 +2470,21 @@ export default function DataAssetsPage({
                   )}
                 </div>
 
-                {/* Physical binding — the business asset maps to this table and
-                    (when scoped) this named set of its columns, each with its
-                    own measured quality. */}
-                {(viewing360.binding || viewing360.columns.length > 0) && (
-                  <Card marginBottom={20}>
-                    <SectionLabel>Bound columns</SectionLabel>
-                    {viewing360.binding && (
-                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '6px 0 10px' }}>
-                        {viewing360.binding.sourceColumns.length > 0
-                          ? <>This asset is bound to {viewing360.binding.sourceColumns.length} column{viewing360.binding.sourceColumns.length === 1 ? '' : 's'} of <code style={{ fontFamily: 'var(--font-mono)' }}>{viewing360.binding.sourceAsset}</code>.</>
-                          : <>This asset is bound to the whole of <code style={{ fontFamily: 'var(--font-mono)' }}>{viewing360.binding.sourceAsset}</code> (all columns).</>}
-                      </div>
-                    )}
-                    {viewing360.columns.length > 0 ? (
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                        <thead>
-                          <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)' }}>
-                            <th style={{ padding: '4px 8px', fontWeight: 600 }}>Column</th>
-                            <th style={{ padding: '4px 8px', fontWeight: 600 }}>Type</th>
-                            <th style={{ padding: '4px 8px', fontWeight: 600 }}>Rules</th>
-                            <th style={{ padding: '4px 8px', fontWeight: 600 }}>Health</th>
-                            {canWrite && !isInheritedAsset(viewing360.asset.orgId, activeOrgId) && (
-                              <th style={{ padding: '4px 8px', fontWeight: 600, textAlign: 'center' }}>Actions</th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {viewing360.columns.map((col) => {
-                            const h = col.healthScore;
-                            const hColor = h == null ? 'var(--color-text-muted)'
-                              : h >= 80 ? 'var(--color-success)'
-                              : h >= 50 ? 'var(--color-warning)' : 'var(--color-error)';
-                            return (
-                              <tr key={col.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                                <td style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)' }}>
-                                  {col.columnName}
-                                  {col.isPrimaryKey && <span title="Primary key" style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 3, padding: '0 4px' }}>PK</span>}
-                                  {col.references && <span title={`References ${col.references}`} style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-text-muted)' }}>→ {col.references}</span>}
-                                </td>
-                                <td style={{ padding: '5px 8px', color: 'var(--color-text-secondary)' }}>{col.dataType || '—'}</td>
-                                <td style={{ padding: '5px 8px', color: col.rulesCount === 0 ? 'var(--color-warning)' : 'var(--color-text-secondary)' }}>
-                                  {col.rulesCount === 0 ? 'No rules' : `${col.rulesCount} rule${col.rulesCount === 1 ? '' : 's'}`}
-                                </td>
-                                <td style={{ padding: '5px 8px', fontWeight: 600, color: hColor }}>
-                                  {h == null ? '—' : `${h}%`}
-                                </td>
-                                {canWrite && !isInheritedAsset(viewing360.asset.orgId, activeOrgId) && (
-                                  <td style={{ padding: '5px 8px', textAlign: 'center' }}>
-                                    <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                                      <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddColumnRule(col, 'NOT_NULL')} />
-                                      <IconButton size="sm" icon="check" label="Add UNIQUE rule" onClick={() => quickAddColumnRule(col, 'UNIQUE')} />
-                                      <IconButton size="sm" icon="settings" label="Manage rules for this column" onClick={() => setDqRulesScope({ id: viewing360.asset.id, name: viewing360.asset.name, sourceAsset: viewing360.binding?.sourceAsset, sourceColumn: col.columnName })} />
-                                    </div>
-                                  </td>
-                                )}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                        No columns defined yet. Link this asset to a source and pick its columns, or auto-discover them.
-                      </div>
-                    )}
-                  </Card>
-                )}
+                {/* Columns — the business asset maps to a table and (when
+                    scoped) a named set of its columns. The columns editor
+                    (auto-discover, per-column type / PK / FK, data-quality rule
+                    actions, delete) lives here on the detail page; the Registry
+                    list no longer expands inline. */}
+                <Card marginBottom={20}>
+                  {viewing360.binding && (
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
+                      {viewing360.binding.sourceColumns.length > 0
+                        ? <>This asset is bound to {viewing360.binding.sourceColumns.length} column{viewing360.binding.sourceColumns.length === 1 ? '' : 's'} of <code style={{ fontFamily: 'var(--font-mono)' }}>{viewing360.binding.sourceAsset}</code>.</>
+                        : <>This asset is bound to the whole of <code style={{ fontFamily: 'var(--font-mono)' }}>{viewing360.binding.sourceAsset}</code> (all columns).</>}
+                    </div>
+                  )}
+                  {renderColumnsEditor(viewing360.asset)}
+                </Card>
 
                 {/* Sensitivity — Suggest & Review flow. Sits above the
                     cross-layer WhereUsed view so a reviewer sees the
@@ -2711,7 +2662,7 @@ export default function DataAssetsPage({
           <DataQualityRulesModal
             asset={dqRulesScope}
             onClose={() => setDqRulesScope(null)}
-            onAfterChange={() => { if (viewing360) void open360(viewing360.asset.id); }}
+            onAfterChange={() => { if (viewing360) { void open360(viewing360.asset.id); void loadColumns(viewing360.asset.id); } }}
           />
         </Suspense>
       )}
