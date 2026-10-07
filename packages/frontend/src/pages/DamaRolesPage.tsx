@@ -1327,12 +1327,19 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
             >
               <td style={{ ...tableTdStyle, fontWeight: 500 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <span aria-hidden="true" style={{
-                    width: 8, height: 8, borderRadius: 999, background: c.color, flexShrink: 0,
-                  }} />
                   <span style={{ color: isSelected ? 'var(--color-primary)' : undefined }}>
                     {ROLE_TYPE_LABELS[rt] || rt}
                   </span>
+                  {ROLE_CATEGORIES[rt] && (
+                    // Labeled category badge (matches the Governance Documents
+                    // category/status badges) rather than a colour-only dot.
+                    <span style={{
+                      display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+                      fontSize: 11, fontWeight: 600, background: c.bg, color: c.color, whiteSpace: 'nowrap',
+                    }}>
+                      {ROLE_CATEGORIES[rt]}
+                    </span>
+                  )}
                   {required && (
                     <span
                       title="Required for a governance program — every org should have a holder for this role."
