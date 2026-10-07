@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import PageHeader from '../components/PageHeader';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
@@ -96,14 +97,25 @@ const CONN_COLUMN_DEFS: Array<{ id: ConnColId; label: string; defaultVisible: bo
   { id: 'lastTested', label: 'Last Tested',    defaultVisible: true  },
 ];
 
+const backLinkStyle: React.CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
+};
+
 export default function ConnectionsPage({
   embedded = false,
   actionsPortal,
+  focusConnId,
 }: {
   embedded?: boolean;
   actionsPortal?: HTMLElement | null;
+  /** When set, render the single connection's detail as a routed page
+   *  (/connections/:id) reusing this page's data — the People/Systems
+   *  detail-page family. */
+  focusConnId?: string;
 } = {}) {
   const { activeOrgId } = useOrgContext();
+  const navigate = useNavigate();
   // /connections writes need connection:write (EDITOR+); gate every write
   // affordance so Viewers/Contributors get a read-only list, not 403 buttons.
   const { canWrite } = usePermissions();
@@ -129,7 +141,6 @@ export default function ConnectionsPage({
   const [editingId, setEditingId] = useState<string | null>(null);
   // Whole-row click opens a read-only detail modal (mirrors Systems / Data
   // Assets); Edit inside it hands back to the inline editor below.
-  const [viewingConnId, setViewingConnId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   // Local-file upload staging — the File is attached to the form but not sent
@@ -233,6 +244,20 @@ export default function ConnectionsPage({
       setSearchParams(params, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  // `?edit=<id>` opens the full config editor for a connection — the escape
+  // hatch the /connections/:id detail page uses for type/config/credentials
+  // (which live only in the list form). Waits for the list to load.
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || connections.length === 0) return;
+    const conn = connections.find((c) => c.id === editId);
+    if (conn) openEdit(conn);
+    const params = new URLSearchParams(searchParams);
+    params.delete('edit');
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, connections]);
 
   // -----------------------------------------------------------------------
   // CRUD
@@ -836,7 +861,7 @@ export default function ConnectionsPage({
       render: (conn: ConnectionProfile) => (
         <button
           type="button"
-          onClick={() => setViewingConnId(conn.id)}
+          onClick={() => navigate(`/connections/${conn.id}`)}
           title={conn.name}
           style={{
             background: 'none', border: 'none', padding: 0,
@@ -905,6 +930,41 @@ export default function ConnectionsPage({
       },
     },
   ].filter(Boolean) as DataTableColumn<ConnectionProfile>[]);
+
+  // Detail route (/connections/:id): render the single connection as a page,
+  // reusing this page's loaded connections + systems. The full config editor
+  // (type/credentials) is reached via ?edit=<id> back on the list.
+  if (focusConnId) {
+    const conn = connections.find((c) => c.id === focusConnId);
+    if (loading) {
+      return (
+        <div>
+          <PageHeader kicker="CONNECTION" title="Loading…" actions={<Link to="/systems?tab=connections" style={backLinkStyle}>{'←'} Back to Connections</Link>} />
+          <Card><SkeletonRows rows={3} columnWidths={[null, null]} /></Card>
+        </div>
+      );
+    }
+    if (!conn) {
+      return (
+        <EmptyState
+          title="Couldn't load this connection"
+          description={loadError || 'It may have been deleted.'}
+          action={{ label: 'Back to Connections', onClick: () => navigate('/systems?tab=connections') }}
+        />
+      );
+    }
+    return (
+      <ConnectionDetailModal
+        asPage
+        conn={conn}
+        systems={systems}
+        canWrite={canWrite}
+        onClose={() => navigate('/systems?tab=connections')}
+        onEdit={(c) => navigate(`/systems?tab=connections&edit=${c.id}`)}
+        onSaved={fetchData}
+      />
+    );
+  }
 
   return (
     <div>
@@ -1202,29 +1262,12 @@ export default function ConnectionsPage({
             rowKey={(c) => c.id}
             selection={canWrite ? sel : undefined}
             sort={{ sortKey, sortDir, onSort: toggleSort }}
-            onRowClick={(c) => setViewingConnId(c.id)}
+            onRowClick={(c) => navigate(`/connections/${c.id}`)}
             selectAllLabel="Select all connections"
             emptyMessage="No connections match the current filters."
           />
         )}
       </div>
-
-      {/* Read-only detail modal — whole-row / name click. Edit hands back to
-          the inline editor above. */}
-      {viewingConnId && (() => {
-        const conn = connections.find((c) => c.id === viewingConnId);
-        if (!conn) return null;
-        return (
-          <ConnectionDetailModal
-            conn={conn}
-            systems={systems}
-            canWrite={canWrite}
-            onClose={() => setViewingConnId(null)}
-            onEdit={(c) => { setViewingConnId(null); openEdit(c); }}
-            onSaved={fetchData}
-          />
-        );
-      })()}
 
       {/* Discover Modal */}
       {discoverModal && (
