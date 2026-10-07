@@ -14,7 +14,7 @@ import { useAiEnabled } from '../stores/aiConfigStore';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
-import { getStatusColor } from '../lib/statusBadge';
+import { getStatusColor, statusBadgeStyle } from '../lib/statusBadge';
 import EditableField from '../components/EditableField';
 import DetailEditActions from '../components/DetailEditActions';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
@@ -86,22 +86,37 @@ const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', critic
 const SIMPLE_TRANSITIONS: Record<string, string[]> = { DRAFT: ['ACTIVE'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 const ADVANCED_TRANSITIONS: Record<string, string[]> = { DRAFT: ['PROPOSED'], PROPOSED: ['UNDER_REVIEW', 'DRAFT'], UNDER_REVIEW: ['APPROVED', 'DRAFT'], APPROVED: ['ACTIVE', 'DRAFT'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 
-function statusDot(status: string): React.CSSProperties {
-  const c = getStatusColor(status);
-  return { display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: c.color, flexShrink: 0 };
+// A single governance-health signal, rendered as a small labeled chip
+// (green when present, muted/outlined when absent) rather than a colour-only
+// dot — so "what's missing" reads without decoding colour.
+function healthChip(label: string, present: boolean) {
+  return (
+    <span
+      title={present ? `${label} assigned` : `No ${label.toLowerCase()}`}
+      style={{
+        fontSize: 9, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase',
+        padding: '0 5px', borderRadius: 8, flexShrink: 0,
+        background: present ? '#d1fae5' : 'transparent',
+        color: present ? '#065f46' : 'var(--color-text-muted)',
+        border: `1px solid ${present ? '#bbf7d0' : 'var(--color-border)'}`,
+      }}
+    >
+      {label}
+    </span>
+  );
 }
 
-function healthDots(domain: DataDomain) {
+function healthChips(domain: DataDomain) {
   const hasOwner = !!domain.ownerId;
   const hasStewards = domain.stewards.length > 0;
   // Reflect the subtree: a parent with no direct assets but assets under its
   // sub-domains still counts as "assets linked".
   const hasAssets = (domain.subtreeAssetCount ?? domain.assets.length) > 0;
   return (
-    <span style={{ display: 'inline-flex', gap: 3 }}>
-      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasOwner ? 'var(--color-success)' : 'var(--color-border)' }} title={hasOwner ? 'Owner assigned' : 'No owner'} />
-      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasStewards ? 'var(--color-success)' : 'var(--color-border)' }} title={hasStewards ? 'Stewards assigned' : 'No stewards'} />
-      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasAssets ? 'var(--color-success)' : 'var(--color-border)' }} title={hasAssets ? 'Assets linked' : 'No assets'} />
+    <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
+      {healthChip('Owner', hasOwner)}
+      {healthChip('Stewards', hasStewards)}
+      {healthChip('Assets', hasAssets)}
     </span>
   );
 }
@@ -879,7 +894,6 @@ export default function DataDomainsPage() {
                       <span aria-hidden="true" style={{ width: 14, flexShrink: 0, display: 'inline-block' }} />
                     )}
                     {isSub && <span title="Sub-domain" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>}
-                    <span style={statusDot(d.status)} title={d.status} />
                     {d.code && (
                       <span title={`Code: ${d.code}`} style={{ flexShrink: 0, fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 5px' }}>{d.code}</span>
                     )}
@@ -887,6 +901,11 @@ export default function DataDomainsPage() {
                       text={d.name}
                       style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}
                     />
+                    {/* Lifecycle status — a labeled tinted badge (the shared
+                        status-badge style), not a colour-only dot. */}
+                    <span style={{ ...statusBadgeStyle(d.status), flexShrink: 0 }} title={`Status: ${d.status.replace(/_/g, ' ')}`}>
+                      {d.status.replace(/_/g, ' ')}
+                    </span>
                     {/* Governance signal chips: sub-domain count on parents,
                         master/reference-data markers. Kept compact to preserve
                         the uniform row height. */}
@@ -902,7 +921,7 @@ export default function DataDomainsPage() {
                       <span title="Holds master data — suggest Tier-1 criticality" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-warning)', border: '1px dashed var(--color-warning)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>Tier-1?</span>
                     )}
                     {scope.applied && <span style={{ flexShrink: 0 }}><ScopeBadge inScope={scope.has('domain', d.id)} /></span>}
-                    {healthDots(d)}
+                    {healthChips(d)}
                   </div>
                 );
               })}
