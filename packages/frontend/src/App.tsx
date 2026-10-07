@@ -40,6 +40,7 @@ const GovernanceGroupsPage       = lazy(() => import('@/pages/GovernanceGroupsPa
 const GovernanceGroupDetailPage  = lazy(() => import('@/pages/GovernanceGroupDetailPage'));
 const GovernanceVisualizationPage= lazy(() => import('@/pages/GovernanceVisualizationPage'));
 const DataDomainsPage            = lazy(() => import('@/pages/DataDomainsPage'));
+const DataDomainDetailPage       = lazy(() => import('@/pages/DataDomainDetailPage'));
 const DocumentationPage          = lazy(() => import('@/pages/DocumentationPage'));
 const RolesPage                  = lazy(() => import('@/pages/RolesPage'));
 const DataLineagePage            = lazy(() => import('@/pages/DataLineagePage'));
@@ -128,6 +129,7 @@ export default function App() {
           <Route path="/governance-groups/:id" element={<GovernanceGroupDetailPage />} />
           <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
           <Route path="/data-domains" element={<DataDomainsPage />} />
+          <Route path="/data-domains/:id" element={<DataDomainDetailPage />} />
           {/* Merged surfaces — option B of the governance IA cleanup */}
           <Route path="/documentation" element={<DocumentationPage />} />
           <Route path="/operations-manual" element={<Navigate to="/documentation?tab=manual" replace />} />

@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -14,7 +16,7 @@ import { useAiEnabled } from '../stores/aiConfigStore';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
-import { getStatusColor, statusBadgeStyle } from '../lib/statusBadge';
+import { statusBadgeStyle } from '../lib/statusBadge';
 import EditableField from '../components/EditableField';
 import DetailEditActions from '../components/DetailEditActions';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
@@ -61,6 +63,15 @@ interface GenDomain { name: string; description: string; selected: boolean; exis
 const inputStyle: React.CSSProperties = { border: '1px solid var(--color-border)', borderRadius: 4, padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)' };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' };
+
+// "← Back to Domains" affordance on the detail page, matching
+// GovernanceGroupDetailPage's backLinkStyle.
+const backLinkStyle: React.CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)', borderRadius: 6,
+  fontSize: 13, fontWeight: 500, textDecoration: 'none',
+  color: 'var(--color-text)',
+};
 
 interface FormData { name: string; description: string; status: string; criticality: string; parentDomainId: string; code: string; }
 
@@ -130,7 +141,8 @@ const roleLabelBtnStyle: React.CSSProperties = {
   textUnderlineOffset: 3,
 };
 
-export default function DataDomainsPage() {
+export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: string } = {}) {
+  const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   // Governance-scope membership for the per-row "in scope / not governed"
   // badge — only surfaces when the org's program has a defined scope.
@@ -338,16 +350,23 @@ export default function DataDomainsPage() {
     },
   );
 
+  // Focus mode (/data-domains/:id): drive the selection off the route param so
+  // the shared detail body renders for exactly that domain.
   useEffect(() => {
+    if (focusDomainId) setSelectedDomainId(focusDomainId);
+  }, [focusDomainId]);
+
+  // End the breadcrumb trail on the focused domain's name (focus mode only;
+  // the list page keeps its own leaf).
+  useBreadcrumbLeaf(focusDomainId ? selectedDomain?.name : undefined);
+
+  // List mode only: auto-select the first visible domain so the (list-mode)
+  // state stays valid. Skipped in focus mode, where selection is the route.
+  useEffect(() => {
+    if (focusDomainId) return;
     if (!selectedDomainId && filteredDomains.length > 0) setSelectedDomainId(filteredDomains[0].id);
     else if (selectedDomainId && !filteredDomains.find((d) => d.id === selectedDomainId) && filteredDomains.length > 0) setSelectedDomainId(filteredDomains[0].id);
-  }, [filteredDomains, selectedDomainId]);
-
-  const openDetail = (domain: DataDomain) => {
-    setSelectedDomainId(domain.id);
-    setAssetSearch('');
-    setShowForm(false);
-  };
+  }, [filteredDomains, selectedDomainId, focusDomainId]);
 
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
@@ -647,6 +666,401 @@ export default function DataDomainsPage() {
   const transitions = statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
   const unownedCount = domains.filter((d) => !d.ownerId).length;
 
+  // The AI modals (industry picker + generate/suggest preview) are lifted to
+  // consts so both the list view and the focus detail page can mount them —
+  // the detail page's "Suggest sub-domains" action drives the same flow.
+  const industryPickerModal = industryPickerOpen && (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={() => setIndustryPickerOpen(false)}
+    >
+      <div
+        ref={industryPickerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Select industry"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-xl)', padding: 24,
+          maxWidth: 480, width: '92vw',
+        }}
+      >
+        <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Pick an industry</h3>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>
+          The active organization doesn't have an industry on file. Choose one for this generation and Procela will ask Claude for standard data domains in that industry. Your org isn't modified.
+        </p>
+        <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 6 }}>
+          Industry
+        </label>
+        <select
+          aria-label="Industry"
+          value={pickedIndustry}
+          onChange={(e) => setPickedIndustry(e.target.value)}
+          autoFocus
+          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', marginBottom: 18 }}
+        >
+          {INDUSTRIES.map((i) => (
+            <option key={i} value={i}>{i}</option>
+          ))}
+        </select>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            onClick={() => setIndustryPickerOpen(false)}
+            style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={async () => {
+              const chosen = pickedIndustry;
+              const pending = pendingGen;
+              setIndustryPickerOpen(false);
+              setPendingGen(null);
+              if (!chosen) return;
+              if (pending?.type === 'branch') {
+                await buildBranch(chosen, pending.domain);
+              } else {
+                await buildTree(chosen);
+              }
+            }}
+            disabled={!pickedIndustry || generating}
+            style={{
+              padding: '8px 14px',
+              background: pickedIndustry ? 'var(--color-primary)' : '#e5e7eb',
+              color: pickedIndustry ? '#fff' : 'var(--color-text-muted)',
+              border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
+              cursor: pickedIndustry ? 'pointer' : 'default',
+            }}
+          >
+            {generating ? 'Generating…' : (pendingGen?.type === 'branch' ? 'Generate sub-domains' : 'Generate domains')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const generatePreviewModal = showGeneratePreview && (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1050, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeGenerate}>
+      <div ref={generatePreviewRef} role="dialog" aria-modal="true" aria-label={genBranchMode ? 'Suggest sub-domains' : 'Generate domains'} onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xl)', padding: 24, maxWidth: 640, width: '94vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+        <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{genBranchMode ? 'Suggest sub-domains' : 'Generate domains'}</h3>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>
+          Review the tree — edit any name, uncheck what you don't need, or add your own. Everything selected is created as DRAFT. Names must be unique within their parent.
+        </p>
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
+          {genTree.map((dom, di) => {
+            const dupTop = topDomainConflict(di);
+            return (
+              <div key={di} style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '10px 12px', background: dom.selected ? 'var(--color-bg)' : 'transparent' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {dom.existingId ? (
+                    <span title="Existing domain" style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>PARENT</span>
+                  ) : (
+                    <input type="checkbox" aria-label={`Include ${dom.name || 'new domain'}`} checked={dom.selected} onChange={() => updateDomain(di, { selected: !dom.selected })} style={{ flexShrink: 0 }} />
+                  )}
+                  <input
+                    aria-label="Domain name"
+                    value={dom.name}
+                    readOnly={!!dom.existingId}
+                    onChange={(e) => updateDomain(di, { name: e.target.value })}
+                    placeholder="Domain name"
+                    style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 8px', background: dom.existingId ? 'var(--color-bg)' : 'var(--color-surface)', color: 'var(--color-text)' }}
+                  />
+                  {!dom.existingId && (
+                    <button type="button" aria-label="Remove domain" onClick={() => removeTopDomain(di)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
+                  )}
+                </div>
+                {!dom.existingId && (
+                  <input
+                    aria-label="Domain description"
+                    value={dom.description}
+                    onChange={(e) => updateDomain(di, { description: e.target.value })}
+                    placeholder="Description (optional)"
+                    style={{ width: '100%', marginTop: 6, fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', background: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}
+                  />
+                )}
+                {dupTop && <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 4 }}>A top-level domain with this name already exists.</div>}
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 22 }}>
+                  {dom.subDomains.map((sub, si) => {
+                    const dupSub = subConflict(di, si);
+                    return (
+                      <div key={si}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>
+                          <input type="checkbox" aria-label={`Include ${sub.name || 'new sub-domain'}`} checked={sub.selected} onChange={() => updateSub(di, si, { selected: !sub.selected })} style={{ flexShrink: 0 }} />
+                          <input aria-label="Sub-domain name" value={sub.name} onChange={(e) => updateSub(di, si, { name: e.target.value })} placeholder="Sub-domain name" style={{ flex: 1, minWidth: 0, fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', background: 'var(--color-surface)', color: 'var(--color-text)' }} />
+                          {genTree.length > 1 && (
+                            <select
+                              aria-label="Move sub-domain to another domain"
+                              title="Move to another domain"
+                              value=""
+                              onChange={(e) => { const to = Number(e.target.value); if (Number.isInteger(to)) moveSub(di, si, to); }}
+                              style={{ flexShrink: 0, fontSize: 11, border: '1px solid var(--color-border)', borderRadius: 4, padding: '3px 4px', background: 'var(--color-surface)', color: 'var(--color-text-muted)', cursor: 'pointer', maxWidth: 130 }}
+                            >
+                              <option value="">Move to…</option>
+                              {genTree.map((d2, di2) => (di2 !== di ? (
+                                <option key={di2} value={di2}>{d2.name.trim() || `Untitled domain ${di2 + 1}`}</option>
+                              ) : null))}
+                            </select>
+                          )}
+                          <button type="button" aria-label="Remove sub-domain" onClick={() => removeSub(di, si)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
+                        </div>
+                        {dupSub && <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 2, paddingLeft: 41 }}>Duplicate name under this parent.</div>}
+                      </div>
+                    );
+                  })}
+                  <button type="button" onClick={() => addSub(di)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 12, padding: '2px 0' }}>+ Add sub-domain</button>
+                </div>
+              </div>
+            );
+          })}
+          {!genBranchMode && (
+            <button type="button" onClick={addTopDomain} style={{ alignSelf: 'flex-start', background: 'none', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13, padding: '6px 12px', borderRadius: 6 }}>+ Add domain</button>
+          )}
+        </div>
+        {!genBranchMode && (
+          <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input type="checkbox" checked={generateStewardshipTeams} onChange={(e) => setGenerateStewardshipTeams(e.target.checked)} />
+            <div style={{ fontSize: 12, fontWeight: 500 }}>Also create Stewardship Teams for new top-level domains</div>
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+          <Button variant="secondary" onClick={closeGenerate}>Cancel</Button>
+          <Button variant="primary" disabled={!genHasCreatable || genHasError} onClick={handleApplyGenerated}>Create selected</Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // /data-domains/:id renders this component in focus mode: just the single
+  // domain's detail as a routed page, not the two-pane list.
+  const focus = !!focusDomainId;
+
+  // The focused domain's detail body (identity → timestamps). The name/status
+  // header that used to sit atop this body now lives in the PageHeader below
+  // (title + action cluster + status meta), so the page shows the name once.
+  const detailBody = selectedDomain ? (() => {
+    const editing = m.isEditing;
+    const statusOptions = Array.from(new Set([m.draft.status, ...(transitions[m.draft.status] || [])])).map((s) => ({ value: s, label: s.replace(/_/g, ' ') }));
+    const parentOptions = [
+      { value: '', label: '— None (top-level domain)' },
+      ...domains.filter((d) => !d.parentDomainId && d.id !== selectedDomain.id).map((d) => ({ value: d.id, label: d.name })),
+    ];
+    const ownerName = people.find((p) => p.id === m.draft.ownerId)?.name || selectedDomain.ownerName;
+    return (
+      <>
+        {/* Identity fields */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14, marginBottom: 20 }}>
+          {editing && (
+            <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="Domain name" />
+          )}
+          {editing && (
+            <EditableField label="Status" editing value={m.draft.status} onChange={(v) => m.set('status', v)} type="select" options={statusOptions} />
+          )}
+          <EditableField label="Criticality" editing={editing} value={m.draft.criticality} onChange={(v) => m.set('criticality', v)} type="select" options={CRITICALITY_OPTIONS}>
+            {criticalityLabel(selectedDomain.criticality)}
+          </EditableField>
+          <EditableField label="Code" editing={editing} value={m.draft.code} onChange={(v) => m.set('code', v)} placeholder="e.g. MFG" emptyText="—">
+            {selectedDomain.code ? <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{selectedDomain.code}</span> : undefined}
+          </EditableField>
+          <EditableField label="Parent domain" editing={editing} value={m.draft.parentDomainId} onChange={(v) => m.set('parentDomainId', v)} type="select" options={parentOptions}>
+            {selectedDomain.parentDomainName || 'Top-level domain'}
+          </EditableField>
+        </div>
+
+        {/* Description */}
+        {(editing || selectedDomain.description) && (
+          <div style={{ marginBottom: 20 }}>
+            <EditableField label="Description" editing={editing} type="textarea" value={m.draft.description} onChange={(v) => m.set('description', v)} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" emptyText="No description">
+              {selectedDomain.description ? <span style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>{selectedDomain.description}</span> : undefined}
+            </EditableField>
+          </div>
+        )}
+
+        {/* Status lifecycle — quick guided transitions (view only). */}
+        {!editing && canWrite && (transitions[selectedDomain.status] || []).length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={labelStyle}>Status Transitions</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(transitions[selectedDomain.status] || []).map((s) => (
+                <Button key={s} variant="secondary" size="sm" onClick={() => handleStatusChange(selectedDomain.id, s)}>{s.replace(/_/g, ' ')}</Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Owner — label opens the Role Detail drawer. */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={labelStyle}>
+            <button type="button" onClick={() => openRoleDrawer('DATA_DOMAIN_OWNER')} title="Learn about this role" style={roleLabelBtnStyle}>
+              Owner (Data Domain Owner)
+            </button>
+          </div>
+          {editing ? (
+            <>
+              <PersonPicker mode="single" valueMode="id" value={m.draft.ownerId || null} onChange={(pid) => m.set('ownerId', pid || '')} placeholder="-- Unassigned --" />
+              {!m.draft.ownerId && selectedParentDomain?.ownerId && selectedParentDomain.ownerName && (
+                <button
+                  type="button"
+                  onClick={inheritOwnerFromParent}
+                  style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                  title={`Assign ${selectedParentDomain.ownerName} — the owner of the parent domain "${selectedParentDomain.name}" — as this sub-domain's owner`}
+                >
+                  ↰ Inherit owner from {selectedParentDomain.name}: {selectedParentDomain.ownerName}
+                </button>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 13 }}>{ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}</div>
+          )}
+        </div>
+
+        {/* Stewards */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={labelStyle}>
+            <button type="button" onClick={() => openRoleDrawer('DATA_DOMAIN_STEWARD')} title="Learn about this role" style={roleLabelBtnStyle}>
+              Stewards ({editing ? m.draft.stewardIds.length : (selectedDomain.stewards?.length || 0)})
+            </button>
+          </div>
+          {editing ? (
+            <PersonPicker mode="multi" valueMode="id" value={m.draft.stewardIds} onChange={(ids) => m.set('stewardIds', ids as string[])} placeholder="Add stewards…" />
+          ) : (
+            <div style={{ fontSize: 13 }}>
+              {(selectedDomain.stewards?.length || 0) === 0
+                ? <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None</span>
+                : selectedDomain.stewards.map((s) => s.name).join(', ')}
+            </div>
+          )}
+        </div>
+
+        {/* Data Assets — DIRECT membership on this exact domain. */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={labelStyle}>
+            Data Assets ({(editing ? m.draft.dataAssetIds.length : (selectedDomain.dataAssetIds?.length || 0))} direct{(selectedDomain.subtreeAssetCount ?? 0) > (selectedDomain.dataAssetIds?.length ?? 0)
+              ? ` · ${selectedDomain.subtreeAssetCount} incl. sub-domains` : ''})
+          </div>
+          {editing ? (
+            <>
+              <input aria-label="Search assets" style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} placeholder="Search assets..." value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)} />
+              <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 6, background: 'var(--color-bg)' }}>
+                {allAssets.filter((a) => !assetSearch || a.name.toLowerCase().includes(assetSearch.toLowerCase())).map((a) => (
+                  <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '3px 4px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={m.draft.dataAssetIds.includes(a.id)} onChange={() => m.set('dataAssetIds', m.draft.dataAssetIds.includes(a.id) ? m.draft.dataAssetIds.filter((id) => id !== a.id) : [...m.draft.dataAssetIds, a.id])} />
+                    {a.name}
+                  </label>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 13 }}>
+              {(selectedDomain.assets?.length || 0) === 0
+                ? <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None assigned directly</span>
+                : selectedDomain.assets.map((a) => a.name).join(', ')}
+            </div>
+          )}
+          {(() => {
+            const own = new Set(selectedDomain.dataAssetIds || []);
+            const viaSub = (selectedDomain.subtreeAssets || []).filter((a) => !own.has(a.id));
+            if (viaSub.length === 0) return null;
+            return (
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                <span style={{ fontWeight: 600 }}>Via sub-domains ({viaSub.length}):</span> {viaSub.map((a) => a.name).join(', ')}
+                <div style={{ marginTop: 2, fontStyle: 'italic' }}>Rolled up into this domain&rsquo;s coverage &amp; health — assign each under its own sub-domain, not here.</div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Timestamps */}
+        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)', paddingTop: 12, marginTop: 16 }}>
+          Created {new Date(selectedDomain.createdAt).toLocaleDateString()} · Updated {new Date(selectedDomain.updatedAt).toLocaleDateString()}
+        </div>
+      </>
+    );
+  })() : null;
+
+  // ── Focus mode (detail page) ──────────────────────────────────────────────
+  if (focus) {
+    if (loading) {
+      return (
+        <div>
+          <PageHeader title="Loading…" />
+          <Card><SkeletonRows rows={6} columns={2} /></Card>
+        </div>
+      );
+    }
+    if (!selectedDomain) {
+      return (
+        <EmptyState
+          icon={renderNavIcon('/data-domains')}
+          title="Domain not found"
+          description="The data domain you're looking for may have been deleted, or you don't have access."
+          action={{ label: '← Back to Domains', onClick: () => navigate('/data-domains') }}
+        />
+      );
+    }
+    return (
+      <div>
+        <PageHeader
+          kicker="Data domain"
+          title={selectedDomain.name}
+          copyId={selectedDomain.id}
+          copyLabel="Copy domain ID"
+          subtitle={`${criticalityLabel(selectedDomain.criticality)} · ${selectedDomain.parentDomainName ? `Sub-domain of ${selectedDomain.parentDomainName}` : 'Top-level domain'}`}
+          actions={
+            <>
+              <Link to="/data-domains" style={backLinkStyle}>← Back to Domains</Link>
+              {!m.isEditing && canWrite && aiEnabled && !selectedDomain.parentDomainId && (
+                <IconButton size="sm" icon="wand" label={generating ? 'Generating…' : 'Suggest sub-domains'} disabled={generating} onClick={() => generateSubsForDomain(selectedDomain)} />
+              )}
+              <DetailEditActions editing={m.isEditing} canEdit={canWrite} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+              {!m.isEditing && canWrite && (
+                <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                  try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${selectedDomain.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
+                  setConfirmDelete(selectedDomain.id);
+                }} />
+              )}
+            </>
+          }
+          meta={
+            <span style={{ ...statusBadgeStyle(selectedDomain.status) }} title={`Status: ${selectedDomain.status.replace(/_/g, ' ')}`}>
+              {selectedDomain.status.replace(/_/g, ' ')}
+            </span>
+          }
+        />
+
+        <Card padding={24}>{detailBody}</Card>
+
+        {/* Delete confirm — mounted in focus mode so the detail Delete works.
+            After a delete, route back to the list. */}
+        <ConfirmDialog open={confirmDelete !== null} title="Delete Data Domain?"
+          message={(() => {
+            const parts: string[] = [];
+            if (deleteImpact && (deleteImpact.assets > 0 || deleteImpact.stewards > 0)) {
+              parts.push(`This domain has ${deleteImpact.assets} asset${deleteImpact.assets !== 1 ? 's' : ''} and ${deleteImpact.stewards} steward${deleteImpact.stewards !== 1 ? 's' : ''}. This cannot be undone.`);
+            } else {
+              parts.push('This will permanently delete this data domain.');
+            }
+            if (deleteImpact?.subDomains) {
+              const names = deleteImpact.subDomainNames || [];
+              const shown = names.slice(0, 3).join(', ');
+              const more = names.length > 3 ? ` +${names.length - 3} more` : '';
+              const list = shown ? ` (${shown}${more})` : '';
+              parts.push(`It has ${deleteImpact.subDomains} sub-domain${deleteImpact.subDomains !== 1 ? 's' : ''}${list}. ${deleteImpact.subDomains !== 1 ? 'They' : 'It'} won't be deleted — ${deleteImpact.subDomains !== 1 ? 'they' : 'it'}'ll move to the top level.`);
+            }
+            return parts.join(' ');
+          })()}
+          confirmLabel="Delete"
+          onConfirm={async () => { const id = confirmDelete; setConfirmDelete(null); setDeleteImpact(null); if (id) { await handleDelete(id); navigate('/data-domains'); } }}
+          onCancel={() => { setConfirmDelete(null); setDeleteImpact(null); }}
+        />
+
+        {industryPickerModal}
+        {generatePreviewModal}
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Header */}
@@ -795,11 +1209,12 @@ export default function DataDomainsPage() {
           action={{ label: 'Add Domain', onClick: openAdd }}
           secondaryAction={canWrite && aiEnabled ? { label: 'Generate from Industry', onClick: handleGenerate, variant: 'secondary' } : undefined} />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
-          {/* Left: Domain index — a compact master rail (narrow index + wide
-              detail), matching the Process Catalog's two-pane proportions so
-              every master-detail page reads the same. */}
-          <Card padding={0} shadow="none" style={{ overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: bulkSelectedIds.size > 0 ? 'minmax(0, 1fr) minmax(340px, 460px)' : '1fr', gap: 16, alignItems: 'start' }}>
+          {/* Domain index — the main, full-width list. Clicking a row opens
+              its detail page (/data-domains/:id), matching the People / Systems
+              / Governance Groups detail-page family. A right column appears only
+              while bulk-editing. */}
+          <Card padding={0} shadow="none" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 160px)' }}>
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
               <input aria-label="Search domains" style={{ ...inputStyle, fontSize: 12, padding: '6px 10px' }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               {parentsWithChildren.size > 0 && (
@@ -846,27 +1261,22 @@ export default function DataDomainsPage() {
               {filteredDomains.length === 0 ? (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No domains match.</div>
               ) : visibleDomains.map((d) => {
-                const isActive = selectedDomainId === d.id;
                 const isChecked = bulkSelectedIds.has(d.id);
                 const isSub = !!d.parentDomainId;
                 const isCollapsible = parentsWithChildren.has(d.id);
                 const isCollapsed = collapsedIds.has(d.id);
                 return (
-                  <div key={d.id} {...clickable(() => openDetail(d), { label: `Open domain ${d.name}` })} style={{
+                  <div key={d.id} {...clickable(() => navigate(`/data-domains/${d.id}`), { label: `Open domain ${d.name}` })} style={{
                     padding: '6px 10px', paddingLeft: isSub ? 28 : 10, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 8,
-                    // Selected-row treatment matches the Process Catalog nav and
-                    // the Organizations tree: brand tint + a 2px inset left accent
-                    // bar (not a layout-shifting border). Active is the full
-                    // primary-light; bulk-checked a fainter wash so the two levels
-                    // still read.
-                    background: isActive ? 'var(--color-primary-light)' : isChecked ? 'color-mix(in srgb, var(--color-primary-light) 45%, transparent)' : 'transparent',
+                    // Whole-row click opens the domain's detail page. A bulk-checked
+                    // row gets a faint brand wash so the selection still reads.
+                    background: isChecked ? 'color-mix(in srgb, var(--color-primary-light) 45%, transparent)' : 'transparent',
                     borderBottom: '1px solid var(--color-border)',
-                    boxShadow: isActive ? 'inset 2px 0 0 var(--color-primary)' : undefined,
                     transition: 'background 0.1s',
                   }}
-                    onMouseEnter={(e) => { if (!isActive && !isChecked) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isActive && !isChecked) e.currentTarget.style.background = 'transparent'; }}>
+                    onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}>
                     {canWrite && (
                       <input
                         type="checkbox"
@@ -931,10 +1341,11 @@ export default function DataDomainsPage() {
             </div>
           </Card>
 
-          {/* Right: Domain detail (or bulk edit panel) */}
+          {/* Right: bulk-edit panel — shown only while rows are selected. The
+              single-domain detail now lives on its own /data-domains/:id page. */}
+          {bulkSelectedIds.size > 0 && (
           <Card padding={0} shadow="none" style={{ minHeight: 400 }}>
-            {bulkSelectedIds.size > 0 ? (
-              <div style={{ padding: '24px 28px' }}>
+            <div style={{ padding: '24px 28px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                   <div>
                     <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Bulk edit {bulkSelectedIds.size} domain{bulkSelectedIds.size !== 1 ? 's' : ''}</h2>
@@ -977,341 +1388,15 @@ export default function DataDomainsPage() {
                   </div>
                 </div>
               </div>
-            ) : selectedDomain ? (() => {
-              const editing = m.isEditing;
-              const statusColor = getStatusColor(selectedDomain.status);
-              const statusOptions = Array.from(new Set([m.draft.status, ...(transitions[m.draft.status] || [])])).map((s) => ({ value: s, label: s.replace(/_/g, ' ') }));
-              const parentOptions = [
-                { value: '', label: '— None (top-level domain)' },
-                ...domains.filter((d) => !d.parentDomainId && d.id !== selectedDomain.id).map((d) => ({ value: d.id, label: d.name })),
-              ];
-              const ownerName = people.find((p) => p.id === m.draft.ownerId)?.name || selectedDomain.ownerName;
-              return (
-              <div style={{ padding: '24px 28px' }}>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{selectedDomain.name}</h2>
-                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: statusColor.bg, color: statusColor.color }}>{selectedDomain.status}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                    {!editing && canWrite && aiEnabled && !selectedDomain.parentDomainId && (
-                      <IconButton size="sm" icon="wand" label={generating ? 'Generating…' : 'Suggest sub-domains'} disabled={generating} onClick={() => generateSubsForDomain(selectedDomain)} />
-                    )}
-                    <DetailEditActions editing={editing} canEdit={canWrite} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
-                    {!editing && canWrite && (
-                      <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
-                        try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${selectedDomain.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
-                        setConfirmDelete(selectedDomain.id);
-                      }} />
-                    )}
-                  </div>
-                </div>
-
-                {/* Identity fields */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14, marginBottom: 20 }}>
-                  {editing && (
-                    <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="Domain name" />
-                  )}
-                  {editing && (
-                    <EditableField label="Status" editing value={m.draft.status} onChange={(v) => m.set('status', v)} type="select" options={statusOptions} />
-                  )}
-                  <EditableField label="Criticality" editing={editing} value={m.draft.criticality} onChange={(v) => m.set('criticality', v)} type="select" options={CRITICALITY_OPTIONS}>
-                    {criticalityLabel(selectedDomain.criticality)}
-                  </EditableField>
-                  <EditableField label="Code" editing={editing} value={m.draft.code} onChange={(v) => m.set('code', v)} placeholder="e.g. MFG" emptyText="—">
-                    {selectedDomain.code ? <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{selectedDomain.code}</span> : undefined}
-                  </EditableField>
-                  <EditableField label="Parent domain" editing={editing} value={m.draft.parentDomainId} onChange={(v) => m.set('parentDomainId', v)} type="select" options={parentOptions}>
-                    {selectedDomain.parentDomainName || 'Top-level domain'}
-                  </EditableField>
-                </div>
-
-                {/* Description */}
-                {(editing || selectedDomain.description) && (
-                  <div style={{ marginBottom: 20 }}>
-                    <EditableField label="Description" editing={editing} type="textarea" value={m.draft.description} onChange={(v) => m.set('description', v)} placeholder="Purpose and scope — what this domain is and what data falls in/out of it" emptyText="No description">
-                      {selectedDomain.description ? <span style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>{selectedDomain.description}</span> : undefined}
-                    </EditableField>
-                  </div>
-                )}
-
-                {/* Status lifecycle — quick guided transitions (view only). */}
-                {!editing && canWrite && (transitions[selectedDomain.status] || []).length > 0 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={labelStyle}>Status Transitions</div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {(transitions[selectedDomain.status] || []).map((s) => (
-                        <Button key={s} variant="secondary" size="sm" onClick={() => handleStatusChange(selectedDomain.id, s)}>{s.replace(/_/g, ' ')}</Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Owner — label opens the Role Detail drawer. */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={labelStyle}>
-                    <button type="button" onClick={() => openRoleDrawer('DATA_DOMAIN_OWNER')} title="Learn about this role" style={roleLabelBtnStyle}>
-                      Owner (Data Domain Owner)
-                    </button>
-                  </div>
-                  {editing ? (
-                    <>
-                      <PersonPicker mode="single" valueMode="id" value={m.draft.ownerId || null} onChange={(pid) => m.set('ownerId', pid || '')} placeholder="-- Unassigned --" />
-                      {!m.draft.ownerId && selectedParentDomain?.ownerId && selectedParentDomain.ownerName && (
-                        <button
-                          type="button"
-                          onClick={inheritOwnerFromParent}
-                          style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-                          title={`Assign ${selectedParentDomain.ownerName} — the owner of the parent domain "${selectedParentDomain.name}" — as this sub-domain's owner`}
-                        >
-                          ↰ Inherit owner from {selectedParentDomain.name}: {selectedParentDomain.ownerName}
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <div style={{ fontSize: 13 }}>{ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}</div>
-                  )}
-                </div>
-
-                {/* Stewards */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={labelStyle}>
-                    <button type="button" onClick={() => openRoleDrawer('DATA_DOMAIN_STEWARD')} title="Learn about this role" style={roleLabelBtnStyle}>
-                      Stewards ({editing ? m.draft.stewardIds.length : (selectedDomain.stewards?.length || 0)})
-                    </button>
-                  </div>
-                  {editing ? (
-                    <PersonPicker mode="multi" valueMode="id" value={m.draft.stewardIds} onChange={(ids) => m.set('stewardIds', ids as string[])} placeholder="Add stewards…" />
-                  ) : (
-                    <div style={{ fontSize: 13 }}>
-                      {(selectedDomain.stewards?.length || 0) === 0
-                        ? <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None</span>
-                        : selectedDomain.stewards.map((s) => s.name).join(', ')}
-                    </div>
-                  )}
-                </div>
-
-                {/* Data Assets — DIRECT membership on this exact domain. */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={labelStyle}>
-                    Data Assets ({(editing ? m.draft.dataAssetIds.length : (selectedDomain.dataAssetIds?.length || 0))} direct{(selectedDomain.subtreeAssetCount ?? 0) > (selectedDomain.dataAssetIds?.length ?? 0)
-                      ? ` · ${selectedDomain.subtreeAssetCount} incl. sub-domains` : ''})
-                  </div>
-                  {editing ? (
-                    <>
-                      <input aria-label="Search assets" style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} placeholder="Search assets..." value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)} />
-                      <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 6, background: 'var(--color-bg)' }}>
-                        {allAssets.filter((a) => !assetSearch || a.name.toLowerCase().includes(assetSearch.toLowerCase())).map((a) => (
-                          <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '3px 4px', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={m.draft.dataAssetIds.includes(a.id)} onChange={() => m.set('dataAssetIds', m.draft.dataAssetIds.includes(a.id) ? m.draft.dataAssetIds.filter((id) => id !== a.id) : [...m.draft.dataAssetIds, a.id])} />
-                            {a.name}
-                          </label>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div style={{ fontSize: 13 }}>
-                      {(selectedDomain.assets?.length || 0) === 0
-                        ? <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None assigned directly</span>
-                        : selectedDomain.assets.map((a) => a.name).join(', ')}
-                    </div>
-                  )}
-                  {(() => {
-                    const own = new Set(selectedDomain.dataAssetIds || []);
-                    const viaSub = (selectedDomain.subtreeAssets || []).filter((a) => !own.has(a.id));
-                    if (viaSub.length === 0) return null;
-                    return (
-                      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        <span style={{ fontWeight: 600 }}>Via sub-domains ({viaSub.length}):</span> {viaSub.map((a) => a.name).join(', ')}
-                        <div style={{ marginTop: 2, fontStyle: 'italic' }}>Rolled up into this domain&rsquo;s coverage &amp; health — assign each under its own sub-domain, not here.</div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Timestamps */}
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)', paddingTop: 12, marginTop: 16 }}>
-                  Created {new Date(selectedDomain.createdAt).toLocaleDateString()} · Updated {new Date(selectedDomain.updatedAt).toLocaleDateString()}
-                </div>
-              </div>
-              );
-            })() : (
-              <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Select a domain from the list to view and edit its governance details.</p>
-              </div>
-            )}
           </Card>
+          )}
         </div>
       )}
 
-      {/* AI Generate Preview Modal */}
-      {/* Industry picker — opens when the active org and its visible
-          ancestors carry no `industry`, so the user can still kick off
-          a generation. Common for division/department-scoped admins
-          whose parent company isn't in their visible org set. */}
-      {industryPickerOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={() => setIndustryPickerOpen(false)}
-        >
-          <div
-            ref={industryPickerRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Select industry"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)',
-              boxShadow: 'var(--shadow-xl)', padding: 24,
-              maxWidth: 480, width: '92vw',
-            }}
-          >
-            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Pick an industry</h3>
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>
-              The active organization doesn't have an industry on file. Choose one for this generation and Procela will ask Claude for standard data domains in that industry. Your org isn't modified.
-            </p>
-            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 6 }}>
-              Industry
-            </label>
-            <select
-              aria-label="Industry"
-              value={pickedIndustry}
-              onChange={(e) => setPickedIndustry(e.target.value)}
-              autoFocus
-              style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', marginBottom: 18 }}
-            >
-              {INDUSTRIES.map((i) => (
-                <option key={i} value={i}>{i}</option>
-              ))}
-            </select>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button
-                onClick={() => setIndustryPickerOpen(false)}
-                style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  const chosen = pickedIndustry;
-                  const pending = pendingGen;
-                  setIndustryPickerOpen(false);
-                  setPendingGen(null);
-                  if (!chosen) return;
-                  if (pending?.type === 'branch') {
-                    await buildBranch(chosen, pending.domain);
-                  } else {
-                    await buildTree(chosen);
-                  }
-                }}
-                disabled={!pickedIndustry || generating}
-                style={{
-                  padding: '8px 14px',
-                  background: pickedIndustry ? 'var(--color-primary)' : '#e5e7eb',
-                  color: pickedIndustry ? '#fff' : 'var(--color-text-muted)',
-                  border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
-                  cursor: pickedIndustry ? 'pointer' : 'default',
-                }}
-              >
-                {generating ? 'Generating…' : (pendingGen?.type === 'branch' ? 'Generate sub-domains' : 'Generate domains')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showGeneratePreview && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1050, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeGenerate}>
-          <div ref={generatePreviewRef} role="dialog" aria-modal="true" aria-label={genBranchMode ? 'Suggest sub-domains' : 'Generate domains'} onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xl)', padding: 24, maxWidth: 640, width: '94vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{genBranchMode ? 'Suggest sub-domains' : 'Generate domains'}</h3>
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>
-              Review the tree — edit any name, uncheck what you don't need, or add your own. Everything selected is created as DRAFT. Names must be unique within their parent.
-            </p>
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
-              {genTree.map((dom, di) => {
-                const dupTop = topDomainConflict(di);
-                return (
-                  <div key={di} style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '10px 12px', background: dom.selected ? 'var(--color-bg)' : 'transparent' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {dom.existingId ? (
-                        <span title="Existing domain" style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>PARENT</span>
-                      ) : (
-                        <input type="checkbox" aria-label={`Include ${dom.name || 'new domain'}`} checked={dom.selected} onChange={() => updateDomain(di, { selected: !dom.selected })} style={{ flexShrink: 0 }} />
-                      )}
-                      <input
-                        aria-label="Domain name"
-                        value={dom.name}
-                        readOnly={!!dom.existingId}
-                        onChange={(e) => updateDomain(di, { name: e.target.value })}
-                        placeholder="Domain name"
-                        style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 8px', background: dom.existingId ? 'var(--color-bg)' : 'var(--color-surface)', color: 'var(--color-text)' }}
-                      />
-                      {!dom.existingId && (
-                        <button type="button" aria-label="Remove domain" onClick={() => removeTopDomain(di)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
-                      )}
-                    </div>
-                    {!dom.existingId && (
-                      <input
-                        aria-label="Domain description"
-                        value={dom.description}
-                        onChange={(e) => updateDomain(di, { description: e.target.value })}
-                        placeholder="Description (optional)"
-                        style={{ width: '100%', marginTop: 6, fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', background: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}
-                      />
-                    )}
-                    {dupTop && <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 4 }}>A top-level domain with this name already exists.</div>}
-                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 22 }}>
-                      {dom.subDomains.map((sub, si) => {
-                        const dupSub = subConflict(di, si);
-                        return (
-                          <div key={si}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>
-                              <input type="checkbox" aria-label={`Include ${sub.name || 'new sub-domain'}`} checked={sub.selected} onChange={() => updateSub(di, si, { selected: !sub.selected })} style={{ flexShrink: 0 }} />
-                              <input aria-label="Sub-domain name" value={sub.name} onChange={(e) => updateSub(di, si, { name: e.target.value })} placeholder="Sub-domain name" style={{ flex: 1, minWidth: 0, fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', background: 'var(--color-surface)', color: 'var(--color-text)' }} />
-                              {genTree.length > 1 && (
-                                <select
-                                  aria-label="Move sub-domain to another domain"
-                                  title="Move to another domain"
-                                  value=""
-                                  onChange={(e) => { const to = Number(e.target.value); if (Number.isInteger(to)) moveSub(di, si, to); }}
-                                  style={{ flexShrink: 0, fontSize: 11, border: '1px solid var(--color-border)', borderRadius: 4, padding: '3px 4px', background: 'var(--color-surface)', color: 'var(--color-text-muted)', cursor: 'pointer', maxWidth: 130 }}
-                                >
-                                  <option value="">Move to…</option>
-                                  {genTree.map((d2, di2) => (di2 !== di ? (
-                                    <option key={di2} value={di2}>{d2.name.trim() || `Untitled domain ${di2 + 1}`}</option>
-                                  ) : null))}
-                                </select>
-                              )}
-                              <button type="button" aria-label="Remove sub-domain" onClick={() => removeSub(di, si)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
-                            </div>
-                            {dupSub && <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 2, paddingLeft: 41 }}>Duplicate name under this parent.</div>}
-                          </div>
-                        );
-                      })}
-                      <button type="button" onClick={() => addSub(di)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 12, padding: '2px 0' }}>+ Add sub-domain</button>
-                    </div>
-                  </div>
-                );
-              })}
-              {!genBranchMode && (
-                <button type="button" onClick={addTopDomain} style={{ alignSelf: 'flex-start', background: 'none', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13, padding: '6px 12px', borderRadius: 6 }}>+ Add domain</button>
-              )}
-            </div>
-            {!genBranchMode && (
-              <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input type="checkbox" checked={generateStewardshipTeams} onChange={(e) => setGenerateStewardshipTeams(e.target.checked)} />
-                <div style={{ fontSize: 12, fontWeight: 500 }}>Also create Stewardship Teams for new top-level domains</div>
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <Button variant="secondary" onClick={closeGenerate}>Cancel</Button>
-              <Button variant="primary" disabled={!genHasCreatable || genHasError} onClick={handleApplyGenerated}>Create selected</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* AI modals (industry picker + generate/suggest preview) — defined as
+          consts above so the detail page can reuse them too. */}
+      {industryPickerModal}
+      {generatePreviewModal}
     </div>
   );
 }
