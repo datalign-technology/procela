@@ -30,7 +30,7 @@ import { getRoleReference, RACI_COLOR, RACI_LABEL, Raci } from '../lib/roleDefin
 // Calendar) with one cohesive view of everything that body owns or does.
 //
 // Sections:
-//   1. Header     — name / type / parent breadcrumb / edit / delete
+//   1. Header     — name / type / parent breadcrumb / edit
 //   2. Composition — expected role slate + members + their governance
 //                    roles, with the typical RACI letter shown on each
 //                    role chip so users see at a glance what each role
@@ -210,7 +210,6 @@ export default function GovernanceGroupDetailPage() {
   const [assignRolePersonId, setAssignRolePersonId] = useState('');
 
   // Confirms
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRemoveMember, setConfirmRemoveMember] = useState<GroupMember | null>(null);
 
   // ── Fetch everything ──
@@ -465,17 +464,6 @@ export default function GovernanceGroupDetailPage() {
     }
   };
 
-  const handleDeleteGroup = async () => {
-    if (!group) return;
-    try {
-      await apiClient.delete(`/governance-groups/${group.id}`);
-      addToast('success', 'Group deleted');
-      navigate('/governance-groups');
-    } catch (e) {
-      addToast('error', e instanceof Error ? e.message : 'Delete failed');
-      setConfirmDelete(false);
-    }
-  };
 
   // ── Render ──
   if (loading) return (
@@ -526,7 +514,6 @@ export default function GovernanceGroupDetailPage() {
               onCancel={m.cancel}
               onSave={m.save}
             />
-            {isAdmin && <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>}
           </>
         }
         meta={
@@ -1000,14 +987,6 @@ export default function GovernanceGroupDetailPage() {
         ]}
       />
 
-      <ConfirmDialog
-        open={confirmDelete}
-        title="Delete this governance group?"
-        message={`Delete "${group.name}"? Members will be detached but their organization-level role assignments will remain. Decision rights, policies, and calendar events that reference this group will need to be updated manually.`}
-        confirmLabel="Delete group"
-        onCancel={() => setConfirmDelete(false)}
-        onConfirm={handleDeleteGroup}
-      />
       <ConfirmDialog
         open={!!confirmRemoveMember}
         title="Remove this member?"
