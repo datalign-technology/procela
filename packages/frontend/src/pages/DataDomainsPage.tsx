@@ -24,7 +24,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
-import TruncatedText from '../components/TruncatedText';
 import ScopeBadge from '../components/ScopeBadge';
 import { useScopeMembership } from '../hooks/useScopeMembership';
 import HelpPopover from '../components/HelpPopover';
@@ -666,6 +665,18 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
   const transitions = statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
   const unownedCount = domains.filter((d) => !d.ownerId).length;
 
+  // Summary-stat counts for the chip row above the list (mirrors the
+  // Organizations page). Top-level vs sub-domain split, plus a total linked
+  // asset count. For the asset total we sum each top-level domain's rolled-up
+  // `subtreeAssetCount` (which already includes its sub-domains' assets),
+  // falling back to a domain's direct count — so a parent's assets and its
+  // children's aren't double-counted.
+  const topDomainCount = domains.filter((d) => !d.parentDomainId).length;
+  const subDomainCount = domains.filter((d) => d.parentDomainId).length;
+  const totalLinkedAssets = domains
+    .filter((d) => !d.parentDomainId)
+    .reduce((sum, d) => sum + (d.subtreeAssetCount ?? d.directAssetCount ?? d.assets.length), 0);
+
   // The AI modals (industry picker + generate/suggest preview) are lifted to
   // consts so both the list view and the focus detail page can mount them —
   // the detail page's "Suggest sub-domains" action drives the same flow.
@@ -1186,6 +1197,41 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
         </Card>
       )}
 
+      {/* Summary stats — top-level vs sub-domain split + total linked assets,
+          mirroring the Organizations page chip row. Rendered only when there
+          are domains. */}
+      {domains.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: '#dbeafe', color: '#1e40af',
+            borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500,
+          }}>
+            <span style={{ fontWeight: 700 }}>{topDomainCount}</span>
+            <span>Domain{topDomainCount === 1 ? '' : 's'}</span>
+          </div>
+          {subDomainCount > 0 && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: '#f1f5f9', color: '#475569',
+              borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500,
+            }}>
+              <span style={{ fontWeight: 700 }}>{subDomainCount}</span>
+              <span>Sub-domain{subDomainCount === 1 ? '' : 's'}</span>
+            </div>
+          )}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: '#ede9fe', color: '#5b21b6',
+            borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500,
+            marginLeft: 'auto',
+          }}>
+            <span style={{ fontWeight: 700 }}>{totalLinkedAssets}</span>
+            <span>Data asset{totalLinkedAssets === 1 ? '' : 's'}</span>
+          </div>
+        </div>
+      )}
+
       {/* Main content: dictionary layout */}
       {loading ? (
         <SkeletonRows rows={5} columns={4} />
@@ -1304,34 +1350,57 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
                       <span aria-hidden="true" style={{ width: 14, flexShrink: 0, display: 'inline-block' }} />
                     )}
                     {isSub && <span title="Sub-domain" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>}
-                    {d.code && (
-                      <span title={`Code: ${d.code}`} style={{ flexShrink: 0, fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 5px' }}>{d.code}</span>
+                    {/* Two-line row body (mirrors the Organizations tree row):
+                        line 1 is the existing chip/badge cluster, line 2 is the
+                        muted single-line description when one is set. */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {d.code && (
+                          <span title={`Code: ${d.code}`} style={{ flexShrink: 0, fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 5px' }}>{d.code}</span>
+                        )}
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{d.name}</span>
+                        {/* Lifecycle status — a labeled tinted badge (the shared
+                            status-badge style), not a colour-only dot. */}
+                        <span style={{ ...statusBadgeStyle(d.status), flexShrink: 0 }} title={`Status: ${d.status.replace(/_/g, ' ')}`}>
+                          {d.status.replace(/_/g, ' ')}
+                        </span>
+                        {/* Governance signal chips: sub-domain count on parents,
+                            master/reference-data markers. */}
+                        {!isSub && (d.subDomainCount ?? 0) > 0 && (
+                          <span title={`${d.subDomainCount} sub-domain${d.subDomainCount === 1 ? '' : 's'}`} style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>
+                            {d.subDomainCount} sub
+                          </span>
+                        )}
+                        {d.containsMasterData && (
+                          <span title="Contains master data" style={{ fontSize: 10, fontWeight: 700, color: '#7c2d12', background: '#ffedd5', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>MD</span>
+                        )}
+                        {!d.criticality && d.suggestedCriticality === 'TIER_1' && (
+                          <span title="Holds master data — suggest Tier-1 criticality" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-warning)', border: '1px dashed var(--color-warning)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>Tier-1?</span>
+                        )}
+                        {scope.applied && <span style={{ flexShrink: 0 }}><ScopeBadge inScope={scope.has('domain', d.id)} /></span>}
+                        {healthChips(d)}
+                      </div>
+                      {d.description && (
+                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {d.description}
+                        </div>
+                      )}
+                    </div>
+                    {/* Per-row hover actions (mirrors the Organizations tree
+                        row): add a sub-domain under a top-level domain, or
+                        delete. stopPropagation so they don't trigger the row's
+                        navigate. */}
+                    {canWrite && (
+                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        {!isSub && (
+                          <IconButton size="sm" icon="plus" label="Add sub-domain" variant="primary" onClick={() => { setForm({ ...emptyForm, parentDomainId: d.id }); setCreateStewardshipTeam(true); setShowForm(true); }} />
+                        )}
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                          try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${d.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
+                          setConfirmDelete(d.id);
+                        }} />
+                      </div>
                     )}
-                    <TruncatedText
-                      text={d.name}
-                      style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}
-                    />
-                    {/* Lifecycle status — a labeled tinted badge (the shared
-                        status-badge style), not a colour-only dot. */}
-                    <span style={{ ...statusBadgeStyle(d.status), flexShrink: 0 }} title={`Status: ${d.status.replace(/_/g, ' ')}`}>
-                      {d.status.replace(/_/g, ' ')}
-                    </span>
-                    {/* Governance signal chips: sub-domain count on parents,
-                        master/reference-data markers. Kept compact to preserve
-                        the uniform row height. */}
-                    {!isSub && (d.subDomainCount ?? 0) > 0 && (
-                      <span title={`${d.subDomainCount} sub-domain${d.subDomainCount === 1 ? '' : 's'}`} style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>
-                        {d.subDomainCount} sub
-                      </span>
-                    )}
-                    {d.containsMasterData && (
-                      <span title="Contains master data" style={{ fontSize: 10, fontWeight: 700, color: '#7c2d12', background: '#ffedd5', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>MD</span>
-                    )}
-                    {!d.criticality && d.suggestedCriticality === 'TIER_1' && (
-                      <span title="Holds master data — suggest Tier-1 criticality" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-warning)', border: '1px dashed var(--color-warning)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>Tier-1?</span>
-                    )}
-                    {scope.applied && <span style={{ flexShrink: 0 }}><ScopeBadge inScope={scope.has('domain', d.id)} /></span>}
-                    {healthChips(d)}
                   </div>
                 );
               })}
