@@ -133,6 +133,7 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
   return {
     display: 'inline-block', padding: '2px 8px', borderRadius: 4,
     fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color, whiteSpace: 'nowrap',
+    textTransform: 'uppercase', letterSpacing: '0.03em',
   };
 }
 

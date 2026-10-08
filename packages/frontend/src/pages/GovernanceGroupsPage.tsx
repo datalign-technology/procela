@@ -16,6 +16,7 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
+import { statusBadgeStyle } from '../lib/statusBadge';
 import { SkeletonRows } from '../components/Skeleton';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
@@ -99,13 +100,6 @@ const makeBadge = (colors: { bg: string; color: string }): React.CSSProperties =
   display: 'inline-block', padding: '1px 6px', borderRadius: 3,
   fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
   background: colors.bg, color: colors.color,
-});
-
-const statusBadge = (status: string): React.CSSProperties => ({
-  display: 'inline-block', padding: '1px 6px', borderRadius: 3,
-  fontSize: 9, fontWeight: 600,
-  background: status === 'ACTIVE' ? '#d1f0eb' : '#f1f5f9',
-  color: status === 'ACTIVE' ? '#0f4f46' : '#64748b',
 });
 
 // ── Helpers ──
@@ -203,7 +197,7 @@ function GroupTreeNode({ node, depth, onDelete, onAddChild, onSelect, selectedId
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
             <span style={makeBadge(typeColor)}>{GROUP_TYPE_SHORT[node.type] || node.type}</span>
-            <span style={statusBadge(node.status)}>{node.status === 'ACTIVE' ? 'Active' : 'Inactive'}</span>
+            <span style={{ ...statusBadgeStyle(node.status), flexShrink: 0 }} title={`Status: ${node.status.replace(/_/g, ' ')}`}>{node.status.replace(/_/g, ' ')}</span>
             {memberCount > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: '#f1f5f9', padding: '0px 5px', borderRadius: 8 }}>{memberCount}</span>}
           </div>
         </div>

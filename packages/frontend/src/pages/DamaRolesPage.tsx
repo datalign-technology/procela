@@ -1334,6 +1334,7 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
                     <span style={{
                       display: 'inline-block', padding: '2px 8px', borderRadius: 4,
                       fontSize: 11, fontWeight: 600, background: c.bg, color: c.color, whiteSpace: 'nowrap',
+                      textTransform: 'uppercase', letterSpacing: '0.03em',
                     }}>
                       {ROLE_CATEGORIES[rt]}
                     </span>

@@ -882,7 +882,6 @@ export default function SystemsPage({
         const hint = inheritedHintFor(sys);
         return (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            <IconButton size="sm" icon="eye" label="View details" onClick={() => navigate(`/systems/${sys.id}`)} />
             {canWrite && <IconButton size="sm" icon="trash" label={hint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
               try {
                 const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
