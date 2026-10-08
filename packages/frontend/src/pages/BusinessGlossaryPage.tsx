@@ -670,7 +670,6 @@ export default function BusinessGlossaryPage() {
                   key: cat,
                   label: cat,
                   count: terms.filter((t) => t.category === cat).length,
-                  dot: CATEGORY_COLORS[cat]?.color || '#64748b',
                 })),
               ]}
             />
