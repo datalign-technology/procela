@@ -668,7 +668,9 @@ export default function BusinessGlossaryPage() {
                 { key: '', label: 'All', count: terms.length },
                 ...CATEGORY_ORDER.map((cat) => ({
                   key: cat,
-                  label: cat,
+                  // Title-case the chip label (the row badge stays UPPERCASE);
+                  // matches the Title-Case filter chips on every other list.
+                  label: cat.charAt(0) + cat.slice(1).toLowerCase(),
                   count: terms.filter((t) => t.category === cat).length,
                 })),
               ]}
