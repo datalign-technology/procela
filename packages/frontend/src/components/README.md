@@ -350,6 +350,67 @@ column is just a `.filter(Boolean)` entry in the `columns` array, which
 specialized non-list tables above — because it *is* a flat entity list,
 the kind of page a reader would expect to find on `DataTable`.
 
+### `<ListToolbar>`
+
+The header action cluster for entity-list pages — the right-aligned
+strip of Saved Views / Export / Column-picker / Import / Add that sits
+in the `PageHeader actions` slot. Every list page used to hand-assemble
+its own `<>…</>` of these, so the affordance **set** and the **order**
+drifted page to page (Views on some, Columns on others; the Add button
+sometimes before the utilities, sometimes after). `ListToolbar` owns the
+order and spacing in one place; new list pages compose it instead of
+re-deriving the cluster.
+
+It owns **order and spacing only** — never which affordances a page has.
+Pass the controls the page supports into named slots; any slot omitted
+isn't rendered. Canonical order (left → right):
+
+```
+[views] [import] [export] [columns] [share] [extra] │ [primary]
+```
+
+A thin divider separates `primary` (the `+ Add` button) from the
+secondary utilities so the main call-to-action always reads as distinct.
+`extra` is the slot for page-specific secondary actions outside the
+standard set — an AI-generate wand, a visualization link, a
+"connect to source" button, a print button (pass a fragment for several).
+
+```tsx
+import ListToolbar from '@/components/ListToolbar';
+
+<PageHeader
+  title="Systems"
+  actions={
+    <ListToolbar
+      views={<SavedViewsMenu pageKey="systems" currentFilters={…} onApply={…} />}
+      export={<ExportMenu build={…} />}
+      columns={<ColumnPicker state={cols} />}
+      import={canWrite ? <IconButton icon="upload" label="Import" onClick={…} /> : undefined}
+      extra={canWrite ? <IconButton icon="link" label="Connect to source" onClick={…} /> : undefined}
+      primary={canWrite ? <IconButton icon="plus" label="Add system" variant="primary" onClick={…} /> : undefined}
+    />
+  }
+/>
+```
+
+The standard affordance set per list archetype:
+
+- **Flat `DataTable` lists** — `views` + `export` + `columns`, plus
+  `import` where the entity has a bulk-import path. Every such page
+  should expose at least Export and (where it has a filter set worth
+  saving) Saved Views.
+- **Tree / hierarchy lists** (Organizations, Governance Groups, Data
+  Domains, Process Catalog) — no `columns` (they have no columns);
+  `export` + optional `extra` (AI-generate) + `primary`.
+
+Export always goes through `<ExportMenu>` (never a bespoke
+`IconButton icon="download"`). `ExportMenu` offers CSV / Excel / JSON /
+clipboard by default; a page with a richer HTML representation than a
+flat table (e.g. the Business Glossary's formatted term sheet) adds
+`'html'` to its `formats` and supplies the pre-rendered document as
+`html` on the `ExportPayload` — the `html` formatter saves that verbatim,
+and falls back to a generic table document when it's omitted.
+
 ### `<TruncatedText>`
 
 Single-line ellipsis + hover tooltip for list-row cells. Combined

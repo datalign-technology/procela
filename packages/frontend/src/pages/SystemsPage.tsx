@@ -14,6 +14,7 @@ import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
+import ListToolbar from '../components/ListToolbar';
 import { useTerm } from '../lib/terminology';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -929,44 +930,48 @@ export default function SystemsPage({
         title="Systems"
         subtitle="Applications and platforms where your organization's data lives."
         actions={
-          <>
-            <SavedViewsMenu
-              pageKey="systems"
-              currentFilters={{ filterType, filterCriticality, filterOwner, searchQuery }}
-              onApply={(f) => {
-                setFilterType((f.filterType as string) || '');
-                setFilterCriticality((f.filterCriticality as string) || '');
-                setFilterOwner((f.filterOwner as string) || '');
-                setSearchQuery((f.searchQuery as string) || '');
-              }}
-            />
-            <ExportMenu
-              disabled={systems.length === 0}
-              build={() => ({
-                filenameBase: 'systems',
-                sheetName: 'Systems',
-                headers: ['Name', 'Type', 'Vendor', 'Criticality', 'Connectivity', 'Connection Status', 'Owner', 'Deputy Owner', custodiansLabel, 'Description'],
-                rows: systems.map((s) => [
-                  s.name,
-                  s.systemType,
-                  s.vendor || '',
-                  s.businessCriticality || '',
-                  s.connectivity ? CONNECTIVITY_LABEL[s.connectivity] : '',
-                  s.connectionStatus || '',
-                  s.ownerName || '',
-                  s.deputyOwnerName || '',
-                  (s.custodianNames || []).join('; '),
-                  s.description,
-                ]),
-              })}
-            />
-            {canWrite && <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />}
-            {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
-            <ColumnPicker state={systemCols} />
-            {canWrite && canOwnHere && (
+          <ListToolbar
+            views={
+              <SavedViewsMenu
+                pageKey="systems"
+                currentFilters={{ filterType, filterCriticality, filterOwner, searchQuery }}
+                onApply={(f) => {
+                  setFilterType((f.filterType as string) || '');
+                  setFilterCriticality((f.filterCriticality as string) || '');
+                  setFilterOwner((f.filterOwner as string) || '');
+                  setSearchQuery((f.searchQuery as string) || '');
+                }}
+              />
+            }
+            export={
+              <ExportMenu
+                disabled={systems.length === 0}
+                build={() => ({
+                  filenameBase: 'systems',
+                  sheetName: 'Systems',
+                  headers: ['Name', 'Type', 'Vendor', 'Criticality', 'Connectivity', 'Connection Status', 'Owner', 'Deputy Owner', custodiansLabel, 'Description'],
+                  rows: systems.map((s) => [
+                    s.name,
+                    s.systemType,
+                    s.vendor || '',
+                    s.businessCriticality || '',
+                    s.connectivity ? CONNECTIVITY_LABEL[s.connectivity] : '',
+                    s.connectionStatus || '',
+                    s.ownerName || '',
+                    s.deputyOwnerName || '',
+                    (s.custodianNames || []).join('; '),
+                    s.description,
+                  ]),
+                })}
+              />
+            }
+            import={canWrite ? <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} /> : undefined}
+            columns={<ColumnPicker state={systemCols} />}
+            extra={canWrite ? <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} /> : undefined}
+            primary={canWrite && canOwnHere ? (
               <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
-            )}
-          </>
+            ) : undefined}
+          />
         }
       >
         <HelpPopover id="systems-intro" title="Systems">

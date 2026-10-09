@@ -22,6 +22,7 @@ import { apiClient } from '../api/client';
 import { useTierLabel, TIER_VALUES, TIER_COLORS, tierKey, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import ListToolbar from '../components/ListToolbar';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SensitivityPanel from '../components/SensitivityPanel';
@@ -1610,22 +1611,24 @@ export default function DataAssetsPage({
   // Toolbar actions — rendered inside the PageHeader on the standalone page,
   // or as a right-aligned strip when embedded in the Data Assets hub.
   const headerActions = (
-    <>
-      <SavedViewsMenu
-        pageKey="data-assets"
-        currentFilters={{ filterCategory, filterTier, filterSystemId, filterOwner, selectedDomainId, filterOrigin, filterMapping, searchQuery }}
-        onApply={(f) => {
-          setFilterCategory((f.filterCategory as string) || '');
-          setFilterTier((f.filterTier as string) || '');
-          setFilterSystemId((f.filterSystemId as string) || '');
-          setFilterOwner((f.filterOwner as string) || '');
-          setSelectedDomainId((f.selectedDomainId as string) || '');
-          setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
-          setFilterMapping((f.filterMapping as '' | 'mapped' | 'unmapped') || '');
-          setSearchQuery((f.searchQuery as string) || '');
-        }}
-      />
-      {assets.length > 0 && (
+    <ListToolbar
+      views={
+        <SavedViewsMenu
+          pageKey="data-assets"
+          currentFilters={{ filterCategory, filterTier, filterSystemId, filterOwner, selectedDomainId, filterOrigin, filterMapping, searchQuery }}
+          onApply={(f) => {
+            setFilterCategory((f.filterCategory as string) || '');
+            setFilterTier((f.filterTier as string) || '');
+            setFilterSystemId((f.filterSystemId as string) || '');
+            setFilterOwner((f.filterOwner as string) || '');
+            setSelectedDomainId((f.selectedDomainId as string) || '');
+            setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
+            setFilterMapping((f.filterMapping as '' | 'mapped' | 'unmapped') || '');
+            setSearchQuery((f.searchQuery as string) || '');
+          }}
+        />
+      }
+      export={assets.length > 0 ? (
         <ExportMenu build={() => ({
           filenameBase: 'data-assets',
           sheetName: 'Data Assets',
@@ -1640,12 +1643,12 @@ export default function DataAssetsPage({
             a.stewardName || '',
           ]),
         })} />
-      )}
-      <ColumnPicker state={colPicker} />
-      {canWrite && canOwnHere && (
+      ) : undefined}
+      columns={<ColumnPicker state={colPicker} />}
+      primary={canWrite && canOwnHere ? (
         <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
-      )}
-    </>
+      ) : undefined}
+    />
   );
 
   return (
