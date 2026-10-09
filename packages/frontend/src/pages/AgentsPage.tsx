@@ -14,6 +14,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import ListToolbar from '../components/ListToolbar';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import { DAMA_ROLE_LABELS } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -470,6 +471,17 @@ export default function AgentsPage() {
           /* Org filtering lives in the filter row below (next to Search),
              matching the other list pages — no duplicate picker here. */
           <ListToolbar
+            views={
+              <SavedViewsMenu
+                pageKey="agents"
+                currentFilters={{ selectedOrgId, govRoleFilter, searchQuery }}
+                onApply={(f) => {
+                  applyOrgFilter((f.selectedOrgId as string) || '');
+                  setGovRoleFilter((f.govRoleFilter as string) || '');
+                  setSearchQuery((f.searchQuery as string) || '');
+                }}
+              />
+            }
             import={isAdmin ? (
               <IconButton icon="upload" label="Import agents"
                 onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />
