@@ -30,6 +30,7 @@ import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import ExportMenu from '../components/ExportMenu';
 import ListToolbar from '../components/ListToolbar';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
@@ -814,6 +815,15 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
         subtitle="Charters, frameworks, standards, and policies — every formal governance document with a lifecycle, owner, and review cadence."
         actions={
           <ListToolbar
+            views={
+              <SavedViewsMenu
+                pageKey="governance-documents"
+                currentFilters={{ typeFilter }}
+                onApply={(f) => {
+                  setTypeFilter(((f.typeFilter as DocumentType | 'ALL') || 'ALL'));
+                }}
+              />
+            }
             export={
               policies.length > 0 ? (
                 <ExportMenu

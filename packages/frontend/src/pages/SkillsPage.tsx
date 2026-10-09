@@ -14,6 +14,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import ListToolbar from '../components/ListToolbar';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import { ExportPayload } from '../lib/export';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -330,6 +331,16 @@ export default function SkillsPage() {
         subtitle="Define and manage the skills your data governance team and AI agents need."
         actions={
           <ListToolbar
+            views={
+              <SavedViewsMenu
+                pageKey="skills"
+                currentFilters={{ filterCategory, searchQuery }}
+                onApply={(f) => {
+                  setFilterCategory((f.filterCategory as string) || '');
+                  setSearchQuery((f.searchQuery as string) || '');
+                }}
+              />
+            }
             export={filtered.length > 0 ? <ExportMenu build={buildSkillsExport} /> : undefined}
             extra={
               <Button
