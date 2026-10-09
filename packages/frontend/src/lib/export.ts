@@ -19,7 +19,7 @@
 // to defensively coerce.
 // ──────────────────────────────────────────────────────────────────────────
 
-export type ExportFormat = 'csv' | 'xlsx' | 'json' | 'pdf' | 'clipboard';
+export type ExportFormat = 'csv' | 'xlsx' | 'json' | 'pdf' | 'html' | 'clipboard';
 
 export type Cell = string | number | boolean | null | undefined;
 
@@ -52,6 +52,13 @@ export interface ExportPayload {
    *  (e.g. "Company · Report · Generated <date> · by <user>"). The data-only
    *  formats ignore it. */
   footer?: string;
+  /** Pre-rendered standalone HTML document for the `html` format. When a
+   *  surface has a richer HTML representation than a plain table (e.g. the
+   *  Business Glossary's formatted term sheet), it supplies the full document
+   *  string here. When omitted, the `html` formatter falls back to a generic
+   *  table built from `headers`/`rows`, matching the PDF layout. Only the
+   *  `html` formatter reads it. */
+  html?: string;
 }
 
 export const FORMAT_LABELS: Record<ExportFormat, string> = {
@@ -59,6 +66,7 @@ export const FORMAT_LABELS: Record<ExportFormat, string> = {
   xlsx: 'Excel (.xlsx)',
   json: 'JSON (.json)',
   pdf: 'PDF (print)',
+  html: 'HTML (.html)',
   clipboard: 'Copy to clipboard',
 };
 
@@ -68,6 +76,7 @@ export async function exportData(format: ExportFormat, payload: ExportPayload): 
     case 'xlsx':      return exportXlsxImpl(payload);
     case 'json':      return exportJsonImpl(payload);
     case 'pdf':       return exportPdfImpl(payload);
+    case 'html':      return exportHtmlImpl(payload);
     case 'clipboard': return exportClipboardImpl(payload);
   }
 }
@@ -215,6 +224,41 @@ function exportPdfImpl({ filenameBase, headers, rows, sheetName, header, footer 
   // Some browsers fire 'load' synchronously for document.write windows;
   // belt-and-suspenders: also try print after a short timeout.
   setTimeout(() => { try { win.print(); } catch { /* */ } }, 250);
+}
+
+// ── HTML (.html file) ───────────────────────────────────────────────────────
+// A downloadable standalone HTML document. Unlike `pdf` (which opens a print
+// window), this saves a .html file. When the caller provides a pre-rendered
+// `html` document (a richer representation than a flat table — e.g. the
+// Glossary's formatted term sheet), that is saved verbatim; otherwise a
+// generic table document is generated from headers/rows, mirroring the PDF
+// table styling without the print affordances.
+
+function exportHtmlImpl({ filenameBase, headers, rows, sheetName, header, html }: ExportPayload): void {
+  if (html != null) {
+    download(`${filenameBase}.html`, new Blob([html], { type: 'text/html;charset=utf-8' }));
+    return;
+  }
+  const title = header?.title || sheetName || filenameBase;
+  const styles = `
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .meta { font-size: 11px; color: #64748b; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 6px 10px; border: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+    thead th { background: #f1f5f9; font-weight: 600; }
+    tr:nth-child(even) td { background: #fafafa; }
+  `;
+  const body = `
+    <h1>${escapeHtml(title)}</h1>
+    <div class="meta">${escapeHtml(filenameBase)} &middot; ${rows.length} row${rows.length === 1 ? '' : 's'} &middot; generated ${new Date().toLocaleString()}</div>
+    <table>
+      <thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(cellToString(c))}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>
+  `;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${styles}</style></head><body>${body}</body></html>`;
+  download(`${filenameBase}.html`, new Blob([doc], { type: 'text/html;charset=utf-8' }));
 }
 
 // ── Clipboard (TSV) ────────────────────────────────────────────────────────
