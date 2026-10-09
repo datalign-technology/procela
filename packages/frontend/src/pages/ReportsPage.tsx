@@ -6,6 +6,8 @@ import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import ExportMenu from '../components/ExportMenu';
 import ListToolbar from '../components/ListToolbar';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import ColumnPicker from '../components/ColumnPicker';
+import { useColumnPicker, type ColumnPickerState } from '../hooks/useColumnPicker';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
@@ -39,6 +41,18 @@ interface UserReportSummary {
   scheduleFrequency: 'off' | 'daily' | 'weekly' | 'monthly';
   updatedAt: string;
 }
+
+// Column-picker set — the Report (name) and Actions columns are always shown;
+// the rest are user-toggleable (defaulting on, so the list is unchanged until
+// a user hides something).
+type ReportColId = 'description' | 'folder' | 'source' | 'columns' | 'lastRun';
+const REPORT_COLUMN_DEFS: Array<{ id: ReportColId; label: string; defaultVisible: boolean }> = [
+  { id: 'description', label: 'Description', defaultVisible: true },
+  { id: 'folder',      label: 'Folder',      defaultVisible: true },
+  { id: 'source',      label: 'Source',      defaultVisible: true },
+  { id: 'columns',     label: 'Columns',     defaultVisible: true },
+  { id: 'lastRun',     label: 'Last run',    defaultVisible: true },
+];
 
 interface RunResult {
   columns: Array<{ field: string; label: string }>;
@@ -187,7 +201,7 @@ function FolderRailRow({ folder, active, count, onSelect, onEdit, onReorder }: {
 
 // ── User Reports — saved Report Builder definitions ────────────────────────
 
-function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
+function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string; reportCols: ColumnPickerState<ReportColId> }) {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
@@ -411,10 +425,10 @@ function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
     }
   };
 
-  const columns: DataTableColumn<UserReportSummary>[] = [
+  const columns = [
     {
       key: 'name', header: 'Report', sortable: true,
-      render: (r) => (
+      render: (r: UserReportSummary) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)' }}>{renderNavIcon('/reports', { size: 16 })}</span>
           <button
@@ -431,15 +445,15 @@ function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
         </div>
       ),
     },
-    {
+    reportCols.isVisible('description') && {
       key: 'description', header: 'Description',
-      render: (r) => r.description
+      render: (r: UserReportSummary) => r.description
         ? <TruncatedText text={r.description} style={{ color: 'var(--color-text-secondary)' }} />
         : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
     },
-    {
+    reportCols.isVisible('folder') && {
       key: 'folder', header: 'Folder', width: 150,
-      render: (r) => {
+      render: (r: UserReportSummary) => {
         const name = folderName(r.folderId);
         return name
           ? (
@@ -451,17 +465,17 @@ function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
           : <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
       },
     },
-    {
+    reportCols.isVisible('source') && {
       key: 'source', header: 'Source', sortable: true, width: 140,
-      render: (r) => <span style={{ color: 'var(--color-text-secondary)' }}>{r.primaryEntity}</span>,
+      render: (r: UserReportSummary) => <span style={{ color: 'var(--color-text-secondary)' }}>{r.primaryEntity}</span>,
     },
-    {
+    reportCols.isVisible('columns') && {
       key: 'columns', header: 'Columns', align: 'center', width: 90,
-      render: (r) => <span style={{ color: 'var(--color-text-secondary)' }}>{r.columnCount}</span>,
+      render: (r: UserReportSummary) => <span style={{ color: 'var(--color-text-secondary)' }}>{r.columnCount}</span>,
     },
-    {
+    reportCols.isVisible('lastRun') && {
       key: 'lastRun', header: 'Last run', sortable: true, width: 200,
-      render: (r) => (
+      render: (r: UserReportSummary) => (
         <span style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
           {r.lastRunAt
             ? <>{timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
@@ -472,7 +486,7 @@ function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
     },
     {
       key: 'actions', header: 'Actions', align: 'center', width: 160,
-      render: (r) => (
+      render: (r: UserReportSummary) => (
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap' }}>
           <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => runReport(r)} />
           <IconButton size="sm" icon="folder" label="Move to folder" onClick={() => { setMoveReport(r); setMoveTarget(r.folderId || ''); }} />
@@ -480,7 +494,7 @@ function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
         </div>
       ),
     },
-  ];
+  ].filter(Boolean) as DataTableColumn<UserReportSummary>[];
 
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList<UserReportSummary>(
     visibleReports,
@@ -866,12 +880,15 @@ function UserReportsTab({ focusReportId }: { focusReportId?: string } = {}) {
 
 export default function ReportsPage({ focusReportId }: { focusReportId?: string } = {}) {
   const navigate = useNavigate();
+  // Column-picker state lives here (the toolbar is on this page header) and is
+  // passed into the tab, which owns the table.
+  const reportCols = useColumnPicker<ReportColId>('procela.reports.visibleCols.v1', REPORT_COLUMN_DEFS);
   // Reports is the report catalog + Builder. The Executive Report and
   // Governance Maturity Scorecard tabs were removed, so there's no tab bar.
   // On the /reports/:id detail route the tab renders its own detail header,
   // so the list's "Reports" PageHeader is suppressed.
   if (focusReportId) {
-    return <div><UserReportsTab focusReportId={focusReportId} /></div>;
+    return <div><UserReportsTab focusReportId={focusReportId} reportCols={reportCols} /></div>;
   }
   return (
     <div>
@@ -880,11 +897,12 @@ export default function ReportsPage({ focusReportId }: { focusReportId?: string 
         subtitle="Reports you and your org have built against the Procela data model."
         actions={
           <ListToolbar
+            columns={<ColumnPicker state={reportCols} />}
             primary={<IconButton icon="plus" label="New report" variant="primary" onClick={() => navigate('/reports/builder')} />}
           />
         }
       />
-      <UserReportsTab />
+      <UserReportsTab reportCols={reportCols} />
     </div>
   );
 }
