@@ -28,6 +28,8 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
@@ -811,10 +813,30 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
         title="Governance Documents"
         subtitle="Charters, frameworks, standards, and policies — every formal governance document with a lifecycle, owner, and review cadence."
         actions={
-          <>
-            <ColumnPicker state={policyCols} />
-            {isAdmin && <IconButton icon="plus" label="Add document" variant="primary" onClick={openAdd} />}
-          </>
+          <ListToolbar
+            export={
+              policies.length > 0 ? (
+                <ExportMenu
+                  label="Export documents"
+                  build={() => ({
+                    filenameBase: 'governance-documents',
+                    sheetName: 'Documents',
+                    headers: ['Code', 'Name', 'Category', 'Status', 'Owner', 'Controls'],
+                    rows: policies.map((pol) => [
+                      pol.code,
+                      pol.name,
+                      (pol.category || '').replace(/_/g, ' '),
+                      (pol.status || '').replace(/_/g, ' '),
+                      pol.ownerName || '',
+                      controlsForPolicy(pol.id).length,
+                    ]),
+                  })}
+                />
+              ) : undefined
+            }
+            columns={<ColumnPicker state={policyCols} />}
+            primary={isAdmin ? <IconButton icon="plus" label="Add document" variant="primary" onClick={openAdd} /> : undefined}
+          />
         }
       />
 

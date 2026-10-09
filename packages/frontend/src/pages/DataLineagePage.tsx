@@ -15,6 +15,7 @@ import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import { usePolling } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
@@ -773,34 +774,39 @@ export default function DataLineagePage() {
         title="Data Lineage"
         subtitle="Track how data flows between systems — which system feeds which."
         actions={
-          <>
-            <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
-              onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
-            {/* Export before Import, matching every other entity list. */}
-            {links.length > 0 && (
-              <ExportMenu build={() => ({
-                filenameBase: 'data-lineage',
-                sheetName: 'Lineage',
-                headers: ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'],
-                rows: links.map((l) => [
-                  l.sourceSystemName,
-                  l.targetSystemName,
-                  l.dataAssetName,
-                  l.flowType,
-                  l.frequency,
-                  l.status,
-                  l.description,
-                ]),
-              })} />
-            )}
-            {canWrite && <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />}
-            {canWrite && snowflakeConns.length > 0 && (
-              <IconButton icon="wand" label="Extract lineage from query history"
-                onClick={() => { setSqlExtractSummary(null); setSqlExtractColumnSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
-            )}
-            <ColumnPicker state={lineageCols} />
-            {canWrite && <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} />}
-          </>
+          <ListToolbar
+            import={canWrite ? <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} /> : undefined}
+            export={
+              links.length > 0 ? (
+                <ExportMenu build={() => ({
+                  filenameBase: 'data-lineage',
+                  sheetName: 'Lineage',
+                  headers: ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'],
+                  rows: links.map((l) => [
+                    l.sourceSystemName,
+                    l.targetSystemName,
+                    l.dataAssetName,
+                    l.flowType,
+                    l.frequency,
+                    l.status,
+                    l.description,
+                  ]),
+                })} />
+              ) : undefined
+            }
+            columns={<ColumnPicker state={lineageCols} />}
+            extra={
+              <>
+                {canWrite && snowflakeConns.length > 0 && (
+                  <IconButton icon="wand" label="Extract lineage from query history"
+                    onClick={() => { setSqlExtractSummary(null); setSqlExtractColumnSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
+                )}
+                <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
+                  onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
+              </>
+            }
+            primary={canWrite ? <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} /> : undefined}
+          />
         }
       />
 

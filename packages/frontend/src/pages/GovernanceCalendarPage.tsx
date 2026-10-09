@@ -13,6 +13,8 @@ import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import PageHeader from '../components/PageHeader';
+import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -633,27 +635,52 @@ export default function GovernanceCalendarPage() {
       <PageHeader
         title="Governance Calendar"
         subtitle="Recurring events and activities that keep your program running."
-        actions={<>
-          {events.length > 0 && (
-            <div style={{ display: 'inline-flex', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-              <button onClick={() => setViewMode('list')} style={{
-                padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
-                background: viewMode === 'list' ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: viewMode === 'list' ? '#fff' : 'var(--color-text)',
-              }}>List</button>
-              <button onClick={() => setViewMode('calendar')} style={{
-                padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
-                borderLeft: '1px solid var(--color-border)',
-                background: viewMode === 'calendar' ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: viewMode === 'calendar' ? '#fff' : 'var(--color-text)',
-              }}>Calendar</button>
-            </div>
-          )}
-          {isAdmin && events.length === 0 && (
-            <Button variant="secondary" onClick={handleSeed}>Seed Standard Events</Button>
-          )}
-          {isAdmin && <IconButton icon="plus" label="Add event" variant="primary" onClick={openAdd} />}
-        </>}
+        actions={
+          <ListToolbar
+            export={
+              events.length > 0 ? (
+                <ExportMenu
+                  label="Export calendar"
+                  build={() => ({
+                    filenameBase: 'governance-calendar',
+                    sheetName: 'Calendar',
+                    headers: ['Name', 'Type', 'Cadence', 'Next date', 'Status'],
+                    rows: events.map((ev) => [
+                      ev.name,
+                      formatTypeLabel(ev.eventType),
+                      formatTypeLabel(ev.cadence),
+                      formatOccurrence(ev.nextOccurrence),
+                      ev.status,
+                    ]),
+                  })}
+                />
+              ) : undefined
+            }
+            extra={
+              <>
+                {events.length > 0 && (
+                  <div style={{ display: 'inline-flex', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                    <button onClick={() => setViewMode('list')} style={{
+                      padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                      background: viewMode === 'list' ? 'var(--color-primary)' : 'var(--color-surface)',
+                      color: viewMode === 'list' ? '#fff' : 'var(--color-text)',
+                    }}>List</button>
+                    <button onClick={() => setViewMode('calendar')} style={{
+                      padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                      borderLeft: '1px solid var(--color-border)',
+                      background: viewMode === 'calendar' ? 'var(--color-primary)' : 'var(--color-surface)',
+                      color: viewMode === 'calendar' ? '#fff' : 'var(--color-text)',
+                    }}>Calendar</button>
+                  </div>
+                )}
+                {isAdmin && events.length === 0 && (
+                  <Button variant="secondary" onClick={handleSeed}>Seed Standard Events</Button>
+                )}
+              </>
+            }
+            primary={isAdmin ? <IconButton icon="plus" label="Add event" variant="primary" onClick={openAdd} /> : undefined}
+          />
+        }
       />
 
       <ConfirmDialog

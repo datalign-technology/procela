@@ -9,6 +9,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
+import ListToolbar from '../components/ListToolbar';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
@@ -565,31 +566,37 @@ export default function DamaRolesPage({
             actionsPortal={actionsPortal}
             title="Governance Roles"
             subtitle="Assign data management governance roles to people across organizations and data domains."
-            actions={<>
-              <SavedViewsMenu
-                pageKey="dama-roles"
-                currentFilters={{ filterCategory, searchQuery }}
-                onApply={(f) => {
-                  setFilterCategory((f.filterCategory as string | null) ?? null);
-                  setSearchQuery((f.searchQuery as string) || '');
-                }}
+            actions={
+              <ListToolbar
+                views={
+                  <SavedViewsMenu
+                    pageKey="dama-roles"
+                    currentFilters={{ filterCategory, searchQuery }}
+                    onApply={(f) => {
+                      setFilterCategory((f.filterCategory as string | null) ?? null);
+                      setSearchQuery((f.searchQuery as string) || '');
+                    }}
+                  />
+                }
+                export={
+                  roles.length > 0 ? (
+                    <ExportMenu build={() => ({
+                      filenameBase: 'governance-roles',
+                      sheetName: 'Governance Roles',
+                      headers: ['Holder', 'Type', 'Governance Role', 'Organization', 'Since'],
+                      rows: roles.map((r) => [
+                        r.agentId ? (r.agentName || '') : (r.personName || ''),
+                        r.agentId ? 'Agent' : 'Person',
+                        ROLE_TYPE_LABELS[r.roleType] || r.roleType,
+                        scopeName(r.scopeId),
+                        new Date(r.since).toLocaleDateString(),
+                      ]),
+                    })} />
+                  ) : undefined
+                }
+                primary={isAdmin ? <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} /> : undefined}
               />
-              {roles.length > 0 && (
-                <ExportMenu build={() => ({
-                  filenameBase: 'governance-roles',
-                  sheetName: 'Governance Roles',
-                  headers: ['Holder', 'Type', 'Governance Role', 'Organization', 'Since'],
-                  rows: roles.map((r) => [
-                    r.agentId ? (r.agentName || '') : (r.personName || ''),
-                    r.agentId ? 'Agent' : 'Person',
-                    ROLE_TYPE_LABELS[r.roleType] || r.roleType,
-                    scopeName(r.scopeId),
-                    new Date(r.since).toLocaleDateString(),
-                  ]),
-                })} />
-              )}
-              {isAdmin && <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />}
-            </>}
+            }
           >
           </EmbeddablePageHeader>
 
