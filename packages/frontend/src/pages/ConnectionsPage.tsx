@@ -16,6 +16,7 @@ import IconButton from './../components/IconButton';
 import Button from '../components/Button';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
+import ListToolbar from '../components/ListToolbar';
 import EmptyState from './../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { errorMessage } from '../lib/errorToast';
@@ -977,38 +978,42 @@ export default function ConnectionsPage({
           ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>
           : 'Connect to external data sources. Test verifies reachability (TCP or HTTP probe); Discover runs a real catalog scan for databases, warehouses, MongoDB, and cloud object stores (API and spreadsheet sources return sample assets).'}
         actions={
-          <>
-            <SavedViewsMenu
-              pageKey="connections"
-              currentFilters={{ filterConnType, searchQuery }}
-              onApply={(f) => {
-                setFilterConnType((f.filterConnType as string) || '');
-                setSearchQuery((f.searchQuery as string) || '');
-              }}
-            />
-            <ExportMenu
-              disabled={visibleConnections.length === 0}
-              build={() => ({
-                filenameBase: 'connections',
-                sheetName: 'Connections',
-                headers: ['Name', 'Type', 'Status', 'Systems', 'Last Tested', 'Last Test Result'],
-                rows: visibleConnections.map((c) => {
-                  const ids = c.systemIds ?? [];
-                  const sysNames = ids.map((id) => systemNameMap[id]).filter(Boolean).join('; ');
-                  return [
-                    c.name,
-                    c.connectionType,
-                    c.status,
-                    sysNames,
-                    c.lastTestedAt ? new Date(c.lastTestedAt).toLocaleString() : '',
-                    c.lastTestResult || '',
-                  ];
-                }),
-              })}
-            />
-            <ColumnPicker state={connCols} />
-            {canWrite && <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />}
-          </>
+          <ListToolbar
+            views={
+              <SavedViewsMenu
+                pageKey="connections"
+                currentFilters={{ filterConnType, searchQuery }}
+                onApply={(f) => {
+                  setFilterConnType((f.filterConnType as string) || '');
+                  setSearchQuery((f.searchQuery as string) || '');
+                }}
+              />
+            }
+            export={
+              <ExportMenu
+                disabled={visibleConnections.length === 0}
+                build={() => ({
+                  filenameBase: 'connections',
+                  sheetName: 'Connections',
+                  headers: ['Name', 'Type', 'Status', 'Systems', 'Last Tested', 'Last Test Result'],
+                  rows: visibleConnections.map((c) => {
+                    const ids = c.systemIds ?? [];
+                    const sysNames = ids.map((id) => systemNameMap[id]).filter(Boolean).join('; ');
+                    return [
+                      c.name,
+                      c.connectionType,
+                      c.status,
+                      sysNames,
+                      c.lastTestedAt ? new Date(c.lastTestedAt).toLocaleString() : '',
+                      c.lastTestResult || '',
+                    ];
+                  }),
+                })}
+              />
+            }
+            columns={<ColumnPicker state={connCols} />}
+            primary={canWrite ? <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} /> : undefined}
+          />
         }
       />
 

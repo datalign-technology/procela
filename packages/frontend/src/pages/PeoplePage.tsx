@@ -11,6 +11,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
+import ListToolbar from '../components/ListToolbar';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
@@ -640,39 +641,47 @@ export default function PeoplePage() {
   // like Business Glossary and the other list pages, rather than dropping
   // onto the list's count row below the header.
   const peopleToolbar = (
-    <>
-      <SavedViewsMenu
-        pageKey="people"
-        currentFilters={{ selectedOrgId, filterAppRole, filterGovRole, searchQuery }}
-        onApply={(f) => {
-          setSelectedOrgId((f.selectedOrgId as string) || '');
-          setFilterAppRole((f.filterAppRole as string) || '');
-          setFilterGovRole((f.filterGovRole as string) || '');
-          setSearchQuery((f.searchQuery as string) || '');
-        }}
-      />
-      {filteredPeople.length > 0 && (
-        <ExportMenu build={() => ({
-          filenameBase: 'people',
-          sheetName: 'People',
-          // The Org column carries the full path (Parent > Child >
-          // Grandchild) so a single-file enterprise-wide export can
-          // round-trip without losing which org each person belongs to.
-          // The import endpoint resolves it per row and falls back to the
-          // dialog's org if the column is missing or the path doesn't match.
-          headers: ['Name', 'Email', 'Role', 'Title', 'Org'],
-          rows: filteredPeople.map((p) => [
-            p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
-            buildOrgPath(p.orgIds[0] || '', flatOrgs),
-          ]),
-        })} />
-      )}
-      {isAdmin && <IconButton icon="upload" label="Import people"
-        onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />}
-      {isAdmin && <IconButton icon="link" label="Connect to source" onClick={() => setShowPeopleSync(true)} />}
-      {isAdmin && <IconButton icon="plus" label="Add person" variant="primary"
-        onClick={openAddPerson} />}
-    </>
+    <ListToolbar
+      views={
+        <SavedViewsMenu
+          pageKey="people"
+          currentFilters={{ selectedOrgId, filterAppRole, filterGovRole, searchQuery }}
+          onApply={(f) => {
+            setSelectedOrgId((f.selectedOrgId as string) || '');
+            setFilterAppRole((f.filterAppRole as string) || '');
+            setFilterGovRole((f.filterGovRole as string) || '');
+            setSearchQuery((f.searchQuery as string) || '');
+          }}
+        />
+      }
+      import={isAdmin ? (
+        <IconButton icon="upload" label="Import people"
+          onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />
+      ) : undefined}
+      export={
+        filteredPeople.length > 0 ? (
+          <ExportMenu build={() => ({
+            filenameBase: 'people',
+            sheetName: 'People',
+            // The Org column carries the full path (Parent > Child >
+            // Grandchild) so a single-file enterprise-wide export can
+            // round-trip without losing which org each person belongs to.
+            // The import endpoint resolves it per row and falls back to the
+            // dialog's org if the column is missing or the path doesn't match.
+            headers: ['Name', 'Email', 'Role', 'Title', 'Org'],
+            rows: filteredPeople.map((p) => [
+              p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
+              buildOrgPath(p.orgIds[0] || '', flatOrgs),
+            ]),
+          })} />
+        ) : undefined
+      }
+      extra={isAdmin ? <IconButton icon="link" label="Connect to source" onClick={() => setShowPeopleSync(true)} /> : undefined}
+      primary={isAdmin ? (
+        <IconButton icon="plus" label="Add person" variant="primary"
+          onClick={openAddPerson} />
+      ) : undefined}
+    />
   );
 
   return (

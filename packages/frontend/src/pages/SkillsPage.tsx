@@ -13,6 +13,7 @@ import { useOrgContext, VALUE_STREAM_LEVELS } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import { ExportPayload } from '../lib/export';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -328,20 +329,20 @@ export default function SkillsPage() {
         title="Skills Taxonomy"
         subtitle="Define and manage the skills your data governance team and AI agents need."
         actions={
-          <>
-            <Button
-              variant="secondary"
-              disabled={skills.length > 0 || seeding}
-              onClick={handleSeed}
-              title={skills.length > 0 ? 'Skills already exist for this organization' : 'Seed standard DAMA-aligned skills'}
-            >
-              {seeding ? 'Seeding...' : 'Seed Standard Skills'}
-            </Button>
-            {filtered.length > 0 && (
-              <ExportMenu build={buildSkillsExport} />
-            )}
-            {canWrite && <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} />}
-          </>
+          <ListToolbar
+            export={filtered.length > 0 ? <ExportMenu build={buildSkillsExport} /> : undefined}
+            extra={
+              <Button
+                variant="secondary"
+                disabled={skills.length > 0 || seeding}
+                onClick={handleSeed}
+                title={skills.length > 0 ? 'Skills already exist for this organization' : 'Seed standard DAMA-aligned skills'}
+              >
+                {seeding ? 'Seeding...' : 'Seed Standard Skills'}
+              </Button>
+            }
+            primary={canWrite ? <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} /> : undefined}
+          />
         }
       >
         <HelpPopover id="skills-taxonomy" title="Skills Taxonomy">

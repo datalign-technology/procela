@@ -11,6 +11,7 @@ import { useToastStore } from '../stores/toastStore';
 import { activateOnKeyStop, clickable } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import ConfirmDialog from '../components/ConfirmDialog';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
@@ -472,40 +473,46 @@ export default function GovernanceGroupsPage() {
         title="Governance Groups"
         subtitle={`Manage governance councils, committees, and working groups. ${flatGroups.length} groups total.`}
         actions={
-          <>
-            {flatGroups.length > 0 && (
-              <IconButton icon="eye" label="Visualize"
-                onClick={() => navigate('/governance/visualization')} />
-            )}
-            {flatGroups.length > 0 && (
-              <ExportMenu build={() => ({
-                filenameBase: 'governance-groups',
-                sheetName: 'Governance Groups',
-                headers: ['Name', 'Type', 'Parent', 'Description', 'Members', 'Status'],
-                rows: flatGroups.map((g) => [
-                  g.name,
-                  GROUP_TYPE_LABELS[g.type] || g.type,
-                  flatGroups.find((p) => p.id === g.parentId)?.name || '',
-                  g.description,
-                  g.members.length,
-                  g.status,
-                ]),
-              })} />
-            )}
-            {isAdmin && (
-              <IconButton icon="wand"
-                label={
-                  flatGroups.length > 0
-                    ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
-                    : 'Generate governance template'
-                }
-                disabled={flatGroups.length > 0}
-                onClick={() => setConfirmGenerate(true)} />
-            )}
-            {isAdmin && (
+          <ListToolbar
+            export={
+              flatGroups.length > 0 ? (
+                <ExportMenu build={() => ({
+                  filenameBase: 'governance-groups',
+                  sheetName: 'Governance Groups',
+                  headers: ['Name', 'Type', 'Parent', 'Description', 'Members', 'Status'],
+                  rows: flatGroups.map((g) => [
+                    g.name,
+                    GROUP_TYPE_LABELS[g.type] || g.type,
+                    flatGroups.find((p) => p.id === g.parentId)?.name || '',
+                    g.description,
+                    g.members.length,
+                    g.status,
+                  ]),
+                })} />
+              ) : undefined
+            }
+            extra={
+              <>
+                {isAdmin && (
+                  <IconButton icon="wand"
+                    label={
+                      flatGroups.length > 0
+                        ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
+                        : 'Generate governance template'
+                    }
+                    disabled={flatGroups.length > 0}
+                    onClick={() => setConfirmGenerate(true)} />
+                )}
+                {flatGroups.length > 0 && (
+                  <IconButton icon="eye" label="Visualize"
+                    onClick={() => navigate('/governance/visualization')} />
+                )}
+              </>
+            }
+            primary={isAdmin ? (
               <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
-            )}
-          </>
+            ) : undefined}
+          />
         }
       />
 

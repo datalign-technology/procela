@@ -13,6 +13,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import { DAMA_ROLE_LABELS } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -466,30 +467,34 @@ export default function AgentsPage() {
         title="Agents"
         subtitle="Non-human actors — AI, service accounts, pipelines, bots — assigned to organizations like people."
         actions={
-          <>
-            {/* Org filtering lives in the filter row below (next to Search),
-                matching the other list pages — no duplicate picker here. */}
-            {filtered.length > 0 && (
-              <ExportMenu build={() => ({
-                filenameBase: 'agents',
-                sheetName: 'Agents',
-                headers: ['Name', 'Type', 'Provider', 'Status', 'Organizations', 'Responsible', 'Description'],
-                rows: filtered.map((a) => [
-                  a.name,
-                  a.agentType,
-                  a.provider,
-                  a.status,
-                  a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join('; '),
-                  personNameById[a.ownerPersonId] || '',
-                  a.description,
-                ]),
-              })} />
-            )}
-            {isAdmin && <IconButton icon="upload" label="Import agents"
-              onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />}
-            <ColumnPicker state={agentCols} />
-            {isAdmin && <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} />}
-          </>
+          /* Org filtering lives in the filter row below (next to Search),
+             matching the other list pages — no duplicate picker here. */
+          <ListToolbar
+            import={isAdmin ? (
+              <IconButton icon="upload" label="Import agents"
+                onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />
+            ) : undefined}
+            export={
+              filtered.length > 0 ? (
+                <ExportMenu build={() => ({
+                  filenameBase: 'agents',
+                  sheetName: 'Agents',
+                  headers: ['Name', 'Type', 'Provider', 'Status', 'Organizations', 'Responsible', 'Description'],
+                  rows: filtered.map((a) => [
+                    a.name,
+                    a.agentType,
+                    a.provider,
+                    a.status,
+                    a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join('; '),
+                    personNameById[a.ownerPersonId] || '',
+                    a.description,
+                  ]),
+                })} />
+              ) : undefined
+            }
+            columns={<ColumnPicker state={agentCols} />}
+            primary={isAdmin ? <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} /> : undefined}
+          />
         }
       />
 

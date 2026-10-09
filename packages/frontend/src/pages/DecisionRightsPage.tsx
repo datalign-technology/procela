@@ -25,6 +25,8 @@ import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useSortedList } from '../hooks/useSortedList';
 import SavedViewsMenu from '../components/SavedViewsMenu';
+import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 
 // ── Types ──
 
@@ -623,8 +625,39 @@ export default function DecisionRightsPage() {
         title="Decision Rights"
         subtitle="Who has authority to decide, recommend, approve, and be informed for governance decisions."
         actions={
-          <>
-            {isAdmin && rows.length === 0 && (
+          <ListToolbar
+            views={
+              <SavedViewsMenu
+                pageKey="decision-rights"
+                currentFilters={{ categoryFilter, searchQuery }}
+                onApply={(f) => {
+                  setCategoryFilter(((f.categoryFilter as 'ALL' | DecisionCategory) || 'ALL'));
+                  setSearchQuery((f.searchQuery as string) || '');
+                }}
+              />
+            }
+            export={
+              rows.length > 0 ? (
+                <ExportMenu
+                  build={() => ({
+                    filenameBase: 'decision-rights',
+                    sheetName: 'Decision Rights',
+                    headers: ['Decision', 'Category', 'Decides', 'Recommends', 'Approves', 'Informed', 'Escalation path'],
+                    rows: rows.map((r) => [
+                      r.decision,
+                      CATEGORY_LABELS[r.category] || r.category,
+                      r.deciderName || (r.decider ? labelFor(r.decider, people, groups) : ''),
+                      (r.recommends || []).map((v) => labelFor(v, people, groups)).join('; '),
+                      (r.approves || []).map((v) => labelFor(v, people, groups)).join('; '),
+                      (r.informed || []).map((v) => labelFor(v, people, groups)).join('; '),
+                      r.escalationPath || '',
+                    ]),
+                  })}
+                />
+              ) : undefined
+            }
+            columns={<ColumnPicker state={decisionCols} />}
+            extra={isAdmin && rows.length === 0 ? (
               <Button
                 variant="secondary"
                 disabled={seeding}
@@ -632,18 +665,9 @@ export default function DecisionRightsPage() {
               >
                 {seeding ? 'Seeding...' : 'Seed Standard Decisions'}
               </Button>
-            )}
-            <SavedViewsMenu
-              pageKey="decision-rights"
-              currentFilters={{ categoryFilter, searchQuery }}
-              onApply={(f) => {
-                setCategoryFilter(((f.categoryFilter as 'ALL' | DecisionCategory) || 'ALL'));
-                setSearchQuery((f.searchQuery as string) || '');
-              }}
-            />
-            <ColumnPicker state={decisionCols} />
-            {isAdmin && <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} />}
-          </>
+            ) : undefined}
+            primary={isAdmin ? <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} /> : undefined}
+          />
         }
       />
 

@@ -15,6 +15,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useAiEnabled } from '../stores/aiConfigStore';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 import { statusBadgeStyle } from '../lib/statusBadge';
 import EditableField from '../components/EditableField';
@@ -1079,27 +1080,29 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
         title="Data Domains"
         subtitle="Organize data assets into governed domains with assigned owners and stewards."
         actions={
-          <>
-            {canWrite && aiEnabled && (
+          <ListToolbar
+            export={
+              domains.length > 0 ? (
+                <ExportMenu build={() => ({
+                  filenameBase: 'data-domains',
+                  sheetName: 'Data Domains',
+                  headers: ['Name', 'Description', 'Owner', 'Stewards', 'Assets', 'Status'],
+                  rows: domains.map((d) => [
+                    d.name,
+                    d.description,
+                    d.ownerName || '',
+                    d.stewards.map((s) => s.name).join('; '),
+                    d.assets.map((a) => a.name).join('; '),
+                    d.status,
+                  ]),
+                })} />
+              ) : undefined
+            }
+            extra={canWrite && aiEnabled ? (
               <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate domains'} disabled={generating} onClick={handleGenerate} />
-            )}
-            {domains.length > 0 && (
-              <ExportMenu build={() => ({
-                filenameBase: 'data-domains',
-                sheetName: 'Data Domains',
-                headers: ['Name', 'Description', 'Owner', 'Stewards', 'Assets', 'Status'],
-                rows: domains.map((d) => [
-                  d.name,
-                  d.description,
-                  d.ownerName || '',
-                  d.stewards.map((s) => s.name).join('; '),
-                  d.assets.map((a) => a.name).join('; '),
-                  d.status,
-                ]),
-              })} />
-            )}
-            {canWrite && <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />}
-          </>
+            ) : undefined}
+            primary={canWrite ? <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} /> : undefined}
+          />
         }
       >
         <HelpPopover id="domains-intro" title="Data Domains">

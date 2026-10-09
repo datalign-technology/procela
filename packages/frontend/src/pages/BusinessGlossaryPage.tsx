@@ -31,6 +31,8 @@ import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import SavedViewsMenu from '../components/SavedViewsMenu';
+import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 
 // ── Types ──
 
@@ -440,7 +442,9 @@ export default function BusinessGlossaryPage() {
     } catch (err) { const e = err as { response?: { data?: { error?: string } } }; addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to create terms')); }
   };
 
-  const handleExportHtml = () => {
+  // Builds the rich, categorized HTML document for the glossary export and
+  // RETURNS it (ExportMenu's 'html' formatter downloads payload.html verbatim).
+  const buildExportHtml = (): string => {
     const orgName = activeOrgName || 'Organization';
     const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -456,12 +460,7 @@ export default function BusinessGlossaryPage() {
       const rows = catTerms.map((t) => `<tr><td style="padding:10px 14px;border:1px solid #e5e7eb;font-weight:600;vertical-align:top;width:22%">${esc(t.term)}</td><td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top">${esc(t.definition)}${t.synonyms?.length ? `<br><span style="color:#6b7280;font-size:12px">Synonyms: ${t.synonyms.map(esc).join(', ')}</span>` : ''}</td><td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top;width:10%;text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:600;background:${STATUS_COLORS[t.status]?.bg || '#f1f5f9'};color:${STATUS_COLORS[t.status]?.color || '#64748b'}">${esc(t.status)}</span></td></tr>`).join('');
       return `<h2 style="margin:28px 0 12px;font-size:18px;color:#1e40af;border-bottom:2px solid #dbeafe;padding-bottom:6px">${esc(cat.charAt(0) + cat.slice(1).toLowerCase())} Terms</h2><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#f8fafc"><th scope="col" style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-size:12px;text-transform:uppercase;color:#64748b">Term</th><th scope="col" style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-size:12px;text-transform:uppercase;color:#64748b">Definition</th><th scope="col" style="padding:10px 14px;border:1px solid #e5e7eb;text-align:center;font-size:12px;text-transform:uppercase;color:#64748b">Status</th></tr></thead><tbody>${rows}</tbody></table>`;
     }).join('');
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Business Glossary — ${esc(orgName)}</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:0 auto;padding:32px 24px;color:#1e293b}</style></head><body><h1 style="border-bottom:3px solid #1e40af;padding-bottom:12px">Business Glossary</h1><p style="color:#64748b">${esc(orgName)} · ${esc(now)} · ${filteredTerms.length} terms</p>${termsHtml}</body></html>`;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `glossary-${orgName.toLowerCase().replace(/\s+/g, '-')}.html`; a.click();
-    URL.revokeObjectURL(url);
-    addToast('success', 'Glossary exported as HTML');
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Business Glossary — ${esc(orgName)}</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:0 auto;padding:32px 24px;color:#1e293b}</style></head><body><h1 style="border-bottom:3px solid #1e40af;padding-bottom:12px">Business Glossary</h1><p style="color:#64748b">${esc(orgName)} · ${esc(now)} · ${filteredTerms.length} terms</p>${termsHtml}</body></html>`;
   };
 
   // ── Columns ──
@@ -560,25 +559,52 @@ export default function BusinessGlossaryPage() {
         title="Business Glossary"
         subtitle="Agreed-upon definitions for key business terms across the organization."
         actions={
-          <>
-            {canWrite && terms.length === 0 && (
-              <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
-            )}
-            {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
-            {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}
-            {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
-            <SavedViewsMenu
-              pageKey="business-glossary"
-              currentFilters={{ searchQuery, filterStatus, filterCategory }}
-              onApply={(f) => {
-                setSearchQuery((f.searchQuery as string) || '');
-                setFilterStatus((f.filterStatus as string) || '');
-                setFilterCategory((f.filterCategory as string) || '');
-              }}
-            />
-            <ColumnPicker state={glossaryCols} />
-            {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
-          </>
+          <ListToolbar
+            views={
+              <SavedViewsMenu
+                pageKey="business-glossary"
+                currentFilters={{ searchQuery, filterStatus, filterCategory }}
+                onApply={(f) => {
+                  setSearchQuery((f.searchQuery as string) || '');
+                  setFilterStatus((f.filterStatus as string) || '');
+                  setFilterCategory((f.filterCategory as string) || '');
+                }}
+              />
+            }
+            import={canWrite ? <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} /> : undefined}
+            export={
+              terms.length > 0 ? (
+                <ExportMenu
+                  label="Export glossary"
+                  formats={['html', 'csv', 'xlsx', 'json']}
+                  build={() => ({
+                    filenameBase: `glossary-${(activeOrgName || 'organization').toLowerCase().replace(/\s+/g, '-')}`,
+                    sheetName: 'Glossary',
+                    headers: ['Term', 'Category', 'Status', 'Primary Domain', 'Owner', 'Definition'],
+                    rows: filteredTerms.map((t) => [
+                      t.term,
+                      t.category,
+                      t.status,
+                      t.domainName || '',
+                      t.ownerName || '',
+                      t.definition,
+                    ]),
+                    html: buildExportHtml(),
+                  })}
+                />
+              ) : undefined
+            }
+            columns={<ColumnPicker state={glossaryCols} />}
+            extra={canWrite ? (
+              <>
+                {terms.length === 0 && (
+                  <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
+                )}
+                <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
+              </>
+            ) : undefined}
+            primary={canWrite ? <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} /> : undefined}
+          />
         }
       />
 

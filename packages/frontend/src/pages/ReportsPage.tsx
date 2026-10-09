@@ -4,6 +4,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
@@ -877,7 +878,11 @@ export default function ReportsPage({ focusReportId }: { focusReportId?: string 
       <PageHeader
         title="Reports"
         subtitle="Reports you and your org have built against the Procela data model."
-        actions={<IconButton icon="plus" label="New report" variant="primary" onClick={() => navigate('/reports/builder')} />}
+        actions={
+          <ListToolbar
+            primary={<IconButton icon="plus" label="New report" variant="primary" onClick={() => navigate('/reports/builder')} />}
+          />
+        }
       />
       <UserReportsTab />
     </div>

@@ -14,6 +14,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { INDUSTRIES } from '../types';
 import Combobox from '../components/Combobox';
 import ExportMenu from '../components/ExportMenu';
+import ListToolbar from '../components/ListToolbar';
 import ConfirmDialog from '../components/ConfirmDialog';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import type { CleanupActions } from '../components/OrgDeleteCleanupDialog';
@@ -488,33 +489,39 @@ export default function OrganizationsPage() {
         title="Organizations"
         subtitle="Build your company hierarchy — divisions, departments, and teams that scope people, systems, and processes across Procela."
         actions={
-          <>
-            {flatOrgs.length > 0 && (
-              <IconButton
-                icon="eye"
-                label="Visualize hierarchy"
-                onClick={() => navigate('/organizations/visualization')}
-              />
-            )}
-            {flatOrgs.length > 0 && (
-              <ExportMenu build={() => ({
-                filenameBase: 'organizations',
-                sheetName: 'Organizations',
-                headers: ['Name', 'Type', 'Parent', 'Industry', 'Description', 'People'],
-                rows: flatOrgs.map((o) => [
-                  o.name,
-                  o.type,
-                  flatOrgs.find((p) => p.id === o.parentId)?.name || '',
-                  o.industry,
-                  o.description,
-                  peopleCounts[o.id] || 0,
-                ]),
-              })} />
-            )}
-            {isAdmin && <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />}
-            {isAdmin && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
-            {isAdmin && <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} />}
-          </>
+          <ListToolbar
+            import={isAdmin ? <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} /> : undefined}
+            export={
+              flatOrgs.length > 0 ? (
+                <ExportMenu build={() => ({
+                  filenameBase: 'organizations',
+                  sheetName: 'Organizations',
+                  headers: ['Name', 'Type', 'Parent', 'Industry', 'Description', 'People'],
+                  rows: flatOrgs.map((o) => [
+                    o.name,
+                    o.type,
+                    flatOrgs.find((p) => p.id === o.parentId)?.name || '',
+                    o.industry,
+                    o.description,
+                    peopleCounts[o.id] || 0,
+                  ]),
+                })} />
+              ) : undefined
+            }
+            extra={
+              <>
+                {flatOrgs.length > 0 && (
+                  <IconButton
+                    icon="eye"
+                    label="Visualize hierarchy"
+                    onClick={() => navigate('/organizations/visualization')}
+                  />
+                )}
+                {isAdmin && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
+              </>
+            }
+            primary={isAdmin ? <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} /> : undefined}
+          />
         }
       >
         <HelpPopover id="orgs-overview" title="Organizations">
