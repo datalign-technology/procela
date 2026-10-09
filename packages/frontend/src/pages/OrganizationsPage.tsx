@@ -508,18 +508,14 @@ export default function OrganizationsPage() {
                 })} />
               ) : undefined
             }
-            extra={
-              <>
-                {flatOrgs.length > 0 && (
-                  <IconButton
-                    icon="eye"
-                    label="Visualize hierarchy"
-                    onClick={() => navigate('/organizations/visualization')}
-                  />
-                )}
-                {isAdmin && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
-              </>
-            }
+            view={flatOrgs.length > 0 ? (
+              <IconButton
+                icon="eye"
+                label="Visualize hierarchy"
+                onClick={() => navigate('/organizations/visualization')}
+              />
+            ) : undefined}
+            extra={isAdmin ? <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} /> : undefined}
             primary={isAdmin ? <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} /> : undefined}
           />
         }
