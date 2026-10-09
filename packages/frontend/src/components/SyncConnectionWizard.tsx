@@ -11,7 +11,7 @@ import SectionLabel from './SectionLabel';
 interface SyncConnectionWizardProps {
   open: boolean;
   onClose: () => void;
-  targetEntity: 'organizations' | 'people' | 'systems' | 'business-glossary';
+  targetEntity: 'organizations' | 'people' | 'systems' | 'business-glossary' | 'skills';
   orgId: string;
   onCreated: () => void;
 }
@@ -48,6 +48,11 @@ const TARGET_FIELDS: Record<string, { key: string; label: string; required?: boo
     { key: 'sourceOfTruth', label: 'Source of Truth' },
     { key: 'context', label: 'Context' },
   ],
+  skills: [
+    { key: 'name', label: 'Name', required: true },
+    { key: 'category', label: 'Category' },
+    { key: 'description', label: 'Description' },
+  ],
 };
 
 const DEFAULT_MATCH_KEY: Record<string, string> = {
@@ -55,6 +60,7 @@ const DEFAULT_MATCH_KEY: Record<string, string> = {
   people: 'email',
   systems: 'name',
   'business-glossary': 'term',
+  skills: 'name',
 };
 
 const INTERVALS = [
@@ -70,6 +76,7 @@ const ENTITY_LABELS: Record<string, string> = {
   people: 'People',
   systems: 'Systems',
   'business-glossary': 'Glossary Terms',
+  skills: 'Skills',
 };
 
 const inputStyle: React.CSSProperties = {
