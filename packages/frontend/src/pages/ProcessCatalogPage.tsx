@@ -18,6 +18,7 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import DomainLensToggle from '../components/DomainLensToggle';
+import SegmentedControl from '../components/SegmentedControl';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import PersonPicker from '../components/PersonPicker';
 import { GOVERNANCE_ROLES } from '../types';
@@ -1347,31 +1348,15 @@ export default function ProcessCatalogPage() {
                 with the org's "Lifecycle: Simple/Advanced" status mode
                 shown right beside it. The persisted value keys stay
                 'simple'/'advanced'. */}
-            <div role="tablist" aria-label="View detail" style={{
-              display: 'inline-flex', border: '1px solid var(--color-border)',
-              borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)',
-            }}>
-              {(['simple', 'advanced'] as const).map((m) => {
-                const active = viewMode === m;
-                return (
-                  <button
-                    key={m}
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setViewModePersist(m)}
-                    title={m === 'simple' ? 'Hide rarely-used fields and levels' : 'Show every field and level'}
-                    style={{
-                      padding: '4px 12px', fontSize: 11,
-                      fontWeight: active ? 600 : 400, border: 'none', cursor: 'pointer',
-                      background: active ? 'var(--color-primary)' : 'transparent',
-                      color: active ? '#fff' : 'var(--color-text)',
-                    }}
-                  >
-                    {m === 'simple' ? 'Basic' : 'Detailed'}
-                  </button>
-                );
-              })}
-            </div>
+            <SegmentedControl
+              ariaLabel="View detail"
+              value={viewMode}
+              onChange={setViewModePersist}
+              options={[
+                { value: 'simple', label: 'Basic', title: 'Hide rarely-used fields and levels' },
+                { value: 'advanced', label: 'Detailed', title: 'Show every field and level' },
+              ]}
+            />
           </>
         }
         actions={
