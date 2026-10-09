@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
+import SegmentedControl from '../components/SegmentedControl';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
 import { healthColorVar } from '../components/HealthBar';
@@ -984,25 +985,15 @@ export default function DashboardPage() {
             )}
             {/* Governed lens — narrows the you-scoped portfolio sections to the
                 entities the governance program governs. 'All' is the default. */}
-            <div role="group" aria-label="Portfolio lens" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
-              {([['all', 'All'], ['governed', 'Governed']] as const).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setLens(mode)}
-                  aria-pressed={lens === mode}
-                  title={mode === 'governed'
-                    ? 'Only the domains and assets your governance program governs'
-                    : 'Everything you own or steward, governed or not'}
-                  style={{
-                    padding: '5px 12px', fontSize: 12, fontWeight: lens === mode ? 600 : 500,
-                    border: 'none', cursor: 'pointer',
-                    background: lens === mode ? 'var(--color-primary)' : 'transparent',
-                    color: lens === mode ? '#fff' : 'var(--color-text-secondary)',
-                  }}
-                >{label}</button>
-              ))}
-            </div>
+            <SegmentedControl
+              ariaLabel="Portfolio lens"
+              value={lens}
+              onChange={setLens}
+              options={[
+                { value: 'all', label: 'All', title: 'Everything you own or steward, governed or not' },
+                { value: 'governed', label: 'Governed', title: 'Only the domains and assets your governance program governs' },
+              ]}
+            />
             {/* Focus mode — collapse the portfolio rail to just the action
                 queue (the compact single-column view). */}
             <button

@@ -878,6 +878,39 @@ clearable chip there when the surface already shows filter chips.
 
 ---
 
+### `<SegmentedControl>`
+
+The in-page "pick one of a few" pill toggle — a bordered, pill-shaped
+track whose active segment fills solid `var(--color-primary)` with white
+text. Used for the view/scope switches that sit in a page header or
+toolbar: the governance/operational lens (`DomainLensToggle` composes
+this), All vs Governed (Dashboard) / In-scope (Gap Detection), Basic vs
+Detailed (Process Catalog), List vs Calendar (Governance Calendar).
+
+Several pages hand-rolled this same control inline and drifted on the
+details (radius `999` vs `--radius-md`, 4/5/6px padding, 11/12px text,
+`text` vs `text-secondary` inactive colour). Compose this instead of
+re-rolling the markup. It's generic over the option value, so a page
+keeps its own string-union type with no casting.
+
+```tsx
+import SegmentedControl from '@/components/SegmentedControl';
+
+<SegmentedControl
+  ariaLabel="Portfolio lens"
+  value={lens}                 // 'all' | 'governed'
+  onChange={setLens}
+  options={[
+    { value: 'all', label: 'All', title: '…' },
+    { value: 'governed', label: 'Governed', title: '…' },
+  ]}
+/>
+```
+
+This is the **in-page** control. The global-chrome toggles in the Layout
+header (`DensityToggle`, `TerminologyToggle`) are a deliberately
+different "raised chip on a subtle track" style and are not this.
+
 ### `<WizardProgress>`
 
 Step-bar at the top of any multi-step flow.

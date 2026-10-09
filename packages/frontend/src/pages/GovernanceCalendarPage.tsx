@@ -14,6 +14,7 @@ import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
 import PageHeader from '../components/PageHeader';
 import ExportMenu from '../components/ExportMenu';
+import SegmentedControl from '../components/SegmentedControl';
 import ListToolbar from '../components/ListToolbar';
 import Modal from '../components/Modal';
 import Card from '../components/Card';
@@ -659,19 +660,15 @@ export default function GovernanceCalendarPage() {
             extra={
               <>
                 {events.length > 0 && (
-                  <div style={{ display: 'inline-flex', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-                    <button onClick={() => setViewMode('list')} style={{
-                      padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
-                      background: viewMode === 'list' ? 'var(--color-primary)' : 'var(--color-surface)',
-                      color: viewMode === 'list' ? '#fff' : 'var(--color-text)',
-                    }}>List</button>
-                    <button onClick={() => setViewMode('calendar')} style={{
-                      padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
-                      borderLeft: '1px solid var(--color-border)',
-                      background: viewMode === 'calendar' ? 'var(--color-primary)' : 'var(--color-surface)',
-                      color: viewMode === 'calendar' ? '#fff' : 'var(--color-text)',
-                    }}>Calendar</button>
-                  </div>
+                  <SegmentedControl
+                    ariaLabel="Calendar view"
+                    value={viewMode}
+                    onChange={setViewMode}
+                    options={[
+                      { value: 'list', label: 'List' },
+                      { value: 'calendar', label: 'Calendar' },
+                    ]}
+                  />
                 )}
                 {isAdmin && events.length === 0 && (
                   <Button variant="secondary" onClick={handleSeed}>Seed Standard Events</Button>

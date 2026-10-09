@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import SegmentedControl from '../components/SegmentedControl';
 import Card from '../components/Card';
 import { Check } from 'lucide-react';
 import { renderNavIcon } from '../components/navIcons';
@@ -310,25 +311,15 @@ export default function GapDetectionPage() {
         title="Gap Detection"
         subtitle="Identifies gaps in process coverage, data governance, ownership, and data quality across the organization."
         actions={
-          <div role="group" aria-label="Scope" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
-            {([['all', 'All'], ['program', 'In scope']] as const).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setScopeMode(mode)}
-                aria-pressed={scopeMode === mode}
-                title={mode === 'program'
-                  ? 'Only the systems, domains and value streams your governance program governs'
-                  : 'Every catalogued entity, governed or not'}
-                style={{
-                  padding: '5px 12px', fontSize: 12, fontWeight: scopeMode === mode ? 600 : 500,
-                  border: 'none', cursor: 'pointer',
-                  background: scopeMode === mode ? 'var(--color-primary)' : 'transparent',
-                  color: scopeMode === mode ? '#fff' : 'var(--color-text-secondary)',
-                }}
-              >{label}</button>
-            ))}
-          </div>
+          <SegmentedControl
+            ariaLabel="Scope"
+            value={scopeMode}
+            onChange={setScopeMode}
+            options={[
+              { value: 'all', label: 'All', title: 'Every catalogued entity, governed or not' },
+              { value: 'program', label: 'In scope', title: 'Only the systems, domains and value streams your governance program governs' },
+            ]}
+          />
         }
       />
 
