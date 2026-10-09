@@ -1729,8 +1729,8 @@ export default function ProcessCatalogPage() {
         ) : (
           /* Two-pane: a compact navigation tree on the left; the selected
              record's detail + actions on the right (TreeNode in detailMode). */
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) minmax(0, 1fr)', alignItems: 'start' }}>
-            <div style={{ borderRight: '1px solid var(--color-border)', padding: 8, alignSelf: 'stretch' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+            <div style={{ borderRight: '1px solid var(--color-border)', paddingLeft: 8, paddingRight: 16, paddingTop: 8, paddingBottom: 8, alignSelf: 'stretch' }}>
               <CatalogNavPanel
                 nodes={visibleTree}
                 selectedId={selectedNodeId}
