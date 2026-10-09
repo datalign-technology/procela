@@ -1264,19 +1264,12 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
               / Governance Groups detail-page family. A right column appears only
               while bulk-editing. */}
           <Card padding={0} shadow="none" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 160px)' }}>
-            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
-              <input aria-label="Search domains" style={{ ...inputStyle, fontSize: 12, padding: '6px 10px' }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-              {parentsWithChildren.size > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 8 }}>
-                  <ExpandCollapseControls
-                    size={11}
-                    onExpandAll={() => setCollapsedIds(new Set())}
-                    onCollapseAll={() => setCollapsedIds(new Set(parentsWithChildren))}
-                  />
-                </div>
-              )}
+            {/* Tree toolbar — select-all + expand/collapse on one compact
+                band (matching the Organizations / Governance Groups tree
+                pages), with the search pushed to the right. */}
+            <div style={{ display: 'flex', gap: 12, padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center', flexWrap: 'wrap' }}>
               {canWrite && filteredDomains.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--color-text-secondary)' }}>
                   <input
                     type="checkbox"
                     aria-label="Select all visible domains"
@@ -1299,12 +1292,20 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
                     }}
                     style={{ cursor: 'pointer' }}
                   />
-                  <span>{bulkSelectedIds.size > 0 ? `${bulkSelectedIds.size} selected` : 'Select all visible'}</span>
-                  {bulkSelectedIds.size > 0 && (
-                    <button onClick={clearBulkSelection} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 11, padding: 0 }}>Clear</button>
-                  )}
-                </div>
+                  {bulkSelectedIds.size > 0 ? `${bulkSelectedIds.size} selected` : 'Select all visible'}
+                </label>
               )}
+              {parentsWithChildren.size > 0 && (
+                <ExpandCollapseControls
+                  size={11}
+                  onExpandAll={() => setCollapsedIds(new Set())}
+                  onCollapseAll={() => setCollapsedIds(new Set(parentsWithChildren))}
+                />
+              )}
+              {bulkSelectedIds.size > 0 && (
+                <button onClick={clearBulkSelection} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 12, padding: 0 }}>Clear</button>
+              )}
+              <input aria-label="Search domains" style={{ ...inputStyle, fontSize: 12, padding: '6px 10px', marginLeft: 'auto', flex: '1 1 180px', maxWidth: 280 }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {filteredDomains.length === 0 ? (
