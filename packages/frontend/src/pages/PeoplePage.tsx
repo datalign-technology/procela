@@ -732,19 +732,20 @@ export default function PeoplePage() {
         {/* People list */}
         <div>
           <>
-              {/* Active filter / counts header. The toolbar moved up into the
-                  page header (see peopleToolbar); this row is just the
-                  scope label + count for the current org filter. */}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <h2 style={{ fontSize: 16, fontWeight: 600 }}>
-                    {selectedOrgId ? selectedOrg?.name : 'All people'}
-                  </h2>
-                  {selectedOrgId && selectedOrg && <span style={typeBadge(selectedOrg.type || '')}>{selectedOrg.type}</span>}
-                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{filteredPeople.length} {filteredPeople.length === 1 ? 'person' : 'people'}</span>
+              {/* Scope header — only shown when filtered to a specific org
+                  (names the org, its type, count and description). In the
+                  default "all people" view it's redundant with the page
+                  title, so it's omitted. */}
+              {selectedOrgId && selectedOrg && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <h2 style={{ fontSize: 16, fontWeight: 600 }}>{selectedOrg.name}</h2>
+                    <span style={typeBadge(selectedOrg.type || '')}>{selectedOrg.type}</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{filteredPeople.length} {filteredPeople.length === 1 ? 'person' : 'people'}</span>
+                  </div>
+                  {selectedOrg.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
                 </div>
-                {selectedOrgId && selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
-              </div>
+              )}
 
               {/* Filters (left-aligned, mirrors Data Assets) */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
