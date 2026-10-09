@@ -341,8 +341,7 @@ export default function SkillsPage() {
                 }}
               />
             }
-            export={filtered.length > 0 ? <ExportMenu build={buildSkillsExport} /> : undefined}
-            extra={
+            view={
               <Button
                 variant="secondary"
                 disabled={skills.length > 0 || seeding}
@@ -352,6 +351,7 @@ export default function SkillsPage() {
                 {seeding ? 'Seeding...' : 'Seed Standard Skills'}
               </Button>
             }
+            export={filtered.length > 0 ? <ExportMenu build={buildSkillsExport} /> : undefined}
             primary={canWrite ? <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} /> : undefined}
           />
         }
