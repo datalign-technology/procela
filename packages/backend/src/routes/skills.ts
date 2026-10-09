@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { isOwnershipLevel, getVisibleOrgScope, OWNERSHIP_LEVELS } from '../lib/org-scope';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import logger from '../lib/logger';
+import { parseCsv } from '../lib/csv';
 import { getSkillsRepository } from '../db/skills.repo';
 import { auditService } from '../services/audit.service';
 import { AuthenticatedRequest } from '../middleware/auth';
@@ -147,6 +148,90 @@ router.post('/', async (req: Request, res: Response) => {
   await skillsRepo.create(skill);
   auditService.log(skill.orgId, (req as AuthenticatedRequest).user?.sub || null, 'Skill', skill.id, 'CREATE', null, skill);
   res.status(201).json({ success: true, data: skill });
+});
+
+/**
+ * POST /api/v1/skills/import — bulk-create skills from a pasted CSV or JSON
+ * array. Mirrors /people/import: accept `{ orgId, csv }` (columns Name,
+ * Category, Description) or `{ orgId, skills: [{ name, category, description }] }`.
+ * Skills clashing (case-insensitive) with one already in the org's visible
+ * scope are skipped and reported, so re-importing is safe.
+ */
+router.post('/import', async (req: Request, res: Response) => {
+  const { orgId, csv, skills: skillsList } = req.body;
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  if (!isOwnershipLevel(orgId)) {
+    res.status(400).json({ success: false, error: `Skills can only be owned at ${OWNERSHIP_LEVELS.join(' or ')} level; sub-levels inherit them.` });
+    return;
+  }
+
+  let rows: Array<{ name: string; category?: string; description?: string }> = [];
+  if (csv && typeof csv === 'string') {
+    const parsed = parseCsv(csv);
+    if (parsed.length === 0) { res.status(400).json({ success: false, error: 'CSV appears to be empty' }); return; }
+    const header = parsed[0].map((h) => h.trim().toLowerCase());
+    const nameIdx = header.indexOf('name');
+    const catIdx = header.indexOf('category');
+    const descIdx = header.indexOf('description');
+    if (nameIdx === -1) { res.status(400).json({ success: false, error: 'CSV must have a "Name" column' }); return; }
+    for (let i = 1; i < parsed.length; i++) {
+      const cols = parsed[i].map((c) => c.trim());
+      if (!cols[nameIdx]) continue;
+      rows.push({
+        name: cols[nameIdx],
+        category: catIdx >= 0 ? cols[catIdx] : undefined,
+        description: descIdx >= 0 ? cols[descIdx] : undefined,
+      });
+    }
+  } else if (Array.isArray(skillsList)) {
+    rows = skillsList;
+  } else {
+    res.status(400).json({ success: false, error: 'Provide a "skills" array or a "csv" string' });
+    return;
+  }
+  if (rows.length === 0) { res.status(400).json({ success: false, error: 'No skills to import' }); return; }
+
+  // Dedupe against what's already visible to this org (ancestors +
+  // descendants), and against earlier rows in this same import.
+  const visibleScope = getVisibleOrgScope(orgId);
+  const existing = await skillsRepo.list();
+  const takenNames = new Set(
+    existing
+      .filter((s) => visibleScope?.has(s.orgId) ?? s.orgId === orgId)
+      .map((s) => s.name.toLowerCase()),
+  );
+
+  const created: StoredSkill[] = [];
+  const skippedNames: string[] = [];
+  const userSub = (req as AuthenticatedRequest).user?.sub || null;
+  for (const row of rows) {
+    const trimmedName = (row.name || '').trim();
+    if (!trimmedName) continue;
+    if (takenNames.has(trimmedName.toLowerCase())) { skippedNames.push(trimmedName); continue; }
+    takenNames.add(trimmedName.toLowerCase());
+    const resolvedCategory: SkillCategory = SKILL_CATEGORIES.includes(row.category as SkillCategory) ? (row.category as SkillCategory) : 'GOVERNANCE';
+    const now = new Date().toISOString();
+    const skill: StoredSkill = {
+      id: uuid(),
+      orgId,
+      name: trimmedName,
+      category: resolvedCategory,
+      description: (row.description || '').trim(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await skillsRepo.create(skill);
+    auditService.log(skill.orgId, userSub, 'Skill', skill.id, 'CREATE', null, skill);
+    created.push(skill);
+  }
+
+  res.status(201).json({
+    success: true,
+    data: created,
+    count: created.length,
+    skipped: skippedNames.length,
+    skippedNames,
+  });
 });
 
 /** POST /api/v1/skills/seed — seed standard DAMA-aligned skills for an org */

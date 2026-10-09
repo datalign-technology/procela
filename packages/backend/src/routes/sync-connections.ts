@@ -6,6 +6,7 @@ import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
 import { people } from './people';
 import { systems } from './systems';
+import { skills } from './skills';
 import { glossaryTerms } from './business-glossary';
 import { connections } from './connections';
 import { connectors } from './connectors';
@@ -17,6 +18,7 @@ import { getConnectorsRepository } from '../db/connectors.repo';
 import { getOrganizationsRepository } from '../db/organizations.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getSystemsRepository } from '../db/systems.repo';
+import { getSkillsRepository } from '../db/skills.repo';
 import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
 import type { Repository } from '../db/repository';
 import { hasDatabase } from '../db/prisma';
@@ -45,7 +47,7 @@ export interface SyncConnection {
   id: string;
   orgId: string;
   name: string;
-  targetEntity: 'organizations' | 'people' | 'systems' | 'business-glossary';
+  targetEntity: 'organizations' | 'people' | 'systems' | 'business-glossary' | 'skills';
   sourceType: 'DATABASE' | 'CSV_URL' | 'JSON_URL';
   /** Optional reference to a saved Connection profile in the admin
    *  Connections area. When set, the sync resolves host/port/credentials
@@ -114,13 +116,14 @@ export interface SyncConnection {
 // ---------------------------------------------------------------------------
 
 const SOURCE_TYPES = ['DATABASE', 'CSV_URL', 'JSON_URL'] as const;
-const TARGET_ENTITIES = ['organizations', 'people', 'systems', 'business-glossary'] as const;
+const TARGET_ENTITIES = ['organizations', 'people', 'systems', 'business-glossary', 'skills'] as const;
 const DB_TYPES = ['POSTGRESQL', 'MYSQL', 'SQLSERVER', 'ORACLE'] as const;
 
 const TARGET_FIELD_MAP: Record<string, string[]> = {
   organizations: ['name', 'type', 'industry', 'description'],
   people: ['name', 'email', 'role', 'title', 'jobRole'],
   systems: ['name', 'description', 'systemType', 'vendor', 'businessCriticality'],
+  skills: ['name', 'category', 'description'],
 };
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
@@ -312,6 +315,7 @@ function getEntityRepo(targetEntity: string): Repository<Record<string, unknown>
     case 'people': return getPeopleRepository(people) as unknown as Repository<Record<string, unknown> & { id: string }>;
     case 'systems': return getSystemsRepository(systems) as unknown as Repository<Record<string, unknown> & { id: string }>;
     case 'business-glossary': return getGlossaryTermsRepository(glossaryTerms) as unknown as Repository<Record<string, unknown> & { id: string }>;
+    case 'skills': return getSkillsRepository(skills) as unknown as Repository<Record<string, unknown> & { id: string }>;
     default: return null;
   }
 }
@@ -494,6 +498,10 @@ async function applyRow(
     if (!newRecord.exampleValues) newRecord.exampleValues = '';
     if (!newRecord.businessRules) newRecord.businessRules = '';
     if (!newRecord.sourceOfTruth) newRecord.sourceOfTruth = '';
+  } else if (targetEntity === 'skills') {
+    if (!newRecord.name) return 'skipped';
+    if (!newRecord.category) newRecord.category = 'GOVERNANCE';
+    if (!newRecord.description) newRecord.description = '';
   }
 
   // Keep the working set current so later rows in this batch can match the

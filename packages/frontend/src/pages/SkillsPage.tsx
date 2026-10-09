@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { clickable } from '../lib/a11y';
@@ -15,6 +15,7 @@ import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import ListToolbar from '../components/ListToolbar';
 import SavedViewsMenu from '../components/SavedViewsMenu';
+import SegmentedControl from '../components/SegmentedControl';
 import { ExportPayload } from '../lib/export';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -27,6 +28,9 @@ import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+
+// Lazy — the sync wizard is a heavy component only opened on "Connect to source".
+const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 
 // ──────────────────────────────────────────────────────────────────────────
 // Skills Taxonomy — DAMA-aligned capabilities that agents (and people) can
@@ -131,6 +135,32 @@ export default function SkillsPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Import (paste CSV/JSON) + Connect-to-source (sync wizard) ───────────────
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
+  const [importing, setImporting] = useState(false);
+  const [showSync, setShowSync] = useState(false);
+
+  const handleImport = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    if (!importText.trim()) return;
+    setImporting(true);
+    try {
+      const body: Record<string, unknown> = { orgId: activeOrgId };
+      if (importFormat === 'csv') body.csv = importText;
+      else body.skills = JSON.parse(importText);
+      const res = await apiClient.post<{ success: boolean; count?: number; skipped?: number }>('/skills/import', body);
+      const count = res.count ?? 0;
+      const skipped = res.skipped ?? 0;
+      if (skipped > 0) addToast('info', `${skipped} skill${skipped === 1 ? '' : 's'} already existed and ${skipped === 1 ? 'was' : 'were'} skipped.`);
+      addToast('success', `Imported ${count} new skill${count === 1 ? '' : 's'}.`);
+      setShowImport(false); setImportText('');
+      fetchData();
+    } catch (err) { addToast('error', errorMessage(err, 'Import failed')); }
+    finally { setImporting(false); }
+  };
 
   const filtered = (filterCategory || searchQuery.trim())
     ? skills.filter((s) => {
@@ -341,8 +371,7 @@ export default function SkillsPage() {
                 }}
               />
             }
-            export={filtered.length > 0 ? <ExportMenu build={buildSkillsExport} /> : undefined}
-            extra={
+            view={
               <Button
                 variant="secondary"
                 disabled={skills.length > 0 || seeding}
@@ -352,6 +381,9 @@ export default function SkillsPage() {
                 {seeding ? 'Seeding...' : 'Seed Standard Skills'}
               </Button>
             }
+            import={canWrite ? <IconButton icon="upload" label="Import skills" onClick={() => { setShowImport(true); setShowForm(false); }} /> : undefined}
+            export={filtered.length > 0 ? <ExportMenu build={buildSkillsExport} /> : undefined}
+            extra={canWrite ? <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} /> : undefined}
             primary={canWrite ? <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} /> : undefined}
           />
         }
@@ -486,6 +518,46 @@ export default function SkillsPage() {
         </Card>
       )}
 
+      {/* Import panel — paste CSV or JSON. */}
+      {showImport && (
+        <Card padding={16} marginBottom={16}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Skills</h3>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Paste a CSV or a JSON array to bulk-create skills. Existing skills (by name) are skipped.</span>
+            </div>
+            <button type="button" onClick={() => { setShowImport(false); setImportText(''); }} aria-label="Close import dialog" style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}><span aria-hidden="true">&times;</span></button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 500 }}>Format</span>
+            <SegmentedControl
+              ariaLabel="Import format"
+              value={importFormat}
+              onChange={(v) => setImportFormat(v)}
+              options={[{ value: 'csv', label: 'CSV' }, { value: 'json', label: 'JSON' }]}
+            />
+          </div>
+          <textarea
+            aria-label="Skills to import (CSV or JSON)"
+            style={{ ...inputStyle, minHeight: 90, fontFamily: 'var(--font-mono)', fontSize: 11, resize: 'vertical' }}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder={importFormat === 'csv'
+              ? 'Name,Category,Description\nData Profiling,DATA_QUALITY,Assess the structure and quality of a dataset'
+              : '[\n  { "name": "Data Profiling", "category": "DATA_QUALITY", "description": "Assess the structure and quality of a dataset" }\n]'}
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>
+              Columns: Name (required), Category, Description. Unknown categories default to Governance.
+            </span>
+            <Button variant="secondary" onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</Button>
+            <Button variant="primary" disabled={!importText.trim() || importing} onClick={handleImport}>
+              {importing ? 'Importing…' : 'Import'}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <BulkActionBar count={sel.count} onClear={sel.clear}>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
@@ -528,6 +600,18 @@ export default function SkillsPage() {
           />
         )}
       </div>
+
+      {showSync && (
+        <Suspense fallback={null}>
+          <SyncConnectionWizard
+            open={showSync}
+            onClose={() => setShowSync(false)}
+            targetEntity="skills"
+            orgId={activeOrgId || ''}
+            onCreated={fetchData}
+          />
+        </Suspense>
+      )}
 
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setConfirmDelete(null)}>

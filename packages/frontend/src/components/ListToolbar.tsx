@@ -21,17 +21,19 @@ import type { ReactNode } from 'react';
 // Canonical order (left → right, right-aligned in the header):
 //   [view] [views] [import] [export] [columns] [share] [extra] │ [primary]
 //
-// `view` leads the cluster — a page-level view switch (the "eye" that opens a
-// visualization/alternate view of the whole list). It anchors the far left so
-// the way you *look at* the list sits apart from the utilities that act on it.
-// Then the standard utilities in a fixed block, then `extra` — the slot for
-// other page-specific secondary actions (an AI-generate wand, a "connect to
-// source" button, a print button). Pass a fragment if a page has more than one.
+// `view` leads the cluster — the far-left slot for a page-level lead action:
+// a view switch (the "eye" that opens a visualization/alternate view of the
+// whole list) or an empty-state seed/generate action. It anchors the far left
+// so the lead action sits apart from the utilities that act on the list. Then
+// the standard utilities in a fixed block, then `extra` — the slot for other
+// page-specific secondary actions (an AI-generate wand, a "connect to source"
+// button, a print button). Pass a fragment if a page has more than one.
 // ──────────────────────────────────────────────────────────────────────────
 
 interface ListToolbarProps {
-  /** Leading page-level view switch — the "eye"/visualize affordance that
-   *  opens an alternate view of the whole list. Anchors the far left. */
+  /** Leading page-level lead action — a view switch (the "eye"/visualize
+   *  affordance that opens an alternate view of the whole list) or an
+   *  empty-state seed/generate action. Anchors the far left. */
   view?: ReactNode;
   /** Saved-views menu (SavedViewsMenu). */
   views?: ReactNode;

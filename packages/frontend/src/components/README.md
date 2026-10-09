@@ -369,10 +369,11 @@ isn't rendered. Canonical order (left → right):
 [view] [views] [import] [export] [columns] [share] [extra] │ [primary]
 ```
 
-`view` is the far-left slot for a page-level view switch — the "eye" that
-opens a visualization/alternate view of the whole list (e.g. the
-Organizations hierarchy visualization). It sits apart from the utilities
-that act on the list.
+`view` is the far-left slot for a page-level lead action — a view switch
+(the "eye" that opens a visualization/alternate view of the whole list,
+e.g. the Organizations hierarchy visualization) or an empty-state
+seed/generate action (e.g. Skills' "Seed Standard Skills"). It sits apart
+from the utilities that act on the list.
 
 A thin divider separates `primary` (the `+ Add` button) from the
 secondary utilities so the main call-to-action always reads as distinct.
