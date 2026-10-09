@@ -366,8 +366,13 @@ Pass the controls the page supports into named slots; any slot omitted
 isn't rendered. Canonical order (left → right):
 
 ```
-[views] [import] [export] [columns] [share] [extra] │ [primary]
+[view] [views] [import] [export] [columns] [share] [extra] │ [primary]
 ```
+
+`view` is the far-left slot for a page-level view switch — the "eye" that
+opens a visualization/alternate view of the whole list (e.g. the
+Organizations hierarchy visualization). It sits apart from the utilities
+that act on the list.
 
 A thin divider separates `primary` (the `+ Add` button) from the
 secondary utilities so the main call-to-action always reads as distinct.
