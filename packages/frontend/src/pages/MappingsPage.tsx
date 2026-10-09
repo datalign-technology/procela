@@ -17,6 +17,9 @@ import { useToastStore } from '../stores/toastStore';
 import TruncatedText from '../components/TruncatedText';
 import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import ListToolbar from '../components/ListToolbar';
+import ColumnPicker from '../components/ColumnPicker';
+import { useColumnPicker } from '../hooks/useColumnPicker';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import InfoTip from '../components/InfoTip';
@@ -158,6 +161,16 @@ function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
 }
 
+// Column-picker set — Process Activity, Target and Actions are always shown
+// (the core identity of a mapping); the rest are user-toggleable, defaulting
+// on so the list is unchanged until a user hides something.
+type MappingColId = 'linkType' | 'ai' | 'notes';
+const MAPPING_COLUMN_DEFS: Array<{ id: MappingColId; label: string; defaultVisible: boolean }> = [
+  { id: 'linkType', label: 'Link Type',    defaultVisible: true },
+  { id: 'ai',       label: 'AI Suggested', defaultVisible: true },
+  { id: 'notes',    label: 'Notes',        defaultVisible: true },
+];
+
 // ── Component ──
 
 export default function MappingsPage({
@@ -172,6 +185,7 @@ export default function MappingsPage({
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
+  const mappingCols = useColumnPicker<MappingColId>('procela.mappings.visibleCols.v1', MAPPING_COLUMN_DEFS);
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [allNodes, setAllNodes] = useState<FlatNode[]>([]);
   const [dataAssets, setDataAssets] = useState<DataAsset[]>([]);
@@ -399,10 +413,10 @@ export default function MappingsPage({
 
   const canSave = selectedStepId && selectedAssetId;
 
-  const mappingColumns: DataTableColumn<Mapping>[] = [
+  const mappingColumns = [
     {
       key: 'stepPath', header: 'Process Activity', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 300 },
-      render: (m) => m.stepInfo ? (
+      render: (m: Mapping) => m.stepInfo ? (
         <TruncatedText text={formatStepPath(m.stepInfo)} />
       ) : (
         <span
@@ -422,7 +436,7 @@ export default function MappingsPage({
     },
     {
       key: 'target', header: 'Target', sortable: true,
-      render: (m) => {
+      render: (m: Mapping) => {
         const t = resolveTarget(m);
         if (t.kind === 'orphan' || t.kind === 'unknown') {
           return (
@@ -472,9 +486,9 @@ export default function MappingsPage({
         );
       },
     },
-    {
+    mappingCols.isVisible('linkType') && {
       key: 'linkType', header: 'Link Type', sortable: true,
-      render: (m) => (
+      render: (m: Mapping) => (
         <span
           style={{
             display: 'inline-block', padding: '2px 8px', borderRadius: 4,
@@ -486,9 +500,9 @@ export default function MappingsPage({
         </span>
       ),
     },
-    {
+    mappingCols.isVisible('ai') && {
       key: 'ai', header: 'AI Suggested', sortable: true,
-      render: (m) => m.aiSuggested ? (
+      render: (m: Mapping) => m.aiSuggested ? (
         <span
           style={{
             display: 'inline-block', padding: '2px 8px', borderRadius: 4,
@@ -502,51 +516,52 @@ export default function MappingsPage({
         <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Manual</span>
       ),
     },
-    {
+    mappingCols.isVisible('notes') && {
       key: 'notes', header: 'Notes', sortable: true, cellStyle: { maxWidth: 200 },
-      render: (m) => (
+      render: (m: Mapping) => (
         <TruncatedText text={m.notes} emptyPlaceholder="--" />
       ),
     },
     {
       key: 'actions', header: 'Actions', align: 'center' as const, width: 60,
-      render: (m) => canWrite ? <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(m.id)} /> : null,
+      render: (m: Mapping) => canWrite ? <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(m.id)} /> : null,
     },
-  ];
+  ].filter(Boolean) as DataTableColumn<Mapping>[];
 
   // Shared toolbar actions — rendered inside the PageHeader on the
   // standalone page, or as a right-aligned strip when embedded in the
   // combined Process ↔ Data map (which supplies its own header).
   const headerActions = (
-    <>
-      {canWrite && (
-        <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
-      )}
-      {mappings.length > 0 && (
-        <ExportMenu build={() => ({
-          filenameBase: 'mappings',
-          sheetName: 'Mappings',
-          headers: ['Process Activity', 'Target Kind', 'Target', 'Link Type', 'AI Suggested', 'Notes'],
-          rows: mappings.map((m) => {
-            const t = resolveTarget(m);
-            const activityLabel = m.stepInfo
-              ? formatStepPath(m.stepInfo)
-              : `(deleted activity ${shortId(m.processStepId)})`;
-            return [
-              activityLabel,
-              t.kind,
-              t.label,
-              m.linkType,
-              m.aiSuggested ? 'Yes' : 'No',
-              m.notes,
-            ];
-          }),
-        })} />
-      )}
-      {canWrite && (
-        <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
-      )}
-    </>
+    <ListToolbar
+      extra={canWrite
+        ? <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
+        : undefined}
+      export={mappings.length > 0
+        ? <ExportMenu build={() => ({
+            filenameBase: 'mappings',
+            sheetName: 'Mappings',
+            headers: ['Process Activity', 'Target Kind', 'Target', 'Link Type', 'AI Suggested', 'Notes'],
+            rows: mappings.map((m) => {
+              const t = resolveTarget(m);
+              const activityLabel = m.stepInfo
+                ? formatStepPath(m.stepInfo)
+                : `(deleted activity ${shortId(m.processStepId)})`;
+              return [
+                activityLabel,
+                t.kind,
+                t.label,
+                m.linkType,
+                m.aiSuggested ? 'Yes' : 'No',
+                m.notes,
+              ];
+            }),
+          })} />
+        : undefined}
+      columns={<ColumnPicker state={mappingCols} />}
+      primary={canWrite
+        ? <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
+        : undefined}
+    />
   );
 
   return (
