@@ -491,24 +491,20 @@ export default function GovernanceGroupsPage() {
                 })} />
               ) : undefined
             }
-            extra={
-              <>
-                {isAdmin && (
-                  <IconButton icon="wand"
-                    label={
-                      flatGroups.length > 0
-                        ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
-                        : 'Generate governance template'
-                    }
-                    disabled={flatGroups.length > 0}
-                    onClick={() => setConfirmGenerate(true)} />
-                )}
-                {flatGroups.length > 0 && (
-                  <IconButton icon="eye" label="Visualize"
-                    onClick={() => navigate('/governance/visualization')} />
-                )}
-              </>
-            }
+            view={flatGroups.length > 0 ? (
+              <IconButton icon="eye" label="Visualize"
+                onClick={() => navigate('/governance/visualization')} />
+            ) : undefined}
+            extra={isAdmin ? (
+              <IconButton icon="wand"
+                label={
+                  flatGroups.length > 0
+                    ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
+                    : 'Generate governance template'
+                }
+                disabled={flatGroups.length > 0}
+                onClick={() => setConfirmGenerate(true)} />
+            ) : undefined}
             primary={isAdmin ? (
               <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
             ) : undefined}
