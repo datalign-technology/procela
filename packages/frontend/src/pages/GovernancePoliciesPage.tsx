@@ -147,10 +147,11 @@ const backLinkStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
 };
 
-type PolicyColId = 'code' | 'name' | 'category' | 'status' | 'owner' | 'controls' | 'created';
+type PolicyColId = 'code' | 'name' | 'type' | 'category' | 'status' | 'owner' | 'controls' | 'created';
 const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible: boolean }> = [
   { id: 'code',      label: 'Code',       defaultVisible: true  },
   { id: 'name',      label: 'Name',       defaultVisible: true  },
+  { id: 'type',      label: 'Type',       defaultVisible: true  },
   { id: 'category',  label: 'Category',   defaultVisible: true  },
   { id: 'status',    label: 'Status',     defaultVisible: true  },
   { id: 'owner',     label: 'Owner',      defaultVisible: true  },
@@ -288,7 +289,9 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   const { addToast } = useToastStore();
   const navigate = useNavigate();
 
-  const policyCols = useColumnPicker<PolicyColId>('procela.governancePolicies.visibleCols.v1', POLICY_COLUMN_DEFS);
+  // v2 — the document-type pill moved out of the name cell into its own Type
+  // column, so force the new defaults (old v1 payloads lack the 'type' id).
+  const policyCols = useColumnPicker<PolicyColId>('procela.governancePolicies.visibleCols.v2', POLICY_COLUMN_DEFS);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [controls, setControls] = useState<Control[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -509,8 +512,10 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
     },
     policyCols.isVisible('name') && {
       key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500 },
+      // Name (+ the rare "from agent draft" provenance flag on promoted
+      // policies). The document-type pill moved to its own Type column so the
+      // name reads cleanly.
       render: (pol: Policy) => {
-        const docType = pol.documentType || 'POLICY';
         const promo = promotionsByPolicy[pol.id];
         return (
           <>
@@ -521,7 +526,6 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
             >
               {pol.name}
             </button>
-            <span style={{ ...badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY), marginLeft: 8 }}>{DOCUMENT_TYPE_LABEL[docType]}</span>
             {promo && (
               <StatusBadge
                 variant="agent"
@@ -536,6 +540,13 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
             )}
           </>
         );
+      },
+    },
+    policyCols.isVisible('type') && {
+      key: 'type', header: 'Type', sortable: true,
+      render: (pol: Policy) => {
+        const docType = pol.documentType || 'POLICY';
+        return <span style={badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY)}>{DOCUMENT_TYPE_LABEL[docType]}</span>;
       },
     },
     policyCols.isVisible('category') && {

@@ -119,12 +119,14 @@ const STATUS_BADGES: Record<string, { bg: string; color: string }> = {
   RETIRED: { bg: '#f1f5f9', color: '#64748b' },
 };
 
-type AgentColId = 'name' | 'type' | 'provider' | 'status' | 'orgs' | 'responsible';
+type AgentColId = 'name' | 'type' | 'provider' | 'status' | 'roles' | 'executions' | 'orgs' | 'responsible';
 const AGENT_COLUMN_DEFS: Array<{ id: AgentColId; label: string; defaultVisible: boolean }> = [
   { id: 'name',        label: 'Name',          defaultVisible: true  },
   { id: 'type',        label: 'Type',          defaultVisible: true  },
   { id: 'provider',    label: 'Provider',      defaultVisible: false },
   { id: 'status',      label: 'Status',        defaultVisible: true  },
+  { id: 'roles',       label: 'Roles',         defaultVisible: true  },
+  { id: 'executions',  label: 'Executions',    defaultVisible: true  },
   { id: 'orgs',        label: 'Organizations', defaultVisible: false },
   { id: 'responsible', label: 'Responsible',   defaultVisible: true  },
 ];
@@ -137,7 +139,10 @@ export default function AgentsPage() {
   const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  const agentCols = useColumnPicker<AgentColId>('procela.agents.visibleCols.v1', AGENT_COLUMN_DEFS);
+  // v2 — the Roles / Executions counts moved out of the name cell into their
+  // own columns, so force the new defaults for everyone (old v1 payloads lack
+  // the new ids and would otherwise hide them).
+  const agentCols = useColumnPicker<AgentColId>('procela.agents.visibleCols.v2', AGENT_COLUMN_DEFS);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [orgs, setOrgs] = useState<OrganizationRef[]>([]);
   const [orgTree, setOrgTree] = useState<OrgTreeNode[]>([]);
@@ -395,26 +400,18 @@ export default function AgentsPage() {
   const agentColumns = ([
     agentCols.isVisible('name') && {
       key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500 },
-      render: (a: Agent) => {
-        const roles = agentRoles.filter((r) => r.agentId === a.id);
-        const execs = agentExecutions.filter((e) => e.agentId === a.id);
-        // Name + role/execution badges live on one line so the badges never
-        // push the row to a second line (keeps every row the same height).
-        // Description isn't shown inline — hover the name to read it.
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            <span
-              {...clickable(() => navigate(`/agents/${a.id}`), { label: `View ${a.name}` })}
-              title={a.description || undefined}
-              style={{ cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
-            >
-              {a.name}
-            </span>
-            {roles.length > 0 && <span style={{ flexShrink: 0 }}><StatusBadge variant="agent">{roles.length} role{roles.length !== 1 ? 's' : ''}</StatusBadge></span>}
-            {execs.length > 0 && <span style={{ flexShrink: 0 }}><StatusBadge variant="success">{execs.length} execution{execs.length !== 1 ? 's' : ''}</StatusBadge></span>}
-          </div>
-        );
-      },
+      // Name alone — the role/execution counts that used to sit inline now
+      // have their own columns, so the name reads cleanly down the list.
+      // Description isn't shown inline — hover the name to read it.
+      render: (a: Agent) => (
+        <span
+          {...clickable(() => navigate(`/agents/${a.id}`), { label: `View ${a.name}` })}
+          title={a.description || undefined}
+          style={{ cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, display: 'inline-block', maxWidth: '100%' }}
+        >
+          {a.name}
+        </span>
+      ),
     },
     agentCols.isVisible('type') && {
       key: 'type', header: 'Type', sortable: true,
@@ -440,6 +437,24 @@ export default function AgentsPage() {
             {a.status}
           </span>
         );
+      },
+    },
+    agentCols.isVisible('roles') && {
+      key: 'roles', header: 'Roles', sortable: true, align: 'center' as const, width: 90,
+      render: (a: Agent) => {
+        const n = agentRoles.filter((r) => r.agentId === a.id).length;
+        return n > 0
+          ? <StatusBadge variant="agent">{n}</StatusBadge>
+          : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>;
+      },
+    },
+    agentCols.isVisible('executions') && {
+      key: 'executions', header: 'Executions', sortable: true, align: 'center' as const, width: 110,
+      render: (a: Agent) => {
+        const n = agentExecutions.filter((e) => e.agentId === a.id).length;
+        return n > 0
+          ? <StatusBadge variant="success">{n}</StatusBadge>
+          : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>;
       },
     },
     agentCols.isVisible('orgs') && {
