@@ -1285,6 +1285,17 @@ export default function ProcessCatalogPage() {
     if (!selectedNode && visibleTree.length > 0) setSelectedNodeId(visibleTree[0].id);
   }, [selectedNode, visibleTree]);
 
+  // The two-pane master-detail renders when we have a visible catalog (i.e.
+  // none of the loading/empty states above apply). Split out so the nav and
+  // detail can be separate Cards on the page background — giving a real
+  // whitespace gutter between them (like the Agents sidebar/content), rather
+  // than two regions sharing one surface Card where a gap is invisible.
+  const showTwoPane =
+    !loading &&
+    !(tree.length === 0 && addingTo !== '__root__') &&
+    lensedTree.length > 0 &&
+    visibleTree.length > 0;
+
   // Build the role-eligibility maps. Activity.responsibleRole is stored
   // as a label string (e.g. "Business Data Steward"); dama-roles uses
   // the roleType code ("BUSINESS_DATA_STEWARD"). Walk GOVERNANCE_ROLES
@@ -1366,10 +1377,6 @@ export default function ProcessCatalogPage() {
                 <IconButton icon="eye" label="Visualize"
                   onClick={() => navigate('/processes/visualization')} />
               )}
-              {(byLevel.VALUE_STREAM || 0) >= 2 && (
-                <IconButton icon="refresh" label="Compare value streams"
-                  onClick={() => navigate('/processes/compare')} />
-              )}
               {canWrite && canCreateHere && aiEnabled && (
                 <IconButton icon="wand"
                   label="Generate from industry template"
@@ -1399,10 +1406,6 @@ export default function ProcessCatalogPage() {
             <>
               <IconButton icon="eye" label="Visualize"
                 onClick={() => navigate('/processes/visualization')} />
-              {(byLevel.VALUE_STREAM || 0) >= 2 && (
-                <IconButton icon="refresh" label="Compare value streams"
-                  onClick={() => navigate('/processes/compare')} />
-              )}
             </>
           ) : undefined
         }
@@ -1653,6 +1656,7 @@ export default function ProcessCatalogPage() {
       )}
 
       {/* Tree */}
+      {!showTwoPane && (
       <Card padding={0} shadow="none" style={{ overflow: 'hidden', minHeight: 300 }}>
         {loading ? (
           <SkeletonRows rows={5} columns={4} />
@@ -1726,11 +1730,17 @@ export default function ProcessCatalogPage() {
           <div style={{ textAlign: 'center', padding: '3rem 2rem', color: 'var(--color-text-secondary)', fontSize: 13 }}>
             Every level is hidden. Re-enable a level in the Legend above to see the catalog.
           </div>
-        ) : (
-          /* Two-pane: a compact navigation tree on the left; the selected
-             record's detail + actions on the right (TreeNode in detailMode). */
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
-            <div style={{ borderRight: '1px solid var(--color-border)', paddingLeft: 8, paddingRight: 16, paddingTop: 8, paddingBottom: 8, alignSelf: 'stretch' }}>
+        ) : null}
+      </Card>
+      )}
+
+      {showTwoPane && (
+        /* Two-pane master-detail: compact nav tree on the left, the selected
+           record's detail on the right. Separate Cards so the 16px grid gap
+           shows the page background — a real whitespace gutter, like the
+           Agents sidebar/content. */
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+          <Card padding={8} style={{ alignSelf: 'stretch' }}>
               <CatalogNavPanel
                 nodes={visibleTree}
                 selectedId={selectedNodeId}
@@ -1741,8 +1751,8 @@ export default function ProcessCatalogPage() {
                 onMove={moveNode}
                 validChildrenMap={validChildrenMap}
               />
-            </div>
-            <div style={{ minWidth: 0 }}>
+          </Card>
+          <Card padding={16} style={{ minWidth: 0 }}>
               {selectedNode ? (
                 <TreeNode key={selectedNode.id} detailMode node={selectedNode} depth={0} parentId={null}
                   nodeInScope={scope.applied ? (id) => scope.has('node', id) : undefined}
@@ -1777,10 +1787,9 @@ export default function ProcessCatalogPage() {
                   Select a step on the left to see its details.
                 </div>
               )}
-            </div>
-          </div>
-        )}
-      </Card>
+          </Card>
+        </div>
+      )}
 
       {/* Add child form */}
       {addingTo && addingTo !== '__root__' && (() => {

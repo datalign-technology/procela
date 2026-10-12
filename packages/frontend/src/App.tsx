@@ -17,7 +17,6 @@ const ProcessCatalogPage         = lazy(() => import('@/pages/ProcessCatalogPage
 const ValueStreamWizard          = lazy(() => import('@/pages/ValueStreamWizard'));
 const ProcessVisualizationPage   = lazy(() => import('@/pages/ProcessVisualizationPage'));
 const ProcessDataMapPage         = lazy(() => import('@/pages/ProcessDataMapPage'));
-const ComparisonPage             = lazy(() => import('@/pages/ComparisonPage'));
 const SystemsAndDataPage         = lazy(() => import('@/pages/SystemsAndDataPage'));
 const AnalyzePage                = lazy(() => import('@/pages/AnalyzePage'));
 const DataAssetsHubPage          = lazy(() => import('@/pages/DataAssetsHubPage'));
@@ -93,7 +92,6 @@ export default function App() {
           <Route path="/processes/wizard" element={<ValueStreamWizard />} />
           <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />
           <Route path="/processes/data-map" element={<ProcessDataMapPage />} />
-          <Route path="/processes/compare" element={<ComparisonPage />} />
           {/* Combined pages */}
           <Route path="/systems-and-data" element={<SystemsAndDataPage />} />
           <Route path="/governance" element={<Navigate to="/governance-groups" replace />} />
