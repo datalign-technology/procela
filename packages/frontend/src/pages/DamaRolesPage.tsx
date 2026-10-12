@@ -1287,6 +1287,9 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
       <thead>
         <tr style={{ background: 'var(--color-bg)' }}>
           <th scope="col" style={tableThStyle}>Role</th>
+          <th scope="col" style={{ ...tableThStyle, width: 150 }}>Category</th>
+          <th scope="col" style={{ ...tableThStyle, width: 90 }}>Required</th>
+          <th scope="col" style={{ ...tableThStyle, width: 100 }}>Scope</th>
           <th scope="col" style={tableThStyle}>Holders</th>
           <th scope="col" style={{ ...tableThStyle, width: 130 }}>Status</th>
           <th scope="col" style={{ ...tableThStyle, width: 100, textAlign: 'center' }}>Action</th>
@@ -1294,7 +1297,7 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
       </thead>
       <tbody>
         {ordered.length === 0 && (
-          <tr><td colSpan={4} style={{ ...tableTdStyle, color: 'var(--color-text-muted)', fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
+          <tr><td colSpan={7} style={{ ...tableTdStyle, color: 'var(--color-text-muted)', fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
             No roles match the current filter.
           </td></tr>
         )}
@@ -1330,38 +1333,43 @@ function RolesTable({ catalog, damaRoles, filterCategory, domains, systems, data
               onMouseEnter={(e) => { if (!isSelected && !criticalGap) e.currentTarget.style.background = 'var(--color-bg)'; }}
               onMouseLeave={(e) => { if (!isSelected && !criticalGap) e.currentTarget.style.background = ''; }}
             >
+              {/* Role name alone — the metadata that used to crowd it now
+                  lives in its own Category / Required / Scope columns, so the
+                  name reads cleanly down the list. */}
               <td style={{ ...tableTdStyle, fontWeight: 500 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: isSelected ? 'var(--color-primary)' : undefined }}>
-                    {ROLE_TYPE_LABELS[rt] || rt}
-                  </span>
-                  {ROLE_CATEGORIES[rt] && (
-                    // Labeled category badge (matches the Governance Documents
-                    // category/status badges) rather than a colour-only dot.
-                    <span style={{
-                      display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-                      fontSize: 11, fontWeight: 600, background: c.bg, color: c.color, whiteSpace: 'nowrap',
-                      textTransform: 'uppercase', letterSpacing: '0.03em',
-                    }}>
-                      {ROLE_CATEGORIES[rt]}
-                    </span>
-                  )}
-                  {required && (
-                    <span
-                      title="Required for a governance program — every org should have a holder for this role."
-                      style={{
-                        fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
-                        background: 'transparent',
-                        color: criticalGap ? '#991b1b' : 'var(--color-text-muted)',
-                        border: `1px solid ${criticalGap ? '#fca5a5' : 'var(--color-border)'}`,
-                        textTransform: 'uppercase', letterSpacing: '0.04em',
-                      }}
-                    >
-                      Required
-                    </span>
-                  )}
-                  <CardinalityChip roleType={rt} />
+                <span style={{ color: isSelected ? 'var(--color-primary)' : undefined }}>
+                  {ROLE_TYPE_LABELS[rt] || rt}
                 </span>
+              </td>
+              <td style={tableTdStyle}>
+                {ROLE_CATEGORIES[rt] ? (
+                  // Labeled category badge (matches the Governance Documents
+                  // category/status badges) rather than a colour-only dot.
+                  <span style={{
+                    display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+                    fontSize: 11, fontWeight: 600, background: c.bg, color: c.color, whiteSpace: 'nowrap',
+                    textTransform: 'uppercase', letterSpacing: '0.03em',
+                  }}>
+                    {ROLE_CATEGORIES[rt]}
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                )}
+              </td>
+              <td style={tableTdStyle}>
+                {required ? (
+                  <span
+                    title="Required for a governance program — every org should have a holder for this role."
+                    style={{ fontSize: 12, fontWeight: 600, color: criticalGap ? 'var(--color-error)' : 'var(--color-text-secondary)' }}
+                  >
+                    Required
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                )}
+              </td>
+              <td style={tableTdStyle}>
+                <CardinalityChip roleType={rt} />
               </td>
               <td style={tableTdStyle}>
                 {holderCount === 0 ? (

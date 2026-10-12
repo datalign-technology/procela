@@ -88,6 +88,11 @@ const typeBadgeColors: Record<string, { bg: string; color: string }> = {
   COMMUNITY_OF_PRACTICE: { bg: '#f1f5f9', color: '#64748b' },
 };
 
+// Palette for the aggregate "Members" summary chip — a distinct violet so it
+// reads apart from the per-type counts beside it. A paired bg+color palette
+// entry, so it stays hex like typeBadgeColors (not a semantic CSS variable).
+const MEMBERS_BADGE = { bg: '#ede9fe', color: '#5b21b6' };
+
 // ── Styles ──
 
 const inputStyle: React.CSSProperties = {
@@ -199,7 +204,7 @@ function GroupTreeNode({ node, depth, onDelete, onAddChild, onSelect, selectedId
             <span style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
             <span style={makeBadge(typeColor)}>{GROUP_TYPE_SHORT[node.type] || node.type}</span>
             <span style={{ ...statusBadgeStyle(node.status), flexShrink: 0 }} title={`Status: ${node.status.replace(/_/g, ' ')}`}>{node.status.replace(/_/g, ' ')}</span>
-            {memberCount > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: '#f1f5f9', padding: '0px 5px', borderRadius: 8 }}>{memberCount}</span>}
+            {memberCount > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0px 5px', borderRadius: 8 }}>{memberCount}</span>}
           </div>
         </div>
         {canEdit && (
@@ -615,7 +620,7 @@ export default function GovernanceGroupsPage() {
           })}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: '#ede9fe', color: '#5b21b6',
+            background: MEMBERS_BADGE.bg, color: MEMBERS_BADGE.color,
             borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500,
             marginLeft: 'auto',
           }}>
