@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
@@ -8,6 +8,7 @@ import Spinner from '../components/Spinner';
 import Button from '../components/Button';
 import ScorecardTargetsPanel from '../components/ScorecardTargetsPanel';
 import RoiModelPanel from '../components/RoiModelPanel';
+import Tabs from '../components/Tabs';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { useRefreshOnFocus } from '../hooks/usePolling';
@@ -154,9 +155,6 @@ export default function GovernanceFoundationPage() {
   const [saving, setSaving] = useState(false);
   // Deep-linkable tab (?tab=value opens the value model straight from the
   // scorecard's "set your value model" prompt).
-  const [searchParams] = useSearchParams();
-  const initialTab = (['scope', 'principles', 'targets', 'value'] as const).find((t) => t === searchParams.get('tab')) ?? 'scope';
-  const [activeTab, setActiveTab] = useState<'scope' | 'principles' | 'targets' | 'value'>(initialTab);
 
   const [inScope, setInScope] = useState('');
   const [outOfScope, setOutOfScope] = useState('');
@@ -289,6 +287,15 @@ export default function GovernanceFoundationPage() {
     savePrinciples(principles.filter((_, i) => i !== index), 'Principle removed');
   };
 
+  // Shared Save footer — shown on the Scope and Principles tabs (they write
+  // the program). Targets and Value model have their own Save inside their
+  // panels (different endpoints), so they don't carry this footer.
+  const saveFooter = (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+      <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
+    </div>
+  );
+
   return (
     <div>
       <PageHeader
@@ -305,23 +312,12 @@ export default function GovernanceFoundationPage() {
       )}
 
       {!loading && program && (
-        <Card padding={24}>
-          {/* Matches the shared <Tabs> strip (components/Tabs.tsx). */}
-          <div role="tablist" style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
-            {([['scope', 'Scope'], ['principles', 'Principles'], ['targets', 'Targets'], ['value', 'Value model']] as const).map(([t, label]) => (
-              <button key={t} role="tab" aria-selected={activeTab === t} onClick={() => setActiveTab(t)} style={{
-                padding: '10px 18px', fontSize: 13,
-                fontWeight: activeTab === t ? 600 : 500,
-                background: 'transparent', border: 'none',
-                borderBottom: activeTab === t ? '2px solid var(--color-primary)' : '2px solid transparent',
-                color: activeTab === t ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                marginBottom: -1, cursor: 'pointer',
-              }}>{label}</button>
-            ))}
-          </div>
-
-          {activeTab === 'scope' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
+        <Tabs
+          defaultTab="scope"
+          tabs={[
+            { id: 'scope', label: 'Scope', render: () => (
+              <Card padding={24}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
               {/* Structured scope — pick the catalogued entities this program
                   governs. This IS the program's scope: selecting the systems,
                   data domains, and value streams here is what marks Phase 1's
@@ -463,11 +459,13 @@ export default function GovernanceFoundationPage() {
                 </div>
                 <textarea aria-label="Boundaries & Constraints" style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational / geographic / functional boundaries, plus budget, timeline, regulatory or resource constraints to respect" />
               </div>
-            </div>
-          )}
-
-          {activeTab === 'principles' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                </div>
+                {saveFooter}
+              </Card>
+            ) },
+            { id: 'principles', label: 'Principles', render: () => (
+              <Card padding={24}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vision</label><textarea aria-label="Vision" style={textareaStyle} value={vision} onChange={(e) => setVision(e.target.value)} placeholder="What does success look like for your data governance program?" /></div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Guiding Principles</label>
@@ -497,30 +495,22 @@ export default function GovernanceFoundationPage() {
                 </select>
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>Centralized = one central team. Federated = domains self-govern. Hybrid = shared.</div>
               </div>
-            </div>
-          )}
-
-          {activeTab === 'targets' && (
-            // Council Scorecard thresholds — moved here from Settings. Its own
-            // Save/Reset live inside the panel (they hit a different endpoint
-            // than the program Save Changes below), so the shared footer is
-            // hidden on this tab.
-            <ScorecardTargetsPanel />
-          )}
-
-          {activeTab === 'value' && (
-            // ROI value model — the tenant's dollar assumptions the scorecard
-            // monetizes. Own Save/Clear inside the panel (own endpoint), so the
-            // shared footer is hidden here like the Targets tab.
-            <RoiModelPanel />
-          )}
-
-          {activeTab !== 'targets' && activeTab !== 'value' && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
-              <Button variant="primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
-            </div>
-          )}
-        </Card>
+                </div>
+                {saveFooter}
+              </Card>
+            ) },
+            { id: 'targets', label: 'Targets', render: () => (
+              // Council Scorecard thresholds — own Save/Reset inside the panel
+              // (different endpoint), so no shared Save footer on this tab.
+              <Card padding={24}><ScorecardTargetsPanel /></Card>
+            ) },
+            { id: 'value', label: 'Value model', render: () => (
+              // ROI value model — own Save/Clear inside the panel (own
+              // endpoint), so no shared Save footer on this tab.
+              <Card padding={24}><RoiModelPanel /></Card>
+            ) },
+          ]}
+        />
       )}
     </div>
   );
