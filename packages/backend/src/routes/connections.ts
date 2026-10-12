@@ -12,6 +12,8 @@ import { hasDatabase } from '../db/prisma';
 import { getConnectionsRepository } from '../db/connections.repo';
 import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
 import { encryptCredentials } from '../services/connection-secrets';
+import { parseCsv } from '../lib/csv';
+import { systems as systemsStore } from './systems';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -306,6 +308,133 @@ router.post('/', async (req: Request, res: Response) => {
   auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'CREATE', null, toPublic(conn, links));
   logger.info({ id: conn.id, name: conn.name, type: conn.connectionType, systemIds: requestedSystemIds }, 'Created connection profile');
   res.status(201).json({ success: true, data: toPublic(conn, links) });
+});
+
+/**
+ * POST /api/v1/connections/import — bulk-create connection PROFILES from a
+ * pasted CSV or JSON array. Definitions only: NO credentials/secrets are
+ * accepted here (a connection carries an encrypted password that is masked on
+ * read — bulk-pasting secrets would defeat that). Every imported connection
+ * lands UNTESTED with an empty credential set; the user opens each one, enters
+ * its password/key, and runs "Test connection" afterwards.
+ *
+ * Accepts `{ orgId, csv }` (columns: Name, System, Type, DbType, Host, Port,
+ * Database, Username) or `{ orgId, connections: [{ name, system, connectionType,
+ * dbType, host, port, database, username }] }`. `System` is resolved to a
+ * system id by name within the org (unmatched → created unlinked, not an
+ * error). Connections clashing (case-insensitive) with one already in the org
+ * are skipped and reported.
+ */
+router.post('/import', async (req: Request, res: Response) => {
+  const { orgId, csv, connections: connList } = req.body;
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  if (!assertOrgAccess(req, res, orgId, 'Organization not found')) return;
+
+  interface ImportRow {
+    name: string; system?: string; connectionType?: string; dbType?: string;
+    host?: string; port?: string; database?: string; username?: string;
+  }
+  let rows: ImportRow[] = [];
+  if (csv && typeof csv === 'string') {
+    const parsed = parseCsv(csv);
+    if (parsed.length === 0) { res.status(400).json({ success: false, error: 'CSV appears to be empty' }); return; }
+    const header = parsed[0].map((h) => h.trim().toLowerCase());
+    const idx = (k: string) => header.indexOf(k);
+    const nameIdx = idx('name');
+    if (nameIdx === -1) { res.status(400).json({ success: false, error: 'CSV must have a "Name" column' }); return; }
+    const col = (cols: string[], k: string) => { const i = idx(k); return i >= 0 ? (cols[i] || '').trim() : undefined; };
+    for (let i = 1; i < parsed.length; i++) {
+      const cols = parsed[i].map((c) => c.trim());
+      if (!cols[nameIdx]) continue;
+      rows.push({
+        name: cols[nameIdx],
+        system: col(cols, 'system'),
+        connectionType: col(cols, 'type'),
+        dbType: col(cols, 'dbtype'),
+        host: col(cols, 'host'),
+        port: col(cols, 'port'),
+        database: col(cols, 'database'),
+        username: col(cols, 'username'),
+      });
+    }
+  } else if (Array.isArray(connList)) {
+    rows = connList;
+  } else {
+    res.status(400).json({ success: false, error: 'Provide a "connections" array or a "csv" string' });
+    return;
+  }
+  if (rows.length === 0) { res.status(400).json({ success: false, error: 'No connections to import' }); return; }
+
+  const existing = await connectionsRepo.list();
+  const takenNames = new Set(
+    existing.filter((c) => c.orgId === orgId).map((c) => c.name.toLowerCase()),
+  );
+  // Systems in this org, for name → id resolution (case-insensitive).
+  const orgSystems = systemsStore.filter((s) => s.orgId === orgId);
+  const systemByName = new Map(orgSystems.map((s) => [s.name.toLowerCase(), s.id]));
+
+  const created: ConnectionProfile[] = [];
+  const skippedNames: string[] = [];
+  const unresolvedSystems: string[] = [];
+  const userSub = (req as { user?: { sub?: string } }).user?.sub || null;
+
+  for (const row of rows) {
+    const trimmedName = (row.name || '').trim();
+    if (!trimmedName) continue;
+    if (takenNames.has(trimmedName.toLowerCase())) { skippedNames.push(trimmedName); continue; }
+    takenNames.add(trimmedName.toLowerCase());
+
+    const connectionType = CONNECTION_TYPES.includes((row.connectionType || '').toUpperCase())
+      ? (row.connectionType as string).toUpperCase() as ConnectionProfile['connectionType']
+      : 'DATABASE';
+
+    const config: ConnectionProfile['config'] = {};
+    if (row.dbType && DB_TYPES.includes(row.dbType.toUpperCase())) config.dbType = row.dbType.toUpperCase() as NonNullable<ConnectionProfile['config']['dbType']>;
+    if (row.host) config.host = row.host;
+    if (row.port && !Number.isNaN(Number(row.port))) config.port = Number(row.port);
+    if (row.database) config.database = row.database;
+
+    // Username is not a secret; password/apiKey/token are NEVER imported.
+    const credentials = row.username ? { username: row.username } : {};
+
+    // Resolve an optional System by name within the org.
+    let systemId: string | undefined;
+    if (row.system && row.system.trim()) {
+      const resolved = systemByName.get(row.system.trim().toLowerCase());
+      if (resolved) systemId = resolved;
+      else unresolvedSystems.push(row.system.trim());
+    }
+
+    const now = new Date().toISOString();
+    const conn: ConnectionProfile = {
+      id: uuid(),
+      orgId,
+      name: trimmedName,
+      connectionType,
+      config,
+      credentials: await encryptCredentials(credentials),
+      status: 'UNTESTED',
+      lastTestedAt: null,
+      lastTestResult: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await connectionsRepo.create(conn);
+    if (systemId) {
+      await connectionSystemLinksRepo.create({ id: uuid(), orgId, connectionId: conn.id, systemId, createdAt: now });
+    }
+    const links = await connectionSystemLinksRepo.list();
+    auditService.log(orgId, userSub, 'ConnectionProfile', conn.id, 'CREATE', null, toPublic(conn, links));
+    created.push(conn);
+  }
+
+  res.status(201).json({
+    success: true,
+    count: created.length,
+    skipped: skippedNames.length,
+    skippedNames,
+    unresolvedSystems: Array.from(new Set(unresolvedSystems)),
+  });
 });
 
 /** PUT /api/v1/connections/:id — update connection profile */
