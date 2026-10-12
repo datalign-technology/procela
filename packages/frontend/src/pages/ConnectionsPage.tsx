@@ -14,6 +14,7 @@ import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from './../components/IconButton';
 import Button from '../components/Button';
+import SegmentedControl from '../components/SegmentedControl';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import ListToolbar from '../components/ListToolbar';
@@ -263,6 +264,35 @@ export default function ConnectionsPage({
   // -----------------------------------------------------------------------
   // CRUD
   // -----------------------------------------------------------------------
+
+  // Import connection DEFINITIONS (no secrets) — paste CSV or JSON. Each
+  // imported connection lands UNTESTED with no credentials; the user enters
+  // each one's password/key and runs Test afterwards.
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    if (!importText.trim()) return;
+    setImporting(true);
+    try {
+      const body: Record<string, unknown> = { orgId: activeOrgId };
+      if (importFormat === 'csv') body.csv = importText;
+      else body.connections = JSON.parse(importText);
+      const res = await apiClient.post<{ success: boolean; count?: number; skipped?: number; unresolvedSystems?: string[] }>('/connections/import', body);
+      const count = res.count ?? 0;
+      const skipped = res.skipped ?? 0;
+      const unresolved = res.unresolvedSystems ?? [];
+      if (skipped > 0) addToast('info', `${skipped} connection${skipped === 1 ? '' : 's'} already existed and ${skipped === 1 ? 'was' : 'were'} skipped.`);
+      if (unresolved.length > 0) addToast('info', `No system matched: ${unresolved.join(', ')}. Those connections were imported unlinked.`);
+      addToast('success', `Imported ${count} connection${count === 1 ? '' : 's'}. Open each to add credentials and test.`);
+      setShowImport(false); setImportText('');
+      fetchData();
+    } catch (err) { addToast('error', errorMessage(err, 'Import failed')); }
+    finally { setImporting(false); }
+  };
 
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setFormTestResult(null);
@@ -1011,6 +1041,7 @@ export default function ConnectionsPage({
                 })}
               />
             }
+            import={canWrite ? <IconButton icon="upload" label="Import connections" onClick={() => { setShowImport(true); setShowForm(false); }} /> : undefined}
             columns={<ColumnPicker state={connCols} />}
             primary={canWrite ? <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} /> : undefined}
           />
@@ -1093,6 +1124,49 @@ export default function ConnectionsPage({
               </>
             )}
           </div>
+
+      {/* Import panel — definitions only, no credentials. */}
+      {showImport && (
+        <Card padding={20} marginBottom={20}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <div>
+              <h3 style={{ fontSize: 15, fontWeight: 600 }}>Import Connections</h3>
+              <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                Bulk-create connection <strong>definitions</strong>. For security, passwords and keys are <strong>not</strong> imported — each
+                connection lands untested, and you add its credentials and run Test afterwards. Existing connections (by name) are skipped.
+              </span>
+            </div>
+            <button type="button" onClick={() => { setShowImport(false); setImportText(''); }} aria-label="Close import dialog" style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}><span aria-hidden="true">&times;</span></button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 500 }}>Format</span>
+            <SegmentedControl
+              ariaLabel="Import format"
+              value={importFormat}
+              onChange={(v) => setImportFormat(v)}
+              options={[{ value: 'csv', label: 'CSV' }, { value: 'json', label: 'JSON' }]}
+            />
+          </div>
+          <textarea
+            aria-label="Connections to import (CSV or JSON)"
+            style={{ ...inputStyle, minHeight: 100, fontFamily: 'var(--font-mono)', fontSize: 11, resize: 'vertical' }}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder={importFormat === 'csv'
+              ? 'Name,System,Type,DbType,Host,Port,Database,Username\nOMS Postgres,Outage Management System,DATABASE,POSTGRESQL,oms-db.internal,5432,oms,readonly_user'
+              : '[\n  { "name": "OMS Postgres", "system": "Outage Management System", "connectionType": "DATABASE", "dbType": "POSTGRESQL", "host": "oms-db.internal", "port": 5432, "database": "oms", "username": "readonly_user" }\n]'}
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>
+              Columns: Name (required), System (matched by name), Type, DbType, Host, Port, Database, Username. No password/key field.
+            </span>
+            <Button variant="secondary" onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</Button>
+            <Button variant="primary" disabled={!importText.trim() || importing} onClick={handleImport}>
+              {importing ? 'Importing…' : 'Import'}
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Add/Edit Form */}
       {showForm && (
