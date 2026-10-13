@@ -199,13 +199,16 @@ function GroupTreeNode({ node, depth, onDelete, onAddChild, onSelect, selectedId
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
         {canEdit && <input type="checkbox" checked={checkedIds.has(node.id)} onChange={() => onToggleCheck(node.id)} onClick={(e) => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0 }} />}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
-            <span style={makeBadge(typeColor)}>{GROUP_TYPE_SHORT[node.type] || node.type}</span>
-            <span style={{ ...statusBadgeStyle(node.status), flexShrink: 0 }} title={`Status: ${node.status.replace(/_/g, ' ')}`}>{node.status.replace(/_/g, ' ')}</span>
-            {memberCount > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0px 5px', borderRadius: 8 }}>{memberCount}</span>}
-          </div>
+        {/* Identity on the left — name + its type. The state metadata
+            (status, member count) is right-aligned below so it doesn't crowd
+            the name. */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
+          <span style={{ ...makeBadge(typeColor), flexShrink: 0 }}>{GROUP_TYPE_SHORT[node.type] || node.type}</span>
+        </div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span style={{ ...statusBadgeStyle(node.status), flexShrink: 0 }} title={`Status: ${node.status.replace(/_/g, ' ')}`}>{node.status.replace(/_/g, ' ')}</span>
+          {memberCount > 0 && <span title={`${memberCount} member${memberCount === 1 ? '' : 's'}`} style={{ fontSize: 9, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0px 5px', borderRadius: 8 }}>{memberCount}</span>}
         </div>
         {canEdit && (
           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
