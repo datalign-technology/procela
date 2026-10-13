@@ -172,32 +172,33 @@ function OrgTreeNode({ node, depth, onDelete, onAddChild, expanded, toggleExpand
           style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none', flexShrink: 0 }}>
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
+        {/* Identity on the left — name + type (+ a sync flag when relevant).
+            Industry dropped from the row: it repeats down the whole tree and
+            lives on the org's detail page. The people / children counts move
+            to a right-aligned cluster so they don't crowd the name. */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span
-              style={{ fontWeight: 500, fontSize: 13, color: isActive ? 'var(--color-primary)' : undefined }}>{node.name}</span>
-            <span style={typeBadge(node.type)}>{node.type}</span>
+              style={{ fontWeight: 500, fontSize: 13, color: isActive ? 'var(--color-primary)' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
+            <span style={{ ...typeBadge(node.type), flexShrink: 0 }}>{node.type}</span>
             <NotInSourceBadge syncStatus={node.syncStatus} />
-            {node.industry && (
-              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>
-                {node.industry}
-              </span>
-            )}
-            {count > 0 && (
-              <span style={{ fontSize: 10, color: '#5b21b6', background: '#ede9fe', padding: '1px 7px', borderRadius: 8, fontWeight: 500 }}>
-                {count} {count === 1 ? 'person' : 'people'}
-              </span>
-            )}
-            {hasChildren && (
-              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
-                {node.children.length} child{node.children.length === 1 ? '' : 'ren'}
-              </span>
-            )}
           </div>
           {node.description && (
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {node.description}
             </div>
+          )}
+        </div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {count > 0 && (
+            <span title={`${count} ${count === 1 ? 'person' : 'people'}`} style={{ fontSize: 10, color: '#5b21b6', background: '#ede9fe', padding: '1px 7px', borderRadius: 8, fontWeight: 500 }}>
+              {count} {count === 1 ? 'person' : 'people'}
+            </span>
+          )}
+          {hasChildren && (
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
+              {node.children.length} child{node.children.length === 1 ? '' : 'ren'}
+            </span>
           )}
         </div>
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>

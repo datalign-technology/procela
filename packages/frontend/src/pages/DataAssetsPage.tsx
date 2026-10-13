@@ -361,11 +361,14 @@ function RowCountChip({ rowCount }: { rowCount?: number | null }) {
 // 'description' is not a column here. It's kept off the list entirely to
 // keep rows single-line and dense; the full text lives in the 360 detail
 // modal and the edit form. (It's still searchable via the search box.)
-type ColumnId = 'system' | 'source' | 'tier' | 'health' | 'domain' | 'owner' | 'steward' | 'created';
+type ColumnId = 'system' | 'source' | 'tier' | 'sensitivity' | 'health' | 'domain' | 'owner' | 'steward' | 'created';
 const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean }> = [
   { id: 'system',      label: 'System',      defaultVisible: true  },
   { id: 'source',      label: 'Source',      defaultVisible: false },
   { id: 'tier',        label: 'Tier',        defaultVisible: true  },
+  // Sensitivity moved out of the name cell into its own column — it's a
+  // high-value, scannable governance attribute.
+  { id: 'sensitivity', label: 'Sensitivity', defaultVisible: true  },
   // Health is off by default here — it's the Quality tab's focus (with the
   // rule breakdown). Registry leads with catalog/governance attributes
   // (Tier, Domain, Owner); health stays one click away in the column picker.
@@ -384,7 +387,9 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
 // stored default set changed — bump the suffix to re-seed defaults (per the
 // useColumnPicker versioning convention) instead of leaving old sessions on
 // the wider v1 layout.
-const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v2';
+// v3 — Sensitivity became its own column (moved out of the crowded name
+// cell), so force the new defaults for everyone (old payloads lack the id).
+const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v3';
 
 const backLinkStyle: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
@@ -1278,34 +1283,19 @@ export default function DataAssetsPage({
               *  (cursor + hover tint signal it); this stays a focusable
               *  button for keyboard users but isn't painted as a hyperlink.
               *  Renaming happens via the row's Edit pencil. */}
+            {/* Name + only the two conditional "standing" flags: the orphan
+                gap flag and the cross-org owner badge. Origin / SOR / sync /
+                row-count moved into the Source column; sensitivity into its
+                own column — so the name reads cleanly. */}
             <button
               type="button"
               onClick={() => navigate(`/data-assets/${asset.id}`)}
               title="View details"
-              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
             >
               {asset.name}
             </button>
-            <OriginBadge origin={asset.origin} />
             <UnmappedBadge isOrphan={asset.isOrphan} />
-            {asset.isSystemOfRecord && (
-              <span
-                title="System of record — the authoritative golden copy"
-                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: 3 }}
-              >
-                SOR
-              </span>
-            )}
-            <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
-            <RowCountChip rowCount={asset.rowCount} />
-            {asset.sensitivityTags && asset.sensitivityTags.length > 0 && (
-              <span
-                title={`Sensitivity: ${asset.sensitivityTags.join(', ')}`}
-                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', background: '#fee2e2', color: '#991b1b', padding: '1px 6px', borderRadius: 3 }}
-              >
-                {asset.sensitivityTags[0]}{asset.sensitivityTags.length > 1 ? ` +${asset.sensitivityTags.length - 1}` : ''}
-              </span>
-            )}
             <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
           </div>
           {/* Description is intentionally not shown inline — rows stay
@@ -1328,21 +1318,59 @@ export default function DataAssetsPage({
         const binding = primaryBindingOf(asset.id);
         const connName = binding ? connectionNameById[binding.connectionId] : undefined;
         const cols = bindingColumnSet(binding);
-        return binding ? (
-          <span
-            title={
-              `Linked to connection ${connName || binding.connectionId}` +
-              (cols.length > 1 ? `\nColumns: ${cols.join(', ')}` : '')
-            }
-          >
-            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-              {bindingSourceLabel(binding)}
-            </code>
-          </span>
-        ) : (
-          <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>
+        // Second line gathers the provenance/freshness chips that used to
+        // crowd the name cell — origin, system-of-record, sync freshness,
+        // row count. They describe where/how this asset's data comes from.
+        const meta = (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: binding ? 3 : 0 }}>
+            <OriginBadge origin={asset.origin} />
+            {asset.isSystemOfRecord && (
+              <span
+                title="System of record — the authoritative golden copy"
+                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: 3 }}
+              >
+                SOR
+              </span>
+            )}
+            <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
+            <RowCountChip rowCount={asset.rowCount} />
+          </div>
+        );
+        return (
+          <div style={{ minWidth: 0 }}>
+            {binding ? (
+              <span
+                title={
+                  `Linked to connection ${connName || binding.connectionId}` +
+                  (cols.length > 1 ? `\nColumns: ${cols.join(', ')}` : '')
+                }
+              >
+                <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                  {bindingSourceLabel(binding)}
+                </code>
+              </span>
+            ) : (
+              <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>
+            )}
+            {meta}
+          </div>
         );
       },
+    },
+    isVisible('sensitivity') && {
+      key: 'sensitivity', header: 'Sensitivity', sortable: false,
+      render: (asset: DataAssetEntity) => (
+        asset.sensitivityTags && asset.sensitivityTags.length > 0 ? (
+          <span
+            title={`Sensitivity: ${asset.sensitivityTags.join(', ')}`}
+            style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', background: '#fee2e2', color: '#991b1b', padding: '1px 6px', borderRadius: 3 }}
+          >
+            {asset.sensitivityTags[0]}{asset.sensitivityTags.length > 1 ? ` +${asset.sensitivityTags.length - 1}` : ''}
+          </span>
+        ) : (
+          <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>
+        )
+      ),
     },
     isVisible('tier') && {
       key: 'tier', header: 'Tier', sortable: true,

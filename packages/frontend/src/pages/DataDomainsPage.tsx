@@ -1375,20 +1375,21 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
                             {d.subDomainCount} sub
                           </span>
                         )}
-                        {d.containsMasterData && (
-                          <span title="Contains master data" style={{ fontSize: 10, fontWeight: 700, color: '#7c2d12', background: '#ffedd5', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>MD</span>
-                        )}
-                        {!d.criticality && d.suggestedCriticality === 'TIER_1' && (
-                          <span title="Holds master data — suggest Tier-1 criticality" style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-warning)', border: '1px dashed var(--color-warning)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>Tier-1?</span>
-                        )}
+                        {/* Master-data marker and the Tier-1 criticality
+                            suggestion are advisory signals that crowded the
+                            name — they live on the domain's detail page now. */}
                         {scope.applied && <span style={{ flexShrink: 0 }}><ScopeBadge inScope={scope.has('domain', d.id)} /></span>}
-                        {healthChips(d)}
                       </div>
                       {d.description && (
                         <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {d.description}
                         </div>
                       )}
+                    </div>
+                    {/* Health chips right-aligned so they read as the row's
+                        state, separate from the name/code identity. */}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      {healthChips(d)}
                     </div>
                     {/* Per-row hover actions (mirrors the Organizations tree
                         row): add a sub-domain under a top-level domain, or
