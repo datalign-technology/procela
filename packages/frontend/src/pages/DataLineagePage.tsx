@@ -225,6 +225,18 @@ const FLOW_ARROW_COLORS: Record<string, string> = {
   STREAMING: '#0d9488',
 };
 
+// How an edge came to be known, in plain words. "manual" reads as "Entered by
+// hand" (it was typed in, not confirmed by an import); "sql" as "Query history".
+const sourceLabel = (s: string) => (s === 'sql' ? 'Query history' : s === 'dbt' ? 'dbt' : 'Entered by hand');
+// A column name that looks like a primary key — `id` or `<something>_id`.
+const keyLike = (c: string | null | undefined) => !!c && /^id$|_id$/i.test(c);
+// A hand-entered column link that maps a non-key column onto a key column is a
+// classic wrong-join: worth a human look before it's trusted.
+const suspiciousColEdge = (e: ColumnLineageEdgeRow) =>
+  e.source === 'manual'
+  && keyLike(e.targetColumnName)
+  && (e.sourceColumnName || '').toLowerCase() !== (e.targetColumnName || '').toLowerCase();
+
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)',
   borderRadius: 4,
@@ -237,6 +249,12 @@ const inputStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = {
   ...inputStyle,
   appearance: 'auto' as any,
+};
+
+const rowMenuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
 };
 
 function Badge({ label, colors }: { label: string; colors: { bg: string; color: string } }) {
@@ -427,8 +445,13 @@ export default function DataLineagePage() {
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmDeleteDbtConn, setConfirmDeleteDbtConn] = useState<DbtCloudConnectionRow | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'visualization'>('table');
-  const [vizMode, setVizMode] = useState<'systems' | 'assets' | 'both'>('systems');
+  // Three views share one toolbar: a visual Map, the System-flows table, and
+  // the auto/hand-entered Asset & column links.
+  const [tab, setTab] = useState<'map' | 'flows' | 'edges'>('map');
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  // The hand-entered column link a steward asked to review (opens a modal).
+  const [reviewEdge, setReviewEdge] = useState<ColumnLineageEdgeRow | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Visualization data
@@ -595,8 +618,22 @@ export default function DataLineagePage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { if (viewMode === 'visualization') fetchVisualization(); }, [viewMode, fetchVisualization]);
+  useEffect(() => { if (tab === 'map') fetchVisualization(); }, [tab, fetchVisualization]);
   usePolling(fetchData, 30000);
+
+  // Close the pop-over menus on any outside click.
+  useEffect(() => {
+    if (!importMenuOpen) return;
+    const close = () => setImportMenuOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [importMenuOpen]);
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
 
   // Sort — comparators keyed by column key; URL persists ?sort=&dir=.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -646,7 +683,7 @@ export default function DataLineagePage() {
       setShowForm(false);
       setForm(emptyForm);
       fetchData();
-      if (viewMode === 'visualization') fetchVisualization();
+      if (tab === 'map') fetchVisualization();
     } catch {
       addToast('error', 'Failed to save lineage flow');
     }
@@ -657,7 +694,7 @@ export default function DataLineagePage() {
       await apiClient.delete(`/data-lineage/${id}`);
       addToast('success', 'Lineage flow deleted');
       fetchData();
-      if (viewMode === 'visualization') fetchVisualization();
+      if (tab === 'map') fetchVisualization();
     } catch {
       addToast('error', 'Failed to delete lineage flow');
     }
@@ -671,7 +708,7 @@ export default function DataLineagePage() {
       addToast('success', `Deleted ${sel.count} lineage flows`);
       sel.clear();
       fetchData();
-      if (viewMode === 'visualization') fetchVisualization();
+      if (tab === 'map') fetchVisualization();
     } catch {
       addToast('error', 'Bulk delete failed');
     }
@@ -734,12 +771,23 @@ export default function DataLineagePage() {
       ),
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const,
+      key: 'actions', header: '', align: 'right' as const,
       render: (link: LineageLink) => (
         !canWrite ? <span style={{ color: 'var(--color-text-muted)' }}>—</span> :
-        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(link.id)} />
-        </div>
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          <button
+            type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded={rowMenuId === link.id}
+            onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === link.id ? null : link.id); }}
+            style={{ width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+          >⋯</button>
+          {rowMenuId === link.id && (
+            <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 160, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+              <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); setViewingId(link.id); }} style={rowMenuItemStyle}>Open &amp; edit</button>
+              <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 2px' }} />
+              <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); setConfirmDelete(link.id); }} style={{ ...rowMenuItemStyle, color: 'var(--color-error)' }}>Delete</button>
+            </div>
+          )}
+        </span>
       ),
     },
   ].filter(Boolean) as DataTableColumn<LineageLink>[]);
@@ -775,7 +823,24 @@ export default function DataLineagePage() {
         subtitle="Track how data flows between systems — which system feeds which."
         actions={
           <ListToolbar
-            import={canWrite ? <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} /> : undefined}
+            import={canWrite ? (
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <button
+                  type="button" aria-haspopup="menu" aria-expanded={importMenuOpen}
+                  onClick={(e) => { e.stopPropagation(); setImportMenuOpen((v) => !v); }}
+                  style={{ height: 40, padding: '0 14px', display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer' }}
+                >Import lineage<span aria-hidden style={{ fontSize: 10 }}>▾</span></button>
+                {importMenuOpen && (
+                  <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 44, right: 0, zIndex: 40, minWidth: 240, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                    <button type="button" role="menuitem" onClick={() => { setImportMenuOpen(false); setShowDbtImport(true); }} style={rowMenuItemStyle}>Import dbt manifest…</button>
+                    {snowflakeConns.length > 0 && (
+                      <button type="button" role="menuitem" onClick={() => { setImportMenuOpen(false); setSqlExtractSummary(null); setSqlExtractColumnSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} style={rowMenuItemStyle}>Extract from query history…</button>
+                    )}
+                    <button type="button" role="menuitem" onClick={() => { setImportMenuOpen(false); setEditingDbtConn(null); setShowDbtConnForm(true); }} style={rowMenuItemStyle}>Connect a dbt Cloud job…</button>
+                  </div>
+                )}
+              </span>
+            ) : undefined}
             export={
               links.length > 0 ? (
                 <ExportMenu build={() => ({
@@ -794,21 +859,32 @@ export default function DataLineagePage() {
                 })} />
               ) : undefined
             }
-            columns={<ColumnPicker state={lineageCols} />}
-            extra={
-              <>
-                {canWrite && snowflakeConns.length > 0 && (
-                  <IconButton icon="wand" label="Extract lineage from query history"
-                    onClick={() => { setSqlExtractSummary(null); setSqlExtractColumnSummary(null); setSqlExtractError(null); setShowSqlExtract(true); }} />
-                )}
-                <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
-                  onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
-              </>
-            }
+            columns={tab !== 'map' ? <ColumnPicker state={lineageCols} /> : undefined}
             primary={canWrite ? <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} /> : undefined}
           />
         }
       />
+
+      {/* View tabs — Map (visual), the System-flows table, and the auto /
+        *  hand-entered Asset & column links. */}
+      <nav aria-label="Lineage views" style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', marginBottom: 20, overflowX: 'auto' }}>
+        {([
+          { key: 'map', label: 'Map', count: new Set(links.flatMap((l) => [l.sourceSystemId, l.targetSystemId])).size },
+          { key: 'flows', label: 'System flows', count: links.length },
+          { key: 'edges', label: 'Asset & column links', count: assetEdges.length + columnEdges.length },
+        ] as const).map((tdef) => {
+          const on = tab === tdef.key;
+          return (
+            <button
+              key={tdef.key} type="button" onClick={() => setTab(tdef.key)} aria-current={on ? 'page' : undefined}
+              style={{ padding: '10px 14px', fontSize: 14, border: 0, background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: on ? 600 : 500, color: on ? 'var(--color-primary)' : 'var(--color-text-secondary)', borderBottom: `2px solid ${on ? 'var(--color-primary)' : 'transparent'}`, marginBottom: -1 }}
+            >
+              {tdef.label}
+              <span style={{ fontSize: 12, fontWeight: 600, padding: '1px 7px', borderRadius: 10, background: 'var(--color-bg)', color: 'var(--color-text-secondary)' }}>{tdef.count}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       {/* Add Flow form (editing a flow happens in the row's expanded detail) */}
       {showForm && (
@@ -860,13 +936,13 @@ export default function DataLineagePage() {
       />
 
       {/* Bulk Action Bar */}
-      {viewMode === 'table' && (
+      {tab === 'flows' && (
         <BulkActionBar count={sel.count} onClear={sel.clear}>
           <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
         </BulkActionBar>
       )}
 
-      {viewMode === 'table' ? (
+      {tab === 'flows' && (
         <>
           {/* Table */}
           {links.length === 0 ? (
@@ -890,6 +966,32 @@ export default function DataLineagePage() {
               />
             </Card>
           )}
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
+            ETL = a scheduled job that copies and reshapes data between systems.
+          </div>
+        </>
+      )}
+
+      {tab === 'edges' && (
+        <>
+          {/* Hand-entered links that join a non-key column onto a key column
+            *  are flagged for a human look — they're the classic wrong-join. */}
+          {(() => {
+            const flagged = columnEdges.filter(suspiciousColEdge);
+            if (flagged.length === 0) return null;
+            return (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 16px', borderRadius: 'var(--radius-md)', background: '#fbe9d9', marginBottom: 20 }}>
+                <AlertTriangle size={18} strokeWidth={2} color="#9a4a0e" style={{ flexShrink: 0, marginTop: 1 }} />
+                <div style={{ flex: 1, fontSize: 13, color: 'var(--color-text)' }}>
+                  {flagged.length === 1 ? 'A hand-entered link needs a look.' : `${flagged.length} hand-entered links need a look.`}{' '}
+                  {flagged.slice(0, 1).map((e) => (
+                    <span key={e.id}><strong>{e.sourceColumnName} → {e.targetColumnName}</strong> maps a non-key column onto a key column. It was entered by hand and has not been confirmed by an import.</span>
+                  ))}
+                </div>
+                <button type="button" onClick={() => setReviewEdge(flagged[0])} style={{ height: 32, padding: '0 12px', border: '1px solid #9a4a0e', background: 'var(--color-surface)', color: '#9a4a0e', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>Review</button>
+              </div>
+            );
+          })()}
 
           {/* Asset-level lineage edges (auto-derived from dbt manifest
             *  imports). Hidden when there are no edges yet so the page
@@ -955,7 +1057,7 @@ export default function DataLineagePage() {
                         <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)', opacity: e.isStale ? 0.7 : 1 }}>
                           <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.sourceAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
                           <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.targetAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
-                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{e.source === 'sql' ? 'query history' : e.source}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{sourceLabel(e.source)}</td>
                           <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>
                             {new Date(e.lastSeenAt).toLocaleString()}
                             {e.isStale && (
@@ -1012,7 +1114,12 @@ export default function DataLineagePage() {
                         <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)', opacity: e.isStale ? 0.7 : 1 }}>
                           <td style={{ padding: '6px 12px', fontSize: 13 }}>{colLabel(e.sourceAssetName, e.sourceColumnName)}</td>
                           <td style={{ padding: '6px 12px', fontSize: 13 }}>{colLabel(e.targetAssetName, e.targetColumnName)}</td>
-                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{e.source === 'sql' ? 'query history' : e.source}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                            {sourceLabel(e.source)}
+                            {suspiciousColEdge(e) && (
+                              <button type="button" onClick={() => setReviewEdge(e)} style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#fbe9d9', color: '#9a4a0e', textTransform: 'uppercase', letterSpacing: '0.04em', border: 'none', cursor: 'pointer' }}>Review</button>
+                            )}
+                          </td>
                           <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>
                             {new Date(e.lastSeenAt).toLocaleString()}
                             {e.isStale && (
@@ -1033,50 +1140,38 @@ export default function DataLineagePage() {
             );
           })()}
         </>
-      ) : (
-        /* Visualization View - three lenses sharing the toolbar:
-         *   systems = the existing flow graph
-         *   assets  = the auto-derived asset edges (from dbt etc.)
-         *   both    = stacked, systems on top, assets below
-         */
-        <div>
-          <div role="group" aria-label="Visualization mode" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 2,
-            background: 'var(--color-bg)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 6, padding: 2, marginBottom: 12,
-          }}>
-            {(['systems', 'assets', 'both'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setVizMode(mode)}
-                aria-pressed={vizMode === mode}
-                style={{
-                  padding: '4px 10px', fontSize: 11, fontWeight: 500,
-                  background: vizMode === mode ? 'var(--color-surface)' : 'transparent',
-                  color: vizMode === mode ? 'var(--color-text)' : 'var(--color-text-muted)',
-                  border: 'none', borderRadius: 4, cursor: 'pointer',
-                  boxShadow: vizMode === mode ? 'var(--shadow-sm)' : 'none',
-                }}
-              >
-                {mode === 'systems' ? 'Systems' : mode === 'assets' ? 'Assets' : 'Both'}
-              </button>
-            ))}
-            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
-              {vizMode === 'systems' && `${visNodes.length} systems`}
-              {vizMode === 'assets' && `${assetEdges.length} edges`}
-              {vizMode === 'both' && `${visNodes.length} systems · ${assetEdges.length} asset edges`}
-            </span>
-          </div>
-          {(vizMode === 'systems' || vizMode === 'both') && (
-            <LineageVisualization nodes={visNodes} links={visLinks} />
-          )}
-          {(vizMode === 'assets' || vizMode === 'both') && (
-            <div style={{ marginTop: vizMode === 'both' ? 16 : 0 }}>
-              <AssetLineageVisualization edges={assetEdges} />
+      )}
+
+      {tab === 'map' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Between systems — the flow graph (boxes + arrows). */}
+          <section>
+            <div style={{ marginBottom: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Between systems</h2>
+              <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>Which system sends which data asset to which system, and how often.</div>
             </div>
-          )}
+            <LineageVisualization nodes={visNodes} links={visLinks} />
+          </section>
+
+          {/* Between data assets — column-grain cards + arrows. */}
+          <section>
+            <div style={{ marginBottom: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Between data assets</h2>
+              <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>Which asset, and which columns, feed another asset.</div>
+            </div>
+            <AssetLineageVisualization edges={assetEdges} />
+          </section>
+
+          {/* Keep lineage fresh — the on-ramp to automatic imports. */}
+          <section style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1px dashed var(--color-border)', background: 'var(--color-surface)' }}>
+            <div style={{ flex: '1 1 360px' }}>
+              <div style={{ fontWeight: 600 }}>Keep lineage up to date automatically</div>
+              <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>Connect a dbt Cloud job or extract from warehouse query history. Links not seen again for 30 days are marked stale.</div>
+            </div>
+            {canWrite && (
+              <button type="button" onClick={() => { setEditingDbtConn(null); setShowDbtConnForm(true); }} style={{ height: 36, padding: '0 14px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 8, fontSize: 14, fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer' }}>Connect dbt Cloud</button>
+            )}
+          </section>
         </div>
       )}
 
@@ -1287,6 +1382,41 @@ export default function DataLineagePage() {
           </Modal>
         );
       })()}
+
+      {/* Review a hand-entered column link. There's no per-edge confirm flag
+        *  in the model yet, so the honest fix is to re-import from a trusted
+        *  source (which overwrites or confirms the link) or remove it at the
+        *  source. The modal explains both. */}
+      {reviewEdge && (
+        <Modal
+          open
+          onClose={() => setReviewEdge(null)}
+          kicker="Review link"
+          title={`${reviewEdge.sourceColumnName} → ${reviewEdge.targetColumnName}`}
+          subtitle="Entered by hand"
+          size="md"
+        >
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--color-text)' }}>
+            <p style={{ marginTop: 0 }}>
+              This link maps <strong>{reviewEdge.sourceAssetName}.{reviewEdge.sourceColumnName}</strong> onto{' '}
+              <strong>{reviewEdge.targetAssetName}.{reviewEdge.targetColumnName}</strong> — a non-key column onto a
+              key column. That pattern is often a wrong join, so it's worth a look before you trust it.
+            </p>
+            <p>
+              It was <strong>entered by hand</strong> and hasn't been confirmed by an import. To confirm it, run an
+              import from a source that actually produces this link (a dbt manifest or warehouse query history) — the
+              link will be re-stamped with that source. If it's wrong, correct it at the source so the next import
+              drops it.
+            </p>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button type="button" onClick={() => setReviewEdge(null)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>Close</button>
+            {canWrite && (
+              <Button onClick={() => { setReviewEdge(null); setShowDbtImport(true); }}>Import to confirm</Button>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1894,8 +2024,8 @@ function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) 
     <Card padding={0} style={{ overflow: 'auto' }}>
       <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-muted)', padding: '8px 12px', borderBottom: '1px solid var(--color-border)' }}>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#0ea5e9', borderRadius: 2, marginRight: 4 }} />dbt</span>
-        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#f59e0b', borderRadius: 2, marginRight: 4 }} />query history</span>
-        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#22c55e', borderRadius: 2, marginRight: 4 }} />manual</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#f59e0b', borderRadius: 2, marginRight: 4 }} />Query history</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#22c55e', borderRadius: 2, marginRight: 4 }} />Entered by hand</span>
       </div>
       <svg width={svgW} height={svgH} style={{ display: 'block' }}>
         <defs>
