@@ -8,7 +8,6 @@ import Card from '../components/Card';
 import Button from '../components/Button';
 import Spinner from '../components/Spinner';
 import { INDUSTRIES } from '../types';
-import { clickable } from '../lib/a11y';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -30,6 +29,8 @@ import { useScopeMembership } from '../hooks/useScopeMembership';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
+import OwnerCell from '../components/OwnerCell';
+import TruncatedText from '../components/TruncatedText';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useFocusTrap } from '../hooks/useFocusTrap';
@@ -97,41 +98,6 @@ const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', critic
 const SIMPLE_TRANSITIONS: Record<string, string[]> = { DRAFT: ['ACTIVE'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 const ADVANCED_TRANSITIONS: Record<string, string[]> = { DRAFT: ['PROPOSED'], PROPOSED: ['UNDER_REVIEW', 'DRAFT'], UNDER_REVIEW: ['APPROVED', 'DRAFT'], APPROVED: ['ACTIVE', 'DRAFT'], ACTIVE: ['DRAFT', 'DEPRECATED'], DEPRECATED: ['DRAFT'] };
 
-// A single governance-health signal, rendered as a small labeled chip
-// (green when present, muted/outlined when absent) rather than a colour-only
-// dot — so "what's missing" reads without decoding colour.
-function healthChip(label: string, present: boolean) {
-  return (
-    <span
-      title={present ? `${label} assigned` : `No ${label.toLowerCase()}`}
-      style={{
-        fontSize: 9, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase',
-        padding: '0 5px', borderRadius: 8, flexShrink: 0,
-        background: present ? '#d1fae5' : 'transparent',
-        color: present ? '#065f46' : 'var(--color-text-muted)',
-        border: `1px solid ${present ? '#bbf7d0' : 'var(--color-border)'}`,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function healthChips(domain: DataDomain) {
-  const hasOwner = !!domain.ownerId;
-  const hasStewards = domain.stewards.length > 0;
-  // Reflect the subtree: a parent with no direct assets but assets under its
-  // sub-domains still counts as "assets linked".
-  const hasAssets = (domain.subtreeAssetCount ?? domain.assets.length) > 0;
-  return (
-    <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
-      {healthChip('Owner', hasOwner)}
-      {healthChip('Stewards', hasStewards)}
-      {healthChip('Assets', hasAssets)}
-    </span>
-  );
-}
-
 // Shared style for "Owner" / "Stewards" labels that open the Role Detail
 // drawer. Looks like a label, hints clickability with a dotted underline.
 const roleLabelBtnStyle: React.CSSProperties = {
@@ -139,6 +105,13 @@ const roleLabelBtnStyle: React.CSSProperties = {
   color: 'inherit', font: 'inherit', cursor: 'pointer',
   textDecoration: 'underline', textDecorationStyle: 'dotted',
   textUnderlineOffset: 3,
+};
+
+// A row in the per-domain "⋯" actions dropdown.
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
 };
 
 export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: string } = {}) {
@@ -163,6 +136,18 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } | null>(null);
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  // "Needs attention" quick filter: '' all · 'emptySub' sub-domains with no
+  // assets · 'noCriticality' criticality not set. Applied flat (ignores the
+  // tree fold) so the matching rows read as a focused worklist.
+  const [attentionFilter, setAttentionFilter] = useState<'' | 'emptySub' | 'noCriticality'>('');
+  // Which row's "⋯" actions menu is open (one at a time).
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!openMenuId) return;
+    const close = () => setOpenMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [openMenuId]);
 
   // Left-tree expand/collapse: the set of parent-domain ids whose sub-domains
   // are folded away. Persisted per org so navigation state survives reloads.
@@ -678,6 +663,22 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
     .filter((d) => !d.parentDomainId)
     .reduce((sum, d) => sum + (d.subtreeAssetCount ?? d.directAssetCount ?? d.assets.length), 0);
 
+  // A domain's rolled-up asset count (subtree where available, else direct).
+  const assetCountOf = (d: DataDomain) => d.subtreeAssetCount ?? d.directAssetCount ?? d.assets.length;
+  // Needs-attention predicates + counts, over all domains / assets.
+  const isEmptySub = (d: DataDomain) => !!d.parentDomainId && assetCountOf(d) === 0;
+  const emptySubCount = domains.filter(isEmptySub).length;
+  const noCriticalityCount = domains.filter((d) => !d.criticality).length;
+  const assetsNoDomainCount = allAssets.filter((a) => !domains.some((d) => d.dataAssetIds.includes(a.id))).length;
+
+  // The rows the table renders: the tree (visibleDomains) by default, or a flat
+  // list of matches when a Needs-attention card is active.
+  const attnTest: Record<'emptySub' | 'noCriticality', (d: DataDomain) => boolean> = {
+    emptySub: isEmptySub,
+    noCriticality: (d) => !d.criticality,
+  };
+  const domainRows = attentionFilter ? orderedDomains.filter(attnTest[attentionFilter]) : visibleDomains;
+
   // The AI modals (industry picker + generate/suggest preview) are lifted to
   // consts so both the list view and the focus detail page can mount them —
   // the detail page's "Suggest sub-domains" action drives the same flow.
@@ -1099,7 +1100,7 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
               ) : undefined
             }
             extra={canWrite && aiEnabled ? (
-              <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate domains'} disabled={generating} onClick={handleGenerate} />
+              <IconButton icon="wand" label={generating ? 'Suggesting…' : 'Suggest domains'} disabled={generating} onClick={handleGenerate} />
             ) : undefined}
             primary={canWrite ? <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} /> : undefined}
           />
@@ -1235,6 +1236,59 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
         </div>
       )}
 
+      {/* Needs attention — a steward's worklist as one-click filters. Empty
+          sub-domains and criticality-not-set filter the table; assets-in-no-
+          domain jumps to the registry's Unassigned view. */}
+      {domains.length > 0 && !loading && (
+        <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Every domain should have an owner, stewards, and assets</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+            {(() => {
+              const cards = [
+                { key: 'emptySub', count: emptySubCount, label: 'Sub-domains with no assets', hint: 'Assets sit on the parent instead', priority: true, kind: 'filter' as const },
+                { key: 'noDomain', count: assetsNoDomainCount, label: 'Assets in no domain', hint: 'Opens Data Assets → Unassigned', kind: 'link' as const },
+                { key: 'noCriticality', count: noCriticalityCount, label: 'Criticality not set', hint: 'How much the business depends on it', kind: 'filter' as const },
+              ];
+              return cards.map((c) => {
+                const active = c.kind === 'filter' && attentionFilter === c.key;
+                const zero = c.count === 0;
+                const onClick = c.kind === 'link'
+                  ? () => navigate('/data-assets?attention=noDomain')
+                  : () => setAttentionFilter(active ? '' : (c.key as 'emptySub' | 'noCriticality'));
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    aria-pressed={c.kind === 'filter' ? active : undefined}
+                    disabled={zero && c.kind === 'filter' && !active}
+                    onClick={onClick}
+                    style={{
+                      textAlign: 'left', cursor: zero && c.kind === 'filter' && !active ? 'default' : 'pointer',
+                      borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                      display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
+                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
+                      opacity: zero && c.kind === 'filter' && !active ? 0.6 : 1,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
+                      {c.priority && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Fix first</span>}
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                  </button>
+                );
+              });
+            })()}
+          </div>
+        </section>
+      )}
+
       {/* Main content: dictionary layout */}
       {loading ? (
         <SkeletonRows rows={5} columns={4} />
@@ -1307,111 +1361,127 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
               )}
               <input aria-label="Search domains" style={{ ...inputStyle, fontSize: 12, padding: '6px 10px', marginLeft: 'auto', flex: '1 1 180px', maxWidth: 280 }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {filteredDomains.length === 0 ? (
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {domainRows.length === 0 ? (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No domains match.</div>
-              ) : visibleDomains.map((d) => {
-                const isChecked = bulkSelectedIds.has(d.id);
-                const isSub = !!d.parentDomainId;
-                const isCollapsible = parentsWithChildren.has(d.id);
-                const isCollapsed = collapsedIds.has(d.id);
-                return (
-                  <div key={d.id} {...clickable(() => navigate(`/data-domains/${d.id}`), { label: `Open domain ${d.name}` })} style={{
-                    padding: '6px 10px', paddingLeft: isSub ? 28 : 10, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    // Whole-row click opens the domain's detail page. A bulk-checked
-                    // row gets a faint brand wash so the selection still reads.
-                    background: isChecked ? 'color-mix(in srgb, var(--color-primary-light) 45%, transparent)' : 'transparent',
-                    borderBottom: '1px solid var(--color-border)',
-                    transition: 'background 0.1s',
-                  }}
-                    onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}>
-                    {canWrite && (
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${d.name}`}
-                        checked={isChecked}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={() => toggleBulkSelect(d.id)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                    )}
-                    {/* Fold caret — only on parents that actually have a
-                        sub-domain in view. Every other row gets an equal-width
-                        spacer so names stay aligned regardless of caret. */}
-                    {isCollapsible ? (
-                      <button
-                        type="button"
-                        aria-label={isCollapsed ? `Expand ${d.name}` : `Collapse ${d.name}`}
-                        aria-expanded={!isCollapsed}
-                        onClick={(e) => { e.stopPropagation(); toggleCollapse(d.id); }}
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: 14, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 10 }}
+              ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)', fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    {canWrite && <th style={{ width: 36, padding: '10px 0 10px 14px', borderBottom: '1px solid var(--color-border)' }} />}
+                    <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Domain</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Owner</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Stewards</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', textAlign: 'right' }}>Assets</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Status</th>
+                    <th style={{ padding: '10px 14px 10px 12px', borderBottom: '1px solid var(--color-border)' }}><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {domainRows.map((d) => {
+                    const isChecked = bulkSelectedIds.has(d.id);
+                    const isSub = !!d.parentDomainId;
+                    // Carets only in tree mode (not while a Needs-attention card
+                    // flattens the list).
+                    const isCollapsible = !attentionFilter && parentsWithChildren.has(d.id);
+                    const isCollapsed = collapsedIds.has(d.id);
+                    const assetCount = assetCountOf(d);
+                    const openDetail = () => navigate(`/data-domains/${d.id}`);
+                    return (
+                      <tr
+                        key={d.id}
+                        onClick={(e) => { if ((e.target as HTMLElement).closest('button, a, input, select, label, [role="button"]')) return; openDetail(); }}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid var(--color-border)', background: isChecked ? 'color-mix(in srgb, var(--color-primary-light) 45%, transparent)' : 'transparent' }}
+                        onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                        onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.background = isChecked ? 'color-mix(in srgb, var(--color-primary-light) 45%, transparent)' : 'transparent'; }}
                       >
-                        {isCollapsed ? '▸' : '▾'}
-                      </button>
-                    ) : (
-                      <span aria-hidden="true" style={{ width: 14, flexShrink: 0, display: 'inline-block' }} />
-                    )}
-                    {isSub && <span title="Sub-domain" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>↳</span>}
-                    {/* Two-line row body (mirrors the Organizations tree row):
-                        line 1 is the existing chip/badge cluster, line 2 is the
-                        muted single-line description when one is set. */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        {d.code && (
-                          <span title={`Code: ${d.code}`} style={{ flexShrink: 0, fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0 5px' }}>{d.code}</span>
+                        {canWrite && (
+                          <td style={{ padding: '0 0 0 14px' }}>
+                            <input type="checkbox" aria-label={`Select ${d.name}`} checked={isChecked} onChange={() => toggleBulkSelect(d.id)} style={{ cursor: 'pointer' }} />
+                          </td>
                         )}
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{d.name}</span>
-                        {/* Lifecycle status — a labeled tinted badge (the shared
-                            status-badge style), not a colour-only dot. */}
-                        <span style={{ ...statusBadgeStyle(d.status), flexShrink: 0 }} title={`Status: ${d.status.replace(/_/g, ' ')}`}>
-                          {d.status.replace(/_/g, ' ')}
-                        </span>
-                        {/* Governance signal chips: sub-domain count on parents,
-                            master/reference-data markers. */}
-                        {!isSub && (d.subDomainCount ?? 0) > 0 && (
-                          <span title={`${d.subDomainCount} sub-domain${d.subDomainCount === 1 ? '' : 's'}`} style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '0 6px', flexShrink: 0 }}>
-                            {d.subDomainCount} sub
+                        {/* Domain — indented for sub-domains; caret toggles the parent. */}
+                        <td style={{ padding: '10px 12px', paddingLeft: isSub ? 40 : 12, maxWidth: 320 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {isCollapsible && (
+                              <button type="button" aria-label={isCollapsed ? `Expand ${d.name}` : `Collapse ${d.name}`} aria-expanded={!isCollapsed} onClick={() => toggleCollapse(d.id)} style={{ background: 'none', border: 'none', padding: 0, marginLeft: -22, cursor: 'pointer', width: 16, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 11 }}>
+                                {isCollapsed ? '▸' : '▾'}
+                              </button>
+                            )}
+                            <button type="button" onClick={openDetail} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', fontWeight: 600, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>{d.name}</button>
+                            {d.code && <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 11, color: 'var(--color-text-muted)' }}>{d.code}</span>}
+                            {scope.applied && <ScopeBadge inScope={scope.has('domain', d.id)} />}
                           </span>
-                        )}
-                        {/* Master-data marker and the Tier-1 criticality
-                            suggestion are advisory signals that crowded the
-                            name — they live on the domain's detail page now. */}
-                        {scope.applied && <span style={{ flexShrink: 0 }}><ScopeBadge inScope={scope.has('domain', d.id)} /></span>}
-                      </div>
-                      {d.description && (
-                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {d.description}
-                        </div>
-                      )}
-                    </div>
-                    {/* Health chips right-aligned so they read as the row's
-                        state, separate from the name/code identity. */}
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      {healthChips(d)}
-                    </div>
-                    {/* Per-row hover actions (mirrors the Organizations tree
-                        row): add a sub-domain under a top-level domain, or
-                        delete. stopPropagation so they don't trigger the row's
-                        navigate. */}
-                    {canWrite && (
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-                        {!isSub && (
-                          <IconButton size="sm" icon="plus" label="Add sub-domain" variant="primary" onClick={() => { setForm({ ...emptyForm, parentDomainId: d.id }); setCreateStewardshipTeam(true); setShowForm(true); }} />
-                        )}
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
-                          try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${d.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
-                          setConfirmDelete(d.id);
-                        }} />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                          {d.description && (
+                            <span style={{ display: 'block', marginTop: 2, maxWidth: 300 }}>
+                              <TruncatedText text={d.description} style={{ fontSize: 12, color: 'var(--color-text-muted)' }} />
+                            </span>
+                          )}
+                        </td>
+                        {/* Owner — real name + avatar (was a tiny green chip). */}
+                        <td style={{ padding: '10px 12px' }}><OwnerCell name={d.ownerName} /></td>
+                        {/* Stewards — real names. */}
+                        <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>
+                          {d.stewards.length > 0 ? d.stewards.map((s) => s.name).join(', ') : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>}
+                        </td>
+                        {/* Assets — rolled-up count, or a "No assets" gap chip. */}
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {assetCount > 0 ? (
+                            <button type="button" onClick={openDetail} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>{assetCount}</button>
+                          ) : (
+                            <span title="No data assets assigned to this domain" style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', border: '1px dashed var(--color-border)', borderRadius: 999, fontSize: 12, fontWeight: 500, color: 'var(--color-text-muted)' }}>No assets</span>
+                          )}
+                        </td>
+                        {/* Status pill. */}
+                        <td style={{ padding: '10px 12px' }}>
+                          <span style={statusBadgeStyle(d.status)} title={`Status: ${d.status.replace(/_/g, ' ')}`}>{d.status.replace(/_/g, ' ')}</span>
+                        </td>
+                        {/* Actions — "Add assets" only where empty, plus a "⋯" menu. */}
+                        <td style={{ padding: '8px 14px 8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {canWrite && assetCount === 0 && (
+                              <button type="button" onClick={openDetail} style={{ height: 30, padding: '0 12px', border: '1px solid var(--color-primary)', background: 'var(--color-surface)', color: 'var(--color-primary)', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Add assets</button>
+                            )}
+                            {canWrite && (
+                              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                                <button type="button" aria-label={`Actions for ${d.name}`} aria-haspopup="menu" aria-expanded={openMenuId === d.id} onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === d.id ? null : d.id); }} style={{ width: 30, height: 30, border: 'none', background: 'transparent', borderRadius: 'var(--radius-md)', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>⋯</button>
+                                {openMenuId === d.id && (
+                                  <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 190, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                                    <button type="button" role="menuitem" onClick={() => { setOpenMenuId(null); openDetail(); }} style={menuItemStyle}>Open</button>
+                                    {!isSub && (
+                                      <button type="button" role="menuitem" onClick={() => { setOpenMenuId(null); setForm({ ...emptyForm, parentDomainId: d.id }); setCreateStewardshipTeam(true); setShowForm(true); }} style={menuItemStyle}>Add sub-domain</button>
+                                    )}
+                                    {!isSub && aiEnabled && (
+                                      <button type="button" role="menuitem" onClick={() => { setOpenMenuId(null); generateSubsForDomain(d); }} style={menuItemStyle}>Suggest sub-domains</button>
+                                    )}
+                                    <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 2px' }} />
+                                    <button type="button" role="menuitem" onClick={async () => {
+                                      setOpenMenuId(null);
+                                      try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${d.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
+                                      setConfirmDelete(d.id);
+                                    }} style={{ ...menuItemStyle, color: 'var(--color-error)' }}>Delete</button>
+                                  </div>
+                                )}
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              )}
             </div>
-            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--color-border)', fontSize: 11, color: 'var(--color-text-muted)', background: 'var(--color-bg)' }}>
-              {filteredDomains.length} of {domains.length} domains
+            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--color-border)', fontSize: 11, color: 'var(--color-text-muted)', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>
+                {attentionFilter
+                  ? `${domainRows.length} ${attentionFilter === 'emptySub' ? 'sub-domain(s) with no assets' : 'domain(s) with no criticality'}`
+                  : `${filteredDomains.length} of ${domains.length} domains`}
+              </span>
+              {attentionFilter && (
+                <button type="button" onClick={() => setAttentionFilter('')} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}>Clear filter</button>
+              )}
             </div>
           </Card>
 
