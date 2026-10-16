@@ -8,11 +8,9 @@ import OwnerCell from '../components/OwnerCell';
 import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import Card from '../components/Card';
 import OrgSidebarTree, { type OrgTreeNode } from '../components/OrgSidebarTree';
-import FieldStack from '../components/FieldStack';
 import Spinner from '../components/Spinner';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
-import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import EditableField from '../components/EditableField';
 import DetailEditActions from '../components/DetailEditActions';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
@@ -520,6 +518,10 @@ export default function DataAssetsPage({
   const isVisible = colPicker.isVisible;
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
+  // Which tab of the 360° detail page is showing. The long scroll is split
+  // into Overview / Columns / Impact / Discussion / Activity so the record
+  // reads as sections, not one wall (D1 redesign).
+  const [detailTab, setDetailTab] = useState<'overview' | 'columns' | 'impact' | 'discussion' | 'activity'>('overview');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   // Duplicate-name soft-warn: stashes the pending save so the ConfirmDialog
@@ -1294,7 +1296,7 @@ export default function DataAssetsPage({
   // Detail route (/data-assets/:id): load the 360 for the focused asset and
   // end the breadcrumb on its name. Re-fetches when the id changes (navigating
   // between assets from the Impact / Where-used panels).
-  useEffect(() => { if (focusAssetId) { void open360(focusAssetId); void loadColumns(focusAssetId); } /* eslint-disable-line react-hooks/exhaustive-deps */ }, [focusAssetId]);
+  useEffect(() => { if (focusAssetId) { setDetailTab('overview'); void open360(focusAssetId); void loadColumns(focusAssetId); } /* eslint-disable-line react-hooks/exhaustive-deps */ }, [focusAssetId]);
   useBreadcrumbLeaf(focusAssetId ? viewing360?.asset.name : undefined);
 
   // In-modal view/edit for the asset's core own-fields. Advanced fields
@@ -2653,26 +2655,104 @@ export default function DataAssetsPage({
             </>
           ) : (
           <>
-                {/* Asset Info */}
-                <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-                  {viewing360.system && (
-                    <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', padding: '3px 10px', borderRadius: 4 }}>
-                      System: {viewing360.system.name} {viewing360.system.systemType ? `(${viewing360.system.systemType})` : ''}
+                {/* Status pills — tier, sensitivity, and mapping at a glance. */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <TierBadge tier={viewing360.asset.governanceTier} />
+                  {viewing360.asset.sensitivityTags && viewing360.asset.sensitivityTags.length > 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>
+                      {viewing360.asset.sensitivityTags[0]}{viewing360.asset.sensitivityTags.length > 1 ? ` +${viewing360.asset.sensitivityTags.length - 1}` : ''}
                     </span>
                   )}
-                  {(viewing360.binding?.sourceAsset || viewing360.asset.sourceAsset) && (
-                    <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', padding: '3px 10px', borderRadius: 4, fontFamily: 'var(--font-mono)' }}>
-                      Source: {viewing360.binding?.sourceAsset || viewing360.asset.sourceAsset}
+                  {viewing360.mappings.length > 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 12, fontWeight: 600 }}>
+                      Mapped to {viewing360.mappings.length} {viewing360.mappings.length === 1 ? 'activity' : 'activities'}
                     </span>
                   )}
                 </div>
 
-                {/* Columns — the business asset maps to a table and (when
-                    scoped) a named set of its columns. The columns editor
+                {/* Tabs — split the long record into sections. */}
+                <div role="tablist" aria-label="Asset sections" style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', marginBottom: 20, overflowX: 'auto' }}>
+                  {(() => {
+                    const tabDefs: { key: typeof detailTab; label: string; count?: number }[] = [
+                      { key: 'overview', label: 'Overview' },
+                      { key: 'columns', label: 'Columns', count: viewing360.columns.length },
+                      { key: 'impact', label: 'Impact' },
+                      { key: 'discussion', label: 'Discussion' },
+                      { key: 'activity', label: 'Activity' },
+                    ];
+                    return tabDefs.map((t) => {
+                      const active = detailTab === t.key;
+                      return (
+                        <button
+                          key={t.key}
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => setDetailTab(t.key)}
+                          style={{ padding: '10px 16px', fontSize: 14, fontWeight: active ? 600 : 500, cursor: 'pointer', border: 'none', background: 'transparent', color: active ? 'var(--color-primary)' : 'var(--color-text-muted)', borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent', marginBottom: -1, display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}
+                        >
+                          {t.label}
+                          {t.count != null && t.count > 0 && (
+                            <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 7px', borderRadius: 999, background: 'var(--color-bg)', color: 'var(--color-text-secondary)' }}>{t.count}</span>
+                          )}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Two-column: tabbed main content + a persistent Facts rail. */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+                  <div style={{ flex: '999 1 520px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                    {/* ===== OVERVIEW: ownership callout + where the data lives ===== */}
+                    {detailTab === 'overview' && (() => {
+                      const a = viewing360.asset;
+                      // Owner inherited from the domain = nobody accountable by name.
+                      const inheritedOwner = a.ownerSource === 'domain' && !!a.domainOwnerName;
+                      return (
+                        <>
+                          {inheritedOwner && (
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', borderRadius: 'var(--radius-md)', background: '#fef3c7', border: '1px solid #fcd34d' }}>
+                              <span aria-hidden="true" style={{ color: '#92400e', flexShrink: 0, marginTop: 1, fontSize: 16 }}>{'⚠'}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, color: 'var(--color-text)' }}>No one is assigned directly to this asset</div>
+                                <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                                  {a.domainOwnerName} is inherited from the {viewing360.domain?.name || 'domain'} domain. The registry shows them as owner, but no one is accountable for this asset by name.
+                                </div>
+                              </div>
+                              {canWrite && !isInheritedAsset(a.orgId, activeOrgId) && (
+                                <button onClick={() => navigate(`/data-assets?edit=${a.id}`)} style={{ height: 34, padding: '0 14px', border: '1px solid #92400e', background: 'var(--color-surface)', color: '#92400e', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>Assign owner</button>
+                              )}
+                            </div>
+                          )}
+                          <Card>
+                            <SectionLabel>Where the data lives</SectionLabel>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginTop: 10 }}>
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>System of record</div>
+                                <div style={{ marginTop: 4 }}>{viewing360.system ? <>{viewing360.system.name}{viewing360.system.systemType ? <span style={{ color: 'var(--color-text-muted)' }}> · {viewing360.system.systemType}</span> : null}</> : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>}</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Source table</div>
+                                <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 13 }}>{viewing360.binding?.sourceAsset || viewing360.asset.sourceAsset || <span style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans, inherit)' }}>Not bound</span>}</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Binding</div>
+                                <div style={{ marginTop: 4 }}>{viewing360.binding ? (viewing360.binding.sourceColumns.length > 0 ? `${viewing360.binding.sourceColumns.length} column${viewing360.binding.sourceColumns.length === 1 ? '' : 's'}` : 'Whole table (all columns)') : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>}</div>
+                              </div>
+                            </div>
+                          </Card>
+                        </>
+                      );
+                    })()}
+
+                {/* ===== COLUMNS ===== the business asset maps to a table and
+                    (when scoped) a named set of its columns. The columns editor
                     (auto-discover, per-column type / PK / FK, data-quality rule
                     actions, delete) lives here on the detail page; the Registry
                     list no longer expands inline. */}
-                <Card marginBottom={20}>
+                {detailTab === 'columns' && (
+                <Card marginBottom={0}>
                   {viewing360.binding && (
                     <div style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
                       {viewing360.binding.sourceColumns.length > 0
@@ -2682,11 +2762,10 @@ export default function DataAssetsPage({
                   )}
                   {renderColumnsEditor(viewing360.asset)}
                 </Card>
+                )}
 
-                {/* Sensitivity — Suggest & Review flow. Sits above the
-                    cross-layer WhereUsed view so a reviewer sees the
-                    classification before deciding whether the asset's
-                    downstream footprint is defensible. */}
+                {/* Sensitivity — Suggest & Review flow (Overview tab). */}
+                {detailTab === 'overview' && (
                 <SensitivityPanel
                   assetId={viewing360.asset.id}
                   initialTags={viewing360.asset.sensitivityTags}
@@ -2696,143 +2775,157 @@ export default function DataAssetsPage({
                     setAssets((prev) => prev.map((a) => a.id === viewing360.asset.id ? { ...a, sensitivityTags: next } : a));
                   }}
                 />
+                )}
 
-                {/* Impact analysis — the "what breaks + who to tell"
-                    question. Sits above the WhereUsed view because
-                    change management is the more urgent read; WhereUsed
-                    stays as the general-purpose informational lookup. */}
+                {/* ===== IMPACT ===== the "what breaks + who to tell" question. */}
+                {detailTab === 'impact' && (
                 <ImpactAnalysisPanel
                   assetId={viewing360.asset.id}
                   onNavigateToActivity={(nodeId) => { navigate(`/processes?node=${encodeURIComponent(nodeId)}`); }}
                   onNavigateToPerson={(personId) => { navigate(`/people/${encodeURIComponent(personId)}`); }}
                   onNavigateToAsset={(id) => navigate(`/data-assets/${id}`)}
                 />
+                )}
 
-                {/* Cross-layer view — same WhereUsed shape used on Systems,
-                    Activities, and People so users learn one navigation
-                    pattern. Detail sections below stay for now and will be
-                    deduplicated as part of the visual density pass. */}
-                <div style={{ marginBottom: 20 }}>
-                  {(() => {
-                    const groups: WhereUsedGroup[] = [
-                      {
-                        title: 'Lives in',
-                        hint: 'The system of record for this asset.',
-                        emptyText: 'No system set.',
-                        items: viewing360.system ? [{
-                          id: viewing360.system.id,
-                          label: viewing360.system.name,
-                          sublabel: viewing360.system.systemType || undefined,
-                          onClick: () => { setViewing360(null); navigate(`/systems?highlight=${encodeURIComponent(viewing360.system!.id)}`); },
-                        }] : [],
-                      },
-                      {
-                        title: 'Supports activities',
-                        hint: 'Process activities that consume or produce this asset.',
-                        emptyText: 'Not mapped to any process activity yet.',
-                        items: viewing360.mappings.map((m) => ({
-                          id: m.id,
-                          label: m.processPath,
-                          sublabel: m.linkType,
-                          onClick: () => { setViewing360(null); navigate(`/processes?highlight=${encodeURIComponent(m.processStepId)}`); },
-                        })),
-                      },
-                      {
-                        title: 'Belongs to domain',
-                        hint: 'The data domain this asset is grouped under.',
-                        emptyText: 'Not assigned to any domain.',
-                        items: viewing360.domain ? [{
-                          id: viewing360.domain.id,
-                          label: viewing360.domain.name,
-                          sublabel: viewing360.domain.ownerName ? `Owner: ${viewing360.domain.ownerName}` : undefined,
-                          onClick: () => { setViewing360(null); navigate(`/data-domains?highlight=${encodeURIComponent(viewing360.domain!.id)}`); },
-                        }] : [],
-                      },
-                      {
-                        title: 'Ownership',
-                        hint: 'Who is accountable for this asset.',
-                        emptyText: 'No owner or steward assigned.',
-                        items: [
-                          ...(viewing360.ownerInfo ? [{
-                            id: `owner-${viewing360.ownerInfo.id || viewing360.ownerInfo.name}`,
-                            label: viewing360.ownerInfo.name,
-                            badge: 'Owner',
-                            badgeRoleType: 'DATA_ASSET_OWNER',
-                            onClick: viewing360.ownerInfo.id
-                              ? () => { setViewing360(null); navigate(`/people/${viewing360.ownerInfo!.id}`); }
-                              : undefined,
-                          }] : []),
-                          ...viewing360.stewardInfos.map((s) => ({
-                            id: `steward-${s.id}`,
-                            label: s.name,
-                            badge: 'Steward',
-                            badgeRoleType: 'DATA_ASSET_STEWARD',
-                            onClick: () => { setViewing360(null); navigate(`/people/${s.id}`); },
-                          })),
-                        ],
-                      },
-                    ];
-                    return (
-                      <WhereUsed
-                        hint="Where this asset sits across the business, data, and people layers."
-                        groups={groups}
-                      />
-                    );
-                  })()}
-                </div>
-
-                <FieldStack gap="section">
-                {/* Data Domain */}
-                <div>
-                  <SectionLabel>Data Domain</SectionLabel>
-                  {viewing360.domain ? (
-                    <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
-                      <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>{viewing360.domain.name}</div>
-                      {viewing360.domain.ownerName && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Owner: {viewing360.domain.ownerName}</div>}
-                      {viewing360.domain.stewards.length > 0 && (
-                        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Stewards: {viewing360.domain.stewards.map((s) => s.name).join(', ')}</div>
-                      )}
+                {/* ===== OVERVIEW: used by process activities =====
+                    The single "Used by" list replaces the old duplicate
+                    Data-domain + Process-mappings blocks; system / domain /
+                    ownership now live in the Facts rail. */}
+                {detailTab === 'overview' && (
+                <Card padding={0}>
+                  <div style={{ padding: '16px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Used by process activities <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>{viewing360.mappings.length}</span></h2>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>Process steps that read (input) or write (output) this asset.</div>
                     </div>
-                  ) : (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Not assigned to any domain</p>
-                  )}
-                </div>
-
-                {/* Mappings */}
-                <div>
-                  <SectionLabel>Process Mappings ({viewing360.mappings.length})</SectionLabel>
+                    {viewing360.mappings.length > 0 && (
+                      <button onClick={() => setDetailTab('impact')} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>See full impact {'→'}</button>
+                    )}
+                  </div>
                   {viewing360.mappings.length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No process mappings for this asset</p>
+                    <div style={{ padding: '4px 18px 18px', fontSize: 13, color: 'var(--color-text-muted)' }}>Not mapped to any process activity yet.</div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {viewing360.mappings.map((m) => (
-                        <div key={m.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12 }}>{m.processPath}</span>
-                          <span style={{
-                            display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500,
-                            background: 'var(--color-primary-light)', color: 'var(--color-primary)',
-                          }}>{m.linkType}</span>
-                        </div>
-                      ))}
-                    </div>
+                    viewing360.mappings.map((m) => (
+                      <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderTop: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => { setViewing360(null); navigate(`/processes?highlight=${encodeURIComponent(m.processStepId)}`); }}
+                          style={{ flex: '1 1 300px', minWidth: 0, textAlign: 'left', border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', color: 'var(--color-text)', fontWeight: 600, fontSize: 13 }}
+                        >
+                          {m.processPath}
+                        </button>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>{m.linkType}</span>
+                      </div>
+                    ))
                   )}
-                </div>
+                </Card>
+                )}
 
-                {/* Comments — uses the shared threaded panel with @mention
-                  *  autocomplete and notifications. */}
-                <div>
-                  <SectionLabel>Discussion</SectionLabel>
+                {/* ===== DISCUSSION ===== shared threaded panel (@mentions). */}
+                {detailTab === 'discussion' && (
                   <CommentsPanel
                     entityType="DataAsset"
                     entityId={viewing360.asset.id}
                     entityLabel={`Data Asset: ${viewing360.asset.name}`}
                   />
+                )}
+
+                {/* ===== ACTIVITY ===== audit trail of edits. */}
+                {detailTab === 'activity' && (
+                  <ActivityFeed entityType="DataAsset" entityId={viewing360.asset.id} inline initialRows={20} />
+                )}
+
+                  </div>
+
+                  {/* ===== Facts rail ===== owner/steward/system/domain/tier/
+                      sensitivity/classification/updated, plus Quality + Lineage. */}
+                  <aside aria-label="Facts" style={{ flex: '1 1 280px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {(() => {
+                      const a = viewing360.asset;
+                      const inherited = isInheritedAsset(a.orgId, activeOrgId);
+                      const canAssign = canWrite && !inherited;
+                      const row = (label: string, value: React.ReactNode) => (
+                        <div style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                          <dt style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>{label}</dt>
+                          <dd style={{ margin: 0, textAlign: 'right', fontSize: 13 }}>{value}</dd>
+                        </div>
+                      );
+                      return (
+                        <Card>
+                          <SectionLabel>Facts</SectionLabel>
+                          <dl style={{ margin: '6px 0 0' }}>
+                            {/* Owner — inherit note when it comes from the domain. */}
+                            <div style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
+                              <dt style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Owner</dt>
+                              <dd style={{ margin: '4px 0 0' }}>
+                                {a.ownerSource === 'asset' && viewing360.ownerInfo ? (
+                                  <span style={{ fontWeight: 600 }}>{viewing360.ownerInfo.name}</span>
+                                ) : canAssign ? (
+                                  <button onClick={() => navigate(`/data-assets?edit=${a.id}`)} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Assign owner</button>
+                                ) : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>}
+                                {a.ownerSource === 'domain' && a.domainOwnerName && (
+                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 3 }}>Inherits {a.domainOwnerName} from {viewing360.domain?.name || 'domain'}</div>
+                                )}
+                              </dd>
+                            </div>
+                            {/* Steward */}
+                            <div style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
+                              <dt style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Steward</dt>
+                              <dd style={{ margin: '4px 0 0' }}>
+                                {a.stewardSource === 'asset' && viewing360.stewardInfos.length > 0 ? (
+                                  <span style={{ fontWeight: 600 }}>{viewing360.stewardInfos.map((s) => s.name).join(', ')}</span>
+                                ) : canAssign ? (
+                                  <button onClick={() => navigate(`/data-assets?edit=${a.id}`)} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Assign steward</button>
+                                ) : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>}
+                                {a.stewardSource === 'domain' && (a.domainStewardNames?.length ?? 0) > 0 && (
+                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 3 }}>Inherits {a.domainStewardNames!.join(', ')} from {viewing360.domain?.name || 'domain'}</div>
+                                )}
+                              </dd>
+                            </div>
+                            {row('System', viewing360.system ? <button onClick={() => { setViewing360(null); navigate(`/systems?highlight=${encodeURIComponent(viewing360.system!.id)}`); }} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-text)', fontWeight: 500, cursor: 'pointer' }}>{viewing360.system.name}</button> : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>)}
+                            {row('Domain', viewing360.domain ? <button onClick={() => { setViewing360(null); navigate(`/data-domains?highlight=${encodeURIComponent(viewing360.domain!.id)}`); }} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-text)', fontWeight: 500, cursor: 'pointer' }}>{viewing360.domain.name}</button> : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>)}
+                            {row('Tier', tierLabel(a.governanceTier))}
+                            {row('Sensitivity', a.sensitivityTags && a.sensitivityTags.length > 0 ? a.sensitivityTags.join(', ') : <span style={{ color: 'var(--color-text-muted)' }}>Not set</span>)}
+                            {row('Classification', a.dataType || <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>)}
+                            <div style={{ padding: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                              <dt style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>Updated</dt>
+                              <dd style={{ margin: 0, textAlign: 'right', fontSize: 13 }} title={absoluteTime(a.updatedAt)}>{relativeTime(a.updatedAt)}</dd>
+                            </div>
+                          </dl>
+                        </Card>
+                      );
+                    })()}
+                    {/* Quality — measured health + rule coverage. Rule counts
+                        and health come from the list endpoint's enrichment (the
+                        360 payload isn't enriched), so prefer the list entry. */}
+                    {(() => {
+                      const enriched = assets.find((x) => x.id === viewing360.asset.id) || viewing360.asset;
+                      const rc = enriched.ruleCount || 0;
+                      const mc = enriched.measuredRuleCount || 0;
+                      return (
+                        <Card>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                            <SectionLabel marginBottom={0}>Quality</SectionLabel>
+                            <button onClick={() => setDqRulesScope({ id: viewing360.asset.id, name: viewing360.asset.name, sourceAsset: viewing360.binding?.sourceAsset })} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Manage rules</button>
+                          </div>
+                          <div style={{ marginTop: 10 }}>
+                            <HealthBar score={enriched.healthScore} />
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 8 }}>
+                            {rc === 0
+                              ? 'No quality rules yet.'
+                              : `${rc} rule${rc === 1 ? '' : 's'}${mc ? `, ${mc} measured` : ' — none measured, health is estimated'}.`}
+                          </div>
+                        </Card>
+                      );
+                    })()}
+                    {/* Lineage — jump to the full graph for this asset. */}
+                    <Card>
+                      <SectionLabel>Lineage</SectionLabel>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 8 }}>Trace what feeds this asset and what it feeds.</div>
+                      <button onClick={() => { setViewing360(null); navigate(`/data-lineage?highlight=${encodeURIComponent(viewing360.asset.id)}`); }} style={{ marginTop: 8, border: 'none', background: 'transparent', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>View lineage {'→'}</button>
+                    </Card>
+                  </aside>
                 </div>
-                <div>
-                  <SectionLabel>Activity</SectionLabel>
-                  <ActivityFeed entityType="DataAsset" entityId={viewing360.asset.id} inline initialRows={5} />
-                </div>
-                </FieldStack>
               </>
           )
             ) : null}
