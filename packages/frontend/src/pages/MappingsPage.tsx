@@ -263,6 +263,23 @@ export default function MappingsPage({
     setSearchParams(next, { replace: true });
   }, [searchParams, allNodes, setSearchParams]);
 
+  // Deep-link prefill from the Data Assets "Map" button: ?assetId=<id> opens
+  // the add-mapping form with that asset preselected, so the user only has to
+  // pick the process step it supports. Runs once after assets have loaded.
+  const assetPrefillHandled = useRef(false);
+  useEffect(() => {
+    const assetId = searchParams.get('assetId');
+    if (!assetId || assetPrefillHandled.current || dataAssets.length === 0) return;
+    if (!dataAssets.some((a) => a.id === assetId)) return;
+    assetPrefillHandled.current = true;
+    setSelectedVsId(''); setSelectedProcId(''); setSelectedSpId(''); setSelectedStepId('');
+    setSelectedAssetId(assetId); setLinkType('references'); setNotes('');
+    setShowForm(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('assetId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, dataAssets, setSearchParams]);
+
   // Cascading dropdowns based on flat node model with parentId relationships.
   // Each level filters by the parent's selection only — guarantees the
   // dropdown values are always valid children of the selected parent.

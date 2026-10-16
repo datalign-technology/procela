@@ -274,24 +274,6 @@ const ORIGIN_BADGE: Record<string, { label: string; bg: string; fg: string; titl
   SYNCED:              { label: 'Synced',    bg: '#dcfce7', fg: '#166534', title: 'Created by a sync connection' },
 };
 
-// "Unmapped" pill — shown when no process-step mapping references the
-// asset (backend `isOrphan`). This is the orphan signal that used to be
-// its own page; surfacing it inline lets a steward spot cleanup / fresh-
-// mapping candidates without leaving the catalog. Amber to read as
-// "worth a look", not an error. Palette kept as hex (semantic-badge
-// convention) so it doesn't drift when --color-warning is retuned.
-function UnmappedBadge({ isOrphan }: { isOrphan?: boolean }) {
-  if (!isOrphan) return null;
-  return (
-    <span
-      title="Not mapped to any process step — investigate, map it to a step, or retire it."
-      style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: '#fef3c7', color: '#92400e', letterSpacing: '0.02em' }}
-    >
-      Unmapped
-    </span>
-  );
-}
-
 function OriginBadge({ origin }: { origin?: string }) {
   if (!origin || origin === 'MANUAL') return null;
   const m = ORIGIN_BADGE[origin];
@@ -361,14 +343,17 @@ function RowCountChip({ rowCount }: { rowCount?: number | null }) {
 // 'description' is not a column here. It's kept off the list entirely to
 // keep rows single-line and dense; the full text lives in the 360 detail
 // modal and the edit form. (It's still searchable via the search box.)
-type ColumnId = 'system' | 'source' | 'tier' | 'sensitivity' | 'health' | 'domain' | 'owner' | 'steward' | 'created';
+type ColumnId = 'system' | 'source' | 'sensitivity' | 'mapping' | 'tier' | 'health' | 'domain' | 'owner' | 'steward' | 'created';
 const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean }> = [
   { id: 'system',      label: 'System',      defaultVisible: true  },
   { id: 'source',      label: 'Source',      defaultVisible: false },
-  { id: 'tier',        label: 'Tier',        defaultVisible: true  },
   // Sensitivity moved out of the name cell into its own column — it's a
   // high-value, scannable governance attribute.
   { id: 'sensitivity', label: 'Sensitivity', defaultVisible: true  },
+  // Mapping status is its own scannable column (was only a name-cell badge +
+  // a filter dropdown). Carries the inline "Map" affordance on orphan rows.
+  { id: 'mapping',     label: 'Mapping',     defaultVisible: true  },
+  { id: 'tier',        label: 'Tier',        defaultVisible: true  },
   // Health is off by default here — it's the Quality tab's focus (with the
   // rule breakdown). Registry leads with catalog/governance attributes
   // (Tier, Domain, Owner); health stays one click away in the column picker.
@@ -389,12 +374,53 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
 // the wider v1 layout.
 // v3 — Sensitivity became its own column (moved out of the crowded name
 // cell), so force the new defaults for everyone (old payloads lack the id).
-const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v3';
+// v4 — Mapping became its own column (moved out of the name cell), so re-seed
+// defaults again so the new column shows for existing sessions.
+const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v4';
 
 const backLinkStyle: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
 };
+
+// "Needs attention" cards — each is a one-click filter over the registry, the
+// backlog a steward works down. Each key maps to a predicate; the strip counts
+// matches against the domain-/filter-scoped set so the number always equals
+// "what clicking this shows". `tag: 'fix'` marks the two gaps that block an
+// asset from being trustworthy at all (no mapping, no owner) — they lead.
+type AttentionKey = 'unmapped' | 'noOwner' | 'uncertified' | 'noDomain' | 'unclassified';
+const ATTENTION_TESTS: Record<AttentionKey, (a: DataAssetEntity) => boolean> = {
+  unmapped: (a) => !!a.isOrphan,
+  noOwner: (a) => !a.ownerName,
+  uncertified: (a) => (a.governanceTier || 'BRONZE') === 'BRONZE',
+  noDomain: (a) => !a.domainName,
+  unclassified: (a) => !(a.sensitivityTags && a.sensitivityTags.length > 0),
+};
+
+// An asset whose definition is kept in step with a source system (synced by a
+// connector, or discovered/synced from one). Advisory lock icon on the row:
+// the business metadata here mirrors the source, so edits to the definition
+// may be overwritten on the next sync. Ownership / tier / governance stay
+// locally editable, so this doesn't gate anything — it just sets expectations.
+function isSourceManaged(a: DataAssetEntity): boolean {
+  return !!a.lastSyncedByConnectorId || a.origin === 'SYNCED' || a.origin === 'DISCOVERED';
+}
+
+function LockIcon() {
+  return (
+    <span
+      title="Definition kept in step with the source system — changes here may be overwritten on the next sync. Owner, tier, and governance stay editable."
+      aria-label="Definition managed by the source system"
+      role="img"
+      style={{ display: 'inline-flex', color: 'var(--color-text-muted)', flexShrink: 0 }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="5" y="11" width="14" height="9" rx="2" />
+        <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+      </svg>
+    </span>
+  );
+}
 
 export default function DataAssetsPage({
   embedded = false,
@@ -472,6 +498,12 @@ export default function DataAssetsPage({
   // rollup), replacing the old by-name domain dropdown.
   const [selectedDomainId, setSelectedDomainId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  // Active "Needs attention" card. A single-select quick filter layered on top
+  // of the other filters. Seeded from ?attention= so a shared/bookmarked link
+  // (and the browser back button) restores it, like the mapping filter.
+  const [attention, setAttention] = useState<AttentionKey | ''>(
+    () => { const a = searchParams.get('attention'); return a && a in ATTENTION_TESTS ? (a as AttentionKey) : ''; },
+  );
 
   // Keep the URL in sync with the mapping filter so the view is
   // shareable/bookmarkable and the browser back button restores it,
@@ -717,7 +749,10 @@ export default function DataAssetsPage({
     return ids;
   }, [selectedDomainId, domainsList]);
 
-  const filteredAssets = assets.filter((a) => {
+  // Everything except the "Needs attention" card filter. The attention
+  // strip counts against this set, so each card's number equals exactly what
+  // clicking it will show; filteredAssets then layers the card on top.
+  const baseFiltered = assets.filter((a) => {
     if (filterCategory) {
       if (filterCategory === '__none__') { if (a.dataType) return false; }
       else if ((a.dataType || '') !== filterCategory) return false;
@@ -748,7 +783,26 @@ export default function DataAssetsPage({
     return true;
   });
 
-  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOwner || selectedDomainId || filterOrigin || filterMapping || filterCoverage || searchQuery);
+  // Per-card counts for the "Needs attention" strip, over the scoped set.
+  const attentionCounts = useMemo<Record<AttentionKey, number>>(() => {
+    const out = { unmapped: 0, noOwner: 0, uncertified: 0, noDomain: 0, unclassified: 0 } as Record<AttentionKey, number>;
+    for (const a of baseFiltered) {
+      (Object.keys(ATTENTION_TESTS) as AttentionKey[]).forEach((k) => { if (ATTENTION_TESTS[k](a)) out[k] += 1; });
+    }
+    return out;
+  }, [baseFiltered]);
+
+  const filteredAssets = attention ? baseFiltered.filter(ATTENTION_TESTS[attention]) : baseFiltered;
+
+  // Keep the URL in sync with the attention card so the view is shareable and
+  // the back button restores it, mirroring the mapping filter above.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (attention) next.set('attention', attention); else next.delete('attention');
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+  }, [attention]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOwner || selectedDomainId || filterOrigin || filterMapping || filterCoverage || searchQuery || attention);
 
   // Distinct owner names present in the current asset set, for the owner filter
   // dropdown. (Domain filtering moved to the left-rail tree.)
@@ -773,6 +827,8 @@ export default function DataAssetsPage({
         if (!sb) return -1;
         return sa.localeCompare(sb);
       },
+      // Unmapped (orphan) rows sort first — they're the ones needing action.
+      mapping: (a, b) => (a.isOrphan ? 0 : 1) - (b.isOrphan ? 0 : 1),
       tier: (a, b) => compareTier(a.governanceTier, b.governanceTier),
       health: (a, b) => (a.healthScore ?? 0) - (b.healthScore ?? 0),
       domain: (a, b) => (a.domainName || '').localeCompare(b.domainName || ''),
@@ -1283,10 +1339,10 @@ export default function DataAssetsPage({
               *  (cursor + hover tint signal it); this stays a focusable
               *  button for keyboard users but isn't painted as a hyperlink.
               *  Renaming happens via the row's Edit pencil. */}
-            {/* Name + only the two conditional "standing" flags: the orphan
-                gap flag and the cross-org owner badge. Origin / SOR / sync /
-                row-count moved into the Source column; sensitivity into its
-                own column — so the name reads cleanly. */}
+            {/* Name + only the conditional "standing" flags: the source-managed
+                lock and the cross-org owner badge. Mapping status moved into its
+                own column; origin / SOR / sync / row-count into Source;
+                sensitivity into its own column — so the name reads cleanly. */}
             <button
               type="button"
               onClick={() => navigate(`/data-assets/${asset.id}`)}
@@ -1295,7 +1351,7 @@ export default function DataAssetsPage({
             >
               {asset.name}
             </button>
-            <UnmappedBadge isOrphan={asset.isOrphan} />
+            {isSourceManaged(asset) && <LockIcon />}
             <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
           </div>
           {/* Description is intentionally not shown inline — rows stay
@@ -1371,6 +1427,45 @@ export default function DataAssetsPage({
           <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>
         )
       ),
+    },
+    isVisible('mapping') && {
+      key: 'mapping', header: 'Mapping', sortable: true,
+      render: (asset: DataAssetEntity) => {
+        if (!asset.isOrphan) {
+          return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)', fontSize: 13 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12.5l4.5 4.5L19 7.5" />
+              </svg>
+              Mapped
+            </span>
+          );
+        }
+        const inherited = isInheritedAsset(asset.orgId, activeOrgId);
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span
+              title="Not mapped to any process step — investigate, map it to a step, or retire it."
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 9px', border: '1px dashed var(--color-warning)', borderRadius: 999, color: 'var(--color-warning)', fontSize: 11, fontWeight: 600 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <path d="M9 15l6-6M10 6l1-1a4.5 4.5 0 0 1 6.4 6.4l-1 1M14 18l-1 1a4.5 4.5 0 0 1-6.4-6.4l1-1M4 4l16 16" />
+              </svg>
+              Unmapped
+            </span>
+            {canWrite && !inherited && (
+              <button
+                type="button"
+                onClick={() => navigate(`/mappings?assetId=${asset.id}`)}
+                title="Map this asset to a process step"
+                style={{ padding: '2px 10px', fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface)', border: '1px solid var(--color-primary)', borderRadius: 6, cursor: 'pointer' }}
+              >
+                Map
+              </button>
+            )}
+          </span>
+        );
+      },
     },
     isVisible('tier') && {
       key: 'tier', header: 'Tier', sortable: true,
@@ -1756,6 +1851,62 @@ export default function DataAssetsPage({
             box is what scrolls when columns exceed the (rail-narrowed) space
             — the page itself never grows a horizontal scrollbar. */}
         <div style={{ minWidth: 0 }}>
+      {/* "Needs attention" strip — the steward's backlog as one-click filters.
+          Counts are over the current (domain-/filter-) scope, so each number
+          equals what clicking it shows. The two gaps that make an asset
+          untrustworthy outright (no mapping, no owner) lead with a "Fix first"
+          tag. Clicking a card toggles the attention filter. */}
+      {assets.length > 0 && (() => {
+        const cards: Array<{ key: AttentionKey; label: string; hint: string; priority?: boolean }> = [
+          { key: 'unmapped',     label: 'Unmapped',          hint: 'Not linked to a process step', priority: true },
+          { key: 'noOwner',      label: 'No owner',          hint: 'Nobody accountable yet',        priority: true },
+          { key: 'uncertified',  label: tierLabel('BRONZE'), hint: 'Not reviewed for trust' },
+          { key: 'noDomain',     label: 'No domain',         hint: 'Missing from the domain tree' },
+          { key: 'unclassified', label: 'Sensitivity not set', hint: 'Classification never recorded' },
+        ];
+        return (
+          <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+              <SectionLabel marginBottom={0}>Needs attention</SectionLabel>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the list</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              {cards.map((c) => {
+                const count = attentionCounts[c.key];
+                const active = attention === c.key;
+                const zero = count === 0;
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    aria-pressed={active}
+                    disabled={zero && !active}
+                    onClick={() => setAttention(active ? '' : c.key)}
+                    style={{
+                      textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
+                      borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                      display: 'flex', flexDirection: 'column', gap: 3, minHeight: 84,
+                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
+                      opacity: zero && !active ? 0.6 : 1,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{count}</span>
+                      {c.priority && count > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Fix first</span>
+                      )}
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })()}
       {/* Data Classification & Origin are fixed taxonomies, so show every
           value including the ones you have none of (dimmed) — the whole set
           of possible types reads at a glance. Hidden only on a fully-empty
@@ -1847,10 +1998,25 @@ export default function DataAssetsPage({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOwner(''); setSelectedDomainId(''); setFilterOrigin(''); setFilterMapping(''); setFilterCoverage(''); setSearchQuery(''); }}
+            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOwner(''); setSelectedDomainId(''); setFilterOrigin(''); setFilterMapping(''); setFilterCoverage(''); setSearchQuery(''); setAttention(''); }}
           >
             Clear Filters
           </Button>
+        )}
+        {attention && (
+          // Active "Needs attention" card as a removable chip, so it's clear
+          // which card is driving the current view and easy to drop.
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 4px 2px 10px', borderRadius: 999, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 11, fontWeight: 600 }}>
+            {{ unmapped: 'Unmapped', noOwner: 'No owner', uncertified: tierLabel('BRONZE'), noDomain: 'No domain', unclassified: 'Sensitivity not set' }[attention]}
+            <button
+              type="button"
+              aria-label="Clear needs-attention filter"
+              onClick={() => setAttention('')}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, border: 'none', borderRadius: 999, background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: 13, lineHeight: 1 }}
+            >
+              &times;
+            </button>
+          </span>
         )}
         {hasActiveFilters && (
           <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
@@ -2399,7 +2565,7 @@ export default function DataAssetsPage({
         {loadError ? (
           <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
         ) : loading ? (
-          <SkeletonRows rows={5} columnWidths={[40, null, null, null, null, null, null, null, null, null, 180]} />
+          <SkeletonRows rows={5} columnWidths={[40, null, null, null, null, null, null, null, null, null, null, 180]} />
         ) : assets.length === 0 && !showForm ? (
           <EmptyState
             icon={renderNavIcon('/data-assets')}
