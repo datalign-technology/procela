@@ -40,6 +40,12 @@ export type NavSection = {
   items: NavItem[];
   subGroups?: { label: string; itemTos: string[] }[];
   adminOnly?: boolean;
+  // Optional super-group band this section belongs to. Consecutive
+  // sections sharing a band render one uppercase band header above the
+  // first of them (Who / What runs / Govern & review), so the rail reads
+  // as three labelled zones instead of a flat stack of accordions.
+  // Sections with no band (Dashboard) sit above the first band.
+  band?: string;
 };
 
 // Opens the Help guide in a separate window as styled HTML.
@@ -87,6 +93,7 @@ export const navSections: NavSection[] = [
     // broader "Organizations" label makes the AI-bot/human pairing
     // less misleading.
     label: 'Organizations',
+    band: 'Who',
     items: [
       // Label is "Structure" inside the Organizations section so it
       // doesn't echo the section title — the destination is still the
@@ -106,12 +113,14 @@ export const navSections: NavSection[] = [
     // so a labelled accordion section would just produce a pointless
     // "Processes › Processes" expand.
     label: null,
+    band: 'What runs',
     items: [
       { to: '/processes', label: 'Processes' },
     ],
   },
   {
     label: 'Data',
+    band: 'What runs',
     items: [
       { to: '/data-assets', label: 'Data Assets' },
       { to: '/data-domains', label: 'Domains' },
@@ -125,12 +134,14 @@ export const navSections: NavSection[] = [
     // item, so it's an unlabelled row rather than a "Systems › Systems"
     // accordion.
     label: null,
+    band: 'What runs',
     items: [
       { to: '/systems', label: 'Systems' },
     ],
   },
   {
     label: 'Governance',
+    band: 'Govern & review',
     items: [
       { to: '/governance/foundation', label: 'Foundation' },
       { to: '/governance-groups', label: 'Groups' },
@@ -153,6 +164,7 @@ export const navSections: NavSection[] = [
     // artefacts in their own right — so they live at the top level
     // rather than under Governance where they used to sit.
     label: 'Insights',
+    band: 'Govern & review',
     items: [
       { to: '/enterprise-view',   label: 'Enterprise View' },
       { to: '/analysis',          label: 'Analysis' },
