@@ -30,8 +30,11 @@ import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
 import OwnerCell from '../components/OwnerCell';
+import Avatar from '../components/Avatar';
 import TruncatedText from '../components/TruncatedText';
 import { formatPersonLabel } from '../lib/personLabel';
+import { TIER_COLORS, tierKey, useTierLabel } from '../lib/governanceTier';
+import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 
@@ -51,7 +54,9 @@ interface DataDomain {
   createdAt: string; updatedAt: string;
 }
 interface Person { id: string; name: string; }
-interface DataAssetOption { id: string; name: string; }
+// Enriched from the /data-assets list endpoint so the domain-detail assets
+// table can show system / tier / owner inline (not just the name).
+interface DataAssetOption { id: string; name: string; systemId?: string; governanceTier?: string; ownerName?: string; }
 
 // Nodes of the unified generate-and-review tree. Every row is an editable
 // name + description, so accepting an AI suggestion, editing it, and
@@ -127,6 +132,8 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [allAssets, setAllAssets] = useState<DataAssetOption[]>([]);
+  const [systemNameById, setSystemNameById] = useState<Record<string, string>>({});
+  const tierLabel = useTierLabel();
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -224,11 +231,12 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
       const [domainsRes, peopleRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
-        apiClient.get<{ success: boolean; data: DataAssetOption[] }>(`/data-assets${query}`),
+        apiClient.get<{ success: boolean; data: DataAssetOption[]; systems?: { id: string; name: string }[] }>(`/data-assets${query}`),
       ]);
       setDomains(domainsRes.data || []);
       setPeople(peopleRes.data || []);
       setAllAssets(assetsRes.data || []);
+      setSystemNameById(Object.fromEntries((assetsRes.systems || []).map((s) => [s.id, s.name])));
       if (activeOrgId) {
         try {
           const orgRes = await apiClient.get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`);
@@ -1015,34 +1023,188 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
     return (
       <div>
         <PageHeader
-          kicker="Data domain"
+          kicker={`Data domain${selectedDomain.code ? ` · ${selectedDomain.code}` : ''}`}
           title={selectedDomain.name}
           copyId={selectedDomain.id}
           copyLabel="Copy domain ID"
-          subtitle={`${criticalityLabel(selectedDomain.criticality)} · ${selectedDomain.parentDomainName ? `Sub-domain of ${selectedDomain.parentDomainName}` : 'Top-level domain'}`}
+          subtitle={selectedDomain.description || undefined}
           actions={
             <>
               <Link to="/data-domains" style={backLinkStyle}>← Back to Domains</Link>
-              {!m.isEditing && canWrite && aiEnabled && !selectedDomain.parentDomainId && (
-                <IconButton size="sm" icon="wand" label={generating ? 'Generating…' : 'Suggest sub-domains'} disabled={generating} onClick={() => generateSubsForDomain(selectedDomain)} />
-              )}
               <DetailEditActions editing={m.isEditing} canEdit={canWrite} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+              {/* wand + trash + status transitions consolidated into one ⋯ menu. */}
               {!m.isEditing && canWrite && (
-                <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
-                  try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${selectedDomain.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
-                  setConfirmDelete(selectedDomain.id);
-                }} />
+                <span style={{ position: 'relative', display: 'inline-flex' }}>
+                  <button type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded={openMenuId === '__header__'} onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === '__header__' ? null : '__header__'); }} style={{ width: 40, height: 40, border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', color: 'var(--color-text)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>⋯</button>
+                  {openMenuId === '__header__' && (
+                    <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 44, right: 0, zIndex: 30, minWidth: 210, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                      {(transitions[selectedDomain.status] || []).map((s) => (
+                        <button key={s} type="button" role="menuitem" onClick={() => { setOpenMenuId(null); handleStatusChange(selectedDomain.id, s); }} style={menuItemStyle}>Set status: {s.replace(/_/g, ' ')}</button>
+                      ))}
+                      {aiEnabled && !selectedDomain.parentDomainId && (
+                        <button type="button" role="menuitem" disabled={generating} onClick={() => { setOpenMenuId(null); generateSubsForDomain(selectedDomain); }} style={menuItemStyle}>{generating ? 'Suggesting…' : 'Suggest sub-domains'}</button>
+                      )}
+                      <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 2px' }} />
+                      <button type="button" role="menuitem" onClick={async () => {
+                        setOpenMenuId(null);
+                        try { const r = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number; subDomains?: number; subDomainNames?: string[] } }>(`/data-domains/${selectedDomain.id}/impact`); setDeleteImpact(r.data || null); } catch { setDeleteImpact(null); }
+                        setConfirmDelete(selectedDomain.id);
+                      }} style={{ ...menuItemStyle, color: 'var(--color-error)' }}>Delete</button>
+                    </div>
+                  )}
+                </span>
               )}
             </>
           }
           meta={
-            <span style={{ ...statusBadgeStyle(selectedDomain.status) }} title={`Status: ${selectedDomain.status.replace(/_/g, ' ')}`}>
-              {selectedDomain.status.replace(/_/g, ' ')}
+            <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={statusBadgeStyle(selectedDomain.status)} title={`Status: ${selectedDomain.status.replace(/_/g, ' ')}`}>
+                {selectedDomain.status.replace(/_/g, ' ')}
+              </span>
+              {!selectedDomain.criticality ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: '#fef3c7', color: '#92400e' }}>Criticality not set</span>
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: 'var(--color-bg)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>{criticalityLabel(selectedDomain.criticality)}</span>
+              )}
             </span>
           }
         />
 
-        <Card padding={24}>{detailBody}</Card>
+        {m.isEditing ? (
+          <Card padding={24}>{detailBody}</Card>
+        ) : (() => {
+          const subDomains = domains.filter((d) => d.parentDomainId === selectedDomain.id).sort((a, b) => a.name.localeCompare(b.name));
+          const directCount = selectedDomain.dataAssetIds?.length ?? 0;
+          const subAllEmpty = subDomains.length > 0 && subDomains.every((s) => assetCountOf(s) === 0);
+          const showGap = directCount > 0 && subAllEmpty;
+          const assetIds = (selectedDomain.subtreeAssetIds?.length ? selectedDomain.subtreeAssetIds : selectedDomain.dataAssetIds) || [];
+          const domainAssets = assetIds.map((id) => allAssets.find((a) => a.id === id)).filter(Boolean) as DataAssetOption[];
+          const factRow = (label: string, value: React.ReactNode) => (
+            <div style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <dt style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>{label}</dt>
+              <dd style={{ margin: 0, textAlign: 'right', fontSize: 13 }}>{value}</dd>
+            </div>
+          );
+          return (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+              <main style={{ flex: '999 1 520px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Sub-domain gap — assets sit on the parent while its sub-domains are empty. */}
+                {showGap && (
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', borderRadius: 'var(--radius-md)', background: '#fef3c7', border: '1px solid #fcd34d' }}>
+                    <span aria-hidden="true" style={{ color: '#92400e', flexShrink: 0, marginTop: 1, fontSize: 16 }}>{'⚠'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: 'var(--color-text)' }}>All {directCount} asset{directCount === 1 ? '' : 's'} sit on this parent domain</div>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>Its {subDomains.length} sub-domain{subDomains.length === 1 ? '' : 's'} {subDomains.length === 1 ? 'has' : 'have'} no assets. Move each asset to the sub-domain it belongs to so the right steward is accountable.</div>
+                    </div>
+                    {canWrite && (
+                      <button type="button" onClick={() => m.enter()} style={{ height: 34, padding: '0 14px', border: '1px solid #92400e', background: 'var(--color-surface)', color: '#92400e', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>Sort assets</button>
+                    )}
+                  </div>
+                )}
+
+                {/* Assets — a real table (system / tier / owner), not a comma line. */}
+                <Card padding={0}>
+                  <div style={{ padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', borderBottom: domainAssets.length ? '1px solid var(--color-border)' : 'none' }}>
+                    <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Data assets <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>{domainAssets.length}</span></h2>
+                    {canWrite && <button type="button" onClick={() => m.enter()} style={{ height: 32, padding: '0 12px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer' }}>Add assets</button>}
+                  </div>
+                  {domainAssets.length === 0 ? (
+                    <div style={{ padding: '18px', fontSize: 13, color: 'var(--color-text-muted)' }}>No data assets assigned to this domain yet.</div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)', fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                            <th style={{ padding: '10px 12px 10px 18px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Asset</th>
+                            <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>System</th>
+                            <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Tier</th>
+                            <th style={{ padding: '10px 18px 10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Owner</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {domainAssets.map((a) => {
+                            const tc = TIER_COLORS[tierKey(a.governanceTier)];
+                            return (
+                              <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                <td style={{ padding: '10px 12px 10px 18px' }}>
+                                  <button type="button" onClick={() => navigate(`/data-assets/${a.id}`)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', fontWeight: 600, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>{a.name}</button>
+                                </td>
+                                <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{a.systemId ? (systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>}</td>
+                                <td style={{ padding: '10px 12px' }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: tc.bg, color: tc.color }}>{tierLabel(a.governanceTier)}</span>
+                                </td>
+                                <td style={{ padding: '10px 18px 10px 12px' }}><OwnerCell name={a.ownerName} /></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+
+                {/* Sub-domains — cards with steward + asset status. */}
+                {subDomains.length > 0 && (
+                  <Card padding={0}>
+                    <div style={{ padding: '16px 18px 10px' }}>
+                      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Sub-domains <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>{subDomains.length}</span></h2>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12, padding: '0 18px 18px' }}>
+                      {subDomains.map((s) => {
+                        const n = assetCountOf(s);
+                        return (
+                          <button key={s.id} type="button" onClick={() => navigate(`/data-domains/${s.id}`)} style={{ textAlign: 'left', cursor: 'pointer', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', background: 'var(--color-surface)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{s.name}</span>
+                              {s.code && <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 12, color: 'var(--color-text-muted)' }}>{s.code}</span>}
+                            </div>
+                            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 6 }}>{s.stewards.length > 0 ? `Steward ${s.stewards.map((x) => x.name).join(', ')}` : 'No steward'}</div>
+                            <div style={{ fontSize: 13, marginTop: 4, fontWeight: 500, color: n === 0 ? 'var(--color-warning)' : 'var(--color-text-secondary)' }}>{n === 0 ? 'No assets yet' : `${n} asset${n === 1 ? '' : 's'}`}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+              </main>
+
+              {/* Facts rail. */}
+              <aside aria-label="Facts" style={{ flex: '1 1 280px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <Card>
+                  <h2 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600 }}>Facts</h2>
+                  <dl style={{ margin: 0 }}>
+                    {/* Owner */}
+                    <div style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
+                      <dt style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Owner</dt>
+                      <dd style={{ margin: '6px 0 0' }}>
+                        {selectedDomain.ownerName ? <OwnerCell name={selectedDomain.ownerName} /> : (canWrite ? <button type="button" onClick={() => m.enter()} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>+ Assign owner</button> : <span style={{ color: 'var(--color-text-muted)' }}>Unassigned</span>)}
+                      </dd>
+                    </div>
+                    {/* Stewards */}
+                    <div style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
+                      <dt style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Stewards {selectedDomain.stewards.length > 0 ? selectedDomain.stewards.length : ''}</dt>
+                      <dd style={{ margin: '6px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {selectedDomain.stewards.length === 0 ? (
+                          canWrite ? <button type="button" onClick={() => m.enter()} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>+ Assign stewards</button> : <span style={{ color: 'var(--color-text-muted)' }}>None</span>
+                        ) : selectedDomain.stewards.map((s) => (
+                          <span key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={s.name} size="sm" /><button type="button" onClick={() => navigate(`/people/${s.id}`)} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-text)', fontWeight: 500, fontSize: 13, cursor: 'pointer' }}>{s.name}</button></span>
+                        ))}
+                      </dd>
+                    </div>
+                    {factRow('Criticality', selectedDomain.criticality ? criticalityLabel(selectedDomain.criticality) : (canWrite ? <button type="button" onClick={() => m.enter()} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Set criticality</button> : <span style={{ color: 'var(--color-text-muted)' }}>Unclassified</span>))}
+                    {factRow('Code', selectedDomain.code ? <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>{selectedDomain.code}</span> : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>)}
+                    {factRow('Parent', selectedDomain.parentDomainName ? <button type="button" onClick={() => selectedDomain.parentDomainId && navigate(`/data-domains/${selectedDomain.parentDomainId}`)} style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--color-text)', fontWeight: 500, cursor: 'pointer' }}>{selectedDomain.parentDomainName}</button> : 'None (top level)')}
+                    {factRow('Created', <span title={absoluteTime(selectedDomain.createdAt)}>{relativeTime(selectedDomain.createdAt)}</span>)}
+                    <div style={{ padding: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <dt style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>Updated</dt>
+                      <dd style={{ margin: 0, textAlign: 'right', fontSize: 13 }} title={absoluteTime(selectedDomain.updatedAt)}>{relativeTime(selectedDomain.updatedAt)}</dd>
+                    </div>
+                  </dl>
+                </Card>
+              </aside>
+            </div>
+          );
+        })()}
 
         {/* Delete confirm — mounted in focus mode so the detail Delete works.
             After a delete, route back to the list. */}
