@@ -168,6 +168,17 @@
   padding-left: 44px;
 }
 
+/* Muted "Admin" marker on admin-only child rows (Agents, Audit Log) —
+   tells an admin the page needs elevated access, mirroring the mock. */
+.navAdminTag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-sidebar-text-muted);
+  flex-shrink: 0;
+}
+
 .navIcon {
   width: 20px;
   display: inline-flex;

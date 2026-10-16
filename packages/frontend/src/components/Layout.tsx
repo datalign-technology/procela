@@ -14,14 +14,14 @@ import CommandPalette from './CommandPalette';
 import MobileNavDrawer from './MobileNavDrawer';
 import NotificationsMenu from './NotificationsMenu';
 import UserMenu from './UserMenu';
+import HelpMenu from './HelpMenu';
 import SupportModal from './SupportModal';
 import Sidebar from './Sidebar';
 import { renderNavIcon } from './navIcons';
-import { MessageGlyph, FlagGlyph, SearchGlyph } from './UiGlyphs';
+import { MessageGlyph, SearchGlyph } from './UiGlyphs';
 import {
   navSections,
   bottomNavItems,
-  openHelpWindow,
   type NavItem,
 } from './navConfig';
 
@@ -537,45 +537,11 @@ export default function Layout() {
               )}
             </button>
             )}
-            {/* Help — opens the Help guide in a separate window so the
-                user can keep it open beside whatever they're doing. A
-                named target means repeated clicks focus the same Help
-                window instead of spawning duplicates. */}
-            <button
-              onClick={openHelpWindow}
-              aria-label="Open the Help guide in a new window"
-              title="Open the Help guide in a new window"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '5px 12px', fontSize: 12, fontWeight: 500,
-                background: 'var(--color-surface)', color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
-              }}
-            >
-              {renderNavIcon('/help', { size: 15, strokeWidth: 1.9 })}
-              <span>Help</span>
-            </button>
-            {/* Report a problem — opens the in-app support form. Sits next
-                to Help so "I'm stuck" and "something's broken" live in the
-                same corner. */}
-            <button
-              onClick={() => setSupportOpen(true)}
-              aria-label="Report a problem"
-              title="Report a problem"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '5px 12px', fontSize: 12, fontWeight: 500,
-                background: 'var(--color-surface)', color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
-              }}
-            >
-              <FlagGlyph size={15} />
-              <span>Report a problem</span>
-            </button>
+            {/* Help & support — one icon button opening a menu that gathers
+                the Help guide, Training, Roadmap, Keyboard shortcuts, Replay
+                tour, and Report a problem. Replaces the two separate top-bar
+                buttons so the corner reads as one "where do I get help?". */}
+            <HelpMenu onReportProblem={() => setSupportOpen(true)} />
             {/* Notifications bell + dropdown */}
             <NotificationsMenu />
             <UserMenu onSignOut={handleSignOut} />

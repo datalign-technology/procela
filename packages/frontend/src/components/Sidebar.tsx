@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import styles from './Layout.module.css';
@@ -174,10 +174,20 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
               ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
               : location.pathname === item.to;
           });
+          // Super-group band header (Who / What runs / Govern & review):
+          // shown above the first section of each band so the rail reads as
+          // three labelled zones. Hidden when collapsed (CSS hides
+          // .navGroupLabel). Compare against the previous section's band so
+          // consecutive sections in the same band share one header.
+          const prevBand = sIdx > 0 ? visibleSections[sIdx - 1].band : undefined;
+          const showBand = !sidebarCollapsed && section.band && section.band !== prevBand;
 
           return (
+          <Fragment key={sIdx}>
+          {showBand && (
+            <div className={styles.navGroupLabel} aria-hidden="true">{section.band}</div>
+          )}
           <div
-            key={sIdx}
             className={styles.navGroup}
             style={{ position: 'relative' }}
             onMouseEnter={(e) => {
@@ -236,7 +246,8 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
                         className={() => clsx(styles.navLink, styles.navLinkChild, isGroupActive && styles.navLinkActive)}
                       >
                         <span className={styles.navIcon}>{navIconNode(item)}</span>
-                        {item.label}
+                        <span style={{ flex: 1 }}>{item.label}</span>
+                        {item.adminOnly && <span className={styles.navAdminTag}>Admin</span>}
                       </NavLink>
                     );
                   };
@@ -274,7 +285,8 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
                             onClick={() => setFlyoutSection(null)}
                           >
                             <span className={styles.navIcon}>{navIconNode(item)}</span>
-                            {item.label}
+                            <span style={{ flex: 1 }}>{item.label}</span>
+                            {item.adminOnly && <span className={styles.navAdminTag}>Admin</span>}
                           </NavLink>
                         );
                       };
@@ -318,6 +330,7 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
               })
             )}
           </div>
+          </Fragment>
           );
         })}
 
@@ -362,9 +375,11 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
       <button
         className={styles.sidebarToggle}
         onClick={() => setSidebarCollapsed((c) => !c)}
-        title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+        aria-label={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
       >
         {NAV_MENU_ICON}
+        {!sidebarCollapsed && <span style={{ marginLeft: 10, fontSize: 14 }}>Collapse menu</span>}
       </button>
     </aside>
   );
