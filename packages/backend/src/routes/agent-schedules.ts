@@ -180,6 +180,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
 const SCHEDULER_TICK_MS = 60 * 1000;
 
 async function runScheduleNow(sched: StoredAgentSchedule): Promise<void> {
+  // A deterministic config error (a 4xx from runAgentExecution — e.g. the
+  // activity isn't a governance activity, or was deleted) can't be fixed by
+  // retrying: it would throw identically on every tick and spam the log.
+  // Pause such a schedule so it stops firing until the config is corrected.
+  let configError = false;
   try {
     await runAgentExecution({
       orgId: sched.orgId,
@@ -193,12 +198,22 @@ async function runScheduleNow(sched: StoredAgentSchedule): Promise<void> {
   } catch (err) {
     // runAgentExecution audits its own failure; we just log here so a
     // bad single schedule doesn't poison the tick loop.
-    logger.error({ err, scheduleId: sched.id }, 'Scheduled agent run threw');
+    const status = (err as { status?: number } | null)?.status;
+    if (typeof status === 'number' && status >= 400 && status < 500) {
+      configError = true;
+      logger.warn({ err, scheduleId: sched.id }, 'Auto-pausing agent schedule after a non-retryable error');
+      auditService.log(sched.orgId, null, 'AgentSchedule', sched.id, 'AGENT_SCHEDULE_PAUSED', sched, { ...sched, status: 'PAUSED' });
+    } else {
+      logger.error({ err, scheduleId: sched.id }, 'Scheduled agent run threw');
+    }
   }
 
   sched.lastRunAt = new Date().toISOString();
   sched.runCount += 1;
-  if (sched.frequency === 'ONCE') {
+  if (configError) {
+    // Stop the loop: the schedule can't succeed as configured.
+    sched.status = 'PAUSED';
+  } else if (sched.frequency === 'ONCE') {
     sched.status = 'COMPLETED';
   } else {
     sched.nextRunAt = advanceNextRunAt(sched.frequency, new Date()).toISOString();
@@ -228,7 +243,9 @@ async function tickAgentSchedules(): Promise<void> {
 import { startBackgroundSweep } from '../lib/background-timer';
 startBackgroundSweep(tickAgentSchedules, SCHEDULER_TICK_MS, { leaderOnly: true });
 
-// Exported for tests that want to deterministically trigger the loop.
-export { tickAgentSchedules };
+// Exported for tests that want to deterministically trigger the loop
+// (tickAgentSchedules) or a single run without the fire-and-forget wrapper
+// (runScheduleNow).
+export { tickAgentSchedules, runScheduleNow };
 
 export default router;

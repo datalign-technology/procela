@@ -639,8 +639,12 @@ async function seedAgentOps(repos: DemoRepos, ts: string, ctx: AgentOpsCtx): Pro
   const base = { orgId, agentId, agentName, activityId, activityName, roleType };
   const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
 
+  // Both seeded schedules are PAUSED: the demo targets operational activities
+  // (there are no governance activities in the demo catalog) and agent runs
+  // are scoped to the GOVERNANCE domain, so an ACTIVE schedule here would just
+  // fail every tick. Paused still demonstrates the scheduling UI.
   await createAll(repos.agentSchedules, [
-    { id: demoId('sched-daily'), ...base, frequency: 'DAILY', status: 'ACTIVE', startAt: daysFromNow(-30), nextRunAt: daysFromNow(1), lastRunAt: hoursAgo(6), runCount: 24, createdBy, createdAt: ts, updatedAt: ts },
+    { id: demoId('sched-daily'), ...base, frequency: 'DAILY', status: 'PAUSED', startAt: daysFromNow(-30), nextRunAt: daysFromNow(1), lastRunAt: hoursAgo(6), runCount: 24, createdBy, createdAt: ts, updatedAt: ts },
     { id: demoId('sched-weekly'), ...base, frequency: 'WEEKLY', status: 'PAUSED', startAt: daysFromNow(-60), nextRunAt: daysFromNow(5), lastRunAt: daysFromNow(-9), runCount: 6, createdBy, createdAt: ts, updatedAt: ts },
   ]);
 
