@@ -7,10 +7,13 @@ import SectionLabel from '../components/SectionLabel';
 import EmptyState from '../components/EmptyState';
 import EditableField from '../components/EditableField';
 import DetailEditActions from '../components/DetailEditActions';
+import Avatar from '../components/Avatar';
+import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import { SkeletonRows } from '../components/Skeleton';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useOrgContext } from '../stores/orgContext';
+import { useToastStore } from '../stores/toastStore';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 
@@ -36,8 +39,10 @@ interface GlossaryTerm {
   domainName: string | null;
   ownerAssignmentId: string | null;
   ownerName: string | null;
+  updatedAt?: string;
 }
 interface DomainRef { id: string; name: string }
+interface TermRef { id: string; term: string; synonyms?: string[] }
 interface PersonRef { id: string; name: string }
 
 interface TermEditable {
@@ -75,6 +80,22 @@ const badge = (c: { bg: string; color: string }): React.CSSProperties => ({
   background: c.bg, color: c.color, whiteSpace: 'nowrap',
 });
 
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+
+// Status as a rounded pill with a leading colour dot + title-case text.
+function StatusPill({ status }: { status: string }) {
+  const c = STATUS_COLORS[status] || STATUS_COLORS.DRAFT;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: c.bg, color: c.color }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: c.color }} />{status.charAt(0) + status.slice(1).toLowerCase()}
+    </span>
+  );
+}
+
 const backLinkStyle: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
@@ -99,31 +120,59 @@ export default function GlossaryTermDetailPage() {
   const navigate = useNavigate();
   const { canWrite } = usePermissions();
   const { activeOrgId } = useOrgContext();
+  const { addToast } = useToastStore();
   const [term, setTerm] = useState<GlossaryTerm | null>(null);
   const [domains, setDomains] = useState<DomainRef[]>([]);
   const [people, setPeople] = useState<PersonRef[]>([]);
+  const [allTerms, setAllTerms] = useState<TermRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [menuOpen]);
 
   const fetchTerm = useCallback(async () => {
     if (!id) return;
     setError(null);
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [res, domRes, peopleRes] = await Promise.all([
+      const [res, domRes, peopleRes, termsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GlossaryTerm }>(`/business-glossary/${id}`),
         apiClient.get<{ success: boolean; data: DomainRef[] }>(`/data-domains${query}`),
         apiClient.get<{ success: boolean; data: PersonRef[] }>('/people'),
+        apiClient.get<{ success: boolean; data: TermRef[] }>(`/business-glossary${query}`),
       ]);
       setTerm(res.data);
       setDomains(domRes.data || []);
       setPeople(peopleRes.data || []);
+      setAllTerms(termsRes.data || []);
     } catch (err) {
       setError(errorMessage(err, 'Could not load glossary term'));
     } finally {
       setLoading(false);
     }
   }, [id, activeOrgId]);
+
+  const handleDelete = async () => {
+    if (!id) return;
+    try {
+      await apiClient.delete(`/business-glossary/${id}`);
+      addToast('success', 'Term deleted');
+      navigate('/business-glossary');
+    } catch (err) { errorToast(err, 'Failed to delete term'); }
+  };
+  const setStatus = async (status: string) => {
+    if (!id) return;
+    try {
+      await apiClient.put(`/business-glossary/${id}`, { status });
+      addToast('success', `Status set to ${status.charAt(0) + status.slice(1).toLowerCase()}`);
+      fetchTerm();
+    } catch (err) { errorToast(err, 'Failed to update status'); }
+  };
 
   useEffect(() => { fetchTerm(); }, [fetchTerm]);
   useBreadcrumbLeaf(term?.term);
@@ -190,108 +239,177 @@ export default function GlossaryTermDetailPage() {
     color: 'var(--color-text)', boxSizing: 'border-box',
   };
   const draftSynonyms = m.draft.synonyms.split(',').map((s) => s.trim()).filter(Boolean);
+  // "Related terms" — a lightweight suggestion from terms that share a
+  // meaningful word with this one (there's no explicit relationship in the
+  // model yet). Advisory only, hence the "confirm in Edit" note on the rail.
+  const nameWords = new Set(t.term.toLowerCase().split(/\s+/).filter((w) => w.length > 3));
+  const relatedTerms = nameWords.size === 0 ? [] : allTerms
+    .filter((o) => o.id !== t.id && o.term.toLowerCase().split(/\s+/).some((w) => nameWords.has(w)))
+    .slice(0, 3);
 
   return (
     <div>
       <PageHeader
-        kicker="Glossary term"
+        kicker={`Glossary term · ${t.category.charAt(0) + t.category.slice(1).toLowerCase()}`}
         title={t.term}
         copyId={t.id}
         copyLabel="Copy term ID"
-        subtitle={<span style={badge(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>}
+        meta={<StatusPill status={t.status} />}
         actions={
-          <DetailEditActions
-            editing={editing}
-            canEdit={canWrite}
-            dirty={m.dirty}
-            saving={m.saving}
-            onEdit={m.enter}
-            onCancel={m.cancel}
-            onSave={m.save}
-            before={<Link to="/business-glossary" style={backLinkStyle}>{'←'} Back to Glossary</Link>}
-          />
+          <>
+            <DetailEditActions
+              editing={editing}
+              canEdit={canWrite}
+              dirty={m.dirty}
+              saving={m.saving}
+              onEdit={m.enter}
+              onCancel={m.cancel}
+              onSave={m.save}
+              before={<Link to="/business-glossary" style={backLinkStyle}>{'←'} Back to Glossary</Link>}
+            />
+            {!editing && canWrite && (
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <button type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }} style={{ width: 40, height: 40, border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', color: 'var(--color-text)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>⋯</button>
+                {menuOpen && (
+                  <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 44, right: 0, zIndex: 30, minWidth: 180, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                    {t.status !== 'DEPRECATED' && (
+                      <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setStatus('DEPRECATED'); }} style={menuItemStyle}>Deprecate</button>
+                    )}
+                    <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 2px' }} />
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); handleDelete(); }} style={{ ...menuItemStyle, color: 'var(--color-error)' }}>Delete</button>
+                  </div>
+                )}
+              </span>
+            )}
+          </>
         }
       />
 
-      {/* Classification */}
-      <Card marginBottom={16}>
-        <SectionLabel marginBottom={10}>Classification</SectionLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-          {editing && (
-            <EditableField label="Term" editing value={m.draft.term} onChange={(v) => m.set('term', v)} placeholder="Term" />
-          )}
-          <EditableField label="Category" editing={editing} value={m.draft.category} onChange={(v) => m.set('category', v)} type="select" options={CATEGORIES.map((c) => ({ value: c, label: c }))}>
-            <span style={badge(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
-          </EditableField>
-          <EditableField label="Status" editing={editing} value={m.draft.status} onChange={(v) => m.set('status', v)} type="select" options={STATUSES.map((s) => ({ value: s, label: s }))}>
-            <span style={badge(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
-          </EditableField>
-          <EditableField label="Primary domain" editing={editing} value={m.draft.domainId} onChange={(v) => m.set('domainId', v)} type="select" options={[{ value: '', label: 'None' }, ...domains.map((d) => ({ value: d.id, label: d.name }))]}>
-            {t.domainName || <span style={emptyStyle}>None</span>}
-          </EditableField>
-          <EditableField label="Owner" editing={editing} value={m.draft.ownerAssignmentId} onChange={(v) => m.set('ownerAssignmentId', v)} type="select" options={[{ value: '', label: 'Unassigned' }, ...people.map((p) => ({ value: p.id, label: p.name }))]}>
-            {t.ownerName || <span style={emptyStyle}>Unassigned</span>}
-          </EditableField>
+      {editing ? (
+        <>
+          {/* Classification */}
+          <Card marginBottom={16}>
+            <SectionLabel marginBottom={10}>Classification</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+              <EditableField label="Term" editing value={m.draft.term} onChange={(v) => m.set('term', v)} placeholder="Term" />
+              <EditableField label="Category" editing value={m.draft.category} onChange={(v) => m.set('category', v)} type="select" options={CATEGORIES.map((c) => ({ value: c, label: c }))} />
+              <EditableField label="Status" editing value={m.draft.status} onChange={(v) => m.set('status', v)} type="select" options={STATUSES.map((s) => ({ value: s, label: s }))} />
+              <EditableField label="Primary domain" editing value={m.draft.domainId} onChange={(v) => m.set('domainId', v)} type="select" options={[{ value: '', label: 'None' }, ...domains.map((d) => ({ value: d.id, label: d.name }))]} />
+              <EditableField label="Owner" editing value={m.draft.ownerAssignmentId} onChange={(v) => m.set('ownerAssignmentId', v)} type="select" options={[{ value: '', label: 'Unassigned' }, ...people.map((p) => ({ value: p.id, label: p.name }))]} />
+            </div>
+          </Card>
+
+          {/* Definition */}
+          <Card marginBottom={16}>
+            <SectionLabel marginBottom={8}>Definition</SectionLabel>
+            <textarea
+              aria-label="Definition"
+              value={m.draft.definition}
+              onChange={(e) => m.set('definition', e.target.value)}
+              rows={4}
+              placeholder="What this term means"
+              style={{ ...synInputStyle, resize: 'vertical', font: 'inherit' }}
+            />
+          </Card>
+
+          {/* Synonyms */}
+          <Card marginBottom={16}>
+            <SectionLabel marginBottom={8}>Synonyms ({draftSynonyms.length})</SectionLabel>
+            <input
+              aria-label="Synonyms"
+              value={m.draft.synonyms}
+              onChange={(e) => m.set('synonyms', e.target.value)}
+              placeholder="Comma-separated synonyms"
+              style={synInputStyle}
+            />
+          </Card>
+
+          {/* Additional detail */}
+          <Card>
+            <SectionLabel marginBottom={10}>Detail</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <EditableField label="Context" editing type="textarea" value={m.draft.context} onChange={(v) => m.set('context', v)} placeholder="Where/how this term is used" />
+              <EditableField label="Example values" editing type="textarea" value={m.draft.exampleValues} onChange={(v) => m.set('exampleValues', v)} />
+              <EditableField label="Business rules" editing type="textarea" value={m.draft.businessRules} onChange={(v) => m.set('businessRules', v)} />
+              <EditableField label="Source of truth" editing type="textarea" value={m.draft.sourceOfTruth} onChange={(v) => m.set('sourceOfTruth', v)} placeholder="System/owner of record" />
+            </div>
+          </Card>
+        </>
+      ) : (
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {/* ── Main: the term as a reader meets it ───────────────────────── */}
+          <div style={{ flex: '999 1 520px', minWidth: 0 }}>
+            {/* Definition leads, large; synonyms read inline as "Also called" */}
+            <Card padding={24} marginBottom={16}>
+              <SectionLabel marginBottom={8}>Definition</SectionLabel>
+              {t.definition
+                ? <p style={{ fontSize: 19, lineHeight: 1.45, color: 'var(--color-text)', margin: 0, maxWidth: 760 }}>{t.definition}</p>
+                : <div style={emptyStyle}>No definition yet — add one in Edit.</div>}
+              {(t.synonyms || []).length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Also called</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {t.synonyms.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* The four detail fields collapse into one "How to use it" list */}
+            {extras.length > 0 && (
+              <Card padding={24}>
+                <SectionLabel marginBottom={12}>How to use it</SectionLabel>
+                <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'minmax(140px, 180px) 1fr', columnGap: 20 }}>
+                  {extras.map(([label, value], i) => (
+                    <div key={label} style={{ display: 'contents' }}>
+                      <dt style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', padding: '12px 0', borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>{label}</dt>
+                      <dd style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', padding: '12px 0', borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </Card>
+            )}
+          </div>
+
+          {/* ── Facts rail ─────────────────────────────────────────────────── */}
+          <aside style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Card>
+              <SectionLabel marginBottom={12}>Facts</SectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <Field label="Owner">
+                  {t.ownerName
+                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Avatar name={t.ownerName} size="sm" />{t.ownerName}</span>
+                    : <span style={emptyStyle}>Unassigned</span>}
+                </Field>
+                <Field label="Category">
+                  <span style={badge(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
+                </Field>
+                <Field label="Status"><StatusPill status={t.status} /></Field>
+                <Field label="Primary domain">
+                  {t.domainId
+                    ? <Link to={`/data-domains?highlight=${t.domainId}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{t.domainName}</Link>
+                    : <span style={emptyStyle}>Enterprise-wide</span>}
+                </Field>
+                {t.updatedAt && (
+                  <Field label="Updated"><span title={absoluteTime(t.updatedAt)}>{relativeTime(t.updatedAt)}</span></Field>
+                )}
+              </div>
+            </Card>
+
+            {relatedTerms.length > 0 && (
+              <Card>
+                <SectionLabel marginBottom={10}>Related terms</SectionLabel>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {relatedTerms.map((r) => (
+                    <Link key={r.id} to={`/business-glossary/${r.id}`} style={{ fontSize: 13, color: 'var(--color-primary)', textDecoration: 'none' }}>{r.term}</Link>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 10, fontStyle: 'italic' }}>Suggested from shared words; confirm in Edit.</div>
+              </Card>
+            )}
+          </aside>
         </div>
-      </Card>
-
-      {/* Definition */}
-      <Card marginBottom={16}>
-        <SectionLabel marginBottom={8}>Definition</SectionLabel>
-        {editing ? (
-          <textarea
-            aria-label="Definition"
-            value={m.draft.definition}
-            onChange={(e) => m.set('definition', e.target.value)}
-            rows={4}
-            placeholder="What this term means"
-            style={{ ...synInputStyle, resize: 'vertical', font: 'inherit' }}
-          />
-        ) : (
-          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap' }}>
-            {t.definition || <span style={emptyStyle}>No definition</span>}
-          </div>
-        )}
-      </Card>
-
-      {/* Synonyms */}
-      <Card marginBottom={16}>
-        <SectionLabel marginBottom={8}>Synonyms ({(editing ? draftSynonyms : (t.synonyms || [])).length})</SectionLabel>
-        {editing ? (
-          <input
-            aria-label="Synonyms"
-            value={m.draft.synonyms}
-            onChange={(e) => m.set('synonyms', e.target.value)}
-            placeholder="Comma-separated synonyms"
-            style={synInputStyle}
-          />
-        ) : (t.synonyms || []).length === 0 ? <div style={emptyStyle}>No synonyms</div> : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {t.synonyms.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
-          </div>
-        )}
-      </Card>
-
-      {/* Additional detail */}
-      <Card>
-        <SectionLabel marginBottom={10}>Detail</SectionLabel>
-        {editing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <EditableField label="Context" editing type="textarea" value={m.draft.context} onChange={(v) => m.set('context', v)} placeholder="Where/how this term is used" />
-            <EditableField label="Example values" editing type="textarea" value={m.draft.exampleValues} onChange={(v) => m.set('exampleValues', v)} />
-            <EditableField label="Business rules" editing type="textarea" value={m.draft.businessRules} onChange={(v) => m.set('businessRules', v)} />
-            <EditableField label="Source of truth" editing type="textarea" value={m.draft.sourceOfTruth} onChange={(v) => m.set('sourceOfTruth', v)} placeholder="System/owner of record" />
-          </div>
-        ) : extras.length === 0 ? <div style={emptyStyle}>No additional detail</div> : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {extras.map(([label, value]) => (
-              <Field key={label} label={label}>
-                <span style={{ color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap' }}>{value}</span>
-              </Field>
-            ))}
-          </div>
-        )}
-      </Card>
+      )}
     </div>
   );
 }
