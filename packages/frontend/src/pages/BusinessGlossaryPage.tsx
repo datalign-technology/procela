@@ -93,6 +93,12 @@ const inputStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   DRAFT:      { bg: '#f3f4f6', color: '#6b7280' },
   PROPOSED:   { bg: '#dbeafe', color: '#1e40af' },
@@ -113,6 +119,18 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
     display: 'inline-block', padding: '2px 8px', borderRadius: 4,
     fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color, whiteSpace: 'nowrap',
   };
+}
+
+// Status as a rounded pill with a leading colour dot + text (the redesign's
+// treatment), so status reads without decoding colour alone.
+function StatusPill({ status }: { status: string }) {
+  const c = STATUS_COLORS[status] || STATUS_COLORS.DRAFT;
+  const label = status.charAt(0) + status.slice(1).toLowerCase();
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: c.bg, color: c.color }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: c.color }} />{label}
+    </span>
+  );
 }
 
 // ── Inline cell edit ──
@@ -213,6 +231,18 @@ export default function BusinessGlossaryPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<TermForm>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // Per-row "⋯" actions menu + the toolbar "Import & sync" menu (one open at a time).
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [importSyncOpen, setImportSyncOpen] = useState(false);
+  useEffect(() => {
+    if (!openMenuId && !importSyncOpen) return;
+    const close = () => { setOpenMenuId(null); setImportSyncOpen(false); };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [openMenuId, importSyncOpen]);
+  // "Needs attention" quick filter: '' all · 'proposed' waiting for approval ·
+  // 'noOwner' no owner assigned.
+  const [attentionFilter, setAttentionFilter] = useState<'' | 'proposed' | 'noOwner'>('');
 
   // Bulk selection
   const [bulkUpdates, setBulkUpdates] = useState<{ status: string; category: string; ownerPersonId: string; domainId: string }>({ status: '', category: '', ownerPersonId: '', domainId: '' });
@@ -300,8 +330,14 @@ export default function BusinessGlossaryPage() {
     }
     if (filterStatus) result = result.filter((t) => t.status === filterStatus);
     if (filterCategory) result = result.filter((t) => t.category === filterCategory);
+    if (attentionFilter === 'proposed') result = result.filter((t) => t.status === 'PROPOSED');
+    if (attentionFilter === 'noOwner') result = result.filter((t) => !t.ownerName);
     return result;
-  }, [terms, searchQuery, filterStatus, filterCategory]);
+  }, [terms, searchQuery, filterStatus, filterCategory, attentionFilter]);
+
+  // Needs-attention counts (over all terms).
+  const proposedCount = terms.filter((t) => t.status === 'PROPOSED').length;
+  const noOwnerCount = terms.filter((t) => !t.ownerName).length;
 
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList<GlossaryTerm>(
     filteredTerms,
@@ -466,25 +502,31 @@ export default function BusinessGlossaryPage() {
   // ── Columns ──
   const glossaryColumns = ([
     glossaryCols.isVisible('term') && {
-      key: 'term', header: 'Term', sortable: true, cellStyle: { fontWeight: 500 },
+      key: 'term', header: 'Term', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 420 },
       render: (t: GlossaryTerm) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          {/* The term name opens the term's detail page (view→Edit→Save).
-           *  Definition isn't shown inline — rows stay single-line; hover the
-           *  term to read it. */}
-          <button
-            type="button"
-            onClick={() => navigate(`/business-glossary/${t.id}`)}
-            title={t.definition || 'View term'}
-            style={{
-              background: 'none', border: 'none', padding: 0,
-              color: 'var(--color-text)', cursor: 'pointer',
-              font: 'inherit', fontWeight: 500, textAlign: 'left',
-            }}
-          >
-            {t.term}
-          </button>
-          <NotInSourceBadge syncStatus={t.syncStatus} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            {/* The term name opens the term's detail page (view→Edit→Save). */}
+            <button
+              type="button"
+              onClick={() => navigate(`/business-glossary/${t.id}`)}
+              title="View term"
+              style={{
+                background: 'none', border: 'none', padding: 0,
+                color: 'var(--color-text)', cursor: 'pointer',
+                font: 'inherit', fontWeight: 600, textAlign: 'left',
+              }}
+            >
+              {t.term}
+            </button>
+            <NotInSourceBadge syncStatus={t.syncStatus} />
+          </div>
+          {/* Definition sub-line — the list is useful without clicking in. */}
+          {t.definition && (
+            <span style={{ display: 'block', marginTop: 2, maxWidth: 420 }}>
+              <TruncatedText text={t.definition} style={{ fontSize: 12, color: 'var(--color-text-muted)' }} />
+            </span>
+          )}
         </div>
       ),
     },
@@ -510,22 +552,22 @@ export default function BusinessGlossaryPage() {
         canWrite ? (
           <InlineCellEdit
             value={t.status}
-            display={<span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>}
+            display={<StatusPill status={t.status} />}
             type="select"
             options={STATUSES}
             onSave={(v) => inlineSaveField(t.id, 'status', v)}
           />
         ) : (
-          <span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
+          <StatusPill status={t.status} />
         )
       ),
     },
     glossaryCols.isVisible('domain') && {
       key: 'domain', header: 'Primary Domain', sortable: true,
       render: (t: GlossaryTerm) => (
-        <span style={{ color: t.domainName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-          {t.domainName || '—'}
-        </span>
+        t.domainName
+          ? <span style={{ color: 'var(--color-text)' }}>{t.domainName}</span>
+          : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Enterprise-wide</span>
       ),
     },
     glossaryCols.isVisible('owner') && {
@@ -541,11 +583,29 @@ export default function BusinessGlossaryPage() {
       render: (t: GlossaryTerm) => <span title={absoluteTime(t.updatedAt)}>{relativeTime(t.updatedAt)}</span>,
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 80,
+      key: 'actions', header: 'Actions', align: 'right' as const, width: 150,
       render: (t: GlossaryTerm) => (
-        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
-        </div>
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+          {/* Proposed terms get a one-click Review (opens the term to approve). */}
+          {canWrite && t.status === 'PROPOSED' && (
+            <button type="button" onClick={() => navigate(`/business-glossary/${t.id}`)} style={{ height: 30, padding: '0 12px', border: '1px solid var(--color-primary)', background: 'var(--color-surface)', color: 'var(--color-primary)', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Review</button>
+          )}
+          {canWrite && (
+            <span style={{ position: 'relative', display: 'inline-flex' }}>
+              <button type="button" aria-label={`Actions for ${t.term}`} aria-haspopup="menu" aria-expanded={openMenuId === t.id} onClick={(e) => { e.stopPropagation(); setImportSyncOpen(false); setOpenMenuId(openMenuId === t.id ? null : t.id); }} style={{ width: 30, height: 30, border: 'none', background: 'transparent', borderRadius: 'var(--radius-md)', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>⋯</button>
+              {openMenuId === t.id && (
+                <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 180, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                  <button type="button" role="menuitem" onClick={() => { setOpenMenuId(null); navigate(`/business-glossary/${t.id}`); }} style={menuItemStyle}>Open &amp; edit</button>
+                  {t.status !== 'DEPRECATED' && (
+                    <button type="button" role="menuitem" onClick={() => { setOpenMenuId(null); inlineSaveField(t.id, 'status', 'DEPRECATED'); }} style={menuItemStyle}>Deprecate</button>
+                  )}
+                  <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 2px' }} />
+                  <button type="button" role="menuitem" onClick={() => { setOpenMenuId(null); setConfirmDelete(t.id); }} style={{ ...menuItemStyle, color: 'var(--color-error)' }}>Delete</button>
+                </div>
+              )}
+            </span>
+          )}
+        </span>
       ),
     },
   ].filter(Boolean) as DataTableColumn<GlossaryTerm>[]);
@@ -571,7 +631,30 @@ export default function BusinessGlossaryPage() {
                 }}
               />
             }
-            import={canWrite ? <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} /> : undefined}
+            import={canWrite ? (
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <button type="button" aria-haspopup="menu" aria-expanded={importSyncOpen} onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); setImportSyncOpen((v) => !v); }} style={{ height: 36, padding: '0 12px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer' }}>
+                  Import &amp; sync
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+                {importSyncOpen && (
+                  <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 40, right: 0, zIndex: 40, minWidth: 250, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                    <button type="button" role="menuitem" onClick={() => { setImportSyncOpen(false); setShowImport(true); }} style={{ ...menuItemStyle, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontWeight: 600 }}>Import terms</span>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Paste or upload CSV / JSON</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setImportSyncOpen(false); setShowSync(true); }} style={{ ...menuItemStyle, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontWeight: 600 }}>Connect to source</span>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Sync terms from a connected glossary</span>
+                    </button>
+                    <button type="button" role="menuitem" disabled={generating} onClick={() => { setImportSyncOpen(false); handleGenerate(); }} style={{ ...menuItemStyle, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontWeight: 600 }}>{generating ? 'Suggesting…' : 'Suggest industry terms'}</span>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>AI-propose standard terms for your industry</span>
+                    </button>
+                  </div>
+                )}
+              </span>
+            ) : undefined}
             export={
               terms.length > 0 ? (
                 <ExportMenu
@@ -595,14 +678,6 @@ export default function BusinessGlossaryPage() {
               ) : undefined
             }
             columns={<ColumnPicker state={glossaryCols} />}
-            extra={canWrite ? (
-              <>
-                {terms.length === 0 && (
-                  <IconButton icon="wand" label={generating ? 'Generating…' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
-                )}
-                <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
-              </>
-            ) : undefined}
             primary={canWrite ? <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} /> : undefined}
           />
         }
@@ -681,27 +756,79 @@ export default function BusinessGlossaryPage() {
 
         {/* Content area */}
         <div>
+          {/* Needs attention — one-click worklists: proposed terms awaiting
+              approval, and terms with no accountable owner. */}
+          {terms.length > 0 && (
+            <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the table</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+                {([
+                  { key: 'proposed' as const, count: proposedCount, label: 'Waiting for approval', hint: 'Proposed terms to review', priority: true },
+                  { key: 'noOwner' as const, count: noOwnerCount, label: 'No owner assigned', hint: 'Nobody accountable for the definition' },
+                ]).map((c) => {
+                  const active = attentionFilter === c.key;
+                  const zero = c.count === 0;
+                  return (
+                    <button
+                      key={c.key}
+                      type="button"
+                      aria-pressed={active}
+                      disabled={zero && !active}
+                      onClick={() => setAttentionFilter(active ? '' : c.key)}
+                      style={{
+                        textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
+                        borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                        display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
+                        background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
+                        opacity: zero && !active ? 0.6 : 1,
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
+                        {('priority' in c && c.priority) && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Review</span>}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
           {/* Category chips — only rendered when the facet actually splits the
               list (≥2 populated categories), to save vertical space. */}
           {/* Categories are a fixed taxonomy: show every one (empty ones
               dimmed) so the whole glossary structure reads at a glance. */}
-          {terms.length > 0 && (
-            <FacetChips
-              ariaLabel="Filter by glossary category"
-              activeKey={filterCategory}
-              onSelect={setFilterCategory}
-              facets={[
-                { key: '', label: 'All', count: terms.length },
-                ...CATEGORY_ORDER.map((cat) => ({
-                  key: cat,
-                  // Title-case the chip label (the row badge stays UPPERCASE);
-                  // matches the Title-Case filter chips on every other list.
-                  label: cat.charAt(0) + cat.slice(1).toLowerCase(),
-                  count: terms.filter((t) => t.category === cat).length,
-                })),
-              ]}
-            />
-          )}
+          {terms.length > 0 && (() => {
+            const title = (c: string) => c.charAt(0) + c.slice(1).toLowerCase();
+            // Only show category chips that actually have terms; name the
+            // empty ones in a note instead of rendering dead chips.
+            const populated = CATEGORY_ORDER.filter((cat) => terms.some((t) => t.category === cat));
+            const hidden = CATEGORY_ORDER.filter((cat) => !terms.some((t) => t.category === cat));
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <FacetChips
+                  ariaLabel="Filter by glossary category"
+                  activeKey={filterCategory}
+                  onSelect={setFilterCategory}
+                  facets={[
+                    { key: '', label: 'All', count: terms.length },
+                    ...populated.map((cat) => ({ key: cat, label: title(cat), count: terms.filter((t) => t.category === cat).length })),
+                  ]}
+                />
+                {hidden.length > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    {hidden.map(title).join(' and ')} hidden (no terms)
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           {/* Filters (left-aligned, mirrors Data Assets) */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', width: 200 }}>
@@ -734,16 +861,22 @@ export default function BusinessGlossaryPage() {
               <option value="">All Statuses</option>
               {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()} ({terms.filter((t) => t.status === s).length})</option>)}
             </select>
-            {(filterStatus || searchQuery || filterCategory) && (
+            {(filterStatus || searchQuery || filterCategory || attentionFilter) && (
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => { setFilterStatus(''); setSearchQuery(''); setFilterCategory(''); }}
+                onClick={() => { setFilterStatus(''); setSearchQuery(''); setFilterCategory(''); setAttentionFilter(''); }}
               >
                 Clear Filters
               </Button>
             )}
-            {(filterStatus || searchQuery || filterCategory) && (
+            {attentionFilter && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 4px 2px 10px', borderRadius: 999, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 11, fontWeight: 600 }}>
+                {attentionFilter === 'proposed' ? 'Waiting for approval' : 'No owner assigned'}
+                <button type="button" aria-label="Clear needs-attention filter" onClick={() => setAttentionFilter('')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, border: 'none', borderRadius: 999, background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>&times;</button>
+              </span>
+            )}
+            {(filterStatus || searchQuery || filterCategory || attentionFilter) && (
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                 Showing {filteredTerms.length} of {terms.length}
               </span>
