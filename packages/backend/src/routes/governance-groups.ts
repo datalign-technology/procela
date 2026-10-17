@@ -202,6 +202,17 @@ router.get('/', async (req: Request, res: Response) => {
     seen.add(key);
     return true;
   });
+  // Enrich each membership with the person/agent display name so list
+  // consumers (e.g. the Chair column) can render who's who without a second
+  // round-trip — the same enrichment the single-group GET does.
+  const [allPeople, allAgents] = await Promise.all([peopleRepo().list(), agentsRepo().list()]);
+  const enrich = (g: StoredGovernanceGroup): StoredGovernanceGroup => ({
+    ...g,
+    members: (g.members || []).map((m) => m.agentId
+      ? { ...m, personName: null, agentName: allAgents.find((a) => a.id === m.agentId)?.name || 'Unknown' }
+      : { ...m, personName: allPeople.find((p) => p.id === m.personId)?.name || 'Unknown', agentName: null }),
+  });
+  filtered = filtered.map(enrich);
   res.json({
     success: true,
     data: filtered,
