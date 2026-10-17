@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
-import CreateScopeNotice from '../components/CreateScopeNotice';
 import FacetChips from '../components/FacetChips';
 import OwnerCell from '../components/OwnerCell';
 import { relativeTime, absoluteTime } from '../lib/relativeTime';
@@ -159,6 +158,12 @@ const inputStyle: React.CSSProperties = {
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 
+const sysMenuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+
 const btnSecondary: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
@@ -169,6 +174,15 @@ const btnSecondary: React.CSSProperties = {
 const typeBadge: React.CSSProperties = {
   display: 'inline-block', padding: '2px 8px', borderRadius: 4,
   fontSize: 11, fontWeight: 500, background: 'var(--color-primary-light)', color: 'var(--color-primary)',
+};
+
+// The two utility-industry system codes get a plain-language companion label
+// and a tooltip, with a matching legend under the table. Other type strings
+// (ERP, CRM, …) are already self-explanatory and render as just the code.
+const SYSTEM_TYPE_PLAIN: Record<string, string> = { OT: 'Operational', IT: 'Business IT' };
+const SYSTEM_TYPE_TITLE: Record<string, string> = {
+  OT: 'Operational technology: runs or monitors physical equipment (grid, pumps, meters)',
+  IT: 'Business IT: customer, finance, analytics',
 };
 
 // Business-criticality badge palette. Hex pairs (bg + companion colour) so the
@@ -207,14 +221,6 @@ const emptyForm: FormData = {
 };
 
 
-// "+ Connect" CTA shares the badge's pill shape but uses the brand
-// primary colour — semantically a call-to-action, not a status, so it
-// can't fold into StatusBadge.
-const pillBase: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 4,
-  padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
-};
-
 // Connectivity status → shared StatusBadge variant. NOT_CONNECTED reads
 // as a placeholder (no connection configured yet) so it picks up the
 // dashed-border treatment to look open rather than asserting a state.
@@ -232,7 +238,6 @@ function renderConnectivityCell(
   configuredCount: number,
   connectedCount: number,
   navigate: (to: string) => void,
-  onOpenPicker: (sys: SystemEntity) => void,
 ) {
   const connectivity: Connectivity = sys.connectivity || 'INTEGRATED';
   const status = sys.connectionStatus
@@ -248,14 +253,13 @@ function renderConnectivityCell(
   }
 
   if (configuredCount === 0) {
+    // A plain "Not connected" status, not a CTA — the Connect action lives in
+    // the row's actions cell so the status column stays a status column.
     return (
-      <button
-        onClick={() => onOpenPicker(sys)}
-        style={{ ...pillBase, background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}
-        title="Attach an existing connection or configure a new one"
-      >
-        + Connect
-      </button>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
+        <span style={{ width: 7, height: 7, borderRadius: 4, border: '1.5px solid var(--color-border)', boxSizing: 'border-box' }} />
+        Not connected
+      </span>
     );
   }
 
@@ -482,6 +486,16 @@ export default function SystemsPage({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; connections: number; mappings: number } | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // Needs-attention one-click filter: '' | 'notConnected' | 'noCriticality'.
+  const [attentionFilter, setAttentionFilter] = useState<'' | 'notConnected' | 'noCriticality'>('');
+  // Per-row "⋯" actions menu.
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
   const custodiansLabel = useTerm('custodians');
   const custodianLabel = useTerm('custodian');
 
@@ -733,7 +747,18 @@ export default function SystemsPage({
     });
   };
 
+  // A system Procela can't read yet: an integrated system with no connection
+  // serving it. Drives the "Not connected" status and the attention card.
+  const connCountFor = (id: string) => connections.filter((c) => connSystemIds(c).includes(id)).length;
+  const isNotConnected = (s: SystemEntity) =>
+    (s.connectivity || 'INTEGRATED') === 'INTEGRATED' && connCountFor(s.id) === 0;
+  const notConnectedCount = systems.filter(isNotConnected).length;
+  const noCriticalityCount = systems.filter((s) => !s.businessCriticality).length;
+  const anyCriticality = systems.some((s) => !!s.businessCriticality);
+
   const filteredSystems = systems.filter((s) => {
+    if (attentionFilter === 'notConnected' && !isNotConnected(s)) return false;
+    if (attentionFilter === 'noCriticality' && s.businessCriticality) return false;
     if (filterType === '__none__' && s.systemType) return false;
     if (filterType && filterType !== '__none__' && s.systemType !== filterType) return false;
     if (filterCriticality && (s.businessCriticality || '') !== filterCriticality) return false;
@@ -815,9 +840,16 @@ export default function SystemsPage({
             >
               {sys.name}
             </button>
+            {/* OwnerBadge renders the lock + "owned by <division>" tooltip for
+                inherited rows — the scope line explains the convention. */}
             <OwnerBadge assetOrgId={sys.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
             <NotInSourceBadge syncStatus={sys.syncStatus} />
           </div>
+          {sys.description && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320, marginTop: 2 }} title={sys.description}>
+              {sys.description}
+            </div>
+          )}
           {/* Description isn't shown inline — rows stay single-line; hover the
               name to read it (full text also in the system detail view). */}
         </div>
@@ -829,16 +861,33 @@ export default function SystemsPage({
     },
     systemCols.isVisible('type') && {
       key: 'type', header: 'Type', sortable: true,
-      render: (sys: SystemEntity) =>
-        sys.systemType
-          ? <span style={typeBadge}>{sys.systemType}</span>
-          : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
+      render: (sys: SystemEntity) => {
+        if (!sys.systemType) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
+        const plain = SYSTEM_TYPE_PLAIN[sys.systemType];
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={typeBadge} title={SYSTEM_TYPE_TITLE[sys.systemType]}>{sys.systemType}</span>
+            {plain && <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{plain}</span>}
+          </span>
+        );
+      },
     },
     systemCols.isVisible('criticality') && {
-      key: 'criticality', header: 'Criticality', sortable: true, width: 120,
+      key: 'criticality', header: 'Criticality', sortable: true, width: 150,
       render: (sys: SystemEntity) => {
         const level = sys.businessCriticality;
-        if (!level) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
+        if (!level) {
+          const inherited = isInheritedAsset(sys.orgId, activeOrgId);
+          if (!canWrite || inherited) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
+          return (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openEdit(sys); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 10px', border: '1px dashed var(--color-border)', borderRadius: 13, background: 'transparent', color: 'var(--color-text-secondary)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+              title="Set this system's business criticality"
+            >+ Set criticality</button>
+          );
+        }
         const pal = CRITICALITY_BADGE[level] || CRITICALITY_BADGE.LOW;
         const label = level.charAt(0) + level.slice(1).toLowerCase();
         return (
@@ -865,7 +914,7 @@ export default function SystemsPage({
       render: (sys: SystemEntity) => {
         const sysConnections = connections.filter((c) => connSystemIds(c).includes(sys.id));
         const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
-        return renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate, setConnectingSystem);
+        return renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate);
       },
     },
     systemCols.isVisible('created') && {
@@ -877,19 +926,46 @@ export default function SystemsPage({
       render: (sys: SystemEntity) => <span title={absoluteTime(sys.updatedAt)}>{relativeTime(sys.updatedAt)}</span>,
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 80,
+      key: 'actions', header: '', align: 'right' as const, width: 170,
       render: (sys: SystemEntity) => {
         const inherited = isInheritedAsset(sys.orgId, activeOrgId);
         const hint = inheritedHintFor(sys);
+        const requestDelete = async () => {
+          try {
+            const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
+            setDeleteImpact(res.data || null);
+          } catch { setDeleteImpact(null); }
+          setConfirmDelete(sys.id);
+        };
         return (
-          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            {canWrite && <IconButton size="sm" icon="trash" label={hint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
-              try {
-                const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
-                setDeleteImpact(res.data || null);
-              } catch { setDeleteImpact(null); }
-              setConfirmDelete(sys.id);
-            }} />}
+          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+            {canWrite && isNotConnected(sys) && !inherited && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setConnectingSystem(sys); }}
+                style={{ height: 30, padding: '0 12px', border: '1px solid var(--color-primary)', background: 'var(--color-surface)', color: 'var(--color-primary)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                title="Attach an existing connection or set up a new one"
+              >Connect</button>
+            )}
+            <span style={{ position: 'relative', display: 'inline-flex' }}>
+              <button
+                type="button" aria-label={`More actions for ${sys.name}`} aria-haspopup="menu" aria-expanded={rowMenuId === sys.id}
+                onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === sys.id ? null : sys.id); }}
+                style={{ width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+              >⋯</button>
+              {rowMenuId === sys.id && (
+                <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 170, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                  <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); navigate(`/systems/${sys.id}`); }} style={sysMenuItemStyle}>Open</button>
+                  {canWrite && !inherited && <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); openEdit(sys); }} style={sysMenuItemStyle}>Edit</button>}
+                  {canWrite && (
+                    <>
+                      <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 2px' }} />
+                      <button type="button" role="menuitem" disabled={inherited} title={inherited ? hint : undefined} onClick={() => { setRowMenuId(null); requestDelete(); }} style={{ ...sysMenuItemStyle, color: inherited ? 'var(--color-text-muted)' : 'var(--color-error)', cursor: inherited ? 'not-allowed' : 'pointer' }}>Delete</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </span>
           </div>
         );
       },
@@ -980,15 +1056,67 @@ export default function SystemsPage({
         </HelpPopover>
       </EmbeddablePageHeader>
 
-      {/* Wrong-level banner. Systems can only be owned by companies
-          or divisions; if the active scope is a department or team
-          the Add button is hidden and this banner explains why.
-          The list itself still renders so users can read inherited
-          rows from above. */}
-      {activeOrgId && !canOwnHere && <CreateScopeNotice noun="systems" />}
+      {/* Quiet scope line (replaces the large banner): says what's in view and
+          explains the lock on division-owned rows. When the active scope can't
+          own systems, it also points to the fix instead of a dead-end banner. */}
+      {activeOrgId && (() => {
+        const anyInherited = systems.some((s) => isInheritedAsset(s.orgId, activeOrgId));
+        if (!anyInherited && canOwnHere) return null;
+        const orgName = getOrgName(activeOrgId) || 'this organization';
+        return (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '12px 0 4px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            <span aria-hidden style={{ color: 'var(--color-info, #24508f)', flexShrink: 0, lineHeight: '18px' }}>ⓘ</span>
+            <span>
+              Showing systems from all of <strong style={{ fontWeight: 600, color: 'var(--color-text)' }}>{orgName}</strong>.
+              {anyInherited && ' Systems marked with a lock are managed by a division; open that division to edit them.'}
+              {!canOwnHere && ' To add a system here, pick a specific company or division from the organization selector.'}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Full-width content — System Types is now a top facet (was a left-rail tree) */}
       <div>
+
+        {/* Needs attention — one-click filters for the two commonest gaps. */}
+        {systems.length > 0 && (notConnectedCount > 0 || noCriticalityCount > 0) && (
+          <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+              <SectionLabel>Needs attention</SectionLabel>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Click a card to filter the table</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+              {([
+                { key: 'notConnected' as const, count: notConnectedCount, label: 'Not connected', hint: 'Procela cannot read data or measure health', tag: 'Fix first' },
+                { key: 'noCriticality' as const, count: noCriticalityCount, label: 'Criticality not set', hint: 'Impact of an outage is unknown', tag: '' },
+              ]).map((c) => {
+                const active = attentionFilter === c.key;
+                const disabled = c.count === 0;
+                return (
+                  <button
+                    key={c.key} type="button" disabled={disabled} aria-pressed={active}
+                    onClick={() => setAttentionFilter(active ? '' : c.key)}
+                    style={{
+                      textAlign: 'left', cursor: disabled ? 'default' : 'pointer', borderRadius: 'var(--radius-md)',
+                      padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 84,
+                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'none',
+                      opacity: disabled ? 0.55 : 1,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span style={{ fontSize: 26, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
+                      {c.tag && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>{c.tag}</span>}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Content Area */}
         <div>
@@ -1022,27 +1150,37 @@ export default function SystemsPage({
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
             />
-            <select aria-label="Filter by criticality" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
-              <option value="">All Criticality</option>
-              <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
-              <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
-              <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
-            </select>
+            {/* Criticality filter is hidden entirely when no system has one —
+                offering High (0) / Medium (0) / Low (0) is just noise. */}
+            {anyCriticality && (
+              <select aria-label="Filter by criticality" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
+                <option value="">All Criticality</option>
+                <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
+                <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
+                <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
+              </select>
+            )}
             <select aria-label="Filter by owner" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
               <option value="">All Owners</option>
               {ownerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
               <option value="__none__">No owner ({systems.filter((s) => !s.ownerName).length})</option>
             </select>
-            {(filterCriticality || searchQuery || filterType || filterOwner) && (
+            {attentionFilter && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 6px 0 12px', borderRadius: 14, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 12, fontWeight: 600 }}>
+                {attentionFilter === 'notConnected' ? 'Not connected' : 'Criticality not set'}
+                <button type="button" aria-label="Remove filter" onClick={() => setAttentionFilter('')} style={{ width: 20, height: 20, border: 'none', borderRadius: 10, background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+              </span>
+            )}
+            {(filterCriticality || searchQuery || filterType || filterOwner || attentionFilter) && (
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => { setFilterCriticality(''); setSearchQuery(''); setFilterType(''); setFilterOwner(''); }}
+                onClick={() => { setFilterCriticality(''); setSearchQuery(''); setFilterType(''); setFilterOwner(''); setAttentionFilter(''); }}
               >
                 Clear Filters
               </Button>
             )}
-            {(filterCriticality || searchQuery || filterType || filterOwner) && (
+            {(filterCriticality || searchQuery || filterType || filterOwner || attentionFilter) && (
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                 Showing {filteredSystems.length} of {systems.length}
               </span>
@@ -1504,6 +1642,14 @@ export default function SystemsPage({
           />
         )}
       </div>
+      {/* Legend — explains the OT / IT type codes, shown only when the list
+          actually uses them. */}
+      {!loading && systems.some((s) => s.systemType === 'OT' || s.systemType === 'IT') && (
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
+          <span><span style={{ ...typeBadge, marginRight: 6 }}>OT</span>Operational technology: runs physical equipment (grid, pumps, meters)</span>
+          <span><span style={{ ...typeBadge, marginRight: 6 }}>IT</span>Business IT: customer, finance, analytics</span>
+        </div>
+      )}
         </div>
       </div>
       {showSync && (
