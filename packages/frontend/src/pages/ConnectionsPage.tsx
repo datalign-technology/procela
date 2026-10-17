@@ -37,7 +37,6 @@ import {
   type ConnectionProfile,
   type SystemEntity,
   STATUS_BADGES,
-  TYPE_BADGES,
   TYPE_LABELS,
   formatBytes,
   configSummary,
@@ -67,6 +66,43 @@ const inputStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
+
+const connMenuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+
+// A small line icon per connection type, so the Type column reads as
+// "<icon> Data warehouse" instead of a coloured pill.
+function TypeIcon({ type }: { type: string }) {
+  const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, 'aria-hidden': true } as const;
+  switch (type) {
+    case 'DATABASE':
+    case 'DATA_WAREHOUSE':
+      return <svg {...common}><ellipse cx="12" cy="6" rx="7" ry="2.5" /><path d="M5 6v12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></svg>;
+    case 'FILE_STORAGE':
+      return <svg {...common} strokeLinejoin="round"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" /></svg>;
+    case 'API':
+      return <svg {...common} strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>;
+    case 'SPREADSHEET':
+      return <svg {...common} strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M10 4v16" /></svg>;
+    default:
+      return <svg {...common}><circle cx="12" cy="12" r="8" /></svg>;
+  }
+}
+
+// Status as a labelled pill with a leading colour dot + title-case text
+// (was an all-caps bare badge, unlike the rest of the app).
+function StatusPill({ status }: { status: string }) {
+  const c = STATUS_BADGES[status] || STATUS_BADGES.UNTESTED;
+  const label = status.charAt(0) + status.slice(1).toLowerCase();
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: c.bg, color: c.color }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: c.color }} />{label}
+    </span>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Form interface
@@ -165,9 +201,20 @@ export default function ConnectionsPage({
     return () => document.removeEventListener('keydown', onKey);
   }, [discoverModal]);
   const [formTestResult, setFormTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   const [formTesting, setFormTesting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [filterConnType, setFilterConnType] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  // Needs-attention one-click filter: '' | 'noSystem' | 'failing'.
+  const [attentionFilter, setAttentionFilter] = useState<'' | 'noSystem' | 'failing'>('');
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   // Which assets in the Discover modal are expanded to show their columns.
@@ -589,10 +636,13 @@ export default function ConnectionsPage({
   // Stats and the table both operate on the system-filtered view so the
   // numbers line up with what the user is looking at.
   const visibleConnections = connections.filter((c) => {
+    if (attentionFilter === 'noSystem' && (c.systemIds ?? []).length > 0) return false;
+    if (attentionFilter === 'failing' && c.status !== 'ERROR') return false;
     if (systemFilter) {
       const ids = c.systemIds ?? [];
       if (!ids.includes(systemFilter)) return false;
     }
+    if (filterStatus && c.status !== filterStatus) return false;
     if (filterConnType && c.connectionType !== filterConnType) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -848,11 +898,22 @@ export default function ConnectionsPage({
 
   const connectionColumns = ([
     connCols.isVisible('system') && {
-      key: 'system', header: 'System', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 240 },
+      key: 'system', header: 'Serves system', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 240 },
       render: (conn: ConnectionProfile) => {
         const ids = conn.systemIds ?? [];
         if (ids.length === 0) {
-          return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>;
+          if (!canWrite) return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>;
+          return (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openEdit(conn); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              title="This connection reads data but isn't linked to a system — assign one"
+            >
+              <span aria-hidden style={{ width: 22, height: 22, borderRadius: 6, border: '1px dashed var(--color-primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, lineHeight: 1 }}>+</span>
+              Assign system
+            </button>
+          );
         }
         const names = ids.map((id) => systemNameMap[id]).filter(Boolean);
         if (names.length === 0) return <span style={{ color: 'var(--color-text-muted)' }}>--</span>;
@@ -888,34 +949,42 @@ export default function ConnectionsPage({
       },
     },
     connCols.isVisible('name') && {
-      key: 'name', header: 'Connection Name', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 260 },
-      render: (conn: ConnectionProfile) => (
-        <button
-          type="button"
-          onClick={() => navigate(`/connections/${conn.id}`)}
-          title={conn.name}
-          style={{
-            background: 'none', border: 'none', padding: 0,
-            color: 'var(--color-text)', cursor: 'pointer',
-            font: 'inherit', fontWeight: 500, textAlign: 'left',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            minWidth: 0, maxWidth: '100%',
-          }}
-        >
-          {conn.name}
-        </button>
-      ),
+      key: 'name', header: 'Connection', sortable: true, cellStyle: { fontWeight: 500, maxWidth: 260 },
+      render: (conn: ConnectionProfile) => {
+        const cfg = configSummary(conn);
+        return (
+          <div style={{ minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/connections/${conn.id}`)}
+              title={conn.name}
+              style={{
+                background: 'none', border: 'none', padding: 0,
+                color: 'var(--color-text)', cursor: 'pointer',
+                font: 'inherit', fontWeight: 600, textAlign: 'left',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                minWidth: 0, maxWidth: '100%', display: 'block',
+              }}
+            >
+              {conn.name}
+            </button>
+            {cfg && cfg !== '--' && (
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240, marginTop: 2 }} title={cfg}>
+                {cfg}
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     connCols.isVisible('type') && {
       key: 'connectionType', header: 'Type', sortable: true,
-      render: (conn: ConnectionProfile) => {
-        const typeBadge = TYPE_BADGES[conn.connectionType] || TYPE_BADGES.DATABASE;
-        return (
-          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: typeBadge.bg, color: typeBadge.color }}>
-            {TYPE_LABELS[conn.connectionType] || conn.connectionType}
-          </span>
-        );
-      },
+      render: (conn: ConnectionProfile) => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+          <span style={{ color: 'var(--color-text-muted)', display: 'inline-flex' }}><TypeIcon type={conn.connectionType} /></span>
+          {TYPE_LABELS[conn.connectionType] || conn.connectionType}
+        </span>
+      ),
     },
     connCols.isVisible('config') && {
       key: 'config', header: 'Config', sortable: true,
@@ -924,14 +993,7 @@ export default function ConnectionsPage({
     },
     connCols.isVisible('status') && {
       key: 'status', header: 'Status', sortable: true,
-      render: (conn: ConnectionProfile) => {
-        const statusBadge = STATUS_BADGES[conn.status] || STATUS_BADGES.UNTESTED;
-        return (
-          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: statusBadge.bg, color: statusBadge.color }}>
-            {conn.status}
-          </span>
-        );
-      },
+      render: (conn: ConnectionProfile) => <StatusPill status={conn.status} />,
     },
     connCols.isVisible('lastTested') && {
       key: 'lastTested', header: 'Last Tested', sortable: true,
@@ -939,23 +1001,37 @@ export default function ConnectionsPage({
       render: (conn: ConnectionProfile) => timeAgo(conn.lastTestedAt),
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, cellStyle: { whiteSpace: 'nowrap' },
+      key: 'actions', header: '', align: 'right' as const, cellStyle: { whiteSpace: 'nowrap' },
       render: (conn: ConnectionProfile) => {
         const isTesting = testingIds.has(conn.id);
         // Every action here (test, discover, edit, duplicate, delete) writes,
         // so non-writers get no actions rather than buttons that 403.
         if (!canWrite) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
         return (
-          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            <IconButton size="sm" icon={isTesting ? 'refresh' : 'play'}
-              label={isTesting ? 'Testing…' : 'Test connection'}
+          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
               disabled={isTesting}
-              onClick={() => !isTesting && handleRowTest(conn.id)} />
-            {conn.status === 'CONNECTED' && (
-              <IconButton size="sm" icon="search" label="Discover assets" onClick={() => handleDiscover(conn)} />
-            )}
-            <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(conn)} />
-            <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(conn.id)} />
+              onClick={(e) => { e.stopPropagation(); if (!isTesting) handleRowTest(conn.id); }}
+              style={{ height: 30, padding: '0 12px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: isTesting ? 'default' : 'pointer', opacity: isTesting ? 0.6 : 1 }}
+              title="Run a connection test now"
+            >{isTesting ? 'Testing…' : 'Test'}</button>
+            <span style={{ position: 'relative', display: 'inline-flex' }}>
+              <button
+                type="button" aria-label={`More actions for ${conn.name}`} aria-haspopup="menu" aria-expanded={rowMenuId === conn.id}
+                onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === conn.id ? null : conn.id); }}
+                style={{ width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+              >⋯</button>
+              {rowMenuId === conn.id && (
+                <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 180, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                  <button type="button" role="menuitem" disabled={conn.status !== 'CONNECTED'} title={conn.status !== 'CONNECTED' ? 'Test the connection first' : 'List the tables and files this connection can see'} onClick={() => { setRowMenuId(null); handleDiscover(conn); }} style={{ ...connMenuItemStyle, color: conn.status !== 'CONNECTED' ? 'var(--color-text-muted)' : 'var(--color-text)', cursor: conn.status !== 'CONNECTED' ? 'not-allowed' : 'pointer' }}>Discover assets</button>
+                  <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); openEdit(conn); }} style={connMenuItemStyle}>Edit</button>
+                  <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); openDuplicate(conn); }} style={connMenuItemStyle}>Duplicate</button>
+                  <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 2px' }} />
+                  <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); setConfirmDelete(conn.id); }} style={{ ...connMenuItemStyle, color: 'var(--color-error)' }}>Delete</button>
+                </div>
+              )}
+            </span>
           </div>
         );
       },
@@ -1006,7 +1082,7 @@ export default function ConnectionsPage({
         title="Data Connections"
         subtitle={filterSystem
           ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>
-          : 'Connect to external data sources. Test verifies reachability (TCP or HTTP probe); Discover runs a real catalog scan for databases, warehouses, MongoDB, and cloud object stores (API and spreadsheet sources return sample assets).'}
+          : "A connection is how Procela reads a system's data: a database, file store or warehouse login."}
         actions={
           <ListToolbar
             views={
@@ -1053,6 +1129,55 @@ export default function ConnectionsPage({
 
         {/* Content Area */}
         <div>
+          {/* Needs attention — the two commonest connection gaps (unlinked
+              connections, failing tests) plus a shortcut to unconnected
+              systems on the other tab. */}
+          {(() => {
+            const noSystemCount = connections.filter((c) => (c.systemIds ?? []).length === 0).length;
+            const failingCount = connections.filter((c) => c.status === 'ERROR').length;
+            const systemsNoConn = systems.filter((s) => !connections.some((c) => (c.systemIds ?? []).includes(s.id))).length;
+            if (connections.length === 0 || (noSystemCount === 0 && failingCount === 0 && systemsNoConn === 0)) return null;
+            const card = (active: boolean, disabled: boolean): React.CSSProperties => ({
+              textAlign: 'left', cursor: disabled ? 'default' : 'pointer', borderRadius: 'var(--radius-md)',
+              padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 84,
+              border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+              background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+              boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'none', opacity: disabled ? 0.55 : 1,
+            });
+            return (
+              <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+                  <SectionLabel>Needs attention</SectionLabel>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Click a card to filter</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+                  <button type="button" disabled={noSystemCount === 0} aria-pressed={attentionFilter === 'noSystem'}
+                    onClick={() => setAttentionFilter(attentionFilter === 'noSystem' ? '' : 'noSystem')}
+                    style={card(attentionFilter === 'noSystem', noSystemCount === 0)}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span style={{ fontSize: 26, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{noSystemCount}</span>
+                      {noSystemCount > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>Fix first</span>}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>No system assigned</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Data flows in, but nobody knows which system it belongs to</span>
+                  </button>
+                  <button type="button" onClick={() => navigate('/systems')}
+                    style={card(false, false)}>
+                    <span style={{ fontSize: 26, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{systemsNoConn}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>Systems with no connection</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Opens the Systems tab</span>
+                  </button>
+                  <button type="button" disabled={failingCount === 0} aria-pressed={attentionFilter === 'failing'}
+                    onClick={() => setAttentionFilter(attentionFilter === 'failing' ? '' : 'failing')}
+                    style={card(attentionFilter === 'failing', failingCount === 0)}>
+                    <span style={{ fontSize: 26, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: failingCount === 0 ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{failingCount}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>Failing tests</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{failingCount === 0 ? 'All connections passed their last test' : 'Last test did not pass'}</span>
+                  </button>
+                </div>
+              </section>
+            );
+          })()}
           {/* Connection Types chips — only rendered when the facet actually
               splits the list (≥2 populated types), to save vertical space. */}
           {(() => {
@@ -1107,14 +1232,27 @@ export default function ConnectionsPage({
             </div>
             <select aria-label="Filter by system" style={{ ...selectStyle, width: 'auto', minWidth: 160 }} value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
               <option value="">All Systems</option>
-              {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
+              {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            {(searchQuery || systemFilter || filterConnType) && (
+            <select aria-label="Filter by status" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">All Status</option>
+              <option value="CONNECTED">Connected</option>
+              <option value="ERROR">Error</option>
+              <option value="UNTESTED">Untested</option>
+              <option value="DISCONNECTED">Disconnected</option>
+            </select>
+            {attentionFilter && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 6px 0 12px', borderRadius: 14, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 12, fontWeight: 600 }}>
+                {attentionFilter === 'noSystem' ? 'No system assigned' : 'Failing tests'}
+                <button type="button" aria-label="Remove filter" onClick={() => setAttentionFilter('')} style={{ width: 20, height: 20, border: 'none', borderRadius: 10, background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+              </span>
+            )}
+            {(searchQuery || systemFilter || filterConnType || filterStatus || attentionFilter) && (
               <>
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => { setSearchQuery(''); setSystemFilter(''); setFilterConnType(''); }}
+                  onClick={() => { setSearchQuery(''); setSystemFilter(''); setFilterConnType(''); setFilterStatus(''); setAttentionFilter(''); }}
                 >
                   Clear Filters
                 </Button>
