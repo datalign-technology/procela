@@ -1,8 +1,8 @@
 import { SkeletonRows } from '../components/Skeleton';
-import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
+import Card from '../components/Card';
+import Avatar from '../components/Avatar';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -10,7 +10,6 @@ import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
 import { installPrintFit } from '../lib/printFit';
-import InfoTip from '../components/InfoTip';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
@@ -40,61 +39,33 @@ interface RaciData {
   reasons: Record<string, Record<string, string>>;
 }
 
-const RACI_COLORS: Record<string, { bg: string; text: string }> = {
-  R: { bg: '#dcfce7', text: '#166534' },
-  A: { bg: '#dbeafe', text: '#1e40af' },
-  C: { bg: '#fef3c7', text: '#92400e' },
-  I: { bg: '#f3f4f6', text: '#4b5563' },
+// Letter styling by weight: A reads loudest (solid primary), R a filled blue,
+// C a quiet amber, I an outlined chip, and an empty cell a faint dot.
+const RACI_STYLE: Record<string, { bg: string; fg: string; bd: string; name: string; desc: string }> = {
+  R: { bg: '#e6eef9', fg: '#24508f', bd: '1px solid #9db6dd', name: 'Responsible', desc: 'Does the work.' },
+  A: { bg: 'var(--color-primary)', fg: '#ffffff', bd: '1px solid var(--color-primary)', name: 'Accountable', desc: 'Signs off and answers for the result. Only one per row.' },
+  C: { bg: '#fbe9d9', fg: '#9a4a0e', bd: '1px solid #fbe9d9', name: 'Consulted', desc: 'Asked for input before the work is done.' },
+  I: { bg: 'var(--color-surface)', fg: 'var(--color-text-secondary)', bd: '1px dashed #b8b3a7', name: 'Informed', desc: 'Told about the outcome afterwards.' },
 };
+const EMPTY_STYLE = { bg: 'transparent', fg: 'var(--color-text-muted)', bd: '1px solid transparent' };
+const RACI_LETTERS = ['R', 'A', 'C', 'I'] as const;
 
-// Rotation angle (degrees) for the person-column header labels and the
-// diagonal separators that match them.
-const RACI_HEADER_ANGLE = 55;
-
-const RACI_LABELS: Record<string, string> = {
-  R: 'Responsible',
-  A: 'Accountable',
-  C: 'Consulted',
-  I: 'Informed',
+const LEVEL_LABEL: Record<string, string> = {
+  VALUE_STREAM: 'Value stream', PROCESS: 'Process', SUBPROCESS: 'Sub-process', ACTIVITY: 'Activity',
 };
-
-const LEVEL_CONFIG: Record<string, { label: string; indent: number; weight: number; badge: string; badgeBg: string; badgeColor: string }> = {
-  VALUE_STREAM: { label: 'VS', indent: 0, weight: 700, badge: 'VS', badgeBg: '#ede9fe', badgeColor: '#6d28d9' },
-  PROCESS:      { label: 'PRO', indent: 20, weight: 600, badge: 'PRO', badgeBg: '#e0e7ff', badgeColor: '#3730a3' },
-  SUBPROCESS:   { label: 'SP', indent: 40, weight: 500, badge: 'SP', badgeBg: '#f0fdf4', badgeColor: '#166534' },
-  ACTIVITY:     { label: 'ACT', indent: 60, weight: 400, badge: 'ACT', badgeBg: '#fef3c7', badgeColor: '#92400e' },
-};
+const LEVEL_INDENT: Record<string, number> = { VALUE_STREAM: 8, PROCESS: 28, SUBPROCESS: 48, ACTIVITY: 68 };
 
 type ColumnGroupBy = 'name' | 'title' | 'jobRole' | 'orgUnit';
 
-const thStyle: React.CSSProperties = {
-  padding: '0.5rem 0.5rem',
-  textAlign: 'left',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-secondary)',
-  border: '1px solid var(--color-border)',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '0.375rem 0.5rem',
-  border: '1px solid var(--color-border)',
-  fontSize: 13,
-};
-
 const RACI_PRINT_STYLE_ID = 'procela-raci-print-styles';
 
-// Print/PDF support for the RACI matrix: hide the app shell, drop the
-// on-screen controls, and scale the (often very wide) matrix down to the
-// printable page width so it isn't clipped at the edge — a PDF can't scroll
-// horizontally. The scale factor itself is set at print time by installPrintFit.
 function ensureRaciPrintStyles() {
   if (document.getElementById(RACI_PRINT_STYLE_ID)) return;
   const style = document.createElement('style');
   style.id = RACI_PRINT_STYLE_ID;
   style.textContent = `
     @media print {
-      nav, aside,
+      nav, aside.app-aside,
       .sidebar, [class*="sidebar"], [class*="Sidebar"],
       [class*="chatPanel"], [class*="ChatPanel"],
       [class*="sessionTimeout"], [class*="toast"],
@@ -119,6 +90,11 @@ function ensureRaciPrintStyles() {
   document.head.appendChild(style);
 }
 
+function firstLast(name: string): { first: string; last: string } {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  return { first: parts[0] || '', last: parts.slice(1).join(' ') };
+}
+
 export default function RaciMatrixPage({
   embedded = false,
   actionsPortal,
@@ -136,53 +112,51 @@ export default function RaciMatrixPage({
   const [groupBy, setGroupBy] = useState<ColumnGroupBy>('name');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [sectionFilter, setSectionFilter] = useState<'all' | 'business' | 'governance'>('all');
+  // A highlighted letter dims every cell that isn't that letter, so you can
+  // read "where is everyone Accountable?" at a glance.
+  const [highlight, setHighlight] = useState<string | null>(null);
+  // The cell whose detail/edit panel is open. Clicking a cell selects it
+  // (it no longer cycles the value on click — that made accidental edits easy).
+  const [selected, setSelected] = useState<{ rowId: string; personId: string } | null>(null);
   const printFitRef = useRef<HTMLTableElement>(null);
 
-  // Inject print styles + scale the matrix to fit the page on print.
   useEffect(() => {
     ensureRaciPrintStyles();
     return installPrintFit(() => printFitRef.current);
   }, []);
+
+  const reload = async () => {
+    const orgParam = activeOrgId ? `?orgId=${activeOrgId}` : '';
+    const res = await apiClient.get<{ success: boolean; data: RaciData }>(`/dashboard/raci${orgParam}`);
+    setData(res.data);
+    return res.data;
+  };
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       setError('');
       try {
-        const orgParam = activeOrgId ? `?orgId=${activeOrgId}` : '';
-        const res = await apiClient.get<{ success: boolean; data: RaciData }>(`/dashboard/raci${orgParam}`);
-        setData(res.data);
-        // Auto-expand value streams
-        const vsIds = new Set((res.data?.rows || []).filter((r) => r.level === 'VALUE_STREAM').map((r) => r.id));
-        setExpanded(vsIds);
+        const d = await reload();
+        setExpanded(new Set((d?.rows || []).filter((r) => r.level === 'VALUE_STREAM').map((r) => r.id)));
       } catch (err) {
-      setError(errorMessage(err, 'Failed to load RACI matrix'));
+        setError(errorMessage(err, 'Failed to load RACI matrix'));
       } finally {
         setLoading(false);
       }
     }
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrgId]);
 
-  const toggleExpand = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const expandAll = () => {
-    if (!data) return;
-    setExpanded(new Set(data.rows.map((r) => r.id)));
-  };
-
+  const toggleExpand = (id: string) => setExpanded((prev) => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+  });
+  const expandAll = () => { if (data) setExpanded(new Set(data.rows.map((r) => r.id))); };
   const collapseAll = () => setExpanded(new Set());
 
-  // Build tree structure from flat rows
   const isRowVisible = (row: RaciRow): boolean => {
     if (!row.parentId) return true;
-    // Check if all ancestors are expanded
     let current = row;
     while (current.parentId) {
       if (!expanded.has(current.parentId)) return false;
@@ -192,10 +166,7 @@ export default function RaciMatrixPage({
     }
     return true;
   };
-
-  const hasChildren = (id: string): boolean => {
-    return data?.rows.some((r) => r.parentId === id) || false;
-  };
+  const hasChildren = (id: string): boolean => data?.rows.some((r) => r.parentId === id) || false;
 
   const getColumnLabel = (col: RaciColumn): string => {
     switch (groupBy) {
@@ -206,39 +177,13 @@ export default function RaciMatrixPage({
     }
   };
 
-  // Sort columns by the selected groupBy
-  const sortedColumns = data ? [...data.columns].sort((a, b) => {
-    return getColumnLabel(a).localeCompare(getColumnLabel(b));
-  }) : [];
+  const sortedColumns = data ? [...data.columns].sort((a, b) => getColumnLabel(a).localeCompare(getColumnLabel(b))) : [];
 
-  const buildExport = (): ExportPayload | null => {
-    if (!data) return null;
-    // Export respects the user's explicit filters (section filter,
-    // Hide-Empty columns) but ignores tree-collapse, which is incidental
-    // navigation rather than intent. Headers and cells now use the same
-    // column set so the two never drift apart.
-    const exportRows = sectionFilteredRows;
-    const exportCols = activeColumns;
-    const headers = ['Process', 'Level', 'Parent', ...exportCols.map((c) => `${c.name} (${getColumnLabel(c)})`)];
-    const rows = exportRows.map((row) => {
-      const cells = exportCols.map((col) => data.matrix[row.id]?.[col.personId] || '-');
-      return [row.name, row.level, row.parentName || '-', ...cells];
-    });
-    return {
-      filenameBase: `raci-matrix-${new Date().toISOString().split('T')[0]}`,
-      sheetName: 'RACI',
-      headers,
-      rows,
-    };
-  };
-
-  // Determine if a row belongs to a governance value stream
+  // Governance-section detection (for the Processes filter).
   const governanceVsIds = new Set<string>();
   if (data) {
     for (const r of data.rows) {
-      if (r.level === 'VALUE_STREAM' && (r.name.includes('Governance') || r.name.includes('Data Management'))) {
-        governanceVsIds.add(r.id);
-      }
+      if (r.level === 'VALUE_STREAM' && (r.name.includes('Governance') || r.name.includes('Data Management'))) governanceVsIds.add(r.id);
     }
   }
   const isGovernanceRow = (row: RaciRow): boolean => {
@@ -253,24 +198,17 @@ export default function RaciMatrixPage({
     return false;
   };
 
-  // Manual override: cycle R → A → C → I → clear
-  const handleCellClick = async (nodeId: string, personId: string, current: string | undefined) => {
-    const cycle = ['R', 'A', 'C', 'I', ''];
-    const nextIdx = (cycle.indexOf(current || '') + 1) % cycle.length;
-    const nextVal = cycle[nextIdx] || null;
+  const setCellValue = async (nodeId: string, personId: string, value: string) => {
     try {
-      await apiClient.post('/dashboard/raci/override', { nodeId, personId, value: nextVal });
-      // Refresh
-      const orgParam = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const res = await apiClient.get<{ success: boolean; data: RaciData }>(`/dashboard/raci${orgParam}`);
-      setData(res.data);
+      await apiClient.post('/dashboard/raci/override', { nodeId, personId, value: value || null });
+      await reload();
+      addToast('success', 'RACI assignment updated');
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Failed to update assignment');
     }
   };
 
-  const hasData = data && data.rows.length > 0 && data.columns.length > 0;
-  // Apply section filter
+  const hasData = !!data && data.rows.length > 0 && data.columns.length > 0;
   const sectionFilteredRows = data ? data.rows.filter((r) => {
     if (sectionFilter === 'all') return true;
     const isGov = isGovernanceRow(r);
@@ -278,56 +216,98 @@ export default function RaciMatrixPage({
   }) : [];
   const treeFilteredRows = sectionFilteredRows.filter(isRowVisible);
 
-  // Hide empty columns: only show people with at least one assignment in
-  // currently-visible rows (before the row-empty pass, otherwise the two
-  // filters loop on each other).
   const activeColumns = sortedColumns.filter((col) => {
     if (!hideEmpty || !data) return true;
     return treeFilteredRows.some((row) => data.matrix[row.id]?.[col.personId]);
   });
 
-  // Angled column headers: the person labels are rotated (RACI_HEADER_ANGLE),
-  // and each column draws a diagonal separator at that same angle instead of a
-  // vertical border, so the header reads as slanted lanes rather than upright
-  // boxes behind slanted text. For the diagonals to align into continuous
-  // parallel rails, every person column shares one header height (tallest label
-  // wins) so all the baselines sit on the same line.
-  const headerHeight = Math.max(
-    120,
-    ...activeColumns.map((col) => getColumnLabel(col).length * 5.5 + 40),
-  );
-  // Length of the diagonal rail needed to rise the full header height at the
-  // label angle (rise = L·sin θ ⇒ L = height / sin θ).
-  const railLength = headerHeight / Math.sin((RACI_HEADER_ANGLE * Math.PI) / 180);
-
-  // Hide empty rows: when Hide-Empty is on, drop rows that have no
-  // assignment in any active column. Parents are kept either way so
-  // the tree structure remains navigable even when intermediate nodes
-  // are blank - hiding a parent would orphan its visible children.
   const visibleRows = !hideEmpty || !data
     ? treeFilteredRows
     : treeFilteredRows.filter((row) => {
-        const hasChildren = data.rows.some((r) => r.parentId === row.id);
-        if (hasChildren) return true;
+        if (data.rows.some((r) => r.parentId === row.id)) return true;
         const cells = data.matrix[row.id] || {};
         return activeColumns.some((col) => cells[col.personId]);
       });
 
-  // Validation warnings per row
-  const rowWarnings = data ? visibleRows.map((row) => {
-    const cells = data.matrix[row.id] || {};
+  // Per-row "Check": exactly one A, at least one R.
+  const rowCheck = (rowId: string): { label: string; ok: boolean } => {
+    const cells = data?.matrix[rowId] || {};
     const values = Object.values(cells);
-    const hasR = values.includes('R');
-    const hasA = values.includes('A');
-    const aCount = values.filter((v) => v === 'A').length;
-    const warnings: string[] = [];
-    if (!hasR) warnings.push('No R (Responsible)');
-    if (!hasA) warnings.push('No A (Accountable)');
-    if (aCount > 1) warnings.push(`${aCount} A's (should be 1)`);
-    return { id: row.id, warnings };
-  }) : [];
-  const warningMap = new Map(rowWarnings.map((w) => [w.id, w.warnings]));
-  const totalWarnings = rowWarnings.reduce((sum, w) => sum + w.warnings.length, 0);
+    const nA = values.filter((v) => v === 'A').length;
+    const nR = values.filter((v) => v === 'R').length;
+    if (nA === 1 && nR >= 1) return { label: 'OK', ok: true };
+    if (nA === 0) return { label: 'No A', ok: false };
+    if (nA > 1) return { label: `${nA} As`, ok: false };
+    return { label: 'No R', ok: false };
+  };
+
+  const buildExport = (): ExportPayload | null => {
+    if (!data) return null;
+    const headers = ['Process', 'Level', 'Parent', 'Check', ...activeColumns.map((c) => `${c.name} (${getColumnLabel(c)})`)];
+    const rows = sectionFilteredRows.map((row) => {
+      const cells = activeColumns.map((col) => data.matrix[row.id]?.[col.personId] || '-');
+      return [row.name, row.level, row.parentName || '-', rowCheck(row.id).label, ...cells];
+    });
+    return { filenameBase: `raci-matrix-${new Date().toISOString().split('T')[0]}`, sheetName: 'RACI', headers, rows };
+  };
+
+  // Default side-panel observations — computed, not hard-coded.
+  const observations: string[] = [];
+  if (data) {
+    for (const col of activeColumns) {
+      let any = false, aCount = 0;
+      for (const row of visibleRows) {
+        const v = data.matrix[row.id]?.[col.personId];
+        if (v) any = true;
+        if (v === 'A') aCount++;
+      }
+      if (!any) observations.push(`${col.name} has no letter on any process.`);
+      else if (visibleRows.length > 1 && aCount === visibleRows.length) observations.push(`${col.name} is Accountable for every row. Check that is intended.`);
+      if (observations.length >= 4) break;
+    }
+  }
+
+  // Resolve the selected cell into display data.
+  const selectedInfo = (() => {
+    if (!selected || !data) return null;
+    const row = data.rows.find((r) => r.id === selected.rowId);
+    const col = data.columns.find((c) => c.personId === selected.personId);
+    if (!row || !col) return null;
+    const value = data.matrix[row.id]?.[col.personId] || '';
+    const reason = data.reasons?.[row.id]?.[col.personId] || '';
+    return { row, col, value, reason };
+  })();
+
+  const controls = (
+    <div className="raci-print-hide" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 16 }}>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+        <span style={{ color: 'var(--color-text-muted)' }}>Columns</span>
+        <select aria-label="Show columns by" value={groupBy} onChange={(e) => setGroupBy(e.target.value as ColumnGroupBy)} style={{ height: 38, padding: '0 10px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', font: 'inherit', fontSize: 13 }}>
+          <option value="name">People</option>
+          <option value="title">Job titles</option>
+          <option value="jobRole">Job roles</option>
+          <option value="orgUnit">Org units</option>
+        </select>
+      </label>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+        <span style={{ color: 'var(--color-text-muted)' }}>Processes</span>
+        <select aria-label="Show processes" value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value as any)} style={{ height: 38, padding: '0 10px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', font: 'inherit', fontSize: 13 }}>
+          <option value="all">All</option>
+          <option value="business">Business only</option>
+          <option value="governance">Governance only</option>
+        </select>
+      </label>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, padding: '0 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', cursor: 'pointer', fontSize: 14 }}>
+        <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--color-primary)' }} />
+        Hide people with no letters
+      </label>
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+        <ExportMenu build={buildExport} disabled={!data} />
+        <button type="button" onClick={expandAll} style={{ height: 36, padding: '0 10px', border: 0, background: 'transparent', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer' }}>Expand all</button>
+        <button type="button" onClick={collapseAll} style={{ height: 36, padding: '0 10px', border: 0, background: 'transparent', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer' }}>Collapse all</button>
+      </span>
+    </div>
+  );
 
   return (
     <div>
@@ -341,237 +321,176 @@ export default function RaciMatrixPage({
         actionsPortal={actionsPortal}
         title="RACI Matrix"
         subtitle="Who's Responsible, Accountable, Consulted, and Informed for every activity — auto-generated from process ownership and governance role assignments."
-      >
-        <InfoTip term="RACI" />
-      </EmbeddablePageHeader>
+      />
 
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        {Object.entries(RACI_COLORS).map(([letter, colors]) => (
-          <div key={letter} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 24, height: 24, borderRadius: 4,
-              background: colors.bg, color: colors.text,
-              fontWeight: 700, fontSize: 12,
-            }}>
-              {letter}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{RACI_LABELS[letter]}</span>
+      {/* What RACI means — plain definitions; click a letter to highlight it. */}
+      <Card padding={0} marginBottom={0}>
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>What RACI means</h2>
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Built automatically from process owners and role assignments. Click a letter to highlight it.</span>
           </div>
-        ))}
-      </div>
-
-      {loading && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-          <SkeletonRows rows={5} columns={4} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginTop: 12 }}>
+            {RACI_LETTERS.map((k) => {
+              const st = RACI_STYLE[k];
+              const active = highlight === k;
+              return (
+                <button key={k} type="button" onClick={() => setHighlight(active ? null : k)} aria-pressed={active}
+                  style={{ display: 'flex', gap: 12, alignItems: 'flex-start', textAlign: 'left', padding: 12, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: active ? 'var(--color-primary-light)' : 'var(--color-surface)', border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}` }}>
+                  <span aria-hidden="true" style={{ flex: 'none', width: 32, height: 32, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono, monospace)', fontSize: 15, fontWeight: 600, background: st.bg, color: st.fg, border: st.bd }}>{k}</span>
+                  <span><span style={{ display: 'block', fontWeight: 600 }}>{st.name}</span><span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-secondary)' }}>{st.desc}</span></span>
+                </button>
+              );
+            })}
+          </div>
+          <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--color-text-secondary)' }}>Rule of thumb: every activity needs <strong>exactly one A</strong> and <strong>at least one R</strong>.</p>
         </div>
-      )}
-      {error && <div style={{ color: 'var(--color-error)', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.75rem', fontSize: 13 }}>{error}</div>}
+      </Card>
+
+      {controls}
+
+      {loading && <Card style={{ marginTop: 12 }}><SkeletonRows rows={5} columns={4} /></Card>}
+      {error && <div style={{ marginTop: 12, color: 'var(--color-error)', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.75rem', fontSize: 13 }}>{error}</div>}
       {!loading && !error && !hasData && (
-        <EmptyState
-          icon={renderNavIcon('/dama-roles')}
-          title="No RACI data available"
-          description="Define processes and assign governance roles to generate the RACI matrix."
-        />
+        <div style={{ marginTop: 12 }}>
+          <EmptyState icon={renderNavIcon('/dama-roles')} title="No RACI data available" description="Define processes and assign governance roles to generate the RACI matrix." />
+        </div>
       )}
 
       {!loading && !error && hasData && data && (
-        <>
-          {/* Controls */}
-          <div className="raci-print-hide" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <ExportMenu build={buildExport} disabled={!data} />
-            <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
-            <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={collapseAll} />
-            <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
-            <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Show columns by:</label>
-            <select
-              aria-label="Show columns by"
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value as ColumnGroupBy)}
-              style={{ fontSize: 12, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
-            >
-              <option value="name">Person Name</option>
-              <option value="title">Job Title</option>
-              <option value="jobRole">Job Role</option>
-              <option value="orgUnit">Org Unit</option>
-            </select>
-            <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
-            <label style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-              <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
-              Hide empty columns
-            </label>
-            <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
-            <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Show:</label>
-            <select aria-label="Show" value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value as any)}
-              style={{ fontSize: 12, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}>
-              <option value="all">All Processes</option>
-              <option value="business">Business Only</option>
-              <option value="governance">Governance Only</option>
-            </select>
-          </div>
-
-          {/* Validation warnings summary */}
-          {totalWarnings > 0 && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', marginBottom: 12,
-              background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 'var(--radius-md)', fontSize: 12,
-            }}>
-              <span style={{ color: '#92400e', fontWeight: 600 }}>{totalWarnings} warning{totalWarnings === 1 ? '' : 's'}</span>
-              <span style={{ color: '#92400e' }}>
-                {rowWarnings.filter((w) => w.warnings.length > 0).length} row{rowWarnings.filter((w) => w.warnings.length > 0).length === 1 ? '' : 's'} missing R or A assignments.
-                Click any cell to manually assign.
-              </span>
-            </div>
-          )}
-
-          {/* Table */}
-          <div className="raci-scroll-area" style={{ overflow: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
-            <table ref={printFitRef} style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
-              <thead>
-                <tr>
-                  <th scope="col" style={{ ...thStyle, position: 'sticky', left: 0, zIndex: 2, background: 'var(--color-surface)', minWidth: 280 }}>
-                    Process Hierarchy
-                  </th>
-                  {activeColumns.map((col, ci) => {
-                    const label = getColumnLabel(col);
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 12, alignItems: 'flex-start' }}>
+          {/* Matrix */}
+          <main style={{ flex: '999 1 640px', minWidth: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+            <div className="raci-scroll-area" style={{ overflowX: 'auto' }}>
+              <table ref={printFitRef} style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: 14, minWidth: '100%' }}>
+                <thead>
+                  <tr>
+                    <th scope="col" style={{ position: 'sticky', left: 0, zIndex: 2, background: 'var(--color-surface)', textAlign: 'left', padding: '12px 16px', minWidth: 260, fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', verticalAlign: 'bottom' }}>Process</th>
+                    <th scope="col" title="Does this row have one A and at least one R?" style={{ padding: '12px 10px', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', verticalAlign: 'bottom', textAlign: 'left', whiteSpace: 'nowrap' }}>Check</th>
+                    {activeColumns.map((col) => {
+                      const nm = firstLast(col.name);
+                      return (
+                        <th scope="col" key={col.personId} title={`${col.name}${getColumnLabel(col) !== col.name ? ` — ${getColumnLabel(col)}` : ''}`} style={{ padding: '10px 4px', width: 64, minWidth: 64, borderBottom: '1px solid var(--color-border)', verticalAlign: 'bottom', fontWeight: 500 }}>
+                          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                            <Avatar name={col.name} size="sm" />
+                            {groupBy === 'name' ? (
+                              <span style={{ fontSize: 12, color: 'var(--color-text)', lineHeight: 1.2, textAlign: 'center' }}>{nm.first}<span style={{ display: 'block', color: 'var(--color-text-muted)' }}>{nm.last}</span></span>
+                            ) : (
+                              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.2, textAlign: 'center', maxWidth: 60, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{getColumnLabel(col)}</span>
+                            )}
+                          </span>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => {
+                    const isExp = expanded.has(row.id);
+                    const hasCh = hasChildren(row.id);
+                    const isVs = row.level === 'VALUE_STREAM';
+                    const chk = rowCheck(row.id);
+                    const headBg = isVs ? 'var(--color-bg)' : 'var(--color-surface)';
                     return (
-                      <th scope="col" key={col.personId} style={{
-                        ...thStyle, padding: 0, minWidth: 26, maxWidth: 30,
-                        // The diagonal rails replace the vertical side borders,
-                        // so the header reads as slanted lanes; keep the bottom
-                        // border as the header/body divider. overflow:visible
-                        // lets each rail extend up-right across the header.
-                        borderLeft: 'none', borderRight: 'none', borderTop: 'none',
-                        verticalAlign: 'bottom', background: 'var(--color-surface)',
-                        overflow: 'visible',
-                      }}>
-                        <div style={{ height: headerHeight, position: 'relative', width: '100%', overflow: 'visible' }}>
-                          {/* Diagonal separator at the column's left edge, at the
-                              same angle as the label. The last column also draws
-                              its right edge so the final lane is closed. */}
-                          <div aria-hidden style={{
-                            position: 'absolute', bottom: 0, left: 0,
-                            width: railLength, height: 1,
-                            background: 'var(--color-border)',
-                            transformOrigin: 'bottom left',
-                            transform: `rotate(-${RACI_HEADER_ANGLE}deg)`,
-                            pointerEvents: 'none',
-                          }} />
-                          {ci === activeColumns.length - 1 && (
-                            <div aria-hidden style={{
-                              position: 'absolute', bottom: 0, right: 0,
-                              width: railLength, height: 1,
-                              background: 'var(--color-border)',
-                              transformOrigin: 'bottom left',
-                              transform: `rotate(-${RACI_HEADER_ANGLE}deg)`,
-                              pointerEvents: 'none',
-                            }} />
-                          )}
-                          {/* Anchor the name's bottom-left corner at the
-                              column's horizontal centre and lean it up-right at
-                              the label angle. Anchoring the corner (not the
-                              centre) keeps the whole label above the header /
-                              value divider — a 'center bottom' origin swings the
-                              label's left half down into the R/A/C/I cell below,
-                              which is what made long names overlap the values. */}
-                          <div style={{
-                            position: 'absolute',
-                            bottom: 4,
-                            left: '50%',
-                            transformOrigin: 'left bottom',
-                            transform: `rotate(-${RACI_HEADER_ANGLE}deg)`,
-                            whiteSpace: 'nowrap',
-                            fontSize: 11,
-                            fontWeight: 500,
-                            color: 'var(--color-text-secondary)',
-                            padding: '2px 4px',
-                          }}>
-                            {label}
-                          </div>
-                        </div>
-                      </th>
+                      <tr key={row.id} className="raci-row">
+                        <th scope="row" style={{ position: 'sticky', left: 0, zIndex: 1, background: headBg, textAlign: 'left', padding: `0 16px 0 ${LEVEL_INDENT[row.level] ?? 8}px`, height: 48, borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', fontWeight: isVs ? 600 : 500 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {hasCh ? (
+                              <span {...clickable(() => toggleExpand(row.id), { label: isExp ? `Collapse ${row.name}` : `Expand ${row.name}` })} aria-expanded={isExp} style={{ width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: 'var(--color-text-secondary)', cursor: 'pointer', flexShrink: 0 }}>
+                                <span aria-hidden="true" style={{ display: 'inline-block', transform: `rotate(${isExp ? 90 : 0}deg)`, transition: 'transform 0.12s', fontSize: 11 }}>&#9654;</span>
+                              </span>
+                            ) : <span style={{ width: 24, flexShrink: 0 }} />}
+                            <span style={{ minWidth: 0 }}>
+                              <span style={{ display: 'block' }}>{row.name}</span>
+                              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>{LEVEL_LABEL[row.level] || row.level}</span>
+                            </span>
+                          </span>
+                        </th>
+                        <td style={{ padding: '0 10px', borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', whiteSpace: 'nowrap', fontSize: 13 }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: chk.ok ? 'var(--color-success)' : 'var(--color-error)' }}>
+                            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 4, background: 'currentColor' }} />{chk.label}
+                          </span>
+                        </td>
+                        {activeColumns.map((col) => {
+                          const value = data.matrix[row.id]?.[col.personId] || '';
+                          const st = value ? RACI_STYLE[value] : EMPTY_STYLE;
+                          const isSel = selected?.rowId === row.id && selected?.personId === col.personId;
+                          const dim = highlight && value !== highlight;
+                          return (
+                            <td key={col.personId} style={{ padding: 4, borderBottom: '1px solid var(--color-border)', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                aria-label={`${col.name}, ${row.name}: ${value ? RACI_STYLE[value].name : 'no role'}. Activate to inspect or change.`}
+                                onClick={() => setSelected({ rowId: row.id, personId: col.personId })}
+                                onKeyDown={activateOnKey(() => setSelected({ rowId: row.id, personId: col.personId }))}
+                                style={{ width: 44, height: 36, borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-mono, monospace)', fontSize: 15, fontWeight: 500, background: st.bg, color: st.fg, border: st.bd, opacity: dim ? 0.25 : 1, boxShadow: isSel ? '0 0 0 2px var(--color-text)' : 'none', transition: 'opacity 0.1s' }}
+                                title={value ? (data.reasons?.[row.id]?.[col.personId] ? `${RACI_STYLE[value].name}: ${data.reasons[row.id][col.personId]}` : RACI_STYLE[value].name) : 'No role — click to assign'}
+                              >
+                                {value || '·'}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
                     );
                   })}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRows.map((row) => {
-                  const cfg = LEVEL_CONFIG[row.level] || LEVEL_CONFIG.ACTIVITY;
-                  const isExp = expanded.has(row.id);
-                  const hasCh = hasChildren(row.id);
-                  const isGov = isGovernanceRow(row);
-                  return (
-                    <tr key={row.id} style={{ background: row.level === 'VALUE_STREAM' ? (isGov ? '#eff6ff' : '#fafbfc') : (isGov ? '#f8fbff' : '') }}>
-                      <td style={{
-                        ...tdStyle,
-                        position: 'sticky', left: 0, zIndex: 1,
-                        background: row.level === 'VALUE_STREAM' ? (isGov ? '#eff6ff' : '#fafbfc') : (isGov ? '#f8fbff' : 'var(--color-surface)'),
-                        borderLeft: isGov ? '3px solid #3b82f6' : undefined,
-                        paddingLeft: 8 + cfg.indent,
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {hasCh ? (
-                            <span
-                              {...clickable(() => toggleExpand(row.id), { label: isExp ? `Collapse ${row.name}` : `Expand ${row.name}` })}
-                              aria-expanded={isExp}
-                              style={{ cursor: 'pointer', fontSize: 8, color: 'var(--color-text-muted)', width: 12, textAlign: 'center', flexShrink: 0 }}
-                            >
-                              {isExp ? '\u25BC' : '\u25B6'}
-                            </span>
-                          ) : (
-                            <span style={{ width: 12, flexShrink: 0 }} />
-                          )}
-                          <span style={{
-                            fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-                            background: isGov ? '#dbeafe' : cfg.badgeBg,
-                            color: isGov ? '#1e40af' : cfg.badgeColor, flexShrink: 0,
-                          }}>
-                            {isGov ? 'GOV' : cfg.badge}
-                          </span>
-                          <span style={{ fontSize: 13, fontWeight: cfg.weight }}>{row.name}</span>
-                          {(warningMap.get(row.id) || []).length > 0 && (
-                            <span title={(warningMap.get(row.id) || []).join(', ')}
-                              style={{ color: 'var(--color-warning)', marginLeft: 4, flexShrink: 0, display: 'inline-flex' }}>
-                              <AlertTriangle size={11} strokeWidth={2.2} />
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      {activeColumns.map((col) => {
-                        const value = data.matrix[row.id]?.[col.personId];
-                        const reason = data.reasons?.[row.id]?.[col.personId];
-                        const colors = value ? RACI_COLORS[value] : null;
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '12px 16px', fontSize: 13, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderTop: '1px solid var(--color-border)' }}>
+              <span>Rows {visibleRows.length} of {sectionFilteredRows.length} · People {activeColumns.length} of {sortedColumns.length}{hideEmpty ? ' (empty hidden)' : ''}</span>
+              <span>Click any cell to see why, or to change it.</span>
+            </div>
+          </main>
+
+          {/* Selected-cell side panel */}
+          <aside aria-label="Selected cell" className="raci-print-hide" style={{ flex: '1 1 280px' }}>
+            <Card padding={0}>
+              <div style={{ padding: '16px 18px' }}>
+                {selectedInfo ? (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Selected cell</div>
+                    <h2 style={{ margin: '4px 0 0', fontSize: 16, fontWeight: 600 }}>{selectedInfo.col.name}</h2>
+                    <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--color-text-secondary)' }}>on {selectedInfo.row.name}</p>
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ width: 36, height: 36, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono, monospace)', fontSize: 16, background: selectedInfo.value ? RACI_STYLE[selectedInfo.value].bg : EMPTY_STYLE.bg, color: selectedInfo.value ? RACI_STYLE[selectedInfo.value].fg : EMPTY_STYLE.fg, border: selectedInfo.value ? RACI_STYLE[selectedInfo.value].bd : EMPTY_STYLE.bd }}>{selectedInfo.value || '·'}</span>
+                      <span style={{ fontWeight: 600 }}>{selectedInfo.value ? RACI_STYLE[selectedInfo.value].name : 'No role'}</span>
+                    </div>
+                    <div style={{ marginTop: 12, fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                      <strong style={{ color: 'var(--color-text)' }}>Why:</strong> {selectedInfo.reason || 'No stated reason — set manually or inherited from process ownership.'}
+                    </div>
+                    <div style={{ marginTop: 16, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>Change to</div>
+                    <div role="group" aria-label="Change RACI value" style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                      {[...RACI_LETTERS, 'None'].map((k) => {
+                        const letter = k === 'None' ? '' : k;
+                        const isCurrent = selectedInfo.value === letter;
                         return (
-                          <td key={col.personId}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`${row.name} — ${value ? RACI_LABELS[value] || value : 'unassigned'}. Activate to change.`}
-                            onClick={() => handleCellClick(row.id, col.personId, value)}
-                            onKeyDown={activateOnKey(() => handleCellClick(row.id, col.personId, value))}
-                            style={{
-                              ...tdStyle, textAlign: 'center', cursor: 'pointer',
-                              background: colors ? colors.bg : 'transparent',
-                              color: colors ? colors.text : 'var(--color-text-muted)',
-                              fontWeight: colors ? 700 : 400, fontSize: 13,
-                            }}
-                            title={reason ? `${RACI_LABELS[value || ''] || ''}: ${reason}` : 'Click to assign'}
-                          >
-                            {value || '-'}
-                          </td>
+                          <button key={k} type="button" title={letter ? RACI_STYLE[letter].name : 'Clear'} disabled={isCurrent}
+                            onClick={() => setCellValue(selectedInfo.row.id, selectedInfo.col.personId, letter)}
+                            style={{ height: 36, minWidth: 40, padding: '0 10px', border: `1px solid ${isCurrent ? 'var(--color-primary)' : 'var(--color-border)'}`, background: isCurrent ? 'var(--color-primary-light)' : 'var(--color-surface)', color: isCurrent ? 'var(--color-primary)' : 'var(--color-text)', borderRadius: 'var(--radius-md)', fontFamily: 'var(--font-mono, monospace)', fontSize: 14, cursor: isCurrent ? 'default' : 'pointer' }}>{k}</button>
                         );
                       })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
-            {visibleRows.length} of {data.rows.length} rows | {activeColumns.length} of {sortedColumns.length} people{hideEmpty ? ' (empty hidden)' : ''} | {sectionFilter !== 'all' ? sectionFilter + ' processes' : 'all processes'} | Click any cell to override
-          </div>
-        </>
+                    </div>
+                    <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>A manual change overrides the automatic value and is logged.</p>
+                  </>
+                ) : (
+                  <>
+                    <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Pick a cell</h2>
+                    <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--color-text-secondary)' }}>Click any letter in the grid to see why that person has it and to change it.</p>
+                    {observations.length > 0 && (
+                      <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 8 }}>Worth a look</div>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {observations.map((o, i) => <li key={i}>{o}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </Card>
+          </aside>
+        </div>
       )}
     </div>
   );
