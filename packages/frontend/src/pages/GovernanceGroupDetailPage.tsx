@@ -20,9 +20,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
 import PersonPicker from '../components/PersonPicker';
+import Avatar from '../components/Avatar';
 import { renderNavIcon } from '../components/navIcons';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
-import { getRoleReference, RACI_COLOR, RACI_LABEL, Raci } from '../lib/roleDefinitions';
+import { getRoleReference, RACI_COLOR, RACI_LABEL, RACI_DESCRIPTION, Raci } from '../lib/roleDefinitions';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceGroupDetailPage — single composition surface for one governance
@@ -143,6 +144,18 @@ const GROUP_TYPE_LABELS: Record<string, string> = {
   COMMUNITY_OF_PRACTICE: 'Community of Practice',
 };
 
+// Short, human type label for the kicker ("Governance group · Council") — the
+// full GROUP_TYPE_LABELS repeats the title ("Data Governance Council"), which
+// is why the old secondary label read as a duplicate.
+const GROUP_TYPE_SHORT: Record<string, string> = {
+  COUNCIL: 'Council',
+  OFFICE: 'Office',
+  COMMITTEE: 'Committee',
+  STEWARDSHIP_TEAM: 'Stewardship team',
+  WORKING_GROUP: 'Working group',
+  COMMUNITY_OF_PRACTICE: 'Community of practice',
+};
+
 const GROUP_ROLE_LABELS: Record<string, string> = {
   CHAIR: 'Chair',
   VICE_CHAIR: 'Vice Chair',
@@ -150,6 +163,13 @@ const GROUP_ROLE_LABELS: Record<string, string> = {
   SECRETARY: 'Secretary',
   ADVISOR: 'Advisor',
 };
+
+// Seat ("their place on this group") colour — Chair stands out, Member is
+// neutral, everything else a quiet blue-grey.
+const seatColor = (role: string): { bg: string; color: string } =>
+  role === 'CHAIR' ? { bg: '#dcefe5', color: '#17604b' }
+  : role === 'MEMBER' ? { bg: 'var(--color-bg)', color: 'var(--color-text-secondary)' }
+  : { bg: '#e5ecf3', color: '#364a5e' };
 
 const DAMA_ROLE_LABELS: Record<string, string> = Object.fromEntries(
   GOVERNANCE_ROLES.map((r) => [r.roleType, r.label]),
@@ -211,6 +231,18 @@ export default function GovernanceGroupDetailPage() {
 
   // Confirms
   const [confirmRemoveMember, setConfirmRemoveMember] = useState<GroupMember | null>(null);
+
+  // Per-member "⋯" actions menu, and the header overflow menu (org chart /
+  // delete). Keyed by member id; closes on any outside click.
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(false);
+  useEffect(() => {
+    if (!rowMenuId && !headerMenuOpen) return;
+    const close = () => { setRowMenuId(null); setHeaderMenuOpen(false); };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId, headerMenuOpen]);
 
   // ── Fetch everything ──
   const fetchAll = useCallback(async () => {
@@ -464,6 +496,19 @@ export default function GovernanceGroupDetailPage() {
     }
   };
 
+  const handleDeleteGroup = async () => {
+    if (!group) return;
+    try {
+      await apiClient.delete(`/governance-groups/${group.id}`);
+      addToast('success', 'Governance group deleted');
+      navigate('/governance-groups');
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setConfirmDeleteGroup(false);
+    }
+  };
+
 
   // ── Render ──
   if (loading) return (
@@ -481,6 +526,88 @@ export default function GovernanceGroupDetailPage() {
     />
   );
 
+  // ── Derived member helpers for the redesigned composition view ──
+  const chairMember = group.members.find((mm) => mm.groupRole === 'CHAIR') || null;
+  const secretaryMember = group.members.find((mm) => mm.groupRole === 'SECRETARY') || null;
+  const memberDisplayName = (mm: GroupMember) => mm.agentId ? (mm.agentName || mm.agentId || 'Agent') : (mm.personName || mm.personId || 'Unknown');
+  // Typical RACI letters a member carries, via their governance roles.
+  const memberRaciLetters = (personRoles: DamaRole[]): Raci[] => {
+    const set = new Set<Raci>();
+    for (const r of personRoles) {
+      const ref = getRoleReference(r.roleType);
+      (ref?.typicalDecisions || []).slice(0, 3).forEach((d) => set.add(d.raci));
+    }
+    return Array.from(set);
+  };
+
+  // Shared right rail — Facts + Expected roles — rendered beside every tab's
+  // main column, since the group's facts stay relevant whichever facet is open.
+  const factsRail = (
+    <>
+      <Card padding={0}>
+        <div style={{ padding: '14px 18px' }}>
+          <h2 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>Facts</h2>
+          <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: '104px 1fr', rowGap: 10, fontSize: 13 }}>
+            <dt style={{ color: 'var(--color-text-muted)' }}>Type</dt><dd style={{ margin: 0 }}>{GROUP_TYPE_SHORT[group.type] || group.type}</dd>
+            <dt style={{ color: 'var(--color-text-muted)' }}>Reports to</dt>
+            <dd style={{ margin: 0 }}>{group.parentId ? <Link to={`/governance-groups/${group.parentId}`} style={{ color: 'var(--color-primary)' }}>{group.parentName || 'Parent group'}</Link> : <span style={{ color: 'var(--color-text-muted)' }}>Top level (no parent)</span>}</dd>
+            <dt style={{ color: 'var(--color-text-muted)' }}>Sub-groups</dt>
+            <dd style={{ margin: 0 }}>{group.children.length === 0 ? <span style={{ color: 'var(--color-text-muted)' }}>None</span> : <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{group.children.map((c) => <Link key={c.id} to={`/governance-groups/${c.id}`} style={{ color: 'var(--color-primary)' }}>{c.name}</Link>)}</span>}</dd>
+            <dt style={{ color: 'var(--color-text-muted)' }}>Chair</dt><dd style={{ margin: 0 }}>{chairMember ? memberDisplayName(chairMember) : <span style={{ color: 'var(--color-text-muted)' }}>Not set</span>}</dd>
+            <dt style={{ color: 'var(--color-text-muted)' }}>Secretary</dt><dd style={{ margin: 0 }}>{secretaryMember ? memberDisplayName(secretaryMember) : <span style={{ color: 'var(--color-text-muted)' }}>Not set</span>}</dd>
+            <dt style={{ color: 'var(--color-text-muted)' }}>Status</dt><dd style={{ margin: 0 }}>{group.status === 'ACTIVE' ? 'Active' : 'Inactive'}</dd>
+          </dl>
+        </div>
+      </Card>
+      {expectedRoles.length > 0 && (
+        <Card padding={0}>
+          <div style={{ padding: '14px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Expected roles</h2>
+              <span style={{ fontSize: 13, fontWeight: 600, color: requiredFilled === requiredExpected.length ? 'var(--color-success)' : 'var(--color-warning)' }}>{requiredFilled} of {requiredExpected.length}</span>
+            </div>
+            <p style={{ margin: '4px 0 12px', fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.45 }}>Roles a {(GROUP_TYPE_SHORT[group.type] || 'group').toLowerCase()} should include. Assigning one here also assigns it org-wide.</p>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {expectedRoles.map((er) => {
+                const assigned = memberRoles.filter((r) => r.roleType === er.roleType);
+                const filled = assigned.length > 0;
+                return (
+                  <li key={er.roleType} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+                    <span aria-hidden="true" style={{ width: 16, flexShrink: 0, color: filled ? 'var(--color-success)' : er.required ? 'var(--color-warning)' : 'var(--color-text-muted)', fontWeight: 700 }}>{filled ? '✓' : er.required ? '!' : '○'}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{er.label}</span>
+                    {filled ? (
+                      <span style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', textAlign: 'right' }}>{assigned.map((a) => a.personName).filter(Boolean).join(', ')}</span>
+                    ) : isAdmin ? (
+                      <button type="button" onClick={() => { setAssignRoleSlot(er.roleType); setAssignRolePersonId(''); }} style={{ fontSize: 12.5, color: 'var(--color-primary)', background: 'none', border: 0, cursor: 'pointer', padding: 0, fontWeight: 600 }}>Assign</button>
+                    ) : <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>Unfilled</span>}
+                  </li>
+                );
+              })}
+            </ul>
+            {isAdmin && assignRoleSlot && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Assign {DAMA_ROLE_LABELS[assignRoleSlot] || assignRoleSlot} to</div>
+                <PersonPicker mode="single" valueMode="id" value={assignRolePersonId || null} onChange={(id) => setAssignRolePersonId(id || '')} orgId={activeOrgId || undefined} placeholder="Pick a person…" />
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <Button size="sm" variant="primary" disabled={!assignRolePersonId} onClick={() => handleAssignRole(assignRoleSlot, assignRolePersonId)}>Assign</Button>
+                  <Button size="sm" onClick={() => { setAssignRoleSlot(null); setAssignRolePersonId(''); }}>Cancel</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+    </>
+  );
+
+  // Wrap a tab's content in the main column, with the shared Facts rail beside.
+  const twoCol = (main: React.ReactNode) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+      <main style={{ flex: '999 1 520px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{main}</main>
+      <aside aria-label="Group facts" style={{ flex: '1 1 280px', display: 'flex', flexDirection: 'column', gap: 16 }}>{factsRail}</aside>
+    </div>
+  );
+
   return (
     <div>
       {/* Header leads; the five owned/derived sections become tabs so the
@@ -488,23 +615,25 @@ export default function GovernanceGroupDetailPage() {
       <Tabs
         header={
       <PageHeader
-        kicker={
-          <>
-            <Link to="/governance-groups" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>← Governance Groups</Link>
-            {group.parentName && (
-              <>
-                <span style={{ margin: '0 6px' }}>›</span>
-                <span>{group.parentName}</span>
-              </>
-            )}
-          </>
-        }
+        kicker={`Governance group · ${GROUP_TYPE_SHORT[group.type] || group.type}`}
         title={group.name}
         copyId={group.id}
         copyLabel="Copy group ID"
         actions={
           <>
-            <Button size="sm" onClick={() => navigate('/governance-groups')}>← Back to list</Button>
+            <span style={{ position: 'relative', display: 'inline-flex' }}>
+              <button
+                type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded={headerMenuOpen}
+                onClick={(e) => { e.stopPropagation(); setHeaderMenuOpen((v) => !v); }}
+                style={{ width: 34, height: 34, border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+              >⋯</button>
+              {headerMenuOpen && (
+                <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 38, right: 0, zIndex: 30, minWidth: 180, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                  <button type="button" role="menuitem" onClick={() => { setHeaderMenuOpen(false); navigate('/governance/visualization'); }} style={menuItemStyle}>View in org chart</button>
+                  {isAdmin && <button type="button" role="menuitem" onClick={() => { setHeaderMenuOpen(false); setConfirmDeleteGroup(true); }} style={{ ...menuItemStyle, color: 'var(--color-error)' }}>Delete group</button>}
+                </div>
+              )}
+            </span>
             <DetailEditActions
               editing={m.isEditing}
               canEdit={isAdmin}
@@ -518,331 +647,168 @@ export default function GovernanceGroupDetailPage() {
         }
         meta={
           <>
-            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: 'var(--color-bg)', color: 'var(--color-text-muted)' }}>
-              {GROUP_TYPE_LABELS[group.type] || group.type}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: group.status === 'ACTIVE' ? '#d1fae5' : '#f1f5f9', color: group.status === 'ACTIVE' ? '#065f46' : '#64748b' }}>
+              <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 3, background: 'currentColor' }} />{group.status === 'ACTIVE' ? 'Active' : 'Inactive'}
             </span>
-            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: group.status === 'ACTIVE' ? '#d1fae5' : '#f1f5f9', color: group.status === 'ACTIVE' ? '#065f46' : '#64748b' }}>
-              {group.status}
-            </span>
+            {requiredExpected.length > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: requiredFilled === requiredExpected.length ? '#d1fae5' : '#fffbeb', color: requiredFilled === requiredExpected.length ? '#065f46' : 'var(--color-warning)' }}>
+                Required roles {requiredFilled} of {requiredExpected.length} filled
+              </span>
+            )}
           </>
         }
       />
         }
         tabs={[
-          { id: 'composition', label: 'Composition', render: () => (
+          { id: 'composition', label: `Members ${group.members.length}`, render: () => twoCol(
       <>
-      {/* Record details — the group's own fields (name / type / status /
-          description / charter) with a view→Edit→Save toggle, matching every
-          other detail surface. Membership & roles below stay live. */}
-      <Card marginBottom={16}>
-        <div style={{ marginBottom: 12 }}>
-          <SectionLabel marginBottom={0}>Details</SectionLabel>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-          {m.isEditing && (
+      {/* Edit mode shows the group's record fields; view mode shows the
+          charter. The rest of the record (type / parent / status) lives in the
+          Facts rail, so it isn't duplicated here. */}
+      {m.isEditing ? (
+        <Card>
+          <SectionLabel marginBottom={12}>Edit group</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
             <EditableField label="Name" editing value={m.draft.name} onChange={(v) => m.set('name', v)} placeholder="Group name" />
-          )}
-          <EditableField
-            label="Type"
-            editing={m.isEditing}
-            value={m.draft.type}
-            onChange={(v) => m.set('type', v)}
-            type="select"
-            options={Object.keys(GROUP_TYPE_LABELS).map((t) => ({ value: t, label: GROUP_TYPE_LABELS[t] }))}
-          >
-            {GROUP_TYPE_LABELS[group.type] || group.type}
-          </EditableField>
-          <EditableField
-            label="Status"
-            editing={m.isEditing}
-            value={m.draft.status}
-            onChange={(v) => m.set('status', v)}
-            type="select"
-            options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
-          >
-            {group.status === 'ACTIVE' ? 'Active' : 'Inactive'}
-          </EditableField>
-          <EditableField
-            label="Parent group"
-            editing={m.isEditing}
-            value={m.draft.parentId ?? ''}
-            onChange={(v) => m.set('parentId', v || null)}
-            type="select"
-            options={[{ value: '', label: '— None (top-level) —' }, ...parentOptions.map((g) => ({ value: g.id, label: g.name }))]}
-          >
-            {group.parentName || <span style={{ color: 'var(--color-text-muted)' }}>Top-level</span>}
-          </EditableField>
-        </div>
-        {(m.isEditing || group.description) && (
-          <div style={{ marginTop: 14 }}>
-            <EditableField label="Description" editing={m.isEditing} type="textarea" value={m.draft.description} onChange={(v) => m.set('description', v)} placeholder="What this group does" emptyText="No description">
-              {group.description ? <span style={{ color: 'var(--color-text-secondary)' }}>{group.description}</span> : undefined}
-            </EditableField>
+            <EditableField label="Type" editing value={m.draft.type} onChange={(v) => m.set('type', v)} type="select" options={Object.keys(GROUP_TYPE_LABELS).map((t) => ({ value: t, label: GROUP_TYPE_LABELS[t] }))}>{GROUP_TYPE_LABELS[group.type] || group.type}</EditableField>
+            <EditableField label="Status" editing value={m.draft.status} onChange={(v) => m.set('status', v)} type="select" options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}>{group.status === 'ACTIVE' ? 'Active' : 'Inactive'}</EditableField>
+            <EditableField label="Parent group" editing value={m.draft.parentId ?? ''} onChange={(v) => m.set('parentId', v || null)} type="select" options={[{ value: '', label: '— None (top-level) —' }, ...parentOptions.map((g) => ({ value: g.id, label: g.name }))]}>{group.parentName || 'Top-level'}</EditableField>
           </div>
-        )}
-        {(m.isEditing || group.charter) && (
           <div style={{ marginTop: 14 }}>
-            <EditableField label="Charter" editing={m.isEditing} type="textarea" value={m.draft.charter} onChange={(v) => m.set('charter', v)} placeholder="The group's charter / mandate" emptyText="No charter">
-              {group.charter ? <span style={{ whiteSpace: 'pre-wrap', color: 'var(--color-text-secondary)' }}>{group.charter}</span> : undefined}
-            </EditableField>
+            <EditableField label="Description" editing type="textarea" value={m.draft.description} onChange={(v) => m.set('description', v)} placeholder="What this group does" emptyText="No description" />
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <EditableField label="Charter" editing type="textarea" value={m.draft.charter} onChange={(v) => m.set('charter', v)} placeholder="The group's charter / mandate" emptyText="No charter" />
+          </div>
+        </Card>
+      ) : group.charter ? (
+        <Card padding={0}>
+          <div style={{ padding: '16px 20px' }}>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Charter</h2>
+            <p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap', color: 'var(--color-text)' }}>{group.charter}</p>
+          </div>
+        </Card>
+      ) : null}
+
+      {/* Members */}
+      <Card padding={0}>
+        <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Members <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>{group.members.length}</span></h2>
+          <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>Seat = their place on this group. Governance role = their org-wide job (drives RACI).</span>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', minWidth: 680, borderCollapse: 'collapse', fontSize: 14 }}>
+            <thead>
+              <tr>
+                <th scope="col" style={th2}>Member</th>
+                <th scope="col" style={th2}>Seat</th>
+                <th scope="col" style={th2}>Governance role</th>
+                <th scope="col" style={th2} title="Typical RACI letters these roles carry">Usual RACI</th>
+                <th scope="col" style={{ ...th2, textAlign: 'right' }}><span style={srOnly}>Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.members.length === 0 && (
+                <tr><td colSpan={5} style={{ ...td2, textAlign: 'center', color: 'var(--color-text-muted)', padding: 20 }}>No members yet. Add one below.</td></tr>
+              )}
+              {group.members.map((mm) => {
+                const isAgent = !!mm.agentId;
+                const memberId = (mm.agentId || mm.personId) as string;
+                const displayName = memberDisplayName(mm);
+                const detailPath = isAgent ? '/agents' : `/people/${mm.personId}`;
+                const personRoles = isAgent ? [] : memberRoles.filter((r) => r.personId === mm.personId);
+                const raci = memberRaciLetters(personRoles);
+                const seatC = seatColor(mm.groupRole);
+                return (
+                  <tr key={memberId}>
+                    <td style={td2}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                        <Avatar name={displayName} size="sm" />
+                        <Link to={detailPath} style={{ color: 'var(--color-text)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          {isAgent && <span title="AI agent" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '1px 6px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6' }}>{renderNavIcon('/agents', { size: 11, strokeWidth: 2 })}Agent</span>}
+                          {displayName}
+                        </Link>
+                      </span>
+                    </td>
+                    <td style={td2}><span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', borderRadius: 13, background: seatC.bg, color: seatC.color, fontSize: 12.5, fontWeight: 600 }}>{GROUP_ROLE_LABELS[mm.groupRole] || mm.groupRole}</span></td>
+                    <td style={td2}>
+                      {isAgent ? <span style={{ color: 'var(--color-text-muted)', fontSize: 12.5, fontStyle: 'italic' }}>Advisor — no governance role</span>
+                       : personRoles.length === 0 ? <span style={{ color: 'var(--color-text-muted)', fontSize: 12.5 }}>None yet</span>
+                       : <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{personRoles.map((r) => <button key={r.id} type="button" onClick={() => openRoleDrawer(r.roleType)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 13, color: 'var(--color-primary)', cursor: 'pointer' }}>{DAMA_ROLE_LABELS[r.roleType] || r.roleType}</button>)}</span>}
+                    </td>
+                    <td style={td2}>
+                      {raci.length === 0 ? <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                       : <span style={{ display: 'inline-flex', gap: 4 }}>{raci.map((l) => { const c = RACI_COLOR[l]; return <span key={l} title={`${RACI_LABEL[l]}: ${RACI_DESCRIPTION[l]}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 26, height: 22, padding: '0 6px', borderRadius: 6, background: c.bg, color: c.text, fontFamily: 'var(--font-mono, monospace)', fontSize: 12, fontWeight: 600 }}>{l}</span>; })}</span>}
+                    </td>
+                    <td style={{ ...td2, textAlign: 'right' }}>
+                      {isAdmin ? (
+                        <span style={{ position: 'relative', display: 'inline-flex' }}>
+                          <button type="button" aria-label={`More actions for ${displayName}`} aria-haspopup="menu" aria-expanded={rowMenuId === memberId} onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === memberId ? null : memberId); }} style={{ width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>⋯</button>
+                          {rowMenuId === memberId && (
+                            <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 200, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                              <Link to={detailPath} role="menuitem" onClick={() => setRowMenuId(null)} style={{ ...menuItemStyle, display: 'block', textDecoration: 'none' }}>Open profile</Link>
+                              {personRoles.map((r) => <button key={r.id} type="button" role="menuitem" onClick={() => { setRowMenuId(null); handleUnassignRole(r.id); }} style={menuItemStyle}>Remove {DAMA_ROLE_LABELS[r.roleType] || r.roleType} role</button>)}
+                              <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); setConfirmRemoveMember(mm); }} style={{ ...menuItemStyle, color: 'var(--color-error)' }}>Remove from group</button>
+                            </div>
+                          )}
+                        </span>
+                      ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Add-member footer — people or agent advisors. Agents are locked to
+            the ADVISOR seat so accountability for voting / chairing / signing
+            stays with humans (backend AGENT_ALLOWED_GROUP_ROLES). Admin only. */}
+        {isAdmin && (
+          <div style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)', padding: '14px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', height: 38 }}>
+                {(['person', 'agent'] as const).map((t) => {
+                  const active = addMemberType === t;
+                  return (
+                    <button key={t} type="button"
+                      onClick={() => { setAddMemberType(t); setAddMemberPersonId(''); setAddMemberAgentId(''); setAddMemberRole(t === 'agent' ? 'ADVISOR' : 'MEMBER'); }}
+                      style={{ padding: '0 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: active ? (t === 'agent' ? '#ede9fe' : 'var(--color-surface)') : 'transparent', color: active ? (t === 'agent' ? '#5b21b6' : 'var(--color-text)') : 'var(--color-text-muted)', border: 'none', borderRight: t === 'person' ? '1px solid var(--color-border)' : 'none' }}>
+                      {t === 'agent' ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{renderNavIcon('/agents', { size: 12, strokeWidth: 2 })}AI agent</span> : 'Person'}
+                    </button>
+                  );
+                })}
+              </div>
+              {addMemberType === 'person' ? (
+                <div style={{ flex: '1 1 220px', minWidth: 200, maxWidth: 320 }}>
+                  <PersonPicker mode="single" valueMode="id" value={addMemberPersonId || null} onChange={(id) => setAddMemberPersonId(id || '')} orgId={activeOrgId || undefined} placeholder="Pick a person…" />
+                </div>
+              ) : (
+                <select value={addMemberAgentId} onChange={(e) => setAddMemberAgentId(e.target.value)} style={{ flex: '1 1 220px', minWidth: 200, maxWidth: 320, height: 38, fontSize: 13, padding: '0 10px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
+                  <option value="">Pick an agent…</option>
+                  {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              )}
+              {addMemberType === 'person' ? (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)' }}>Seat
+                  <select value={addMemberRole} onChange={(e) => setAddMemberRole(e.target.value)} style={{ height: 38, fontSize: 13, padding: '0 10px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
+                    {Object.entries(GROUP_ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </label>
+              ) : (
+                <span title="Agents may only serve as Advisor so accountability for voting / chairing / signing stays with humans." style={{ fontSize: 11, padding: '6px 10px', borderRadius: 'var(--radius-md)', background: '#ede9fe', color: '#5b21b6', fontWeight: 600 }}>Advisor only</span>
+              )}
+              <Button size="md" variant="primary" onClick={handleAddMember} disabled={addMemberType === 'agent' ? !addMemberAgentId : !addMemberPersonId}>Add member</Button>
+            </div>
+            {addMemberType === 'agent' && agents.length === 0 && (
+              <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 8 }}>No active agents in this org — create one on the Agents page first.</div>
+            )}
           </div>
         )}
       </Card>
-
-      <SectionShell
-        title="Composition"
-        hint="Members and the governance roles they hold. Required roles for this group type are tracked at the top. Each role chip shows its typical RACI letter on common decisions."
-      >
-        {/* Expected role slate */}
-        {expectedRoles.length > 0 && (
-          <div style={{
-            padding: 12, marginBottom: 12,
-            background: requiredFilled === requiredExpected.length ? '#f0fdf4' : '#fffbeb',
-            border: `1px solid ${requiredFilled === requiredExpected.length ? '#bbf7d0' : '#fde68a'}`,
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <SectionLabel marginBottom={6}>
-              Expected roles ({requiredFilled}/{requiredExpected.length} required filled)
-            </SectionLabel>
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
-              Governance roles are <strong>org-wide</strong> — assigning one here is the
-              same assignment shown on the Governance Roles page and the Governance
-              Groups expected-role panel.
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {expectedRoles.map((er) => {
-                const assigned = memberRoles.filter((m) => m.roleType === er.roleType);
-                const filled = assigned.length > 0;
-                const indicator = filled ? '✓' : er.required ? '✗' : '○';
-                const color = filled ? '#065f46' : er.required ? '#991b1b' : '#64748b';
-                const bg = filled ? '#d1fae5' : er.required ? '#fee2e2' : '#f1f5f9';
-                return (
-                  <button
-                    key={er.roleType}
-                    onClick={isAdmin ? () => { setAssignRoleSlot(er.roleType); setAssignRolePersonId(''); } : undefined}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '4px 10px', borderRadius: 4, border: `1px solid ${color}33`,
-                      background: bg, color, fontSize: 12, fontWeight: 500, cursor: isAdmin ? 'pointer' : 'default',
-                    }}
-                    title={isAdmin ? `${assigned.length} assigned${er.required ? ' (required)' : ''} — click to assign` : `${assigned.length} assigned${er.required ? ' (required)' : ''}`}
-                  >
-                    <span style={{ fontWeight: 700 }}>{indicator}</span>
-                    <span>{er.label}</span>
-                    <span style={{ fontSize: 10, opacity: 0.8 }}>{assigned.length}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {/* Inline assign panel for the active slot (admin-only write) */}
-            {isAdmin && assignRoleSlot && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '8px 10px', background: 'var(--color-surface)', borderRadius: 4, border: '1px solid var(--color-border)' }}>
-                <span style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Assign {DAMA_ROLE_LABELS[assignRoleSlot]} to:</span>
-                <div style={{ flex: 1, minWidth: 200, maxWidth: 320 }}>
-                  <PersonPicker
-                    mode="single"
-                    valueMode="id"
-                    value={assignRolePersonId || null}
-                    onChange={(id) => setAssignRolePersonId(id || '')}
-                    orgId={activeOrgId || undefined}
-                    placeholder="Pick a person…"
-                  />
-                </div>
-                <Button size="sm" variant="primary" onClick={() => handleAssignRole(assignRoleSlot, assignRolePersonId)} disabled={!assignRolePersonId}>
-                  Assign
-                </Button>
-                <Button size="sm" onClick={() => { setAssignRoleSlot(null); setAssignRolePersonId(''); }}>
-                  Cancel
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Members table */}
-        <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr>
-              <th scope="col" style={th}>Member</th>
-              <th scope="col" style={th}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  Group role
-                  <HelpPopover id="group-role-vs-governance-role" title="Group role vs governance role">
-                    <strong>Group role</strong> is the person's seat on this body — Chair,
-                    Member, Secretary, etc. It's local to the group and has no RACI effect.
-                    <strong> Governance roles</strong> (next column) are the org-wide DAMA
-                    roles — Data Owner, Steward, CDO — that drive RACI and ownership.
-                    Someone can be a group <em>Member</em> with no governance role, or hold
-                    a governance role without sitting on any group.
-                  </HelpPopover>
-                </span>
-              </th>
-              <th scope="col" style={th}>Governance roles</th>
-              <th scope="col" style={{ ...th, width: 80 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {group.members.length === 0 && (
-              <tr><td colSpan={4} style={{ ...td, color: 'var(--color-text-muted)', fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
-                No members yet. Use the panel below to add one.
-              </td></tr>
-            )}
-            {group.members.map((m) => {
-              const isAgent = !!m.agentId;
-              const memberId = (m.agentId || m.personId) as string;
-              const displayName = isAgent ? (m.agentName || m.agentId) : (m.personName || m.personId);
-              const detailPath = isAgent ? `/agents` : `/people/${m.personId}`;
-              const personRoles = isAgent ? [] : memberRoles.filter((r) => r.personId === m.personId);
-              return (
-                <tr key={memberId}>
-                  <td style={td}>
-                    <Link to={detailPath} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {isAgent && (
-                        <span title="AI Agent" style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 3,
-                          fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
-                          padding: '1px 6px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6',
-                        }}>{renderNavIcon('/agents', { size: 11, strokeWidth: 2 })}Agent</span>
-                      )}
-                      {displayName}
-                    </Link>
-                  </td>
-                  <td style={td}>{GROUP_ROLE_LABELS[m.groupRole] || m.groupRole}</td>
-                  <td style={td}>
-                    {isAgent ? (
-                      <span style={{ color: 'var(--color-text-muted)', fontSize: 12, fontStyle: 'italic' }}>
-                        Advisor — no governance roles
-                      </span>
-                    ) : personRoles.length === 0 ? (
-                      <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>— no roles yet</span>
-                    ) : (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {personRoles.map((r) => (
-                          <RoleChip
-                            key={r.id}
-                            roleType={r.roleType}
-                            onOpenDrawer={() => openRoleDrawer(r.roleType)}
-                            onRemove={isAdmin ? () => handleUnassignRole(r.id) : undefined}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    {isAdmin ? (
-                    <button
-                      onClick={() => setConfirmRemoveMember(m)}
-                      aria-label={`Remove ${displayName}`}
-                      style={{ background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--color-error, #dc2626)' }}
-                    >
-                      Remove
-                    </button>
-                    ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        </div>
-
-        {/* Add-member panel — supports both people and agent advisors.
-            Agents are locked to the ADVISOR group role so the row keeps
-            its accountability boundary (see backend
-            AGENT_ALLOWED_GROUP_ROLES). Admin-only write. */}
-        {isAdmin && (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '8px 10px', background: 'var(--color-bg)', borderRadius: 4, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Add member:</span>
-          <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
-            {(['person', 'agent'] as const).map((t) => {
-              const active = addMemberType === t;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => {
-                    setAddMemberType(t);
-                    setAddMemberPersonId('');
-                    setAddMemberAgentId('');
-                    if (t === 'agent') setAddMemberRole('ADVISOR');
-                    else setAddMemberRole('MEMBER');
-                  }}
-                  style={{
-                    padding: '4px 10px', fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                    background: active ? (t === 'agent' ? '#ede9fe' : 'var(--color-surface)') : 'transparent',
-                    color: active ? (t === 'agent' ? '#5b21b6' : 'var(--color-text)') : 'var(--color-text-muted)',
-                    border: 'none', borderRight: t === 'person' ? '1px solid var(--color-border)' : 'none',
-                  }}
-                >
-                  {t === 'agent'
-                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{renderNavIcon('/agents', { size: 12, strokeWidth: 2 })}Agent</span>
-                    : 'Person'}
-                </button>
-              );
-            })}
-          </div>
-          {addMemberType === 'person' ? (
-            <div style={{ flex: 1, minWidth: 200, maxWidth: 320 }}>
-              <PersonPicker
-                mode="single"
-                valueMode="id"
-                value={addMemberPersonId || null}
-                onChange={(id) => setAddMemberPersonId(id || '')}
-                orgId={activeOrgId || undefined}
-                placeholder="Pick a person…"
-              />
-            </div>
-          ) : (
-            <select
-              value={addMemberAgentId}
-              onChange={(e) => setAddMemberAgentId(e.target.value)}
-              style={{ flex: 1, minWidth: 200, maxWidth: 320, fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4 }}
-            >
-              <option value="">-- Pick an agent --</option>
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          )}
-          {addMemberType === 'person' ? (
-            <select
-              value={addMemberRole}
-              onChange={(e) => setAddMemberRole(e.target.value)}
-              style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4 }}
-            >
-              {Object.entries(GROUP_ROLE_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-          ) : (
-            <span
-              title="Agents may only serve as Advisor so accountability for voting / chairing / signing stays with humans."
-              style={{
-                fontSize: 11, padding: '4px 8px', borderRadius: 4,
-                background: '#ede9fe', color: '#5b21b6', fontWeight: 500,
-              }}
-            >
-              Advisor only
-            </span>
-          )}
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={handleAddMember}
-            disabled={addMemberType === 'agent' ? !addMemberAgentId : !addMemberPersonId}
-          >
-            Add
-          </Button>
-        </div>
-        {addMemberType === 'agent' && agents.length === 0 && (
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, paddingLeft: 10 }}>
-            No active agents in this org — create one on the Agents page first.
-          </div>
-        )}
-        </>)}
-      </SectionShell>
       </>
           ) },
-          { id: 'decision-rights', label: 'Decision Rights', render: () => (
+          { id: 'decision-rights', label: `Decision Rights ${groupDRs.length}`, render: () => twoCol(
       <SectionShell
         title={`Decision Rights (${groupDRs.length})`}
         hint="Decisions where this group is the decider, recommends, approves, or is informed. Edit the full list on the Decision Rights page."
@@ -880,11 +846,11 @@ export default function GovernanceGroupDetailPage() {
         )}
       </SectionShell>
           ) },
-          { id: 'policies', label: 'Policies', render: () => (
+          { id: 'policies', label: `Documents ${memberPolicies.length}`, render: () => twoCol(
       <SectionShell
-        title={`Policies (${memberPolicies.length})`}
-        hint="Policies owned by anyone holding a governance role inside this group. Edit on the Policies page."
-        link={{ label: 'Open Policies ↗', to: '/governance-policies' }}
+        title={`Documents (${memberPolicies.length})`}
+        hint="Policies and standards owned by anyone holding a governance role inside this group. Edit on the Documents page."
+        link={{ label: 'Open Documents ↗', to: '/governance-policies' }}
       >
         {memberPolicies.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '8px 0' }}>
@@ -906,9 +872,9 @@ export default function GovernanceGroupDetailPage() {
         )}
       </SectionShell>
           ) },
-          { id: 'calendar', label: 'Calendar', render: () => (
+          { id: 'calendar', label: `Meetings ${memberEvents.length}`, render: () => twoCol(
       <SectionShell
-        title={`Calendar (${memberEvents.length})`}
+        title={`Meetings (${memberEvents.length})`}
         hint="Recurring events where at least one member is an attendee. Manage cadence and attendees on the Calendar page."
         link={{ label: 'Open Calendar ↗', to: '/governance-calendar' }}
       >
@@ -936,7 +902,7 @@ export default function GovernanceGroupDetailPage() {
         )}
       </SectionShell>
           ) },
-          { id: 'raci', label: 'RACI', render: () => (
+          { id: 'raci', label: `RACI ${groupRaciRows.length}`, render: () => twoCol(
       <SectionShell
         title={`RACI snapshot (${groupRaciRows.length}${raciRows.length > 0 && groupRaciRows.length < 25 ? '' : '+'} activities)`}
         hint="Process activities where at least one member is Responsible, Accountable, Consulted, or Informed. Edit cells on the RACI matrix page."
@@ -995,6 +961,15 @@ export default function GovernanceGroupDetailPage() {
         onCancel={() => setConfirmRemoveMember(null)}
         onConfirm={() => confirmRemoveMember && handleRemoveMember(confirmRemoveMember)}
       />
+
+      <ConfirmDialog
+        open={confirmDeleteGroup}
+        title="Delete this governance group?"
+        message={`Permanently delete ${group.name} and its sub-groups. This cannot be undone. Members' org-wide governance roles are not deleted — only their membership here.`}
+        confirmLabel="Delete group"
+        onCancel={() => setConfirmDeleteGroup(false)}
+        onConfirm={handleDeleteGroup}
+      />
     </div>
   );
 }
@@ -1024,47 +999,6 @@ function SectionShell({
   );
 }
 
-// ── RoleChip — shows the role label plus its typical RACI letters on
-//    common decisions, derived from roleDefinitions.ts. Clicking the
-//    role opens the full Role Detail drawer; the × removes the
-//    assignment. ──
-function RoleChip({
-  roleType, onOpenDrawer, onRemove,
-}: { roleType: string; onOpenDrawer: () => void; onRemove?: () => void }) {
-  // Top RACI letters this role typically holds. Use the first three
-  // typicalDecisions so the chip stays compact; the drawer shows the
-  // full set. Deduplicate so 'A A A' renders as just 'A'.
-  const ref = getRoleReference(roleType);
-  const topRaci = (ref?.typicalDecisions || []).slice(0, 3).map((d) => d.raci);
-  const distinctRaci: Raci[] = Array.from(new Set(topRaci));
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 12, background: 'var(--color-bg)', border: '1px solid var(--color-border)', fontSize: 11 }}>
-      <button
-        onClick={onOpenDrawer}
-        style={{ background: 'transparent', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', color: 'var(--color-text)', fontWeight: 500 }}
-      >
-        {DAMA_ROLE_LABELS[roleType] || roleType}
-      </button>
-      {distinctRaci.length > 0 && (
-        <span style={{ display: 'inline-flex', gap: 2 }} title="Typical RACI authority on common decisions">
-          {distinctRaci.map((l) => {
-            const c = RACI_COLOR[l];
-            return (
-              <span key={l} style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 3, background: c.bg, color: c.text, fontSize: 9, fontWeight: 700, textAlign: 'center', lineHeight: '14px' }}>
-                {l}
-              </span>
-            );
-          })}
-        </span>
-      )}
-      {onRemove && <button onClick={onRemove} aria-label="Remove role"
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12, padding: 0, lineHeight: 1 }}>
-        ×
-      </button>}
-    </span>
-  );
-}
-
 // ── Table cell styles ──
 const th: React.CSSProperties = {
   fontSize: 11, fontWeight: 600, textAlign: 'left', padding: '8px 8px',
@@ -1073,4 +1007,18 @@ const th: React.CSSProperties = {
 };
 const td: React.CSSProperties = {
   padding: '8px', borderBottom: '1px solid var(--color-border)', verticalAlign: 'top',
+};
+
+// Members-table header/cell (a touch roomier than the compact snapshot tables).
+const th2: React.CSSProperties = {
+  textAlign: 'left', padding: '10px 12px', fontSize: 11, fontWeight: 600,
+  letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)',
+  borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)',
+};
+const td2: React.CSSProperties = { padding: '10px 12px', borderBottom: '1px solid var(--color-border)', verticalAlign: 'middle' };
+const srOnly: React.CSSProperties = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' };
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
 };
