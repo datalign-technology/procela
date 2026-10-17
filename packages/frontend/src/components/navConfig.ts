@@ -212,7 +212,7 @@ export const ROUTE_GROUPS: Record<string, string[]> = {
   '/processes/data-map': ['/processes/data-map', '/mappings'],
   '/data-lineage': ['/data-lineage'],
   '/governance/foundation': ['/governance/foundation'],
-  '/governance-groups': ['/governance-groups'],
+  '/governance-groups': ['/governance-groups', '/governance/visualization'],
   '/data-domains': ['/data-domains'],
   '/dama-roles': ['/dama-roles', '/roles', '/raci'],
   '/decision-rights': ['/decision-rights'],
