@@ -74,6 +74,19 @@ const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: (size: numb
 
 const COLUMN_ORDER: string[] = ['process', 'system', 'data-asset', 'domain', 'person'];
 
+// Per-relationship (edge-type) display: a plain verb + a key colour, so the
+// selection panel can group a node's links the way the mock does and a legend
+// can explain the lines. Colours are a fixed key (not --color-* tokens).
+const REL_META: Record<string, { label: string; color: string; dash?: string }> = {
+  hierarchy:  { label: 'Contains',  color: '#9A9D9A' },
+  'hosted-by':{ label: 'Hosted by', color: '#24508F' },
+  governs:    { label: 'Governs',   color: '#A4262C' },
+  'owned-by': { label: 'Owned by',  color: '#9A4A0E' },
+  mapping:    { label: 'Uses',      color: '#364A5E', dash: 'dashed' },
+  lineage:    { label: 'Lineage',   color: '#17604B', dash: 'dotted' },
+};
+const REL_ORDER = ['hierarchy', 'hosted-by', 'uses', 'mapping', 'governs', 'owned-by', 'lineage'];
+
 // Title-case labels for the process-depth (drill) control.
 const DEPTH_LABEL: Record<ProcessLevel, string> = {
   VALUE_STREAM: 'Value Streams',
@@ -161,7 +174,9 @@ export default function EnterpriseViewPage() {
   // The preset selector was removed; the view always shows everything, and
   // scope is dialed in with the Show-layer toggles + Include-governance.
   const [activeView] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('diagram');
+  // Default to the readable Cards view (pick-an-item-and-trace) rather than
+  // the all-edges Diagram, which is an unreadable tangle at scale.
+  const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('cards');
   // Hide nodes with no relationships in the current view — lets users focus
   // on the connected core and drop dangling entities.
   const [hideUnconnected, setHideUnconnected] = useState(false);
@@ -317,6 +332,45 @@ export default function EnterpriseViewPage() {
   const directEdges = selected
     ? filteredEdges.filter((e) => e.source === selected.id || e.target === selected.id)
     : [];
+  // Only the selected item's *direct* neighbours light up; everything else
+  // greys out, so the map reads as "pick an item, see its links" (the
+  // selected node included so it stays highlighted).
+  const directSet = new Set<string>();
+  if (selected) {
+    directSet.add(selected.id);
+    for (const e of directEdges) { directSet.add(e.source); directSet.add(e.target); }
+  }
+  // The selected node's links grouped by relationship (edge type), ordered by
+  // REL_ORDER then anything else, for the panel.
+  const directByRel: Array<{ type: string; meta: { label: string; color: string; dash?: string }; items: Array<{ node: GraphNode; dir: string; edgeLabel: string }> }> = [];
+  if (selected) {
+    const map = new Map<string, Array<{ node: GraphNode; dir: string; edgeLabel: string }>>();
+    for (const e of directEdges) {
+      const otherId = e.source === selected.id ? e.target : e.source;
+      const other = nodeMap.get(otherId);
+      if (!other) continue;
+      (map.get(e.type) ?? map.set(e.type, []).get(e.type)!).push({ node: other, dir: e.source === selected.id ? '→' : '←', edgeLabel: e.label });
+    }
+    const types = Array.from(map.keys()).sort((a, b) => {
+      const ia = REL_ORDER.indexOf(a), ib = REL_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    for (const t of types) directByRel.push({ type: t, meta: REL_META[t] || { label: t.replace(/-/g, ' '), color: '#5F6461' }, items: map.get(t)! });
+  }
+  // "Gaps in this view" — data assets in view with no owner and no domain.
+  // A data-asset endpoint of an owned-by / governs edge means it has an owner
+  // / domain respectively.
+  const ownedAssetIds = new Set<string>();
+  const domainedAssetIds = new Set<string>();
+  for (const e of filteredEdges) {
+    for (const end of [e.source, e.target]) {
+      const nd = nodeMap.get(end);
+      if (nd?.type !== 'data-asset') continue;
+      if (e.type === 'owned-by') ownedAssetIds.add(end);
+      if (e.type === 'governs') domainedAssetIds.add(end);
+    }
+  }
+  const gapAssets = filteredNodes.filter((n) => n.type === 'data-asset' && !ownedAssetIds.has(n.id) && !domainedAssetIds.has(n.id));
 
   const selectNode = (n: GraphNode) => {
     setSelected((prev) => prev?.id === n.id ? null : n);
@@ -376,8 +430,8 @@ export default function EnterpriseViewPage() {
   const renderNode = (n: GraphNode) => {
     const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.process;
     const isSelected = selected?.id === n.id;
-    const isImpacted = selected && impactSet.has(n.id) && !isSelected;
-    const isDimmed = selected && !impactSet.has(n.id);
+    const isImpacted = selected && directSet.has(n.id) && !isSelected;
+    const isDimmed = selected && !directSet.has(n.id);
     const statusColor = n.status ? getStatusColor(n.status) : null;
     return (
       <div key={n.id}
@@ -461,12 +515,44 @@ export default function EnterpriseViewPage() {
       {/* Toolbar — spans full width above the catalog / impact split */}
       <PageHeader
         title="Enterprise View"
-        subtitle="See how processes, systems, data assets, domains, and people connect across the enterprise."
+        subtitle="See how processes, systems, data assets, domains, and people connect. Pick anything to trace it."
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div role="tablist" aria-label="Display mode" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden', background: 'var(--color-surface)' }}>
+              {(['cards', 'diagram'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  role="tab"
+                  aria-selected={viewMode === mode}
+                  onClick={() => setViewMode(mode)}
+                  style={{
+                    padding: '7px 14px', fontSize: 13, fontWeight: viewMode === mode ? 600 : 500,
+                    border: 'none', cursor: 'pointer',
+                    background: viewMode === mode ? 'var(--color-primary-light)' : 'transparent',
+                    color: viewMode === mode ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  }}
+                >
+                  {mode === 'cards' ? 'Cards' : 'Diagram'}
+                </button>
+              ))}
+            </div>
+            {viewMode === 'diagram' && filteredNodes.length > 0 && (
+              <button
+                type="button"
+                onClick={() => exportEnterpriseDrawio(filteredNodes, filteredEdges, TYPE_CONFIG, visibleTypes, 'enterprise-view')}
+                title="Download this view as an editable .drawio file — opens in diagrams.net (free) and exports to Visio (.vsdx) from there."
+                style={{ height: 40, padding: '0 14px', display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 8, fontSize: 14, fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer' }}
+              >
+                Export diagram
+              </button>
+            )}
+          </div>
+        }
       >
         <HelpPopover id="enterprise-view-intro" title="Enterprise View" showInitially>
           See all processes, systems, assets, domains, and people in one place.
-          Click a category to expand it, then click an item to run impact analysis — a panel
-          shows every entity connected to your selection.
+          Click a category to focus it, then click an item to trace its links — a panel
+          lists everything it connects to, grouped by relationship.
         </HelpPopover>
       </PageHeader>
 
@@ -502,8 +588,8 @@ export default function EnterpriseViewPage() {
             more than one process level. */}
         {presetTypes.includes('process') && processLevels.length > 1 && (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Depth:</span>
-            <div role="group" aria-label="Process depth" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Process detail:</span>
+            <div role="group" aria-label="Process detail" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
               {processLevels.map((lvl) => (
                 <button
                   key={lvl}
@@ -563,39 +649,6 @@ export default function EnterpriseViewPage() {
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-muted)' }}>
           {filteredNodes.length} entities &middot; {filteredEdges.length} relationships
         </span>
-        {viewMode === 'diagram' && filteredNodes.length > 0 && (
-          <button
-            type="button"
-            onClick={() => exportEnterpriseDrawio(filteredNodes, filteredEdges, TYPE_CONFIG, visibleTypes, 'enterprise-view')}
-            title="Download this view as an editable .drawio file — opens in diagrams.net (free) for viewing and authoring, and exports to Visio (.vsdx) from there."
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '4px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-              border: '1px solid var(--color-border)', borderRadius: 999,
-              background: 'var(--color-surface)', color: 'var(--color-text-secondary)',
-            }}
-          >
-            Export diagram
-          </button>
-        )}
-        <div role="tablist" aria-label="Display mode" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
-          {(['cards', 'diagram'] as const).map((mode) => (
-            <button
-              key={mode}
-              role="tab"
-              aria-selected={viewMode === mode}
-              onClick={() => setViewMode(mode)}
-              style={{
-                padding: '4px 14px', fontSize: 12, fontWeight: viewMode === mode ? 600 : 400,
-                border: 'none', cursor: 'pointer',
-                background: viewMode === mode ? 'var(--color-primary)' : 'transparent',
-                color: viewMode === mode ? '#fff' : 'var(--color-text)',
-              }}
-            >
-              {mode === 'cards' ? 'Cards' : 'Diagram'}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Catalog + impact split. The page scrolls normally; the impact
@@ -705,10 +758,11 @@ export default function EnterpriseViewPage() {
             once a node is selected so the diagram keeps full width. Sticks
             while scrolling. */}
         {(viewMode === 'cards' || selected) && (
-          <Card padding={16} style={{ width: 320, flexShrink: 0, position: 'sticky', top: 16, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}>
+          <div style={{ width: 320, flexShrink: 0, position: 'sticky', top: 16, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card padding={16}>
             {!selected ? (
               <div style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.6, padding: '4px 2px' }}>
-                Select an entity on the left to trace its dependencies across the enterprise — its direct connections and full impact chain appear here.
+                Pick an entity on the left to trace it — its links appear here, grouped by relationship, and everything it isn't linked to greys out.
               </div>
             ) : (<>
             {/* Selected node header */}
@@ -730,9 +784,20 @@ export default function EnterpriseViewPage() {
                   </div>
                 </div>
               </div>
-              <SecondaryButton onClick={() => setSelected(null)} aria-label="Close impact panel" style={{ padding: '4px 8px' }}>
-                <X size={14} />
-              </SecondaryButton>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                {(() => {
+                  const id = selected.id;
+                  const href = selected.type === 'system' ? `/systems/${id}`
+                    : selected.type === 'data-asset' ? `/data-assets/${id}`
+                    : selected.type === 'person' ? `/people/${id}`
+                    : selected.type === 'domain' ? `/data-domains?highlight=${id}`
+                    : `/processes?highlight=${id}`;
+                  return <Link to={href} style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none', whiteSpace: 'nowrap' }}>Open page</Link>;
+                })()}
+                <SecondaryButton onClick={() => setSelected(null)} aria-label="Close panel" style={{ padding: '4px 8px' }}>
+                  <X size={14} />
+                </SecondaryButton>
+              </div>
             </div>
 
             {/* Status */}
@@ -811,93 +876,65 @@ export default function EnterpriseViewPage() {
               ))}
             </div>
 
-            {/* Direct connections */}
-            {directEdges.length > 0 && (
-              <>
-                <h4 style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                  Direct Connections ({directEdges.length})
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
-                  {directEdges.map((e) => {
-                    const otherId = e.source === selected.id ? e.target : e.source;
-                    const other = nodeMap.get(otherId);
-                    if (!other) return null;
-                    const cfg = TYPE_CONFIG[other.type] || TYPE_CONFIG.process;
-                    const direction = e.source === selected.id ? '→' : '←';
-                    return (
-                      <div key={e.id}
-                        {...clickable(() => setSelected(other), { label: `Select ${other.label}` })}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px',
-                          borderRadius: 4, cursor: 'pointer', fontSize: 12,
-                          background: 'var(--color-bg)',
-                        }}
-                        onMouseEnter={(ev) => { ev.currentTarget.style.background = cfg.bg; }}
-                        onMouseLeave={(ev) => { ev.currentTarget.style.background = 'var(--color-bg)'; }}
-                      >
-                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{direction}</span>
-                        <span style={{ display: 'inline-flex', color: cfg.color }}>{cfg.icon(12)}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{other.label}</div>
-                          <div style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>{e.label}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
-            {/* Full impact by type */}
-            <h4 style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-              Full Impact ({impactSet.size - 1} entities)
-            </h4>
-            {impactSet.size <= 1 ? (
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No dependencies found.</p>
+            {/* Links grouped by relationship — the heart of the trace. */}
+            {directByRel.length === 0 ? (
+              <div style={{ padding: 14, border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-bg)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                No links recorded for this item in the current view.
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {COLUMN_ORDER.map((type) => {
-                  const items = impactByType[type];
-                  if (!items || items.length === 0) return null;
-                  const cfg = TYPE_CONFIG[type];
-                  return (
-                    <div key={type}>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: cfg.color, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ display: 'inline-flex' }}>{cfg.icon(12)}</span> {cfg.plural} ({items.length})
-                      </div>
-                      {items.map((n) => (
-                        <div key={n.id}
-                          {...clickable(() => setSelected(n), { label: `Select ${n.label}` })}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px',
-                            borderRadius: 4, cursor: 'pointer', fontSize: 12,
-                            borderLeft: `3px solid ${cfg.color}44`,
-                            marginBottom: 2,
-                          }}
-                          onMouseEnter={(ev) => { ev.currentTarget.style.background = 'var(--color-bg)'; }}
-                          onMouseLeave={(ev) => { ev.currentTarget.style.background = ''; }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.label}</div>
-                          </div>
-                          {n.status && (
-                            <span style={{
-                              fontSize: 8, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-                              background: getStatusColor(n.status).bg,
-                              color: getStatusColor(n.status).color,
-                            }}>
-                              {n.status.replace('_', ' ')}
-                            </span>
-                          )}
-                        </div>
-                      ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {directByRel.map((grp) => (
+                  <div key={grp.type}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                      <span style={{ width: 16, borderTop: `2px ${grp.meta.dash || 'solid'} ${grp.meta.color}` }} />
+                      {grp.meta.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>{grp.items.length}</span>
                     </div>
-                  );
-                })}
+                    <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0 }}>
+                      {grp.items.map(({ node, edgeLabel }) => (
+                        <li key={node.id + grp.type} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <button type="button" onClick={() => setSelected(node)} title={`${node.label} — ${edgeLabel}`}
+                            style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'baseline', padding: '6px 0 6px 24px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.label}</span>
+                            <span style={{ fontSize: 12, color: 'var(--color-text-muted)', flexShrink: 0 }}>{TYPE_CONFIG[node.type]?.label}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </div>
             )}
             </>)}
           </Card>
+
+          {/* Gaps in this view — assets with no owner and no domain. */}
+          {gapAssets.length > 0 && (
+            <Card padding={16}>
+              <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Gaps in this view</h2>
+              <ul style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, fontSize: 14 }}>
+                {gapAssets.slice(0, 8).map((n, i) => (
+                  <li key={n.id} style={{ padding: '8px 0', borderBottom: i === Math.min(gapAssets.length, 8) - 1 ? 'none' : '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+                    <button type="button" onClick={() => { const nd = nodeMap.get(n.id); if (nd) setSelected(nd as GraphNode); }} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text)' }}>{n.label}</button>
+                    <span style={{ fontSize: 12, color: 'var(--color-warning)', fontWeight: 600, flexShrink: 0 }}>No owner · no domain</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {/* Relationship key — explains the line colours. */}
+          <Card padding={16}>
+            <h2 style={{ margin: 0, fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Relationship key</h2>
+            <ul style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, fontSize: 13, color: 'var(--color-text-secondary)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
+              {REL_ORDER.filter((t) => REL_META[t]).map((t) => (
+                <li key={t} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 16, borderTop: `2px ${REL_META[t].dash || 'solid'} ${REL_META[t].color}` }} />
+                  {REL_META[t].label}
+                </li>
+              ))}
+            </ul>
+          </Card>
+          </div>
         )}
       </div>
     </div>
