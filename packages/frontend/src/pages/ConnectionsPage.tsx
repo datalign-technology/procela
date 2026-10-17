@@ -308,6 +308,20 @@ export default function ConnectionsPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, connections]);
 
+  // Deep-link discover intent: /…&discover=<id> (from the connection detail
+  // page's Discover button) opens the Discover modal on the list, then strips
+  // the param so a refresh/back doesn't re-open it.
+  useEffect(() => {
+    const discId = searchParams.get('discover');
+    if (!discId || focusConnId || connections.length === 0) return;
+    const conn = connections.find((c) => c.id === discId);
+    if (conn) handleDiscover(conn);
+    const params = new URLSearchParams(searchParams);
+    params.delete('discover');
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, connections, focusConnId]);
+
   // -----------------------------------------------------------------------
   // CRUD
   // -----------------------------------------------------------------------
@@ -1066,6 +1080,9 @@ export default function ConnectionsPage({
         conn={conn}
         systems={systems}
         canWrite={canWrite}
+        testing={testingIds.has(conn.id)}
+        onTest={() => handleRowTest(conn.id)}
+        onDiscover={() => navigate(`/systems?tab=connections&discover=${conn.id}`)}
         onClose={() => navigate('/systems?tab=connections')}
         onEdit={(c) => navigate(`/systems?tab=connections&edit=${c.id}`)}
         onSaved={fetchData}
