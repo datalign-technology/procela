@@ -11,6 +11,7 @@ import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
 import ExportMenu from '../components/ExportMenu';
 import Button from '../components/Button';
+import SecondaryButton from '../components/SecondaryButton';
 import IconButton from '../components/IconButton';
 import { renderNavIcon } from '../components/navIcons';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -46,6 +47,12 @@ const DIM_ROUTE: Record<Dim, string> = {
   connections: '/connections',
 };
 const dimIcon = (dim: Dim, size: number) => renderNavIcon(DIM_ROUTE[dim], { size });
+
+const reportMenuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
 
 interface DimensionDef {
   id: Dim;
@@ -145,6 +152,13 @@ export default function AnalysisPage() {
   const [saveDesc, setSaveDesc] = useState('');
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<SavedReport | null>(null);
+  const [reportMenuId, setReportMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!reportMenuId) return;
+    const close = () => setReportMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [reportMenuId]);
 
   // ── Load dimension catalog once ──
   useEffect(() => {
@@ -248,6 +262,19 @@ export default function AnalysisPage() {
     else setColDims((prev) => prev.filter((_, i) => i !== index));
     setActiveReportId(null);
   };
+
+  // Click-to-add (keyboard / touch friendly, not drag-only): fills Rows
+  // first, then Columns, then a sub-group slot on whichever axis has room.
+  const clickAddDim = (dim: Dim) => {
+    if (rowDims.includes(dim) || colDims.includes(dim)) return;
+    if (rowDims.length === 0) setRowDims([dim]);
+    else if (colDims.length < MAX_DIMS_PER_AXIS) setColDims((p) => [...p, dim]);
+    else if (rowDims.length < MAX_DIMS_PER_AXIS) setRowDims((p) => [...p, dim]);
+    else { addToast('info', 'Rows and Columns are full — remove one before adding another.'); return; }
+    setActiveReportId(null);
+  };
+  // Where a dimension currently sits, for the palette's state label.
+  const dimState = (dim: Dim): string => rowDims.includes(dim) ? 'In rows' : colDims.includes(dim) ? 'In columns' : '';
 
   // Pivot rows ↔ columns. Keeps the dim order within each axis, so a
   // (Systems > Domains) row pivot becomes (Systems > Domains) on
@@ -366,24 +393,33 @@ export default function AnalysisPage() {
   }, [cube, filters, dimensions]);
 
   // ── Render ──
-  const Tile = ({ d }: { d: DimensionDef }) => (
-    <div
-      draggable
-      onDragStart={(e) => onTileDragStart(e, d.id)}
-      title={d.description}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '8px 12px',
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        marginBottom: 6, cursor: 'grab', userSelect: 'none',
-      }}
-    >
-      <span style={{ display: 'inline-flex', width: 20, justifyContent: 'center', color: 'var(--color-text-secondary)', flexShrink: 0 }}>{dimIcon(d.id, 16)}</span>
-      <span style={{ fontSize: 13, fontWeight: 500 }}>{d.label}</span>
-    </div>
-  );
+  const Tile = ({ d }: { d: DimensionDef }) => {
+    const state = dimState(d.id);
+    const used = !!state;
+    return (
+      <button
+        type="button"
+        draggable={!used}
+        onDragStart={(e) => onTileDragStart(e, d.id)}
+        onClick={() => clickAddDim(d.id)}
+        disabled={used}
+        title={used ? `${d.label} — already ${state.toLowerCase()}` : `${d.description || d.label} · click to add`}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+          padding: '9px 12px',
+          background: used ? 'var(--color-bg)' : 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 6, cursor: used ? 'default' : 'pointer', userSelect: 'none',
+          color: used ? 'var(--color-text-muted)' : 'var(--color-text)', font: 'inherit',
+        }}
+      >
+        <span style={{ display: 'inline-flex', width: 20, justifyContent: 'center', color: 'var(--color-text-secondary)', flexShrink: 0 }}>{dimIcon(d.id, 16)}</span>
+        <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{d.label}</span>
+        {used && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{state}</span>}
+      </button>
+    );
+  };
 
   const DropZone = ({
     label, values, onDrop, onRemove, hint, secondaryHint,
@@ -459,19 +495,45 @@ export default function AnalysisPage() {
     <div>
       <PageHeader
         title="Analysis"
-        subtitle="Pivot any two dimensions to see how the org connects. Drag from the palette into Rows and Columns."
+        subtitle="Count how things relate — for example, how many data assets each system holds."
+        actions={(() => {
+          const ready = rowDims.length > 0 && colDims.length > 0;
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <SecondaryButton
+                onClick={() => { setRowDims([]); setColDims([]); setFilters([]); setActiveReportId(null); setCube(null); setDrill(null); setError(null); }}
+                disabled={rowDims.length === 0 && colDims.length === 0 && filters.length === 0 && !activeReportId && !cube}
+              >
+                Reset
+              </SecondaryButton>
+              <SecondaryButton
+                onClick={() => { if (!activeReportId) { setSaveName(''); setSaveDesc(''); } setShowSave(true); }}
+                disabled={!ready}
+                title={ready ? undefined : 'Fill Rows and Columns first'}
+              >
+                {activeReportId ? 'Update report' : 'Save report'}
+              </SecondaryButton>
+              <Button variant="primary" onClick={runCube} disabled={!ready || loading} title={ready ? undefined : 'Fill Rows and Columns first'}>
+                {loading ? 'Running…' : 'Run'}
+              </Button>
+            </div>
+          );
+        })()}
       >
         <HelpPopover id="analysis-intro" title="Cube-style analysis" showInitially>
-          Drag dimensions into Rows and Columns to pivot the org's catalog. Each cell shows how many records connect both. Click a cell to drill down to the matching entities. Click a row label to use that value as a filter. Saved reports persist your configuration and can be shared via link.
+          Add a dimension to Rows and one to Columns (click a dimension, or drag it) to pivot the org's catalog. Each cell counts the records that connect both; click a cell to drill down. Click a row label to filter by it. Saved reports persist your configuration and can be shared via link.
         </HelpPopover>
       </PageHeader>
 
       <div style={{ display: 'flex', gap: 16 }}>
         {/* Left palette */}
-        <aside style={{ width: 220, flexShrink: 0 }}>
+        <aside style={{ width: 240, flexShrink: 0 }}>
           <SectionLabel>
             Dimensions
           </SectionLabel>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '2px 0 8px' }}>
+            Click to add (fills Rows, then Columns), or drag onto a zone.
+          </div>
           {dimensions.map((d) => <Tile key={d.id} d={d} />)}
 
           <SectionLabel style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -492,25 +554,34 @@ export default function AnalysisPage() {
               <div key={r.id}
                 style={{
                   display: 'flex', alignItems: 'flex-start', gap: 6,
-                  padding: '6px 8px',
+                  padding: '8px 8px',
                   background: isActive ? 'var(--color-bg)' : 'transparent',
                   border: `1px solid ${isActive ? 'var(--color-primary)' : 'transparent'}`,
-                  borderRadius: 4,
-                  marginBottom: 4,
+                  borderTop: isActive ? undefined : '1px solid var(--color-border)',
+                  borderRadius: isActive ? 'var(--radius-md)' : 0,
                 }}
               >
                 <button
                   onClick={() => loadReport(r)}
-                  style={{ flex: 1, textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', color: 'inherit' }}
+                  style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', color: 'inherit' }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>{r.name}</div>
-                  {r.description && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description}</div>}
-                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>by {r.ownerName || '—'}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{r.name}</div>
+                  {r.description && <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{r.description}</div>}
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>By {r.ownerName || '—'}</div>
                 </button>
-                <button onClick={() => setConfirmDelete(r)} aria-label="Delete report"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 2, display: 'inline-flex' }}>
-                  <X size={14} strokeWidth={2.4} />
-                </button>
+                <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                  <button type="button" aria-label={`More actions for ${r.name}`} aria-haspopup="menu" aria-expanded={reportMenuId === r.id}
+                    onClick={(e) => { e.stopPropagation(); setReportMenuId(reportMenuId === r.id ? null : r.id); }}
+                    style={{ width: 28, height: 28, border: 0, background: 'transparent', borderRadius: 6, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>⋯</button>
+                  {reportMenuId === r.id && (
+                    <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 30, right: 0, zIndex: 30, minWidth: 150, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                      <button type="button" role="menuitem" onClick={() => { setReportMenuId(null); loadReport(r); }} style={reportMenuItemStyle}>Open</button>
+                      <button type="button" role="menuitem" onClick={() => { setReportMenuId(null); loadReport(r); setActiveReportId(r.id); setSaveName(r.name); setSaveDesc(r.description || ''); setShowSave(true); }} style={reportMenuItemStyle}>Rename…</button>
+                      <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 2px' }} />
+                      <button type="button" role="menuitem" onClick={() => { setReportMenuId(null); setConfirmDelete(r); }} style={{ ...reportMenuItemStyle, color: 'var(--color-error)' }}>Delete</button>
+                    </div>
+                  )}
+                </span>
               </div>
             );
           })}
@@ -525,13 +596,13 @@ export default function AnalysisPage() {
               values={rowDims}
               onDrop={onZoneDrop('row')}
               onRemove={(i) => removeFromZone('row', i)}
-              hint="Drag a dimension here for the y-axis."
-              secondaryHint="+ drag again for a sub-group"
+              hint="Down the side, e.g. Systems"
+              secondaryHint="+ add again for a sub-group"
             />
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <IconButton
                 icon="refresh"
-                label="Pivot rows and columns"
+                label="Swap rows and columns"
                 onClick={pivotAxes}
                 disabled={rowDims.length === 0 && colDims.length === 0}
               />
@@ -541,8 +612,8 @@ export default function AnalysisPage() {
               values={colDims}
               onDrop={onZoneDrop('col')}
               onRemove={(i) => removeFromZone('col', i)}
-              hint="Drag a dimension here for the x-axis."
-              secondaryHint="+ drag again for a sub-group"
+              hint="Across the top, e.g. Domains"
+              secondaryHint="+ add again for a sub-group"
             />
           </div>
 
@@ -565,43 +636,12 @@ export default function AnalysisPage() {
             </div>
           )}
 
-          {/* Action bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Button variant="primary" size="sm" onClick={runCube} disabled={rowDims.length === 0 || colDims.length === 0 || loading}>
-              {loading ? 'Running…' : 'Run'}
-            </Button>
-            <Button size="sm" onClick={() => { setSaveName(''); setSaveDesc(''); setActiveReportId(null); setShowSave(true); }} disabled={rowDims.length === 0 || colDims.length === 0}>
-              Save as new
-            </Button>
-            {activeReportId && (
-              <Button size="sm" onClick={() => setShowSave(true)}>
-                Update saved
-              </Button>
-            )}
-            {/* Reset the builder back to a blank slate — clears the chosen
-                rows, columns, filters, any loaded-report binding, and the
-                last cube result. Saved reports themselves are untouched. */}
-            <span title="Clear rows, columns, filters, and the current result. Saved reports are not deleted.">
-              <Button
-                size="sm"
-                onClick={() => {
-                  setRowDims([]);
-                  setColDims([]);
-                  setFilters([]);
-                  setActiveReportId(null);
-                  setCube(null);
-                  setDrill(null);
-                  setError(null);
-                }}
-                disabled={rowDims.length === 0 && colDims.length === 0 && filters.length === 0 && !activeReportId && !cube}
-              >
-                Reset
-              </Button>
-            </span>
-            <div style={{ marginLeft: 'auto' }}>
-              {cube && exportPayload && <ExportMenu build={exportPayload} />}
+          {/* Export (Run / Save / Reset live in the header toolbar now) */}
+          {cube && exportPayload && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <ExportMenu build={exportPayload} />
             </div>
-          </div>
+          )}
 
           {/* Grid */}
           {error && (
@@ -610,29 +650,32 @@ export default function AnalysisPage() {
             </div>
           )}
           {rowDims.length === 0 || colDims.length === 0 ? (
-            <div>
-              <EmptyState
-                icon={renderNavIcon('/analysis', { size: 28 })}
-                title="Pick dimensions to pivot"
-                description="Drag at least one dimension into Rows and one into Columns. Drag a second into either zone to create a sub-group — or start from an example below."
-              />
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 4 }}>
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 24 }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Start from a question</h2>
+              <p style={{ margin: '4px 0 16px', color: 'var(--color-text-secondary)', maxWidth: 640 }}>
+                Pick one below, or add a dimension to Rows and one to Columns. Each cell counts the matching items; click a cell to see them.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
                 {([
-                  { label: 'Data Assets by System', row: ['systems'], col: ['dataAssets'] },
-                  { label: 'Roles by Person', row: ['roles'], col: ['people'] },
-                  { label: 'Assets by Domain', row: ['domains'], col: ['dataAssets'] },
-                  { label: 'Processes by System', row: ['processes'], col: ['systems'] },
-                ] as Array<{ label: string; row: Dim[]; col: Dim[] }>).map((p) => (
+                  { q: 'Which systems hold which data assets?', row: ['dataAssets'], col: ['systems'] },
+                  { q: 'Who holds which roles?', row: ['roles'], col: ['people'] },
+                  { q: 'How many assets sit in each domain?', row: ['dataAssets'], col: ['domains'] },
+                  { q: 'Which processes depend on which systems?', row: ['processes'], col: ['systems'] },
+                ] as Array<{ q: string; row: Dim[]; col: Dim[] }>).filter((p) =>
+                  // Only offer a question whose dimensions actually exist in this deployment.
+                  [...p.row, ...p.col].every((d) => dimensions.some((dd) => dd.id === d)),
+                ).map((p) => (
                   <button
-                    key={p.label}
-                    onClick={() => { setRowDims(p.row); setColDims(p.col); }}
+                    key={p.q}
+                    onClick={() => { setRowDims(p.row); setColDims(p.col); setActiveReportId(null); }}
                     style={{
-                      fontSize: 12, padding: '6px 14px', borderRadius: 999, cursor: 'pointer',
-                      border: '1px solid var(--color-border)', background: 'var(--color-surface)',
-                      color: 'var(--color-text)',
+                      textAlign: 'left', cursor: 'pointer', border: '1px solid var(--color-border)',
+                      background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', padding: '14px 16px',
+                      display: 'flex', flexDirection: 'column', gap: 4, minHeight: 84,
                     }}
                   >
-                    Try: {p.label}
+                    <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{p.q}</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{p.row.map(dimensionLabel).join(' / ')} by {p.col.map(dimensionLabel).join(' / ')}</span>
                   </button>
                 ))}
               </div>
