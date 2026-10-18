@@ -11,7 +11,6 @@ import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import ListToolbar from '../components/ListToolbar';
 import ConfirmDialog from '../components/ConfirmDialog';
-import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
@@ -25,7 +24,8 @@ import Avatar from '../components/Avatar';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { SkeletonRows } from '../components/Skeleton';
-import { GOVERNANCE_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON, DAMA_ROLE_TYPES } from '../types';
+import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON, DAMA_ROLE_TYPES } from '../types';
+import { getRoleReference, RACI_LABEL, RACI_DESCRIPTION, Raci } from '../lib/roleDefinitions';
 
 // Roles an operations manual can document (the manual picker's vocabulary).
 // Entity-attached roles like Data Domain Owner aren't manual-eligible, so the
@@ -96,6 +96,29 @@ interface ManualRef {
   roleType: string;
   label: string;
 }
+
+// Minimal decision-right shape — just enough to count where a role decides,
+// recommends, approves or is informed, for the role detail's "where it shows
+// up" card.
+interface DecisionRight {
+  id: string;
+  deciderType?: 'PERSON' | 'ROLE' | 'GROUP';
+  decider?: string | null;
+  recommends?: string[];
+  approves?: string[];
+  informed?: string[];
+}
+
+// Governance group type → display label, for the role detail's "expected in"
+// groups card.
+const GROUP_TYPE_LABELS: Record<string, string> = {
+  COUNCIL: 'Data Governance Council',
+  OFFICE: 'Data Governance Office',
+  COMMITTEE: 'Data Governance Committee',
+  STEWARDSHIP_TEAM: 'Data Stewardship Team',
+  WORKING_GROUP: 'Working Group',
+  COMMUNITY_OF_PRACTICE: 'Community of Practice',
+};
 
 // ── Entity-scoped role catalogue ────────────────────────────────────────
 //
@@ -229,33 +252,6 @@ function buildRoleModel(
   };
 }
 
-// The compact Single / Multiple cardinality chip shown next to a role name.
-function CardinalityChip({ roleType }: { roleType: string }) {
-  const multiple = roleAllowsMultiple(roleType);
-  // Entity-scoped roles are single/multiple *per entity* — so the aggregate
-  // list can show several holders of a "Single" role (one per domain/system/
-  // asset). Say "per <entity>" so that reads as intended, not contradictory.
-  const info = entityRoleInfo(roleType);
-  const per = info
-    ? ` per ${info.entityType === 'domain' ? 'data domain' : info.entityType === 'system' ? 'system' : 'data asset'}`
-    : '';
-  return (
-    <span
-      title={multiple
-        ? `Multiple holders${per} — you can assign more than one person or agent.`
-        : `Single holder${per} — exactly one person or agent.`}
-      style={{
-        fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
-        background: 'var(--color-bg)', color: 'var(--color-text-muted)',
-        border: '1px solid var(--color-border)',
-        textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
-      }}
-    >
-      {multiple ? 'Multiple' : 'Single'}
-    </span>
-  );
-}
-
 const ROLE_TYPE_LABELS: Record<string, string> = {
   // Executive/Strategic
   CDO: 'Chief Data Officer',
@@ -301,26 +297,6 @@ const ROLE_CATEGORIES: Record<string, string> = {
   DATA_ASSET_OWNER: 'Entity-attached', DATA_ASSET_STEWARD: 'Entity-attached',
 };
 
-// One palette per *category* rather than per role. Eighteen distinct
-// role colours encoded nothing the role label wasn't already telling
-// you — the page read as confetti and reserved no colour budget for
-// real signal (e.g. required-but-unfilled). Four category palettes
-// give scanning value ("this is a business role") and let the red
-// staffing-gap treatment stay loud.
-const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
-  Executive:         { bg: '#ede9fe', color: '#5b21b6' },  // purple
-  Business:          { bg: '#dbeafe', color: '#1e40af' },  // blue
-  Technical:         { bg: '#fef3c7', color: '#92400e' },  // amber
-  'Entity-attached': { bg: '#e2e8f0', color: '#475569' },  // slate
-};
-
-const NEUTRAL_PALETTE = { bg: '#f1f5f9', color: '#64748b' };
-
-function roleColors(roleType: string): { bg: string; color: string } {
-  const cat = ROLE_CATEGORIES[roleType];
-  return (cat && CATEGORY_COLORS[cat]) || NEUTRAL_PALETTE;
-}
-
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
@@ -342,11 +318,6 @@ interface FormData {
 interface AgentOption { id: string; name: string; status: string; orgIds: string[]; }
 
 const emptyForm: FormData = { assigneeType: 'person', personId: '', agentId: '', roleType: 'CDO', scopeType: 'ORG', scopeId: '' };
-
-const backLinkStyle: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
-};
 
 export default function DamaRolesPage({
   embedded = false,
@@ -375,6 +346,7 @@ export default function DamaRolesPage({
   const [systems, setSystems] = useState<SystemOption[]>([]);
   const [dataAssets, setDataAssets] = useState<AssetOption[]>([]);
   const [manuals, setManuals] = useState<ManualRef[]>([]);
+  const [decisionRights, setDecisionRights] = useState<DecisionRight[]>([]);
   // Counts come from the local `roles` list now (see roleCounts below);
   // the /summary endpoint is still fetched so future per-role analytics
   // have a single source of truth, but the result is intentionally
@@ -402,6 +374,15 @@ export default function DamaRolesPage({
   // Role-coverage card filter — narrows the table to roles that are unfilled,
   // required-and-unfilled, or have only a single holder. One at a time.
   const [coverageFilter, setCoverageFilter] = useState<'unfilled' | 'reqUnfilled' | 'single' | null>(null);
+  // Role-detail (focus) menus: the header "⋯" and the per-holder "⋯".
+  const [focusMenuOpen, setFocusMenuOpen] = useState(false);
+  const [holderMenuId, setHolderMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusMenuOpen && !holderMenuId) return;
+    const close = () => { setFocusMenuOpen(false); setHolderMenuId(null); };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [focusMenuOpen, holderMenuId]);
   // On the detail route (/dama-roles/:roleType) the trail ends on the role's
   // name ("Dashboard › Roles › Data Owner"); the list route registers no leaf.
   useBreadcrumbLeaf(focusRoleType ? (ROLE_TYPE_LABELS[focusRoleType] || focusRoleType) : undefined);
@@ -409,7 +390,7 @@ export default function DamaRolesPage({
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [rolesRes, summaryRes, peopleRes, agentsRes, orgsRes, domainsRes, systemsRes, assetsRes, manualsRes] = await Promise.all([
+      const [rolesRes, summaryRes, peopleRes, agentsRes, orgsRes, domainsRes, systemsRes, assetsRes, manualsRes, decisionRightsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
         apiClient.get<{ success: boolean; data: Record<string, number> }>(`/dama-roles/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
@@ -421,6 +402,7 @@ export default function DamaRolesPage({
         apiClient.get<{ success: boolean; data: SystemOption[] }>(`/systems${query}`).catch(() => ({ success: true, data: [] as SystemOption[] })),
         apiClient.get<{ success: boolean; data: AssetOption[] }>(`/data-assets${query}`).catch(() => ({ success: true, data: [] as AssetOption[] })),
         apiClient.get<{ success: boolean; data: ManualRef[] }>(`/operations-manuals${query}`).catch(() => ({ success: true, data: [] as ManualRef[] })),
+        apiClient.get<{ success: boolean; data: DecisionRight[] }>(`/decision-rights${query}`).catch(() => ({ success: true, data: [] as DecisionRight[] })),
       ]);
       setRoles(rolesRes.data || []);
       setRoleTypes(rolesRes.roleTypes || []);
@@ -432,6 +414,7 @@ export default function DamaRolesPage({
       setSystems(systemsRes.data || []);
       setDataAssets(assetsRes.data || []);
       setManuals(manualsRes.data || []);
+      setDecisionRights(decisionRightsRes.data || []);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -600,24 +583,48 @@ export default function DamaRolesPage({
 
   const scopeName = (scopeId: string) => resolveScope(scopeId).name;
 
-  const roleBadge = (roleType: string): React.CSSProperties => {
-    const c = roleColors(roleType);
-    return {
-      display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-      fontSize: 11, fontWeight: 600, background: c.bg, color: c.color,
-    };
-  };
-
   return (
     <div>
-      {focusRoleType ? (
-        <PageHeader
-          kicker="Governance role"
-          title={ROLE_TYPE_LABELS[focusRoleType] || focusRoleType}
-          subtitle={ROLE_CATEGORIES[focusRoleType] ? `${ROLE_CATEGORIES[focusRoleType]} role` : undefined}
-          actions={<Link to="/dama-roles" style={backLinkStyle}>{'←'} Back to Roles</Link>}
-        />
-      ) : (
+      {focusRoleType ? (() => {
+        const rt = focusRoleType;
+        const def = GOVERNANCE_ROLES.find((r) => r.roleType === rt);
+        const required = REQUIRED_ROLE_TYPES.has(rt);
+        const model = buildRoleModel(rt, roles, domains, systems, dataAssets, personById);
+        const filled = model.filled;
+        return (
+          <PageHeader
+            kicker={`Governance role · ${ROLE_CATEGORIES[rt] || 'Governance'}`}
+            title={ROLE_TYPE_LABELS[rt] || rt}
+            subtitle={def?.purpose || undefined}
+            meta={
+              <>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: filled ? '#d1fae5' : '#fffbeb', color: filled ? '#065f46' : 'var(--color-warning)' }}>
+                  <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 3, background: 'currentColor' }} />{filled ? 'Filled' : 'Unfilled'}
+                </span>
+                {required && (
+                  <span title="Every governance program should have someone in this role" style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>Required</span>
+                )}
+              </>
+            }
+            actions={
+              <>
+                <span style={{ position: 'relative', display: 'inline-flex' }}>
+                  <button type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded={focusMenuOpen}
+                    onClick={(e) => { e.stopPropagation(); setFocusMenuOpen((v) => !v); }}
+                    style={{ width: 34, height: 34, border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>⋯</button>
+                  {focusMenuOpen && (
+                    <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 38, right: 0, zIndex: 30, minWidth: 180, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                      <button type="button" role="menuitem" onClick={() => { setFocusMenuOpen(false); openRoleDrawer(rt); }} style={rolesMenuItemStyle}>About this role</button>
+                      <button type="button" role="menuitem" onClick={() => { setFocusMenuOpen(false); navigate('/dama-roles?tab=raci'); }} style={rolesMenuItemStyle}>View in RACI matrix</button>
+                    </div>
+                  )}
+                </span>
+                {isAdmin && <Button variant="primary" onClick={() => openAddForRole(rt)}>{filled && !model.several ? 'Change holder' : 'Assign holder'}</Button>}
+              </>
+            }
+          />
+        );
+      })() : (
         <>
           <EmbeddablePageHeader
             embedded={embedded}
@@ -975,74 +982,171 @@ export default function DamaRolesPage({
       )}
       {!focusRoleType && loading && <Card padding={0} shadow="none"><SkeletonRows rows={6} columns={5} /></Card>}
 
-      {/* ── Single-role detail (the /dama-roles/:roleType route) ──
-       *  Reuses the same RolePreviewPane the modal used, rendered as the
-       *  page body inside a Card. Assign / remove actions reuse the shared
-       *  assign form + confirm dialog above. */}
+      {/* ── Single-role detail (the /dama-roles/:roleType route) ── */}
       {focusRoleType && (
         loading ? (
           <Card><SkeletonRows rows={4} columns={2} /></Card>
-        ) : (
-          <Card padding={0}>
-            <RolePreviewPane
-              bare
-              roleType={focusRoleType}
-              dama={roles.filter((r) => r.roleType === focusRoleType)}
-              domains={domains}
-              systems={systems}
-              dataAssets={dataAssets}
-              personById={personById}
-              manuals={manualsByRole.get(focusRoleType) || []}
-              roleBadge={roleBadge}
-              resolveScope={resolveScope}
-              onClose={() => navigate('/dama-roles')}
-              onAssign={() => openAddForRole(focusRoleType)}
-              onAssignToEntity={openAddForEntity}
-              navigateToEntity={navigateToEntity}
-              onOpenDrawer={openRoleDrawer}
-              setConfirmDelete={setConfirmDelete}
-              canEdit={isAdmin}
-            />
-          </Card>
-        )
+        ) : (() => {
+          const rt = focusRoleType;
+          const info = entityRoleInfo(rt);
+          const holders = roles.filter((r) => r.roleType === rt);
+          const manuals = manualsByRole.get(rt) || [];
+          const required = REQUIRED_ROLE_TYPES.has(rt);
+          // Groups whose expected-role slate includes this role.
+          const expectedInGroups = GOVERNANCE_GROUP_ROLES.filter((g) => g.roleTypes.includes(rt)).map((g) => GROUP_TYPE_LABELS[g.groupType] || g.groupType);
+          // Decision rights that reference this role type.
+          const drCount = decisionRights.filter((dr) =>
+            (dr.deciderType === 'ROLE' && dr.decider === rt) ||
+            (dr.recommends || []).includes(rt) || (dr.approves || []).includes(rt) || (dr.informed || []).includes(rt)
+          ).length;
+          // Usual RACI letter — the most common letter across the role's
+          // typical decisions.
+          const typ = getRoleReference(rt)?.typicalDecisions || [];
+          const raciCounts: Record<string, number> = {};
+          for (const d of typ) raciCounts[d.raci] = (raciCounts[d.raci] || 0) + 1;
+          const usualRaci = (Object.entries(raciCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '') as Raci | '';
+          const assignedAt = info ? `${info.entityType === 'domain' ? 'Data domain' : info.entityType === 'system' ? 'System' : 'Data asset'} level` : 'Organization level';
+
+          const factsRail = (
+            <aside aria-label="Role facts" style={{ flex: '1 1 280px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <Card padding={0}>
+                <div style={{ padding: '14px 18px' }}>
+                  <h2 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>Facts</h2>
+                  <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: '110px 1fr', rowGap: 10, fontSize: 13 }}>
+                    <dt style={{ color: 'var(--color-text-muted)' }}>Category</dt><dd style={{ margin: 0 }}>{ROLE_CATEGORIES[rt] || '—'}</dd>
+                    <dt style={{ color: 'var(--color-text-muted)' }}>Required</dt><dd style={{ margin: 0 }}>{required ? 'Yes, every program needs one' : 'No, optional'}</dd>
+                    <dt style={{ color: 'var(--color-text-muted)' }}>Holders</dt><dd style={{ margin: 0 }}>{scopeText(rt)}</dd>
+                    <dt style={{ color: 'var(--color-text-muted)' }}>Assigned at</dt><dd style={{ margin: 0 }}>{assignedAt}</dd>
+                  </dl>
+                </div>
+              </Card>
+              <Card padding={0}>
+                <div style={{ padding: '14px 18px' }}>
+                  <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>About this role</h2>
+                  <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>Roles follow the DAMA data management framework, a widely used industry standard. <button type="button" onClick={() => openRoleDrawer(rt)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 600, color: 'var(--color-primary)', cursor: 'pointer' }}>Learn more</button></p>
+                </div>
+              </Card>
+            </aside>
+          );
+
+          return (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+              <main style={{ flex: '999 1 560px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Who holds it */}
+                <Card padding={0}>
+                  <div style={{ padding: '16px 20px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                    <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Who holds it {!info && <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>{holders.length}</span>}</h2>
+                    <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{scopeText(rt)}.</span>
+                  </div>
+                  {info ? (
+                    renderEntityMatrix({ rt, info, dama: holders, domains, systems, dataAssets, personById, onAssignToEntity: openAddForEntity, navigateToEntity, setConfirmDelete, canEdit: isAdmin })
+                  ) : holders.length === 0 ? (
+                    <div style={{ padding: '4px 20px 18px', fontSize: 13, color: 'var(--color-text-muted)' }}>No one holds this role yet.{isAdmin && <> <button type="button" onClick={() => openAddForRole(rt)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 600, color: 'var(--color-primary)', cursor: 'pointer' }}>Assign someone →</button></>}</div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                        <thead>
+                          <tr>
+                            <th scope="col" style={{ ...tableThStyle, paddingLeft: 20, borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)' }}>Person</th>
+                            <th scope="col" style={{ ...tableThStyle, borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)' }}>Covers</th>
+                            <th scope="col" style={{ ...tableThStyle, borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)' }}>Since</th>
+                            <th scope="col" style={{ ...tableThStyle, textAlign: 'right', paddingRight: 20, borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)' }}><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Actions</span></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {holders.map((r) => {
+                            const isAgent = !!r.agentId;
+                            const displayName = isAgent ? (r.agentName || 'Agent') : (r.personName || 'Unknown');
+                            const sc = resolveScope(r.scopeId);
+                            return (
+                              <tr key={r.id}>
+                                <td style={{ padding: '12px 12px 12px 20px', borderBottom: '1px solid var(--color-border)' }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                                    <Avatar name={displayName} size="sm" />
+                                    {isAgent ? <span style={{ fontWeight: 600 }}>{displayName}</span> : <Link to={`/people/${r.personId}`} style={{ color: 'var(--color-text)', fontWeight: 600, textDecoration: 'none' }}>{displayName}</Link>}
+                                  </span>
+                                </td>
+                                <td style={{ padding: 12, borderBottom: '1px solid var(--color-border)', fontSize: 13 }}><span style={{ color: 'var(--color-text-muted)' }}>{sc.kind === 'ORG' ? 'Organization' : sc.kind === 'DOMAIN' ? 'Data domain' : sc.kind === 'SYSTEM' ? 'System' : sc.kind === 'ASSET' ? 'Data asset' : 'Scope'}</span> · {sc.name}</td>
+                                <td style={{ padding: 12, borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: 13 }}>{r.since ? new Date(r.since).toLocaleDateString() : '—'}</td>
+                                <td style={{ padding: '12px 20px 12px 12px', borderBottom: '1px solid var(--color-border)', textAlign: 'right' }}>
+                                  {isAdmin && (
+                                    <span style={{ position: 'relative', display: 'inline-flex' }}>
+                                      <button type="button" aria-label={`More actions for ${displayName}`} aria-haspopup="menu" aria-expanded={holderMenuId === r.id} onClick={(e) => { e.stopPropagation(); setHolderMenuId(holderMenuId === r.id ? null : r.id); }} style={{ width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>⋯</button>
+                                      {holderMenuId === r.id && (
+                                        <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 180, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                                          {!isAgent && <button type="button" role="menuitem" onClick={() => { setHolderMenuId(null); navigate(`/people/${r.personId}`); }} style={rolesMenuItemStyle}>Open person</button>}
+                                          <button type="button" role="menuitem" onClick={() => { setHolderMenuId(null); setConfirmDelete(r.id); }} style={{ ...rolesMenuItemStyle, color: 'var(--color-error)' }}>Remove from role</button>
+                                        </div>
+                                      )}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+
+                {/* Where this role shows up */}
+                <Card padding={0}>
+                  <div style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Where this role shows up</h2>
+                      <Link to="/dama-roles?tab=raci" style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-primary)' }}>Open RACI matrix</Link>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginTop: 12 }}>
+                      <Link to="/governance-groups" style={{ textDecoration: 'none', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
+                        <span style={{ display: 'block', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Groups</span>
+                        <span style={{ display: 'block', marginTop: 4, fontWeight: 600 }}>{expectedInGroups.length > 0 ? expectedInGroups[0] : 'Not an expected role'}</span>
+                        <span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-muted)' }}>{expectedInGroups.length > 0 ? `Expected role${expectedInGroups.length > 1 ? ` in ${expectedInGroups.length} group types` : ''}` : 'Can still be assigned to any group'}</span>
+                      </Link>
+                      <Link to="/decision-rights" style={{ textDecoration: 'none', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
+                        <span style={{ display: 'block', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Decision rights</span>
+                        <span style={{ display: 'block', marginTop: 4, fontWeight: 600 }}>{drCount} decision{drCount === 1 ? '' : 's'}</span>
+                        <span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-muted)' }}>Where this role decides or approves</span>
+                      </Link>
+                      <Link to="/dama-roles?tab=raci" style={{ textDecoration: 'none', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
+                        <span style={{ display: 'block', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>RACI</span>
+                        <span style={{ display: 'block', marginTop: 4, fontWeight: 600 }}>{usualRaci ? `Usually ${RACI_LABEL[usualRaci]}` : 'No typical letter'}</span>
+                        <span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-muted)' }}>{usualRaci ? RACI_DESCRIPTION[usualRaci] : 'Depends on the activity'}</span>
+                      </Link>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Operations manual */}
+                {(manuals.length > 0 || MANUAL_ELIGIBLE_ROLES.has(rt)) && (
+                  <Card padding={0}>
+                    <div style={{ padding: '16px 20px' }}>
+                      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Operations manual</h2>
+                      <p style={{ margin: '4px 0 12px', fontSize: 13, color: 'var(--color-text-muted)' }}>The written routine for this role: meetings, reviews and sign-offs.</p>
+                      {manuals.length === 0 ? (
+                        <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No manual documents this role yet.{isAdmin && <> <button type="button" onClick={() => navigate('/documentation?tab=manual')} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 600, color: 'var(--color-primary)', cursor: 'pointer' }}>Add one →</button></>}</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {manuals.map((man) => (
+                            <button key={man.id} type="button" onClick={() => navigate('/documentation?tab=manual')} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
+                              <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/documentation', { size: 18 })}</span>
+                              <span style={{ flex: 1, fontWeight: 600, color: 'var(--color-text)' }}>{man.label}</span>
+                              <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Documentation</span>
+                              <span aria-hidden="true" style={{ color: 'var(--color-primary)' }}>&rarr;</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                )}
+              </main>
+              {factsRail}
+            </div>
+          );
+        })()
       )}
     </div>
-  );
-}
-
-// Per-holder scope display. The small leading tag tells the user what
-// the assignment is scoped to (Org / Domain / System / Asset) so a
-// Data Architect attached to "Customer Data" no longer reads as a raw
-// UUID. UNKNOWN renders amber so a deleted scope ref is obvious.
-function ScopeChip({ scope, rawId }: {
-  scope: { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string };
-  rawId: string;
-}) {
-  const palette: Record<typeof scope.kind, { bg: string; fg: string }> = {
-    ORG:     { bg: '#e0e7ff', fg: '#3730a3' },
-    DOMAIN:  { bg: '#dcfce7', fg: '#166534' },
-    SYSTEM:  { bg: '#fee2e2', fg: '#991b1b' },
-    ASSET:   { bg: '#dbeafe', fg: '#1e40af' },
-    UNKNOWN: { bg: '#fef3c7', fg: '#92400e' },
-  };
-  const c = palette[scope.kind];
-  const isUnknown = scope.kind === 'UNKNOWN';
-  return (
-    <span
-      title={isUnknown
-        ? `Scope id ${rawId} did not resolve to any org, domain, system, or asset — likely deleted.`
-        : `${scope.kind}: ${scope.name}`}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}
-    >
-      <span style={{
-        fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
-        padding: '1px 6px', borderRadius: 3,
-        background: c.bg, color: c.fg,
-      }}>
-        {scope.kind}
-      </span>
-      {isUnknown ? <em>unresolved</em> : scope.name}
-    </span>
   );
 }
 
@@ -1399,174 +1503,3 @@ const rolesMenuItemStyle: React.CSSProperties = {
   padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
   background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
 };
-
-// ── RolePreviewPane ──────────────────────────────────────────────────
-// Right rail (340px), mirrors the People page's 360° preview pane.
-// Opens when a table row is clicked. Shows role purpose, holders
-// (org-scoped) or per-entity matrix (entity-attached), and an Assign
-// action.
-function RolePreviewPane({
-  roleType, dama, domains, systems, dataAssets, personById, manuals,
-  roleBadge, resolveScope, onClose, onAssign, onAssignToEntity,
-  navigateToEntity, onOpenDrawer, setConfirmDelete, canEdit, inline = false, bare = false,
-}: {
-  canEdit: boolean;
-  /** Rendered inline beneath the clicked row (no sticky rail, no close ×). */
-  inline?: boolean;
-  /** Rendered inside a <Modal> body — drop the card chrome and the close ×
-   *  (the modal supplies both). */
-  bare?: boolean;
-  roleType: string;
-  dama: DamaRoleAssignment[];
-  domains: DomainOption[];
-  systems: SystemOption[];
-  dataAssets: AssetOption[];
-  personById: Map<string, string>;
-  manuals: ManualRef[];
-  roleBadge: (rt: string) => React.CSSProperties;
-  resolveScope: (id: string) => { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string };
-  onClose: () => void;
-  onAssign: () => void;
-  onAssignToEntity: (rt: string, scopeType: 'DOMAIN', scopeId: string) => void;
-  navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
-  onOpenDrawer: (rt: string) => void;
-  setConfirmDelete: (id: string) => void;
-}) {
-  const info = entityRoleInfo(roleType);
-  const def = GOVERNANCE_ROLES.find((r) => r.roleType === roleType);
-  const purpose = def?.purpose || '';
-  const required = REQUIRED_ROLE_TYPES.has(roleType);
-  const navigate = useNavigate();
-  const openManual = () => navigate('/documentation?tab=manual');
-
-  return (
-    <Card padding={0} shadow="none" borderColor={bare ? 'transparent' : undefined} style={bare ? { margin: 0, border: 'none', background: 'transparent' } : inline ? { margin: 12 } : { position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
-      <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          onClick={() => onOpenDrawer(roleType)}
-          title="Learn about this role"
-          style={{ ...roleBadge(roleType), border: 'none', cursor: 'pointer', padding: '3px 10px', font: 'inherit' }}
-        >
-          {ROLE_TYPE_LABELS[roleType] || roleType}
-        </button>
-        {required && (
-          <span style={{
-            fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
-            background: 'transparent', color: 'var(--color-text-muted)',
-            border: '1px solid var(--color-border)',
-            textTransform: 'uppercase', letterSpacing: '0.04em',
-          }}>Required</span>
-        )}
-        <CardinalityChip roleType={roleType} />
-        {!inline && !bare && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close preview"
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: 0, lineHeight: 1 }}
-          >×</button>
-        )}
-      </div>
-
-      {purpose && (
-        <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5, borderBottom: '1px solid var(--color-border)' }}>
-          {purpose}
-        </div>
-      )}
-
-      {info ? (
-        // Entity-attached: render the per-entity matrix.
-        renderEntityMatrix({
-          rt: roleType, info,
-          dama, domains, systems, dataAssets, personById,
-          onAssignToEntity, navigateToEntity, setConfirmDelete, canEdit,
-        })
-      ) : (
-        // Org-scoped: render the simple holder list.
-        <div style={{ padding: 0 }}>
-          {dama.length === 0 ? (
-            <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--color-text-muted)' }}>
-              No one holds this role yet.
-            </div>
-          ) : (
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {dama.map((r) => {
-                const isAgent = !!r.agentId;
-                const displayName = isAgent ? (r.agentName || 'Agent') : (r.personName || 'Unknown');
-                return (
-                  <li key={r.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto', gap: 8, alignItems: 'center', padding: '8px 14px', borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
-                    <span style={{
-                      width: 22, height: 22, borderRadius: '50%',
-                      background: isAgent ? '#ede9fe' : '#e0e7ff',
-                      color: isAgent ? '#5b21b6' : '#3730a3',
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 10, fontWeight: 700, flexShrink: 0,
-                    }}>
-                      {isAgent ? renderNavIcon('/agents', { size: 13, strokeWidth: 2.4 }) : displayName.charAt(0).toUpperCase()}
-                    </span>
-                    <span style={{ fontWeight: 500 }}>{displayName}</span>
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                      <ScopeChip scope={resolveScope(r.scopeId)} rawId={r.scopeId} />
-                    </span>
-                    {canEdit && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {/* Reverse of the manual→role link authored on the Documentation page:
-          the operations manual(s) that document this role's cadence. Shown for
-          manual-eligible roles, or any role that already has a manual. */}
-      {(manuals.length > 0 || MANUAL_ELIGIBLE_ROLES.has(roleType)) && (
-      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-border)' }}>
-        <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 6 }}>
-          Operations manual
-        </div>
-        {manuals.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-            No manual documents this role yet.{canEdit && <> <button type="button" onClick={openManual} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)', font: 'inherit', fontSize: 12 }}>Add one →</button></>}
-          </div>
-        ) : (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {manuals.map((man) => (
-              <li key={man.id}>
-                <button
-                  type="button"
-                  onClick={openManual}
-                  title={`Open "${man.label}" on the Documentation page`}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                    background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4,
-                    padding: '6px 10px', cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-primary)',
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/documentation', { size: 13 })}</span>
-                  <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{man.label}</span>
-                  <span aria-hidden="true" style={{ flexShrink: 0 }}>&rarr;</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      )}
-
-      {canEdit && (
-      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-border)' }}>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={onAssign}
-          style={{ width: '100%' }}
-        >
-          + Assign
-        </Button>
-      </div>
-      )}
-    </Card>
-  );
-}
