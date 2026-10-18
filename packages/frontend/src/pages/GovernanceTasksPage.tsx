@@ -49,6 +49,7 @@ export interface GovernanceTask {
   automationMode: string;
   linkedObjectType: string | null;
   linkedObjectId: string | null;
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,12 +79,12 @@ const emptyForm: FormData = {
 
 // ── Constants ──
 
-const TASK_STATUSES = ['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const;
+export const TASK_STATUSES = ['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const;
 const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 const TASK_TYPES = ['REVIEW', 'APPROVAL', 'REMEDIATION', 'CERTIFICATION', 'DATA_QUALITY', 'POLICY_UPDATE', 'OTHER'] as const;
 const AUTOMATION_MODES = ['HUMAN', 'AGENT', 'HYBRID'] as const;
 
-const STATUS_TRANSITIONS: Record<string, { label: string; target: string; style: 'primary' | 'secondary' | 'danger' }[]> = {
+export const STATUS_TRANSITIONS: Record<string, { label: string; target: string; style: 'primary' | 'secondary' | 'danger' }[]> = {
   OPEN:        [{ label: 'Start', target: 'IN_PROGRESS', style: 'primary' }, { label: 'Cancel', target: 'CANCELLED', style: 'danger' }],
   IN_PROGRESS: [{ label: 'Complete', target: 'COMPLETED', style: 'primary' }, { label: 'Cancel', target: 'CANCELLED', style: 'danger' }],
   COMPLETED:   [{ label: 'Reopen', target: 'OPEN', style: 'secondary' }],
@@ -119,35 +120,35 @@ const menuItemStyle: React.CSSProperties = {
 // surface. Priority runs a cool→warm ramp; status uses the shared slate /
 // blue / green set.
 
-const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+export const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   OPEN:        { bg: '#e5ecf3', color: '#364a5e' }, // slate — not started
   IN_PROGRESS: { bg: '#e6eef9', color: '#24508f' }, // blue — underway
   COMPLETED:   { bg: '#dcefe5', color: '#17604b' }, // green — done
   CANCELLED:   { bg: '#eef0f2', color: '#6b7280' }, // muted grey
 };
 
-const PRIORITY_COLORS: Record<string, { bg: string; color: string }> = {
+export const PRIORITY_COLORS: Record<string, { bg: string; color: string }> = {
   LOW:      { bg: '#e5ecf3', color: '#364a5e' }, // slate
   MEDIUM:   { bg: '#e6eef9', color: '#24508f' }, // blue
   HIGH:     { bg: '#fbe9d9', color: '#9a4a0e' }, // amber
   CRITICAL: { bg: '#fbe4e4', color: '#9a1c1c' }, // red
 };
 
-const MODE_COLORS: Record<string, { bg: string; color: string }> = {
+export const MODE_COLORS: Record<string, { bg: string; color: string }> = {
   HUMAN:  { bg: '#e6eef9', color: '#24508f' },
   AGENT:  { bg: '#ede9fe', color: '#5b21b6' },
   HYBRID: { bg: '#ccfbf1', color: '#115e59' },
 };
 
 // Sentence-case a SCREAMING_SNAKE code: "IN_PROGRESS" → "In progress".
-function prettyLabel(code: string): string {
+export function prettyLabel(code: string): string {
   const s = (code || '').replace(/_/g, ' ').toLowerCase();
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 // A sentence-case pill with a leading status dot. OPEN (not-yet-started) wears
 // a hollow dot so an open task doesn't read as an active/closed state.
-function dotPill(colors: { bg: string; color: string }, label: string, hollow = false): React.ReactNode {
+export function dotPill(colors: { bg: string; color: string }, label: string, hollow = false): React.ReactNode {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: colors.bg, color: colors.color }}>
       <span style={{ width: 7, height: 7, borderRadius: 4, background: hollow ? 'transparent' : colors.color, boxShadow: hollow ? `inset 0 0 0 1.5px ${colors.color}` : undefined }} />{label}
@@ -168,14 +169,14 @@ const TASK_COLUMN_DEFS: Array<{ id: TaskColId; label: string; defaultVisible: bo
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
-function fmtDate(d: string | null): string {
+export function fmtDate(d: string | null): string {
   if (!d) return '--';
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // Whole days from today to a due date, local calendar day (a date-only ISO is
 // otherwise read as UTC midnight and lands a day early behind UTC).
-function daysUntil(iso: string | null): number | null {
+export function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(iso);
@@ -187,7 +188,7 @@ function daysUntil(iso: string | null): number | null {
 
 // "Overdue 3 days" / "Due today" / "in 3 days" — the urgency cue the US
 // numeric date alone never gave. null for no due date.
-function relativeDue(iso: string | null): string | null {
+export function relativeDue(iso: string | null): string | null {
   const n = daysUntil(iso);
   if (n == null) return null;
   if (n < 0) return `Overdue ${-n} day${n === -1 ? '' : 's'}`;
@@ -262,7 +263,7 @@ function TaskFields({ form, setForm, people }: {
 // The expanded row: read-only detail with a view/edit toggle. Edit flips the
 // SAME panel into the field grid and one Save writes PUT /governance-tasks/:id
 // — the row's own in-place editor (there's no separate edit form anymore).
-export function ExpandedTask({ task, people, orgId, canEdit, onSaved, actionsSlot }: {
+export function ExpandedTask({ task, people, orgId, canEdit, onSaved, actionsSlot, hideMeta }: {
   task: GovernanceTask;
   people: Person[];
   orgId: string | null;
@@ -271,6 +272,9 @@ export function ExpandedTask({ task, people, orgId, canEdit, onSaved, actionsSlo
   /** When set, the Edit / Save·Cancel cluster renders into the page header's
    *  actions slot (the detail-page placement) instead of inline. */
   actionsSlot?: HTMLElement | null;
+  /** Hide the bottom linked/created/updated meta row — the detail page owns
+   *  those facts in its rail, so they'd otherwise duplicate. */
+  hideMeta?: boolean;
 }) {
   const m = useDetailEditMode<FormData>(
     {
@@ -308,16 +312,18 @@ export function ExpandedTask({ task, people, orgId, canEdit, onSaved, actionsSlo
       ) : (
         <>
           <SectionLabel marginBottom={6}>Description</SectionLabel>
-          <div style={{ fontSize: 12, color: task.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: task.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: task.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: task.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: hideMeta ? 0 : 12 }}>
             {task.description || 'No description provided.'}
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
-            {task.linkedObjectType && (
-              <div><span style={{ color: 'var(--color-text-muted)' }}>Linked to </span><span style={{ fontWeight: 500 }}>{task.linkedObjectType.replace(/_/g, ' ').toLowerCase()}</span></div>
-            )}
-            <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{fmtDate(task.createdAt)}</span></div>
-            <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{fmtDate(task.updatedAt)}</span></div>
-          </div>
+          {!hideMeta && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
+              {task.linkedObjectType && (
+                <div><span style={{ color: 'var(--color-text-muted)' }}>Linked to </span><span style={{ fontWeight: 500 }}>{task.linkedObjectType.replace(/_/g, ' ').toLowerCase()}</span></div>
+              )}
+              <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{fmtDate(task.createdAt)}</span></div>
+              <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{fmtDate(task.updatedAt)}</span></div>
+            </div>
+          )}
         </>
       )}
     </div>
