@@ -263,6 +263,13 @@ export default function OrganizationsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
+  // "Needs attention" quick filter: '' all · 'noMembers' units with nobody
+  // directly assigned · 'noDescription' units with no description. Clicking a
+  // card prunes the tree to matching units (keeping ancestors so the structure
+  // still reads). Orgs have no owner field in the model, so the board's "No
+  // owner" card is substituted with the computable "Missing description".
+  const [attentionFilter, setAttentionFilter] = useState<'' | 'noMembers' | 'noDescription'>('');
+
   const fetchData = useCallback(async () => {
     try {
       // Scope the org tree to the active "Working In" context so siblings
@@ -381,6 +388,32 @@ export default function OrganizationsPage() {
       return next;
     });
   };
+  // ── "Needs attention" counts + predicates (over every org, not just the
+  // selectable set — these are catalogue-completeness signals). ──
+  const attentionTest = {
+    noMembers: (o: OrgFlat) => (peopleCounts[o.id] || 0) === 0,
+    noDescription: (o: OrgFlat) => !o.description?.trim(),
+  } as const;
+  const noMembersCount = flatOrgs.filter(attentionTest.noMembers).length;
+  const noDescriptionCount = flatOrgs.filter(attentionTest.noDescription).length;
+
+  // Tree pruned to the active attention filter, keeping ancestors so matches
+  // stay in context. A node survives if it matches or any descendant does.
+  const pruneTree = (nodes: OrgNode[], match: (o: OrgFlat) => boolean): OrgNode[] =>
+    nodes.reduce<OrgNode[]>((acc, node) => {
+      const kids = pruneTree(node.children, match);
+      if (match(node) || kids.length > 0) acc.push({ ...node, children: kids });
+      return acc;
+    }, []);
+  const visibleTree = attentionFilter ? pruneTree(tree, attentionTest[attentionFilter]) : tree;
+  // Collect every id in a (possibly pruned) tree — used to force the filtered
+  // view fully expanded so matches are visible without manual drilling.
+  const collectTreeIds = (nodes: OrgNode[], into: Set<string> = new Set()): Set<string> => {
+    for (const n of nodes) { into.add(n.id); collectTreeIds(n.children, into); }
+    return into;
+  };
+  const effectiveExpanded = attentionFilter ? collectTreeIds(visibleTree) : expanded;
+
   // Selectable orgs = everything in the user's edit scope, minus the root.
   const selectableOrgIds = flatOrgs
     .filter((o) => (accessibleOrgIds.size === 0 || accessibleOrgIds.has(o.id) || (() => {
@@ -646,6 +679,55 @@ export default function OrganizationsPage() {
         </div>
       )}
 
+      {/* Needs attention — catalogue-completeness gaps as one-click filters.
+          Clicking a card prunes the tree to the matching units. */}
+      {flatOrgs.length > 0 && !loading && (
+        <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to show only those organizations</span>
+          </div>
+          {/* auto-fill keeps a short card set tile-sized and left-aligned. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {(() => {
+              const cards = [
+                { key: 'noMembers' as const, count: noMembersCount, label: 'No direct members', hint: 'Unit exists but nobody is assigned to it', priority: true },
+                { key: 'noDescription' as const, count: noDescriptionCount, label: 'Missing description', hint: 'No description to say what this unit does', priority: false },
+              ];
+              return cards.map((c) => {
+                const active = attentionFilter === c.key;
+                const zero = c.count === 0;
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    aria-pressed={active}
+                    disabled={zero && !active}
+                    onClick={() => setAttentionFilter(active ? '' : c.key)}
+                    style={{
+                      textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
+                      borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                      display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
+                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
+                      opacity: zero && !active ? 0.6 : 1,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
+                      {c.priority && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Fix first</span>}
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                  </button>
+                );
+              });
+            })()}
+          </div>
+        </section>
+      )}
+
       <BulkActionBar count={selectedIds.size} onClear={() => setSelectedIds(new Set())}>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
         <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
@@ -716,6 +798,12 @@ export default function OrganizationsPage() {
             Select all
           </label>
           <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={() => setExpanded(new Set())} />
+          {attentionFilter && (
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+              Showing {attentionFilter === 'noMembers' ? 'units with no direct members' : 'units with no description'}
+              <button type="button" onClick={() => setAttentionFilter('')} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Clear</button>
+            </span>
+          )}
         </div>
 
         {/* Tree — uses full page width. No inner scroll container:
@@ -732,11 +820,16 @@ export default function OrganizationsPage() {
               action={isAdmin ? { label: '+ Add Organization', onClick: () => openAddOrg(null) } : undefined}
               secondaryAction={isAdmin ? { label: 'Import from CSV', onClick: () => setShowImport(true) } : undefined}
             />
+          ) : visibleTree.length === 0 ? (
+            <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
+              No organizations match this filter.{' '}
+              <button type="button" onClick={() => setAttentionFilter('')} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Show all</button>
+            </div>
           ) : (
-            tree.map((node) => (
+            visibleTree.map((node) => (
               <OrgTreeNode key={node.id} node={node} depth={0}
                 onDelete={promptDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
-                expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
+                expanded={effectiveExpanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
                 accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
                 selectedIds={selectedIds} toggleSelect={toggleOrgSelect}
                 onSelect={(oid) => navigate(`/organizations/${oid}`)} activeDetailId={null} isAdmin={isAdmin} />
