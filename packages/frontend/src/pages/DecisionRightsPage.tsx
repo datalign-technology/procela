@@ -6,16 +6,16 @@ import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import { HeaderEditActions } from '../components/DetailEditActions';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
-import FacetChips from '../components/FacetChips';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import Avatar from '../components/Avatar';
+import TruncatedText from '../components/TruncatedText';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
-import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
@@ -98,15 +98,16 @@ export const CATEGORY_LABELS: Record<DecisionCategory, string> = {
   OTHER: 'Other',
 };
 
-const CATEGORY_COLORS: Record<DecisionCategory, { bg: string; color: string }> = {
-  POLICY:         { bg: '#dbeafe', color: '#1e40af' },
-  EXCEPTION:      { bg: '#fef3c7', color: '#92400e' },
-  ISSUE:          { bg: '#fee2e2', color: '#991b1b' },
-  CLASSIFICATION: { bg: '#fce7f3', color: '#9d174d' },
-  ACCESS:         { bg: '#ccfbf1', color: '#115e59' },
-  SCOPE:          { bg: '#ede9fe', color: '#5b21b6' },
-  ROLE:           { bg: '#e0e7ff', color: '#3730a3' },
-  OTHER:          { bg: '#f3f4f6', color: '#6b7280' },
+// Plain-English hint per decision area, shown on the area cards.
+const CATEGORY_HINT: Record<DecisionCategory, string> = {
+  POLICY:         'Approving or changing policies',
+  EXCEPTION:      'Allowing a rule to be broken for a time',
+  ISSUE:          'Settling problems and disputes',
+  CLASSIFICATION: 'How sensitive data is labelled',
+  ACCESS:         'Who may see or use data',
+  SCOPE:          'What the program covers',
+  ROLE:           'Who holds governance roles',
+  OTHER:          'Anything else',
 };
 
 const DAMA_ROLES = [
@@ -137,14 +138,6 @@ const inputStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
-function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties {
-  return {
-    display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-    fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color, whiteSpace: 'nowrap',
-    textTransform: 'uppercase', letterSpacing: '0.03em',
-  };
-}
-
 const chipStyle: React.CSSProperties = {
   display: 'inline-block',
   padding: '2px 6px',
@@ -156,6 +149,23 @@ const chipStyle: React.CSSProperties = {
   marginRight: 4,
   marginBottom: 2,
   whiteSpace: 'nowrap',
+};
+
+// Row "⋯" overflow button + its dropdown (shared list-row menu pattern).
+const rowMenuBtnStyle: React.CSSProperties = {
+  width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8,
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+};
+const rowMenuStyle: React.CSSProperties = {
+  position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 150,
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))',
+  padding: 6, textAlign: 'left',
+};
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
 };
 
 // ── Helpers ──
@@ -262,15 +272,15 @@ function MultiSelect({
   );
 }
 
-type DecisionColId = 'decision' | 'category' | 'decides' | 'recommends' | 'approves' | 'informed' | 'escalation';
+// Decision and Decides are always shown; the picker manages the rest of the
+// accountability chain. Category folds into the Decision cell's sub-line, so
+// it is no longer a toggle. (v2 — new column set.)
+type DecisionColId = 'recommends' | 'approves' | 'informed' | 'escalation';
 const DECISION_COLUMN_DEFS: Array<{ id: DecisionColId; label: string; defaultVisible: boolean }> = [
-  { id: 'decision',   label: 'Decision',    defaultVisible: true  },
-  { id: 'category',   label: 'Category',    defaultVisible: true  },
-  { id: 'decides',    label: 'Decides',     defaultVisible: true  },
-  { id: 'recommends', label: 'Recommends',  defaultVisible: false },
-  { id: 'approves',   label: 'Approves',    defaultVisible: true  },
-  { id: 'informed',   label: 'Informed',    defaultVisible: false },
-  { id: 'escalation', label: 'Escalation',  defaultVisible: false },
+  { id: 'recommends', label: 'Recommends',  defaultVisible: true },
+  { id: 'approves',   label: 'Approves',    defaultVisible: true },
+  { id: 'informed',   label: 'Informed',    defaultVisible: true },
+  { id: 'escalation', label: 'If disputed', defaultVisible: true },
 ];
 
 // ── Component ──
@@ -430,7 +440,7 @@ export default function DecisionRightsPage() {
   const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
 
-  const decisionCols = useColumnPicker<DecisionColId>('procela.decisionRights.visibleCols.v1', DECISION_COLUMN_DEFS);
+  const decisionCols = useColumnPicker<DecisionColId>('procela.decisionRights.visibleCols.v2', DECISION_COLUMN_DEFS);
   const [rows, setRows] = useState<DecisionRight[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [groups, setGroups] = useState<GovernanceGroup[]>([]);
@@ -445,6 +455,14 @@ export default function DecisionRightsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // Per-row "⋯" overflow menu (Open / Duplicate / Delete).
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -497,6 +515,27 @@ export default function DecisionRightsPage() {
       fetchData();
     } catch (err) {
       addToast('error', errorMessage(err, 'Failed to delete decision right'));
+    }
+  };
+
+  const handleDuplicate = async (r: DecisionRight) => {
+    try {
+      await apiClient.post('/decision-rights', {
+        decision: `${r.decision} (copy)`,
+        category: r.category,
+        description: r.description,
+        decider: r.decider || null,
+        deciderType: r.deciderType,
+        recommends: r.recommends,
+        approves: r.approves,
+        informed: r.informed,
+        escalationPath: r.escalationPath,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
+      });
+      addToast('success', 'Decision duplicated');
+      fetchData();
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to duplicate decision'));
     }
   };
 
@@ -565,54 +604,82 @@ export default function DecisionRightsPage() {
   for (const c of CATEGORIES) categoryCounts[c] = 0;
   for (const r of rows) categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
 
-  // Build multi-select option list based on decider type (for recommends/approves/informed we allow any)
+  // One accountability-chain cell (Recommends / Approves / Informed): the
+  // resolved role/person/group names, joined and ellipsised, or a muted dash.
+  const chainCell = (values: string[]) => (
+    <TruncatedText text={(values || []).map((v) => labelFor(v, people, groups)).join(', ')} emptyPlaceholder="—" />
+  );
+
   const decisionColumns = ([
-    decisionCols.isVisible('decision') && {
-      key: 'decision', header: 'Decision', sortable: true, cellStyle: { fontWeight: 500, verticalAlign: 'top' },
+    {
+      // Decision + its category on a muted sub-line (the category badge used
+      // to be a red/pink pill that read like an error; plain text reads as a
+      // label).
+      key: 'decision', header: 'Decision', sortable: true, cellStyle: { verticalAlign: 'middle' },
       render: (r: DecisionRight) => (
-        // Description isn't shown inline — rows stay single-line; hover the
-        // decision to read it (full text also in the expanded row + edit form).
-        <button
-          type="button"
-          onClick={() => navigate(`/decision-rights/${r.id}`)}
-          title={r.description || undefined}
-          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
-        >
-          {r.decision}
-        </button>
+        <div>
+          <button
+            type="button"
+            onClick={() => navigate(`/decision-rights/${r.id}`)}
+            title={r.description || undefined}
+            style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--color-text)', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+          >
+            {r.decision}
+          </button>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{CATEGORY_LABELS[r.category]}</span>
+        </div>
       ),
     },
-    decisionCols.isVisible('category') && {
-      key: 'category', header: 'Category', sortable: true, cellStyle: { verticalAlign: 'top' },
-      render: (r: DecisionRight) => (
-        <span style={badgeStyle(CATEGORY_COLORS[r.category] || CATEGORY_COLORS.OTHER)}>
-          {CATEGORY_LABELS[r.category]}
-        </span>
-      ),
-    },
-    decisionCols.isVisible('decides') && {
+    {
+      // Who decides — a person (round avatar) or a group / role (square),
+      // with the kind spelled out in plain text below.
       key: 'decides', header: 'Decides', sortable: true,
       render: (r: DecisionRight) => {
-        const decidesLabel = r.deciderName || (r.decider ? labelFor(r.decider, people, groups) : null);
-        // Single line (chip + muted type) so rows keep the same height as
-        // every other entity list — the type used to sit on a second line
-        // below the chip, which made these rows taller than their neighbours.
-        return decidesLabel ? (
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, whiteSpace: 'nowrap' }}>
-            <span style={chipStyle}>{decidesLabel}</span>
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{r.deciderType.toLowerCase()}</span>
+        const label = r.deciderName || (r.decider ? labelFor(r.decider, people, groups) : null);
+        if (!label) return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>Unassigned</span>;
+        const isPerson = r.deciderType === 'PERSON';
+        const kind = isPerson ? 'Person' : r.deciderType === 'GROUP' ? 'Group' : 'Role';
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+            <Avatar name={label} size="sm" style={isPerson ? undefined : { borderRadius: 6 }} />
+            <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.25 }}>
+              <span style={{ fontWeight: 600 }}>{label}</span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{kind}</span>
+            </span>
           </span>
-        ) : (
-          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>Unassigned</span>
         );
       },
     },
+    decisionCols.isVisible('recommends') && {
+      key: 'recommends', header: 'Recommends', render: (r: DecisionRight) => chainCell(r.recommends),
+    },
+    decisionCols.isVisible('approves') && {
+      key: 'approves', header: 'Approves', render: (r: DecisionRight) => chainCell(r.approves),
+    },
+    decisionCols.isVisible('informed') && {
+      key: 'informed', header: 'Informed', render: (r: DecisionRight) => chainCell(r.informed),
+    },
+    decisionCols.isVisible('escalation') && {
+      key: 'escalation', header: 'If disputed',
+      render: (r: DecisionRight) => <TruncatedText text={r.escalationPath} emptyPlaceholder="—" />,
+    },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
+      key: 'actions', header: 'Actions', align: 'right' as const, width: 70,
       render: (r: DecisionRight) => (
-        <div style={{ display: 'inline-flex', gap: 4 }}>
-          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />}
-        </div>
+        <span style={{ position: 'relative', display: 'inline-flex' }} onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button" aria-label={`More actions for ${r.decision}`} aria-haspopup="menu" aria-expanded={rowMenuId === r.id}
+            onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === r.id ? null : r.id); }}
+            style={rowMenuBtnStyle}
+          >⋯</button>
+          {rowMenuId === r.id && (
+            <div role="menu" onClick={(e) => e.stopPropagation()} style={rowMenuStyle}>
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); navigate(`/decision-rights/${r.id}`); }}>Open</button>
+              {isAdmin && <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); handleDuplicate(r); }}>Duplicate</button>}
+              {isAdmin && <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); setConfirmDelete(r.id); }}>Delete</button>}
+            </div>
+          )}
+        </span>
       ),
     },
   ].filter(Boolean) as DataTableColumn<DecisionRight>[]);
@@ -623,7 +690,6 @@ export default function DecisionRightsPage() {
       {/* Header */}
       <PageHeader
         title="Decision Rights"
-        subtitle="Who has authority to decide, recommend, approve, and be informed for governance decisions."
         actions={
           <ListToolbar
             views={
@@ -666,10 +732,16 @@ export default function DecisionRightsPage() {
                 {seeding ? 'Seeding...' : 'Seed Standard Decisions'}
               </Button>
             ) : undefined}
-            primary={isAdmin ? <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} /> : undefined}
+            primary={isAdmin ? <Button variant="primary" onClick={openAdd}>+ Add decision</Button> : undefined}
           />
         }
       />
+
+      {/* The five-role definition up front — the whole chain, not just the
+          decider, is what this page captures. */}
+      <p style={{ margin: '0 0 16px', color: 'var(--color-text-secondary)', maxWidth: 820, fontSize: 13.5, lineHeight: 1.5 }}>
+        For each recurring decision: who <strong style={{ color: 'var(--color-text)' }}>decides</strong>, who <strong style={{ color: 'var(--color-text)' }}>recommends</strong>, who <strong style={{ color: 'var(--color-text)' }}>approves</strong>, who is <strong style={{ color: 'var(--color-text)' }}>informed</strong>, and where it goes if people disagree.
+      </p>
 
       {/* Search + row-expansion controls. Category filter moved into the
        *  sidebar; expand/collapse-all replaces the visual noise of always
@@ -688,9 +760,14 @@ export default function DecisionRightsPage() {
               background: 'var(--color-surface)',
             }}
           />
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-            {filteredRows.length} of {rows.length} decisions
-            {categoryFilter !== 'ALL' && ` · ${CATEGORY_LABELS[categoryFilter]}`}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-muted)' }}>
+            <span>{filteredRows.length} of {rows.length} decisions</span>
+            {categoryFilter !== 'ALL' && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 24, padding: '0 4px 0 10px', borderRadius: 12, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontWeight: 600 }}>
+                {CATEGORY_LABELS[categoryFilter]}
+                <button type="button" aria-label="Remove category filter" onClick={() => setCategoryFilter('ALL')} style={{ width: 18, height: 18, border: 0, borderRadius: 9, background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, lineHeight: 1 }}>×</button>
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -735,22 +812,47 @@ export default function DecisionRightsPage() {
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 
-      {/* Full-width content — Categories is now a top facet (was a left-rail
-       *  tree) so it matches the chip filters used across the app. */}
+      {/* Decision areas — the eight common areas governance covers. A covered
+          area shows its count; an uncovered one reads "Not defined" on a
+          dashed card, so the gaps are as legible as the coverage. Clicking a
+          card filters the table (and clicking the active one clears). */}
       <div>
-        {/* Categories are a fixed taxonomy: show every one (including the
-            empty ones, dimmed) so the full set of decision categories reads
-            at a glance. Clicking the active category clears back to All. */}
         {rows.length > 0 && (
-          <FacetChips
-            ariaLabel="Filter by decision category"
-            activeKey={categoryFilter}
-            onSelect={(k) => setCategoryFilter(k === 'ALL' ? 'ALL' : (categoryFilter === k ? 'ALL' : (k as DecisionCategory)))}
-            facets={[
-              { key: 'ALL', label: 'All', count: rows.length },
-              ...CATEGORIES.map((c) => ({ key: c as string, label: CATEGORY_LABELS[c], count: categoryCounts[c] || 0 })),
-            ]}
-          />
+          <section aria-label="Decision areas" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+              <SectionLabel marginBottom={0}>Decision areas</SectionLabel>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                Covered {CATEGORIES.filter((c) => (categoryCounts[c] || 0) > 0).length} of {CATEGORIES.length} · Click an area to filter
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+              {CATEGORIES.map((c) => {
+                const n = categoryCounts[c] || 0;
+                const active = categoryFilter === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setCategoryFilter(active ? 'ALL' : c)}
+                    title={CATEGORY_HINT[c]}
+                    style={{
+                      textAlign: 'left', cursor: 'pointer', borderRadius: 10, padding: '10px 12px',
+                      minHeight: 62, display: 'flex', flexDirection: 'column', gap: 2,
+                      border: `1px ${n ? 'solid' : 'dashed'} ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      background: active ? 'var(--color-primary-light)' : (n ? 'var(--color-surface)' : 'var(--color-bg)'),
+                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'none',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{CATEGORY_LABELS[c]}</span>
+                    <span style={{ fontSize: 12, color: n ? 'var(--color-text-secondary)' : 'var(--color-warning)' }}>
+                      {n ? `Decisions ${n}` : 'Not defined'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
@@ -785,6 +887,10 @@ export default function DecisionRightsPage() {
                 selectAllLabel="Select all decision rights"
                 emptyMessage="No decisions match the current filters."
               />
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '12px 16px', fontSize: 12, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderTop: '1px solid var(--color-border)' }}>
+                <span>Decisions {filteredRows.length}</span>
+                <span>Round avatar = person · Square = group or role</span>
+              </div>
             </div>
           )}
         </div>
