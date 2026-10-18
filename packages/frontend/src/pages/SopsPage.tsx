@@ -8,7 +8,7 @@ import DetailEditActions from '../components/DetailEditActions';
 import EmbeddablePageHeader from '../components/EmbeddablePageHeader';
 import Modal from '../components/Modal';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
-import OwnerCell from '../components/OwnerCell';
+import Avatar from '../components/Avatar';
 import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
@@ -19,7 +19,6 @@ import { useOrgContext } from '../stores/orgContext';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
-import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
@@ -99,23 +98,25 @@ const CATEGORY_LABELS: Record<string, string> = {
   ONBOARDING: 'Onboarding', QUALITY: 'Quality', INCIDENT: 'Incident', ACCESS: 'Access',
   REQUEST: 'Request', REVIEW: 'Review', ESCALATION: 'Escalation', OTHER: 'Other',
 };
-const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
-  ONBOARDING: { bg: '#dbeafe', color: '#1e40af' },
-  QUALITY: { bg: '#d1f0eb', color: '#0f4f46' },
-  INCIDENT: { bg: '#fce7f3', color: '#9d174d' },
-  ACCESS: { bg: '#ede9fe', color: '#5b21b6' },
-  REQUEST: { bg: '#e0e7ff', color: '#3730a3' },
-  REVIEW: { bg: '#fef3c7', color: '#92400e' },
-  ESCALATION: { bg: '#fee2e2', color: '#991b1b' },
-  OTHER: { bg: '#f1f5f9', color: '#64748b' },
-};
 
 const STATUSES = ['DRAFT', 'ACTIVE', 'DEPRECATED'];
+// Draft is amber (a stage to finish), not grey (which read as disabled).
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  DRAFT: { bg: '#f1f5f9', color: '#64748b' },
-  ACTIVE: { bg: '#d1f0eb', color: '#0f4f46' },
-  DEPRECATED: { bg: '#fee2e2', color: '#991b1b' },
+  DRAFT: { bg: '#fbe9d9', color: '#9a4a0e' },
+  ACTIVE: { bg: '#dcefe5', color: '#17604b' },
+  DEPRECATED: { bg: '#e5ecf3', color: '#364a5e' },
 };
+// Sentence-case status pill with a leading dot.
+function statusPill(status: string): React.ReactNode {
+  const c = STATUS_COLORS[status] || STATUS_COLORS.DRAFT;
+  const label = status.charAt(0) + status.slice(1).toLowerCase();
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: c.bg, color: c.color }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: c.color }} />{label}
+    </span>
+  );
+}
+const stepMinutes = (sop: { steps?: { estimatedMinutes: number }[] }) => (sop.steps || []).reduce((n, s) => n + (s.estimatedMinutes || 0), 0);
 
 import { DAMA_ROLE_LABELS } from '../types';
 import { formatPersonLabel } from '../lib/personLabel';
@@ -124,26 +125,37 @@ import { useRefreshOnFocus } from '../hooks/usePolling';
 const DAMA_ROLES = Object.keys(DAMA_ROLE_LABELS);
 const ROLE_LABELS = DAMA_ROLE_LABELS;
 
-const badge = (colors: { bg: string; color: string }): React.CSSProperties => ({
-  display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-  fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em',
-  background: colors.bg, color: colors.color,
-});
 
-type SopColId = 'code' | 'title' | 'category' | 'roles' | 'document' | 'steps' | 'status' | 'owner' | 'created';
+// Procedure (title + code + trigger sub-line) and Status always show; the
+// rest are pickable. (v2 — code folds into the Procedure cell.)
+type SopColId = 'category' | 'roles' | 'document' | 'steps' | 'owner' | 'updated' | 'created';
 const SOP_COLUMN_DEFS: Array<{ id: SopColId; label: string; defaultVisible: boolean }> = [
-  { id: 'code',     label: 'Code',       defaultVisible: true  },
-  { id: 'title',    label: 'Title',      defaultVisible: true  },
   { id: 'category', label: 'Category',   defaultVisible: true  },
+  { id: 'steps',    label: 'Steps',      defaultVisible: true  },
+  { id: 'owner',    label: 'Owner',      defaultVisible: true  },
+  { id: 'updated',  label: 'Updated',    defaultVisible: true  },
   { id: 'roles',    label: 'Roles',      defaultVisible: false },
   { id: 'document', label: 'Implements', defaultVisible: false },
-  { id: 'steps',    label: 'Steps',      defaultVisible: true  },
-  { id: 'status',   label: 'Status',     defaultVisible: true  },
-  { id: 'owner',    label: 'Owner',      defaultVisible: true  },
   { id: 'created',  label: 'Created',    defaultVisible: false },
 ];
 
 const sopLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 };
+
+const rowMenuBtnStyle: React.CSSProperties = {
+  width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8,
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+};
+const rowMenuStyle: React.CSSProperties = {
+  position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 160,
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))',
+  padding: 6, textAlign: 'left',
+};
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
 
 // The record fields of an SOP (everything but the step list, which is managed
 // live in the row's expansion). Shared by the create form and the in-row
@@ -329,7 +341,7 @@ export default function SopsPage({
 } = {}) {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
-  const sopCols = useColumnPicker<SopColId>('procela.sops.visibleCols.v1', SOP_COLUMN_DEFS);
+  const sopCols = useColumnPicker<SopColId>('procela.sops.visibleCols.v2', SOP_COLUMN_DEFS);
   const { addToast } = useToastStore();
   const [sops, setSops] = useState<Sop[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -339,6 +351,17 @@ export default function SopsPage({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<SopForm>(emptyForm);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  // The procedure shown in the right-hand preview rail (row click); the full
+  // editor Modal opens from the rail's "Open procedure".
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  // Per-row "⋯" overflow menu.
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterOwner, setFilterOwner] = useState('');
@@ -398,6 +421,26 @@ export default function SopsPage({
     await apiClient.delete(`/sops/${id}`);
     addToast('success', 'SOP deleted');
     fetchData();
+  };
+
+  const handleSetStatus = async (sop: Sop, status: string) => {
+    try {
+      await apiClient.put(`/sops/${sop.id}`, { status });
+      addToast('success', status === 'ACTIVE' ? 'Procedure published' : status === 'DEPRECATED' ? 'Procedure deprecated' : 'Procedure updated');
+      fetchData();
+    } catch (err) { addToast('error', errorMessage(err, 'Failed to update status')); }
+  };
+
+  const handleDuplicate = async (sop: Sop) => {
+    if (!activeOrgId) return;
+    try {
+      await apiClient.post('/sops', {
+        orgId: activeOrgId, title: `${sop.title} (copy)`, purpose: sop.purpose, category: sop.category,
+        applicableRoles: sop.applicableRoles, triggerEvent: sop.triggerEvent, steps: sop.steps, status: 'DRAFT',
+        ownerPersonId: sop.ownerPersonId || null, governancePolicyId: sop.governancePolicyId || null,
+      });
+      addToast('success', 'Procedure duplicated'); fetchData();
+    } catch (err) { addToast('error', errorMessage(err, 'Failed to duplicate procedure')); }
   };
 
   const handleSeed = async () => {
@@ -490,31 +533,32 @@ export default function SopsPage({
 
   const sel = useRowSelection(sorted, (s) => s.id);
 
+  // The procedure shown in the preview rail — the clicked row, else the first.
+  const previewSop = (previewId ? sops.find((s) => s.id === previewId) : null) || sorted[0] || null;
+
   const sopColumns = ([
-    sopCols.isVisible('code') && {
-      key: 'code', header: 'Code', sortable: true, width: 80, cellStyle: { fontFamily: 'var(--font-mono)', fontSize: 12 },
-      render: (sop: Sop) => sop.code,
-    },
-    sopCols.isVisible('title') && {
-      key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
+    {
+      // Title leads; code and trigger ("When: …") fold into a muted sub-line.
+      key: 'procedure', header: 'Procedure', sortable: true, sortKey: 'title', cellStyle: { verticalAlign: 'middle' },
       render: (sop: Sop) => (
-        <button
-          type="button"
-          onClick={() => setViewingId(sop.id)}
-          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
-        >
-          {sop.title}
-        </button>
+        <div>
+          <button type="button" onClick={() => setPreviewId(sop.id)}
+            style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--color-text)', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+            {sop.title}
+          </button>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>{sop.code}</span>
+            {sop.triggerEvent ? <> · When: {sop.triggerEvent.replace(/\.$/, '')}</> : null}
+          </span>
+        </div>
       ),
     },
     sopCols.isVisible('category') && {
-      key: 'category', header: 'Category', sortable: true,
-      render: (sop: Sop) => (
-        <span style={badge(CATEGORY_COLORS[sop.category] || CATEGORY_COLORS.OTHER)}>{CATEGORY_LABELS[sop.category] || sop.category}</span>
-      ),
+      key: 'category', header: 'Category', sortable: true, cellStyle: { color: 'var(--color-text-secondary)' },
+      render: (sop: Sop) => CATEGORY_LABELS[sop.category] || sop.category,
     },
     sopCols.isVisible('roles') && {
-      key: 'roles', header: 'Roles', cellStyle: { fontSize: 11, color: 'var(--color-text-muted)' },
+      key: 'roles', header: 'Roles', cellStyle: { fontSize: 12, color: 'var(--color-text-muted)' },
       render: (sop: Sop) => (
         <>
           {(sop.applicableRoles || []).slice(0, 3).map((r) => ROLE_LABELS[r] || r).join(', ')}
@@ -529,33 +573,49 @@ export default function SopsPage({
         : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
     },
     sopCols.isVisible('steps') && {
-      key: 'steps', header: 'Steps', sortable: true, align: 'center' as const,
-      render: (sop: Sop) => sop.steps?.length || 0,
+      key: 'steps', header: 'Steps', sortable: true, cellStyle: { color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' },
+      render: (sop: Sop) => <>{sop.steps?.length || 0} · {stepMinutes(sop)} min</>,
     },
-    sopCols.isVisible('status') && {
+    {
       key: 'status', header: 'Status', sortable: true,
-      render: (sop: Sop) => (
-        <span style={badge(STATUS_COLORS[sop.status] || STATUS_COLORS.DRAFT)}>{sop.status}</span>
-      ),
+      render: (sop: Sop) => statusPill(sop.status),
     },
     sopCols.isVisible('owner') && {
-      key: 'owner', header: 'Owner', sortable: true, cellStyle: { fontSize: 12 },
-      render: (sop: Sop) => <OwnerCell name={sop.ownerName} />,
+      key: 'owner', header: 'Owner', sortable: true, cellStyle: { fontSize: 13 },
+      render: (sop: Sop) => sop.ownerName
+        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}><Avatar name={sop.ownerName} size="sm" /> {sop.ownerName}</span>
+        : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>,
+    },
+    sopCols.isVisible('updated') && {
+      key: 'updated', header: 'Updated', sortable: true, width: 110,
+      render: (sop: Sop) => <span title={absoluteTime(sop.updatedAt)} style={{ color: 'var(--color-text-muted)' }}>{relativeTime(sop.updatedAt)}</span>,
     },
     sopCols.isVisible('created') && {
       key: 'created', header: 'Created', sortable: true, width: 110,
-      render: (sop: Sop) => <span title={absoluteTime(sop.createdAt)}>{relativeTime(sop.createdAt)}</span>,
+      render: (sop: Sop) => <span title={absoluteTime(sop.createdAt)} style={{ color: 'var(--color-text-muted)' }}>{relativeTime(sop.createdAt)}</span>,
     },
     {
-      key: 'updated', header: 'Updated', sortable: true, width: 110,
-      render: (sop: Sop) => <span title={absoluteTime(sop.updatedAt)}>{relativeTime(sop.updatedAt)}</span>,
-    },
-    {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
+      key: 'actions', header: 'Actions', align: 'right' as const, width: 120,
       render: (sop: Sop) => (
-        <div style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(sop.id)} />}
-        </div>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+          {canWrite && sop.status === 'DRAFT' && (
+            <Button variant="secondary" size="sm" onClick={() => handleSetStatus(sop, 'ACTIVE')}>Publish</Button>
+          )}
+          {canWrite && (
+            <span style={{ position: 'relative', display: 'inline-flex' }}>
+              <button type="button" aria-label={`More actions for ${sop.title}`} aria-haspopup="menu" aria-expanded={rowMenuId === sop.id}
+                onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === sop.id ? null : sop.id); }} style={rowMenuBtnStyle}>⋯</button>
+              {rowMenuId === sop.id && (
+                <div role="menu" onClick={(e) => e.stopPropagation()} style={rowMenuStyle}>
+                  <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); setViewingId(sop.id); }}>Open &amp; edit</button>
+                  <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); handleDuplicate(sop); }}>Duplicate</button>
+                  {sop.status !== 'DEPRECATED' && <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); handleSetStatus(sop, 'DEPRECATED'); }}>Deprecate</button>}
+                  <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); setConfirmDelete(sop.id); }}>Delete</button>
+                </div>
+              )}
+            </span>
+          )}
+        </span>
       ),
     },
   ].filter(Boolean) as DataTableColumn<Sop>[]);
@@ -644,10 +704,39 @@ export default function SopsPage({
         actions={
           <>
             <ColumnPicker state={sopCols} />
-            {canWrite && <IconButton icon="plus" label="Add SOP" variant="primary" onClick={openAdd} />}
+            {canWrite && <Button variant="primary" onClick={openAdd}>+ Add procedure</Button>}
           </>
         }
       />
+
+      <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--color-text-muted)', maxWidth: 820 }}>
+        Procedures (also called <strong style={{ fontWeight: 600 }}>SOPs</strong>, standard operating procedures) are step-by-step instructions for recurring governance jobs.
+      </p>
+
+      {/* Needs attention — drafts (click to filter) and ownerless procedures. */}
+      {sops.length > 0 && (() => {
+        const draftCount = sops.filter((s) => s.status === 'DRAFT').length;
+        const noOwner = sops.filter((s) => !s.ownerPersonId).length;
+        const draftActive = filterStatus === 'DRAFT';
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 14 }}>
+            <button type="button" onClick={() => setFilterStatus(draftActive ? '' : 'DRAFT')} aria-pressed={draftActive}
+              style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, border: `1px solid ${draftActive ? 'var(--color-primary)' : 'var(--color-border)'}`, background: draftActive ? 'var(--color-primary-light)' : 'var(--color-surface)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span style={{ fontSize: 28, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{draftCount}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>Fix first</span>
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Still in draft</span>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Not yet approved — publish when the steps are final.</span>
+            </button>
+            <div style={{ borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, border: `1px ${noOwner ? 'solid' : 'dashed'} var(--color-border)`, background: noOwner ? 'var(--color-surface)' : 'transparent' }}>
+              <span style={{ fontSize: 28, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: noOwner ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{noOwner}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>No owner</span>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Every procedure should have an owner.</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -667,8 +756,10 @@ export default function SopsPage({
           {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
         </select>
         <select aria-label="Filter by owner" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
-          <option value="">All Owners</option>
-          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+          <option value="">All owners</option>
+          {Array.from(new Map(sops.filter((s) => s.ownerPersonId).map((s) => [s.ownerPersonId as string, s.ownerName || 'Unknown'])).entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
         {(filterCategory || filterStatus || filterOwner || searchQuery) && (
           <>
@@ -758,18 +849,60 @@ export default function SopsPage({
           secondaryAction={canWrite ? { label: '+ Create SOP', onClick: openAdd } : undefined}
         />
       ) : (
-        <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
-          <DataTable
-            rows={sorted}
-            columns={sopColumns}
-            rowKey={(s) => s.id}
-            selection={canWrite ? sel : undefined}
-            sort={{ sortKey, sortDir, onSort: toggleSort }}
-            onRowClick={(s) => setViewingId(s.id)}
-            selectAllLabel="Select all SOPs"
-            emptyMessage="No SOPs match the current filters."
-          />
-        </Card>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+          <main style={{ flex: '999 1 540px', minWidth: 0 }}>
+            <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
+              {filterStatus === 'DRAFT' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--color-border)', fontSize: 13, color: 'var(--color-text-muted)' }}>
+                  <span>Showing {filtered.length} of {sops.length}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 28, padding: '0 4px 0 12px', borderRadius: 14, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontWeight: 600 }}>
+                    Still in draft
+                    <button type="button" aria-label="Remove filter" onClick={() => setFilterStatus('')} style={{ width: 20, height: 20, border: 0, borderRadius: 10, background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+                  </span>
+                </div>
+              )}
+              <div style={{ overflowX: 'auto' }}>
+                <DataTable
+                  rows={sorted}
+                  columns={sopColumns}
+                  rowKey={(s) => s.id}
+                  selection={canWrite ? sel : undefined}
+                  sort={{ sortKey, sortDir, onSort: toggleSort }}
+                  onRowClick={(s) => setPreviewId(s.id)}
+                  selectAllLabel="Select all SOPs"
+                  emptyMessage="No SOPs match the current filters."
+                />
+              </div>
+              <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--color-text-muted)', background: 'var(--color-bg)' }}>{filtered.length} procedure{filtered.length === 1 ? '' : 's'}</div>
+            </Card>
+          </main>
+          {previewSop && (
+            <aside style={{ flex: '1 1 300px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 18, boxSizing: 'border-box' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Procedure · <span style={{ fontFamily: 'var(--font-mono)', letterSpacing: 0 }}>{previewSop.code}</span></div>
+              <h2 style={{ margin: '4px 0 6px', fontSize: 17, fontWeight: 600 }}>{previewSop.title}</h2>
+              {previewSop.purpose && <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{previewSop.purpose}</p>}
+              <dl style={{ margin: '0 0 14px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px', fontSize: 13 }}>
+                <dt style={{ color: 'var(--color-text-muted)' }}>Starts when</dt><dd style={{ margin: 0 }}>{previewSop.triggerEvent || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</dd>
+                <dt style={{ color: 'var(--color-text-muted)' }}>For roles</dt><dd style={{ margin: 0 }}>{(previewSop.applicableRoles || []).length ? previewSop.applicableRoles.map((r) => ROLE_LABELS[r] || r).join(', ') : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Any</span>}</dd>
+                <dt style={{ color: 'var(--color-text-muted)' }}>Total time</dt><dd style={{ margin: 0 }}>About {stepMinutes(previewSop)} minutes</dd>
+                <dt style={{ color: 'var(--color-text-muted)' }}>Status</dt><dd style={{ margin: 0 }}>{statusPill(previewSop.status)}</dd>
+              </dl>
+              <SectionLabel>Steps</SectionLabel>
+              <ol style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {(previewSop.steps || []).map((st, i) => (
+                  <li key={st.order ?? i} style={{ display: 'flex', gap: 10 }}>
+                    <span style={{ flex: 'none', width: 24, height: 24, borderRadius: 12, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span>
+                    <span><span style={{ fontWeight: 600 }}>{st.title}</span>{st.estimatedMinutes ? <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}> · {st.estimatedMinutes} min</span> : null}{st.description && <span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-secondary)' }}>{st.description}</span>}</span>
+                  </li>
+                ))}
+              </ol>
+              <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--color-border)' }}>
+                <Button variant="primary" size="sm" onClick={() => setViewingId(previewSop.id)}>Open procedure</Button>
+                {canWrite && <Button variant="secondary" size="sm" onClick={() => setViewingId(previewSop.id)}>Edit</Button>}
+              </div>
+            </aside>
+          )}
+        </div>
       )}
 
       {/* Detail modal — opened on row click; the clicked procedure's record
