@@ -143,7 +143,7 @@ Later, if you delete or deactivate one of the people above on the
 **Organizations → People** page, every active agent they own
 auto-pauses and a governance issue opens. Look for the *"N active
 agents were auto-paused"* toast; the issues land in **Governance →
-Tasks & Issues** with severity HIGH for a lead to pick up.
+Governance Work** with severity HIGH for a lead to pick up.
 
 ### 1.5 Seed the skill catalog
 

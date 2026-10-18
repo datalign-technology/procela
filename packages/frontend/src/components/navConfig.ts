@@ -150,7 +150,7 @@ export const navSections: NavSection[] = [
       { to: '/decision-rights', label: 'Decision Rights' },
       { to: '/documentation', label: 'Documentation' },
       { to: '/governance-calendar', label: 'Calendar' },
-      { to: '/governance-work', label: 'Tasks & Issues' },
+      { to: '/governance-work', label: 'Governance Work' },
       { to: '/governance-exceptions', label: 'Exceptions' },
     ],
     subGroups: [
