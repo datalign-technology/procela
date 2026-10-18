@@ -142,22 +142,40 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
+const docMenuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+const filterSelectStyle: React.CSSProperties = {
+  height: 34, padding: '0 8px', fontSize: 13, border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)',
+};
+
 const backLinkStyle: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
 };
 
-type PolicyColId = 'code' | 'name' | 'type' | 'category' | 'status' | 'owner' | 'controls' | 'created';
+// Code + category fold into the name cell's sub-line, type is plain text, and
+// Next review is surfaced — so the picker manages the optional columns only.
+type PolicyColId = 'type' | 'status' | 'owner' | 'controls' | 'nextReview' | 'updated';
 const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible: boolean }> = [
-  { id: 'code',      label: 'Code',       defaultVisible: true  },
-  { id: 'name',      label: 'Name',       defaultVisible: true  },
-  { id: 'type',      label: 'Type',       defaultVisible: true  },
-  { id: 'category',  label: 'Category',   defaultVisible: true  },
-  { id: 'status',    label: 'Status',     defaultVisible: true  },
-  { id: 'owner',     label: 'Owner',      defaultVisible: true  },
-  { id: 'controls',  label: 'Controls',   defaultVisible: true  },
-  { id: 'created',   label: 'Created',    defaultVisible: false },
+  { id: 'type',       label: 'Type',        defaultVisible: true },
+  { id: 'status',     label: 'Status',      defaultVisible: true },
+  { id: 'owner',      label: 'Owner',       defaultVisible: true },
+  { id: 'controls',   label: 'Controls',    defaultVisible: true },
+  { id: 'nextReview', label: 'Next review', defaultVisible: true },
+  { id: 'updated',    label: 'Updated',     defaultVisible: true },
 ];
+
+// Plain-English hint for each document type card.
+const DOCUMENT_TYPE_HINT: Record<DocumentType, string> = {
+  CHARTER:   'Why the program exists and who has authority.',
+  FRAMEWORK: 'How the program is organised and run.',
+  STANDARD:  'Measurable rules data must meet.',
+  POLICY:    'What people must or must not do, with controls.',
+};
 
 // ── Component ──
 
@@ -289,9 +307,8 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   const { addToast } = useToastStore();
   const navigate = useNavigate();
 
-  // v2 — the document-type pill moved out of the name cell into its own Type
-  // column, so force the new defaults (old v1 payloads lack the 'type' id).
-  const policyCols = useColumnPicker<PolicyColId>('procela.governancePolicies.visibleCols.v2', POLICY_COLUMN_DEFS);
+  // v3 — code/category folded into the name sub-line; Next review surfaced.
+  const policyCols = useColumnPicker<PolicyColId>('procela.governancePolicies.visibleCols.v3', POLICY_COLUMN_DEFS);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [controls, setControls] = useState<Control[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -314,9 +331,22 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   const [showAgentPromotedOnly, setShowAgentPromotedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // documentType filter for the segmented control above the list.
+  // documentType filter — chosen via the type-explainer cards.
   // 'ALL' shows everything; the four document types narrow the view.
   const [typeFilter, setTypeFilter] = useState<DocumentType | 'ALL'>('ALL');
+  // Toolbar filters: free-text search + Status / Category / Owner.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('');
+  // Per-row "⋯" actions menu.
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -423,6 +453,17 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
       addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to delete document')); }
   };
 
+  // Mark an under-review document as active (the "Finish review" row action).
+  const finishReview = async (pol: Policy) => {
+    try {
+      await apiClient.put(`/governance-policies/${pol.id}`, { status: 'ACTIVE', ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+      addToast('success', `${DOCUMENT_TYPE_LABEL[pol.documentType || 'POLICY']} marked active`);
+      fetchData();
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to update document'));
+    }
+  };
+
   // ── Control CRUD ──
 
   const openAddControl = () => { setControlForm(emptyControlForm); setEditingControlId(null); setShowControlForm(true); };
@@ -476,18 +517,23 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   // The rows the table actually renders (type filter + agent-promoted
   // filter). Selection is built over THIS list so select-all matches the
   // visible rows, not the unfiltered catalog.
+  const q = searchQuery.trim().toLowerCase();
   const filteredPolicies = policies
     .filter((p) => typeFilter === 'ALL' || p.documentType === typeFilter)
-    .filter((p) => !showAgentPromotedOnly || !!promotionsByPolicy[p.id]);
+    .filter((p) => !showAgentPromotedOnly || !!promotionsByPolicy[p.id])
+    .filter((p) => !statusFilter || p.status === statusFilter)
+    .filter((p) => !categoryFilter || p.category === categoryFilter)
+    .filter((p) => !ownerFilter || p.ownerAssignmentId === ownerFilter)
+    .filter((p) => !q || `${p.name} ${p.code} ${p.ownerName || ''} ${p.category}`.toLowerCase().includes(q));
+  const anyToolbarFilter = !!(q || statusFilter || categoryFilter || ownerFilter);
   // Sort — URL-persisted via ?sort=&dir=. Owner sorts by the resolved
   // owner name (what the cell shows); unassigned rows sort last regardless
   // of direction. Controls sorts by the joined control count.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
     filteredPolicies,
     {
-      code: (a, b) => (a.code || '').localeCompare(b.code || ''),
       name: (a, b) => (a.name || '').localeCompare(b.name || ''),
-      category: (a, b) => (a.category || '').localeCompare(b.category || ''),
+      type: (a, b) => (a.documentType || '').localeCompare(b.documentType || ''),
       status: (a, b) => (a.status || '').localeCompare(b.status || ''),
       owner: (a, b) => {
         const an = a.ownerName || '';
@@ -498,64 +544,44 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
         return an.localeCompare(bn);
       },
       controls: (a, b) => controlsForPolicy(a.id).length - controlsForPolicy(b.id).length,
-      created: (a, b) => +new Date(a.createdAt) - +new Date(b.createdAt),
+      nextReview: (a, b) => (a.nextReviewDate || '￿').localeCompare(b.nextReviewDate || '￿'),
       updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
-    'code',
+    'name',
   );
   const sel = useRowSelection(sorted, (p) => p.id);
 
   const policyColumns = ([
-    policyCols.isVisible('code') && {
-      key: 'code', header: 'Code', sortable: true, cellStyle: { fontWeight: 500, fontFamily: 'monospace', fontSize: 12 },
-      render: (pol: Policy) => pol.code,
-    },
-    policyCols.isVisible('name') && {
-      key: 'name', header: 'Name', sortable: true, cellStyle: { fontWeight: 500 },
-      // Name (+ the rare "from agent draft" provenance flag on promoted
-      // policies). The document-type pill moved to its own Type column so the
-      // name reads cleanly.
+    // Name always shows; code + category live on a muted sub-line beneath it.
+    {
+      key: 'name', header: 'Document', sortable: true, cellStyle: { fontWeight: 500 },
       render: (pol: Policy) => {
         const promo = promotionsByPolicy[pol.id];
         return (
-          <>
-            <button
-              type="button"
-              onClick={() => navigate(`/governance-policies/${pol.id}`)}
-              style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontWeight: 500, color: 'var(--color-text)', cursor: 'pointer', textAlign: 'left' }}
-            >
-              {pol.name}
-            </button>
-            {promo && (
-              <StatusBadge
-                variant="agent"
-                size="md"
-                outlined
-                icon={<Bot size={11} strokeWidth={2.4} />}
-                title={`Promoted from agent draft "${promo.activityName}" by ${promo.agentName}${promo.reviewedBy ? `, approved by ${promo.reviewedBy}` : ''}`}
-                style={{ marginLeft: 8 }}
-              >
-                from agent draft
-              </StatusBadge>
-            )}
-          </>
+          <div style={{ minWidth: 0 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <button type="button" onClick={() => navigate(`/governance-policies/${pol.id}`)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontWeight: 600, color: 'var(--color-text)', cursor: 'pointer', textAlign: 'left' }}>{pol.name}</button>
+              {promo && (
+                <StatusBadge variant="agent" size="md" outlined icon={<Bot size={11} strokeWidth={2.4} />} title={`Promoted from agent draft "${promo.activityName}" by ${promo.agentName}${promo.reviewedBy ? `, approved by ${promo.reviewedBy}` : ''}`}>from agent draft</StatusBadge>
+              )}
+            </span>
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{pol.code}</span> · {pol.category.replace(/_/g, ' ').toLowerCase()}
+            </span>
+          </div>
         );
       },
     },
     policyCols.isVisible('type') && {
       key: 'type', header: 'Type', sortable: true,
-      render: (pol: Policy) => {
-        const docType = pol.documentType || 'POLICY';
-        return <span style={badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY)}>{DOCUMENT_TYPE_LABEL[docType]}</span>;
-      },
-    },
-    policyCols.isVisible('category') && {
-      key: 'category', header: 'Category', sortable: true,
-      render: (pol: Policy) => <span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span>,
+      render: (pol: Policy) => <span style={{ color: 'var(--color-text-secondary)' }}>{DOCUMENT_TYPE_LABEL[pol.documentType || 'POLICY']}</span>,
     },
     policyCols.isVisible('status') && {
       key: 'status', header: 'Status', sortable: true,
-      render: (pol: Policy) => <span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span>,
+      render: (pol: Policy) => {
+        const c = STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT;
+        return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 10px', borderRadius: 13, fontSize: 13, fontWeight: 600, background: c.bg, color: c.color }}><span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 4, background: 'currentColor' }} />{pol.status.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())}</span>;
+      },
     },
     policyCols.isVisible('owner') && {
       key: 'owner', header: 'Owner', sortable: true,
@@ -563,21 +589,37 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
     },
     policyCols.isVisible('controls') && {
       key: 'controls', header: 'Controls', sortable: true,
-      render: (pol: Policy) => <span style={{ fontSize: 12, fontWeight: 600 }}>{controlsForPolicy(pol.id).length}</span>,
+      // Only policies carry controls; charters / frameworks / standards don't.
+      render: (pol: Policy) => (pol.documentType || 'POLICY') === 'POLICY'
+        ? <span style={{ fontVariantNumeric: 'tabular-nums' }}>{controlsForPolicy(pol.id).length}</span>
+        : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
     },
-    policyCols.isVisible('created') && {
-      key: 'created', header: 'Created', sortable: true, width: 110,
-      render: (pol: Policy) => <span title={absoluteTime(pol.createdAt)}>{relativeTime(pol.createdAt)}</span>,
+    policyCols.isVisible('nextReview') && {
+      key: 'nextReview', header: 'Next review', sortable: true, width: 130,
+      render: (pol: Policy) => pol.nextReviewDate
+        ? <span title={absoluteTime(pol.nextReviewDate)} style={{ color: 'var(--color-text-secondary)' }}>{new Date(pol.nextReviewDate).toLocaleDateString()}</span>
+        : (isAdmin ? <button type="button" onClick={(e) => { e.stopPropagation(); navigate(`/governance-policies/${pol.id}`); }} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 13, color: 'var(--color-primary)', cursor: 'pointer' }}>Set review date</button> : <span style={{ color: 'var(--color-text-muted)' }}>—</span>),
     },
-    {
+    policyCols.isVisible('updated') && {
       key: 'updated', header: 'Updated', sortable: true, width: 110,
       render: (pol: Policy) => <span title={absoluteTime(pol.updatedAt)}>{relativeTime(pol.updatedAt)}</span>,
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
+      key: 'actions', header: 'Actions', align: 'right' as const, width: 160,
       render: (pol: Policy) => (
-        <div style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(pol.id)} />}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+          {isAdmin && pol.status === 'UNDER_REVIEW' && (
+            <Button variant="secondary" size="sm" onClick={() => finishReview(pol)}>Finish review</Button>
+          )}
+          <span style={{ position: 'relative', display: 'inline-flex' }}>
+            <button type="button" aria-label={`More actions for ${pol.name}`} aria-haspopup="menu" aria-expanded={rowMenuId === pol.id} onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === pol.id ? null : pol.id); }} style={{ width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>⋯</button>
+            {rowMenuId === pol.id && (
+              <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 160, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); navigate(`/governance-policies/${pol.id}`); }} style={docMenuItemStyle}>Open</button>
+                {isAdmin && <button type="button" role="menuitem" onClick={() => { setRowMenuId(null); setConfirmDelete(pol.id); }} style={{ ...docMenuItemStyle, color: 'var(--color-error)' }}>Delete</button>}
+              </div>
+            )}
+          </span>
         </div>
       ),
     },
@@ -856,42 +898,35 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
               ) : undefined
             }
             columns={<ColumnPicker state={policyCols} />}
-            primary={isAdmin ? <IconButton icon="plus" label="Add document" variant="primary" onClick={openAdd} /> : undefined}
+            primary={isAdmin ? <Button variant="primary" onClick={openAdd}>+ Add document</Button> : undefined}
           />
         }
       />
 
-      {/* documentType filter — segmented control. "All" is the
-          default so the page still reads as one combined list. */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
-        {(['ALL', ...DOCUMENT_TYPES] as const).map((t) => {
-          const active = typeFilter === t;
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTypeFilter(t)}
-              style={{
-                padding: '4px 12px', fontSize: 12, fontWeight: 500,
-                borderRadius: 999, cursor: 'pointer',
-                background: active ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: active ? '#fff' : 'var(--color-text)',
-                border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-              }}
-            >
-              {t === 'ALL' ? 'All' : DOCUMENT_TYPE_LABEL[t]}
-            </button>
-          );
-        })}
-        {/* Agent-promoted toggle. Counts surface even when the toggle is
-            off so the user knows there are AI-originated docs in the list. */}
-        {Object.keys(promotionsByPolicy).length > 0 && (
-          <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--color-text-secondary)' }}>
-            <input type="checkbox" checked={showAgentPromotedOnly} onChange={(e) => setShowAgentPromotedOnly(e.target.checked)} />
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} style={{ color: '#5b21b6' }} /> Show only agent-promoted ({Object.keys(promotionsByPolicy).length})</span>
-          </label>
-        )}
-      </div>
+      {/* Document types — four explained cards, broadest to most specific.
+          Clicking one filters the list; empty types read "None yet". */}
+      <section aria-label="Document types" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Document types</h2>
+          <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>From broadest to most specific. Click one to filter.</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+          {DOCUMENT_TYPES.map((t) => {
+            const n = policies.filter((p) => (p.documentType || 'POLICY') === t).length;
+            const active = typeFilter === t;
+            return (
+              <button key={t} type="button" onClick={() => setTypeFilter(active ? 'ALL' : t)} aria-pressed={active}
+                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--radius-md)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 92, boxSizing: 'border-box', border: `1px ${n > 0 ? 'solid' : 'dashed'} ${active ? 'var(--color-primary)' : 'var(--color-border)'}`, background: active ? 'var(--color-primary-light)' : 'var(--color-surface)', boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)' }}>
+                <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>{DOCUMENT_TYPE_LABEL[t]}</span>
+                  <span style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: n > 0 ? 'var(--color-text)' : 'var(--color-warning)' }}>{n > 0 ? n : 'None yet'}</span>
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{DOCUMENT_TYPE_HINT[t]}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {(() => {
         const doc = confirmDelete ? policies.find((p) => p.id === confirmDelete) : null;
@@ -941,27 +976,67 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 
-      {/* Policies Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+      {/* Documents table */}
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loadError ? (
           <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
         ) : loading ? (
-          <SkeletonRows rows={5} columns={9} />
+          <div style={{ padding: 8 }}><SkeletonRows rows={5} columns={7} /></div>
         ) : policies.length === 0 && !showForm ? (
           <EmptyState icon={renderNavIcon('/governance-policies')} title="No governance documents yet"
             description="Charters, policies, standards, and frameworks that define the governance program."
             action={isAdmin ? { label: '+ Add Document', onClick: openAdd } : undefined} />
         ) : (
-          <DataTable
-            rows={sorted}
-            columns={policyColumns}
-            rowKey={(p) => p.id}
-            selection={isAdmin ? sel : undefined}
-            sort={{ sortKey, sortDir, onSort: toggleSort }}
-            selectAllLabel="Select all documents"
-            emptyMessage="No documents match the current filters."
-            onRowClick={(p) => navigate(`/governance-policies/${p.id}`)}
-          />
+          <>
+            {/* Search + Status / Category / Owner filters */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '14px 16px', borderBottom: '1px solid var(--color-border)' }}>
+              <div style={{ flex: '1 1 220px', minWidth: 200, display: 'flex', alignItems: 'center', gap: 8, height: 34, padding: '0 10px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
+                <span aria-hidden="true" style={{ fontSize: 13 }}>&#128269;</span>
+                <input type="search" aria-label="Search documents" placeholder="Search by name or code" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ border: 0, outline: 'none', flex: 1, font: 'inherit', fontSize: 13, color: 'var(--color-text)', background: 'transparent', minWidth: 0 }} />
+              </div>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text-muted)' }}>Status
+                <select aria-label="Filter by status" style={filterSelectStyle} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                  <option value="">All</option>
+                  {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())}</option>)}
+                </select>
+              </label>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text-muted)' }}>Category
+                <select aria-label="Filter by category" style={filterSelectStyle} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                  <option value="">All</option>
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())}</option>)}
+                </select>
+              </label>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text-muted)' }}>Owner
+                <select aria-label="Filter by owner" style={filterSelectStyle} value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
+                  <option value="">All</option>
+                  {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+                </select>
+              </label>
+              {Object.keys(promotionsByPolicy).length > 0 && (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer', color: 'var(--color-text-secondary)' }}>
+                  <input type="checkbox" checked={showAgentPromotedOnly} onChange={(e) => setShowAgentPromotedOnly(e.target.checked)} style={{ accentColor: 'var(--color-primary)' }} />
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} style={{ color: '#5b21b6' }} /> Agent-promoted</span>
+                </label>
+              )}
+              {anyToolbarFilter && (
+                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setCategoryFilter(''); setOwnerFilter(''); }} style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: 'var(--color-primary)', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontSize: 13 }}>Clear filters</button>
+              )}
+            </div>
+            <DataTable
+              rows={sorted}
+              columns={policyColumns}
+              rowKey={(p) => p.id}
+              selection={isAdmin ? sel : undefined}
+              sort={{ sortKey, sortDir, onSort: toggleSort }}
+              selectAllLabel="Select all documents"
+              emptyMessage="No documents match the current filters."
+              onRowClick={(p) => navigate(`/governance-policies/${p.id}`)}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '12px 16px', fontSize: 13, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderTop: '1px solid var(--color-border)' }}>
+              <span>Documents {sorted.length}</span>
+              <span>Charters, frameworks and standards have no controls; only policies do.</span>
+            </div>
+          </>
         )}
       </div>
     </div>
