@@ -1,9 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import { errorMessage, errorToast, successToast } from '../lib/errorToast';
-import { useDetailEditMode } from '../hooks/useDetailEditMode';
-import { HeaderEditActions } from '../components/DetailEditActions';
+import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import Card from '../components/Card';
@@ -59,7 +57,7 @@ interface Person extends DecisionPerson {}
 export interface DecisionGroup { id: string; name: string; }
 interface GovernanceGroup extends DecisionGroup {}
 
-interface DecisionForm {
+export interface DecisionForm {
   decision: string;
   category: DecisionCategory;
   description: string;
@@ -116,7 +114,7 @@ const DAMA_ROLES = [
   'DATA_ARCHITECT', 'DATA_ENGINEER', 'DATABASE_ADMINISTRATOR',
 ];
 
-const ROLE_LABELS: Record<string, string> = {
+export const ROLE_LABELS: Record<string, string> = {
   CDO: 'Chief Data Officer',
   DATA_GOVERNANCE_LEAD: 'Data Governance Lead',
   DATA_OWNER: 'Data Owner',
@@ -138,18 +136,6 @@ const inputStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
-const chipStyle: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '2px 6px',
-  borderRadius: 3,
-  fontSize: 10,
-  fontWeight: 500,
-  background: '#eef2ff',
-  color: '#3730a3',
-  marginRight: 4,
-  marginBottom: 2,
-  whiteSpace: 'nowrap',
-};
 
 // Row "⋯" overflow button + its dropdown (shared list-row menu pattern).
 const rowMenuBtnStyle: React.CSSProperties = {
@@ -170,63 +156,13 @@ const menuItemStyle: React.CSSProperties = {
 
 // ── Helpers ──
 
-function labelFor(value: string, people: Person[], groups: GovernanceGroup[]): string {
+export function labelFor(value: string, people: Person[], groups: GovernanceGroup[]): string {
   if (ROLE_LABELS[value]) return ROLE_LABELS[value];
   const person = people.find((p) => p.id === value);
   if (person) return person.name;
   const group = groups.find((g) => g.id === value);
   if (group) return group.name;
   return value;
-}
-
-function Chips({ values, people, groups }: { values: string[]; people: Person[]; groups: GovernanceGroup[] }) {
-  if (!values || values.length === 0) {
-    return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>--</span>;
-  }
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-      {values.map((v) => (
-        <span key={v} style={chipStyle}>{labelFor(v, people, groups)}</span>
-      ))}
-    </div>
-  );
-}
-
-// Expanded RACI panel - the recommends/approves/informed/escalation
-// detail revealed when a row is expanded. ColumnPicker toggles still
-// control which of the four sections render, so users who hide one
-// permanently won't see it even when expanded.
-function ExpandedRaciDetails({ row, people, groups, showRecommends, showApproves, showInformed, showEscalation }: {
-  row: DecisionRight;
-  people: Person[];
-  groups: GovernanceGroup[];
-  showRecommends: boolean;
-  showApproves: boolean;
-  showInformed: boolean;
-  showEscalation: boolean;
-}) {
-  const Item = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div>
-      <SectionLabel marginBottom={4}>
-        {label}
-      </SectionLabel>
-      <div style={{ fontSize: 12 }}>{children}</div>
-    </div>
-  );
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-      {showRecommends && <Item label="Recommends">  <Chips values={row.recommends} people={people} groups={groups} /></Item>}
-      {showApproves   && <Item label="Approves">    <Chips values={row.approves}   people={people} groups={groups} /></Item>}
-      {showInformed   && <Item label="Informed">    <Chips values={row.informed}   people={people} groups={groups} /></Item>}
-      {showEscalation && (
-        <Item label="Escalation Path">
-          {row.escalationPath
-            ? <span style={{ color: 'var(--color-text-secondary)' }}>{row.escalationPath}</span>
-            : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
-        </Item>
-      )}
-    </div>
-  );
 }
 
 // Multi-select component that lets the user check multiple roles/people
@@ -286,9 +222,9 @@ const DECISION_COLUMN_DEFS: Array<{ id: DecisionColId; label: string; defaultVis
 // ── Component ──
 
 // The decision-right field grid — shared by the top "Add" form (create) and
-// the in-row edit (ExpandedDecisionRight). deciderOptions depends on the
-// chosen deciderType, so it's computed here from the current form value.
-function DecisionRightFields({ form, setForm, people, groups }: {
+// the detail page's edit mode. deciderOptions depends on the chosen
+// deciderType, so it's computed here from the current form value.
+export function DecisionRightFields({ form, setForm, people, groups }: {
   form: DecisionForm;
   setForm: (next: DecisionForm) => void;
   people: Person[];
@@ -361,75 +297,6 @@ function DecisionRightFields({ form, setForm, people, groups }: {
 // The expanded row: read-only RACI detail with a view/edit toggle. Edit flips
 // the SAME panel into the field grid and one Save writes PUT /decision-rights/
 // :id — the row's own in-place editor (there's no separate edit form anymore).
-export function ExpandedDecisionRight({ row, people, groups, orgId, canEdit, onSaved, showRecommends, showApproves, showInformed, showEscalation, actionsSlot }: {
-  row: DecisionRight;
-  people: Person[];
-  groups: GovernanceGroup[];
-  orgId: string | null;
-  canEdit: boolean;
-  onSaved: () => void;
-  showRecommends: boolean;
-  showApproves: boolean;
-  showInformed: boolean;
-  showEscalation: boolean;
-  /** When set, the Edit / Save·Cancel cluster renders into the page header's
-   *  actions slot (the detail-page placement) instead of inline. */
-  actionsSlot?: HTMLElement | null;
-}) {
-  const m = useDetailEditMode<DecisionForm>(
-    {
-      decision: row.decision,
-      category: row.category,
-      description: row.description,
-      decider: row.decider || '',
-      deciderType: row.deciderType,
-      recommends: [...row.recommends],
-      approves: [...row.approves],
-      informed: [...row.informed],
-      escalationPath: row.escalationPath,
-    },
-    async (draft) => {
-      if (!draft.decision.trim()) { errorToast(null, 'Decision is required'); throw new Error('no-decision'); }
-      try {
-        await apiClient.put(`/decision-rights/${row.id}`, {
-          ...draft,
-          decider: draft.decider || null,
-          ...(orgId ? { orgId } : {}),
-        });
-        successToast('Decision right updated');
-        onSaved();
-      } catch (err) { errorToast(err, 'Failed to update decision right'); throw err; }
-    },
-  );
-  return (
-    <div>
-      <HeaderEditActions
-        slot={actionsSlot}
-        editing={m.isEditing}
-        canEdit={canEdit}
-        dirty={m.dirty}
-        saving={m.saving}
-        onEdit={m.enter}
-        onCancel={m.cancel}
-        onSave={m.save}
-      />
-      {m.isEditing ? (
-        <DecisionRightFields form={m.draft} setForm={(next) => m.patch(next)} people={people} groups={groups} />
-      ) : (
-        <ExpandedRaciDetails
-          row={row}
-          people={people}
-          groups={groups}
-          showRecommends={showRecommends}
-          showApproves={showApproves}
-          showInformed={showInformed}
-          showEscalation={showEscalation}
-        />
-      )}
-    </div>
-  );
-}
-
 export default function DecisionRightsPage() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
