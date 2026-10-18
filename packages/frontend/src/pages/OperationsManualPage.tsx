@@ -5,7 +5,6 @@ import { useOrgContext } from '../stores/orgContext';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import { useToastStore } from '../stores/toastStore';
 import { usePermissions } from '../hooks/usePermissions';
-import { clickable } from '../lib/a11y';
 import ConfirmDialog from '../components/ConfirmDialog';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import EmptyState from '../components/EmptyState';
@@ -75,22 +74,49 @@ const menuItemStyle: React.CSSProperties = {
 
 interface ManualEditable { label: string; purpose: string; roleType: string; customContent: string; }
 
-// The expanded body of one manual card. The manual's own scalar fields —
-// label, role, purpose and custom content — edit as one staged Edit→Save
-// unit (useDetailEditMode + DetailEditActions), the same view/edit model as
-// every other detail surface. The section activity lists and linked documents
-// below are live quick-edit controls and stay immediate.
-function ExpandedManual({ manual, roleHolders, canWrite, orgId, onUpdate, onSaved }: {
+// Soft per-cadence pill palette for the reader section headers.
+const SECTION_PILL: Record<SectionKey, { bg: string; color: string }> = {
+  daily: { bg: '#dcefe5', color: '#17604b' },
+  weekly: { bg: '#e6eef9', color: '#24508f' },
+  monthly: { bg: '#e5ecf3', color: '#364a5e' },
+  quarterly: { bg: '#fbe9d9', color: '#9a4a0e' },
+  escalation: { bg: '#fbe4e4', color: '#a4262c' },
+};
+const SOP_READER_STATUS: Record<string, { bg: string; color: string }> = {
+  ACTIVE: { bg: '#d1fae5', color: '#065f46' },
+  DRAFT: { bg: '#fef3c7', color: '#92400e' },
+  DEPRECATED: { bg: '#f3f4f6', color: '#6b7280' },
+};
+
+const readerPanel: React.CSSProperties = {
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden',
+};
+
+// The full reading view of one manual: a header with Role / Held-by, every
+// cadence as a labelled always-visible section (not collapsed behind a click),
+// procedure references rendered as links with status, free-form notes and
+// linked documents. Edit flips the scalar fields in place; the activity lists
+// stay live quick-edit. Delete / duplicate live in the "⋯" menu.
+function ManualReader({ manual, roleHolders, canWrite, orgId, onUpdate, onSaved, sops, onDuplicate, onDelete }: {
   manual: OperationsManual;
   roleHolders: Record<string, string[]>;
   canWrite: boolean;
   orgId: string | null;
   onUpdate: (id: string, patch: Partial<OperationsManual>) => void;
   onSaved: () => void;
+  sops: SopRef[];
+  onDuplicate: (m: OperationsManual) => void;
+  onDelete: (id: string) => void;
 }) {
   const addToast = useToastStore((s) => s.addToast);
   const [addInputs, setAddInputs] = useState<Record<string, string>>({});
-  const [expandedSections, setExpandedSections] = useState<Set<SectionKey>>(new Set());
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [menuOpen]);
 
   const m = useDetailEditMode<ManualEditable>(
     {
@@ -111,8 +137,6 @@ function ExpandedManual({ manual, roleHolders, canWrite, orgId, onUpdate, onSave
     },
   );
 
-  const toggleSection = (key: SectionKey) =>
-    setExpandedSections((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const addItem = (section: SectionKey) => {
     const text = (addInputs[section] || '').trim();
     if (!text) return;
@@ -129,104 +153,141 @@ function ExpandedManual({ manual, roleHolders, canWrite, orgId, onUpdate, onSave
     </>
   );
 
+  const sopByCode = new Map(sops.map((s) => [s.code, s]));
+  const total = SECTIONS.reduce((n, s) => n + manual[s.key].length, 0);
+  const holders = roleHolders[manual.roleType] || [];
+  const holderText = manual.roleType && manual.roleType !== CUSTOM_ROLE
+    ? (holders.length > 0 ? holders.slice(0, 3).join(', ') + (holders.length > 3 ? ` +${holders.length - 3}` : '') : 'Not assigned yet')
+    : '—';
+
+  // Split an activity line so a trailing "(SOP-003)" / "SOP-003" renders as a
+  // status-badged link to the procedure.
+  const renderItemText = (text: string) => {
+    const code = (text.match(SOP_CODE_RE) || [])[0];
+    if (!code) return <span style={{ flex: 1 }}>{text}</span>;
+    const sop = sopByCode.get(code) || null;
+    const stripped = text.replace(new RegExp(`\\s*\\(?${code}\\)?`), '').trim();
+    return (
+      <span style={{ flex: 1, display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+        <span>{stripped}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500, color: 'var(--color-primary)' }}>{code}</span>
+          {sop && <span style={{ display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, ...(SOP_READER_STATUS[sop.status] || SOP_READER_STATUS.DEPRECATED) }}>{sop.status.charAt(0) + sop.status.slice(1).toLowerCase()}</span>}
+        </span>
+      </span>
+    );
+  };
+
   return (
-    <div style={{ padding: 16 }}>
-      {canWrite && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: m.isEditing ? 12 : 8 }}>
-          <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
-        </div>
-      )}
-
-      {/* Header scalar fields — edit vs view */}
-      {m.isEditing ? (
-        <div style={{ marginBottom: 16 }}>
-          <input aria-label="Label" style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={m.draft.label} onChange={(e) => m.set('label', e.target.value)} placeholder="Label" />
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Role this manual is for</label>
-          <select aria-label="Role" style={{ ...inputStyle, marginBottom: 8 }} value={m.draft.roleType} onChange={(e) => m.set('roleType', e.target.value)}>{roleOptions}</select>
-          <textarea aria-label="Purpose" style={{ ...inputStyle, minHeight: 80 }} value={m.draft.purpose} onChange={(e) => m.set('purpose', e.target.value)} placeholder="Purpose" />
-        </div>
-      ) : (
-        <>
-          {/* Role & who holds it — the manual↔role link, made visible. */}
-          {manual.roleType && manual.roleType !== CUSTOM_ROLE && (() => {
-            const holders = roleHolders[manual.roleType] || [];
-            const shown = holders.slice(0, 3).join(', ');
-            const extra = holders.length > 3 ? ` +${holders.length - 3}` : '';
-            return (
-              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: manual.purpose ? 8 : 16 }}>
-                <span style={{ color: 'var(--color-text-muted)' }}>Role: </span>
-                <span style={{ fontWeight: 600 }}>{roleLabel(manual.roleType)}</span>
-                {' · '}
-                {holders.length > 0
-                  ? <span>Held by {shown}{extra}</span>
-                  : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>not assigned to anyone yet — assign on the Roles page</span>}
-              </div>
-            );
-          })()}
-          {manual.purpose && <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, fontStyle: 'italic', lineHeight: 1.5 }}>{manual.purpose}</p>}
-        </>
-      )}
-
-      {/* Sections in 2-column grid — live quick-edit */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        {SECTIONS.map((s) => {
-          const items = manual[s.key];
-          const expanded = expandedSections.has(s.key);
-          return (
-            <div key={s.key} style={{ borderLeft: `3px solid ${s.accentColor}`, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-              <div {...clickable(() => toggleSection(s.key), { label: `Toggle ${s.name} section` })} aria-expanded={expanded} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}>
-                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
-                <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: s.accentColor, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{s.name}</span>
-                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{items.length}</span>
-              </div>
-              {expanded && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6 }}>{s.description}</div>
-                  {items.length === 0
-                    ? <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic', marginBottom: 6 }}>No activities defined.</div>
-                    : <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 6 }}>
-                        {items.map((item, idx) => (
-                          <li key={idx} style={{ fontSize: 12, color: 'var(--color-text)', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
-                            <span style={{ flex: 1 }}>{item}</span>
-                            {canWrite && <button onClick={() => removeItem(s.key, idx)} title="Remove"
-                              style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 13, fontWeight: 700, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>x</button>}
-                          </li>
-                        ))}
-                      </ul>}
-                  {canWrite && (
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <input aria-label={`Add ${s.name} item`} style={{ ...inputStyle, flex: 1, fontSize: 12, padding: '4px 8px' }} value={addInputs[s.key] || ''} onChange={(e) => setAddInputs((p) => ({ ...p, [s.key]: e.target.value }))}
-                        placeholder="Add item..." onKeyDown={(e) => e.key === 'Enter' && addItem(s.key)} />
-                      <Button variant="primary" size="sm"
-                        onClick={() => addItem(s.key)} disabled={!(addInputs[s.key] || '').trim()}>Add</Button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header card */}
+      <section style={{ ...readerPanel, padding: '20px 24px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ minWidth: 0, flex: '1 1 320px' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Operations manual</div>
+            {m.isEditing ? (
+              <>
+                <input aria-label="Label" style={{ ...inputStyle, margin: '6px 0 8px', fontWeight: 600, fontSize: 18 }} value={m.draft.label} onChange={(e) => m.set('label', e.target.value)} placeholder="Label" />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Role this manual is for</label>
+                <select aria-label="Role" style={{ ...inputStyle, marginBottom: 8 }} value={m.draft.roleType} onChange={(e) => m.set('roleType', e.target.value)}>{roleOptions}</select>
+                <textarea aria-label="Purpose" style={{ ...inputStyle, minHeight: 70 }} value={m.draft.purpose} onChange={(e) => m.set('purpose', e.target.value)} placeholder="Purpose" />
+              </>
+            ) : (
+              <>
+                <h2 style={{ margin: '4px 0 6px', fontSize: 20, fontWeight: 600 }}>{manual.label}</h2>
+                {manual.purpose && <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>{manual.purpose}</p>}
+              </>
+            )}
+          </div>
+          {canWrite && (
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <DetailEditActions editing={m.isEditing} canEdit dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
+              {!m.isEditing && (
+                <span style={{ position: 'relative', display: 'inline-flex' }}>
+                  <button type="button" aria-label="More actions for this manual" aria-haspopup="menu" aria-expanded={menuOpen}
+                    onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+                    style={{ width: 34, height: 34, border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 8, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>⋯</button>
+                  {menuOpen && (
+                    <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 38, right: 0, zIndex: 30, minWidth: 150, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
+                      <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setMenuOpen(false); onDuplicate(manual); }}>Duplicate</button>
+                      <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setMenuOpen(false); onDelete(manual.id); }}>Delete</button>
                     </div>
                   )}
-                </div>
+                </span>
               )}
             </div>
-          );
-        })}
-      </div>
-
-      {/* Custom Content — part of the staged Edit→Save unit */}
-      <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-        <SectionLabel marginBottom={6}>Custom Content</SectionLabel>
-        {m.isEditing ? (
-          <textarea aria-label="Custom Content" style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit', lineHeight: 1.6, fontSize: 12 }} value={m.draft.customContent}
-            onChange={(e) => m.set('customContent', e.target.value)} placeholder="Paste or type additional content here..." />
-        ) : manual.customContent ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{manual.customContent}</div>
-        ) : (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No custom content. Use Edit to add notes.</div>
+          )}
+        </div>
+        {!m.isEditing && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
+            <span><span style={{ color: 'var(--color-text-muted)' }}>Role </span><strong style={{ fontWeight: 600 }}>{manual.roleType && manual.roleType !== CUSTOM_ROLE ? roleLabel(manual.roleType) : 'Custom'}</strong></span>
+            <span><span style={{ color: 'var(--color-text-muted)' }}>Held by </span><strong style={{ fontWeight: 600 }}>{holderText}</strong></span>
+            <span><span style={{ color: 'var(--color-text-muted)' }}>Activities </span><strong style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{total}</strong></span>
+          </div>
         )}
-      </div>
+      </section>
 
-      {/* Linked documents — point this manual at the real doc wherever it
-          lives (SharePoint, a web page, a file server) or upload a copy. */}
-      <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-        <SectionLabel marginBottom={6}>Linked documents</SectionLabel>
-        <AttachmentsPanel entityType="OperationsManual" entityId={manual.id} orgId={orgId ?? undefined} disabled={!canWrite} hideHeader />
+      {/* Cadence sections — every one visible, no second click to read. */}
+      {SECTIONS.map((s) => {
+        const items = manual[s.key];
+        const pill = SECTION_PILL[s.key];
+        const addId = `add-${manual.id}-${s.key}`;
+        return (
+          <section key={s.key} style={readerPanel}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', height: 26, padding: '0 10px', borderRadius: 13, fontSize: 12, fontWeight: 600, background: pill.bg, color: pill.color }}>{s.name.replace(/ activities| paths/i, '')}</span>
+                <span style={{ fontSize: 13, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.description}</span>
+              </div>
+              <span style={{ fontSize: 13, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{items.length}</span>
+            </div>
+            {items.length > 0 ? (
+              <ul style={{ listStyle: 'none', margin: 0, padding: '4px 0' }}>
+                {items.map((item, idx) => (
+                  <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 16px', fontSize: 13.5, lineHeight: 1.5 }}>
+                    <span aria-hidden="true" style={{ flex: 'none', marginTop: 6, width: 5, height: 5, borderRadius: '50%', background: 'var(--color-text-muted)' }} />
+                    {renderItemText(item)}
+                    {canWrite && <button type="button" onClick={() => removeItem(s.key, idx)} aria-label={`Remove: ${item}`} title="Remove"
+                      style={{ flexShrink: 0, background: 'none', border: 0, color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 2px' }}>×</button>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '14px 16px', background: 'var(--color-warning-light, #fffbeb)' }}>
+                <span style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>No {s.name.replace(/ activities| paths/i, '').toLowerCase()} activities for this role yet. Is that intentional?</span>
+                {canWrite && <button type="button" onClick={() => { const el = document.getElementById(addId) as HTMLInputElement | null; el?.focus(); }}
+                  style={{ height: 32, padding: '0 12px', border: '1px solid var(--color-primary)', background: 'var(--color-surface)', color: 'var(--color-primary)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Add activity</button>}
+              </div>
+            )}
+            {canWrite && (
+              <div style={{ display: 'flex', gap: 6, padding: '8px 16px', borderTop: items.length > 0 ? '1px solid var(--color-border)' : 'none' }}>
+                <input id={addId} aria-label={`Add ${s.name} item`} style={{ ...inputStyle, flex: 1, fontSize: 13 }} value={addInputs[s.key] || ''}
+                  onChange={(e) => setAddInputs((p) => ({ ...p, [s.key]: e.target.value }))} placeholder="Add an activity…" onKeyDown={(e) => e.key === 'Enter' && addItem(s.key)} />
+                <Button variant="secondary" size="sm" onClick={() => addItem(s.key)} disabled={!(addInputs[s.key] || '').trim()}>Add</Button>
+              </div>
+            )}
+          </section>
+        );
+      })}
+
+      {/* Notes + linked documents */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+        <section style={{ ...readerPanel, padding: 16 }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600 }}>Additional notes</h3>
+          <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--color-text-muted)' }}>Free-form guidance that does not fit a cadence, such as context or tips.</p>
+          {m.isEditing ? (
+            <textarea aria-label="Additional notes" style={{ ...inputStyle, minHeight: 80, lineHeight: 1.6 }} value={m.draft.customContent} onChange={(e) => m.set('customContent', e.target.value)} placeholder="Paste or type additional guidance…" />
+          ) : manual.customContent ? (
+            <div style={{ fontSize: 13, color: 'var(--color-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{manual.customContent}</div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No notes yet. Use Edit to add guidance.</div>
+          )}
+        </section>
+        <section style={{ ...readerPanel, padding: 16 }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600 }}>Linked documents</h3>
+          <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--color-text-muted)' }}>Point to the official copy (SharePoint, intranet, file share) or upload one.</p>
+          <AttachmentsPanel entityType="OperationsManual" entityId={manual.id} orgId={orgId ?? undefined} disabled={!canWrite} hideHeader />
+        </section>
       </div>
     </div>
   );
@@ -256,7 +317,9 @@ export default function OperationsManualPage({
   const [roleHolders, setRoleHolders] = useState<Record<string, string[]>>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  // The manual open in the reader (two-pane view); null shows the cadence
+  // overview table.
+  const [selectedManualId, setSelectedManualId] = useState<string | null>(null);
   // Per-row "⋯" overflow menu (Open & edit / Duplicate / Delete).
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   useEffect(() => {
@@ -307,6 +370,7 @@ export default function OperationsManualPage({
   const handleDelete = async (id: string) => {
     try {
       await apiClient.delete(`/operations-manuals/${id}`); addToast('success', 'Manual deleted'); setConfirmDeleteId(null);
+      if (selectedManualId === id) setSelectedManualId(null);
       const next = new Set(selectedIds); next.delete(id); setSelectedIds(next); await fetchManuals();
     } catch { addToast('error', 'Failed to delete manual'); }
   };
@@ -319,9 +383,6 @@ export default function OperationsManualPage({
   };
   const toggleSelectAll = () => {
     setSelectedIds(selectedIds.size === manuals.length ? new Set() : new Set(manuals.map((m) => m.id)));
-  };
-  const toggleCard = (id: string) => {
-    setExpandedCards((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
 
   const handleAddManual = async () => {
@@ -414,9 +475,60 @@ export default function OperationsManualPage({
   const countCell = (n: number, m: OperationsManual) => (n > 0
     ? <span style={{ fontVariantNumeric: 'tabular-nums' }}>{n}</span>
     : (
-      <button type="button" onClick={(e) => { e.stopPropagation(); toggleCard(m.id); }} title="No activities at this frequency yet"
+      <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedManualId(m.id); }} title="No activities at this frequency yet — open the manual to add some"
         style={{ display: 'inline-flex', alignItems: 'center', height: 26, padding: '0 10px', border: '1px dashed var(--color-warning)', borderRadius: 13, color: 'var(--color-warning)', background: 'transparent', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>None set</button>
     ));
+
+  const headerActions = (
+    <>
+      <Button variant="secondary" onClick={handleSeed} disabled={seeding} title="Creates the standard manual for each governance role that doesn't have one yet. Existing manuals are left untouched.">{seedLabel}</Button>
+      {canWrite && <Button variant="primary" onClick={() => setShowAddManual(true)}>+ Add manual</Button>}
+    </>
+  );
+
+  // ── Reader (two-pane): a manual is selected — pick on the left, read on the
+  //    right, so opening one no longer pushes the whole list down. ──
+  const selectedManual = selectedManualId ? manuals.find((mm) => mm.id === selectedManualId) : null;
+  if (selectedManual) {
+    const gapNote = (mm: OperationsManual) => {
+      const g = CADENCES.filter((c) => mm[c.key].length === 0).map((c) => c.label.toLowerCase());
+      return g.length ? `No ${g.join(', ')} activities` : '';
+    };
+    return (
+      <div>
+        <EmbeddablePageHeader embedded={embedded} actionsPortal={actionsPortal} title="Operations Manual"
+          subtitle="Role-specific guidance for running your governance program." actions={headerActions} />
+        <button type="button" onClick={() => setSelectedManualId(null)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 0, padding: '0 0 12px', font: 'inherit', fontSize: 13, color: 'var(--color-primary)', cursor: 'pointer' }}>&larr; All manuals</button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+          <aside style={{ flex: '1 1 240px', maxWidth: 320, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '14px 8px', boxSizing: 'border-box' }}>
+            <SectionLabel style={{ padding: '0 8px', marginBottom: 8 }}>Role manuals</SectionLabel>
+            {manuals.map((mm) => {
+              const active = mm.id === selectedManualId;
+              const note = gapNote(mm);
+              return (
+                <button key={mm.id} type="button" onClick={() => setSelectedManualId(mm.id)} aria-pressed={active}
+                  style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, border: 0, borderRadius: 8, cursor: 'pointer', textAlign: 'left', padding: '10px', marginBottom: 2, background: active ? 'var(--color-primary-light)' : 'transparent', boxShadow: active ? 'inset 3px 0 0 var(--color-primary)' : 'none' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: active ? 'var(--color-primary)' : 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{mm.label}</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{mm.roleType && mm.roleType !== CUSTOM_ROLE ? roleLabel(mm.roleType) : 'Custom'} · {totalItems(mm)} activities</span>
+                  {note && <span style={{ fontSize: 12, color: 'var(--color-warning)', fontWeight: 600 }}>{note}</span>}
+                </button>
+              );
+            })}
+            <div style={{ margin: '12px 8px 0', paddingTop: 12, borderTop: '1px solid var(--color-border)', fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>Each manual describes one governance role&rsquo;s recurring work. Select one to read it.</div>
+          </aside>
+          <main style={{ flex: '999 1 540px', minWidth: 0 }}>
+            <ManualReader manual={selectedManual} roleHolders={roleHolders} canWrite={canWrite} orgId={activeOrgId}
+              onUpdate={updateManual} onSaved={fetchManuals} sops={sops} onDuplicate={handleDuplicateManual}
+              onDelete={(id) => setConfirmDeleteId(id)} />
+          </main>
+        </div>
+        <ConfirmDialog open={!!confirmDeleteId} title="Delete Manual" message="Are you sure you want to delete this operations manual? This cannot be undone."
+          confirmLabel="Delete" variant="danger" onConfirm={() => confirmDeleteId && handleDelete(confirmDeleteId)} onCancel={() => setConfirmDeleteId(null)} />
+        {showAddManual && renderAddManualDialog()}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -425,10 +537,7 @@ export default function OperationsManualPage({
         actionsPortal={actionsPortal}
         title="Operations Manual"
         subtitle="Role-specific guidance for running your governance program."
-        actions={<>
-          <Button variant="secondary" onClick={handleSeed} disabled={seeding} title="Creates the standard manual for each governance role that doesn't have one yet. Existing manuals are left untouched.">{seedLabel}</Button>
-          {canWrite && <Button variant="primary" onClick={() => setShowAddManual(true)}>+ Add manual</Button>}
-        </>}
+        actions={headerActions}
       />
 
       {manuals.length === 0 ? (
@@ -501,12 +610,9 @@ export default function OperationsManualPage({
                   </thead>
                   <tbody>
                     {manuals.map((m) => {
-                      const isExpanded = expandedCards.has(m.id);
                       const isSelected = selectedIds.has(m.id);
                       const refs = sopsForManual(m);
-                      const colCount = (canWrite ? 1 : 0) + 8;
                       return (
-                        <>
                           <tr key={m.id} style={{ background: isSelected ? 'var(--color-primary-light)' : 'transparent' }}>
                             {canWrite && (
                               <td style={tdStyle}>
@@ -516,7 +622,7 @@ export default function OperationsManualPage({
                               </td>
                             )}
                             <td style={tdStyle}>
-                              <button type="button" onClick={() => toggleCard(m.id)} aria-expanded={isExpanded}
+                              <button type="button" onClick={() => setSelectedManualId(m.id)}
                                 style={{ background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--color-text)', fontWeight: 600, cursor: 'pointer', textAlign: 'left', display: 'block', maxWidth: 320 }}>
                                 <TruncatedText text={m.label} style={{ fontWeight: 600 }} />
                               </button>
@@ -548,7 +654,7 @@ export default function OperationsManualPage({
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <Button variant="secondary" size="sm" onClick={() => toggleCard(m.id)}>{isExpanded ? 'Close' : 'Open'}</Button>
+                                <Button variant="secondary" size="sm" onClick={() => setSelectedManualId(m.id)}>Open</Button>
                                 {canWrite && (
                                   <span style={{ position: 'relative', display: 'inline-flex' }}>
                                     <button type="button" aria-label={`More actions for ${m.label}`} aria-haspopup="menu" aria-expanded={rowMenuId === m.id}
@@ -556,7 +662,7 @@ export default function OperationsManualPage({
                                       style={{ width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8, color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>⋯</button>
                                     {rowMenuId === m.id && (
                                       <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 150, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6, textAlign: 'left' }}>
-                                        <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); if (!isExpanded) toggleCard(m.id); }}>Open &amp; edit</button>
+                                        <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); setSelectedManualId(m.id); }}>Open &amp; edit</button>
                                         <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); handleDuplicateManual(m); }}>Duplicate</button>
                                         <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); setConfirmDeleteId(m.id); }}>Delete</button>
                                       </div>
@@ -566,21 +672,6 @@ export default function OperationsManualPage({
                               </span>
                             </td>
                           </tr>
-                          {isExpanded && (
-                            <tr key={`${m.id}-detail`}>
-                              <td colSpan={colCount} style={{ padding: 0, background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
-                                <ExpandedManual
-                                  manual={m}
-                                  roleHolders={roleHolders}
-                                  canWrite={canWrite}
-                                  orgId={activeOrgId}
-                                  onUpdate={updateManual}
-                                  onSaved={fetchManuals}
-                                />
-                              </td>
-                            </tr>
-                          )}
-                        </>
                       );
                     })}
                   </tbody>
