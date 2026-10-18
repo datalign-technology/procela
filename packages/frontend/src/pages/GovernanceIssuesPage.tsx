@@ -45,12 +45,17 @@ export interface GovernanceIssue {
   status: string;
   domainId: string | null;
   domainName: string | null;
+  dataAssetId: string | null;
   dataAssetName: string | null;
+  systemId: string | null;
+  reportedBy: string | null;
   reporterName: string | null;
   assignedTo: string | null;
   assigneeName: string | null;
+  resolutionSummary: string | null;
   createdAt: string;
   updatedAt: string;
+  closedAt: string | null;
 }
 
 
@@ -86,11 +91,11 @@ const ISSUE_SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 const ISSUE_TYPES = ['METADATA', 'DATA_QUALITY', 'CLASSIFICATION', 'OWNERSHIP', 'POLICY', 'ACCESS', 'LINEAGE', 'COMPLIANCE', 'WORKFLOW'] as const;
 
 // Still-open statuses — the ones that count toward "needs attention".
-const OPEN_ISSUE_STATUSES = new Set(['OPEN', 'INVESTIGATING', 'IN_PROGRESS']);
+export const OPEN_ISSUE_STATUSES = new Set(['OPEN', 'INVESTIGATING', 'IN_PROGRESS']);
 
 // One primary action per status drives the issue toward resolution; the rest
 // (and "Won't fix") move into the row ⋯ menu.
-const ISSUE_STATUS_TRANSITIONS: Record<string, { label: string; target: string; style: 'primary' | 'secondary' | 'danger' }[]> = {
+export const ISSUE_STATUS_TRANSITIONS: Record<string, { label: string; target: string; style: 'primary' | 'secondary' | 'danger' }[]> = {
   OPEN:          [{ label: 'Investigate', target: 'INVESTIGATING', style: 'primary' }, { label: 'Start work', target: 'IN_PROGRESS', style: 'secondary' }, { label: "Won't fix", target: 'WONT_FIX', style: 'danger' }],
   INVESTIGATING: [{ label: 'Start work', target: 'IN_PROGRESS', style: 'primary' }, { label: 'Resolve', target: 'RESOLVED', style: 'secondary' }, { label: "Won't fix", target: 'WONT_FIX', style: 'danger' }],
   IN_PROGRESS:   [{ label: 'Resolve', target: 'RESOLVED', style: 'primary' }, { label: "Won't fix", target: 'WONT_FIX', style: 'danger' }],
@@ -127,7 +132,7 @@ const menuItemStyle: React.CSSProperties = {
 // Dotted pills (leading status dot). Severity carries the warm cue; status and
 // type stay neutral so colour reads as one signal, not three competing ones.
 
-const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+export const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   OPEN:          { bg: '#e5ecf3', color: '#364a5e' }, // slate — needs triage
   INVESTIGATING: { bg: '#ede9fe', color: '#5b21b6' }, // purple
   IN_PROGRESS:   { bg: '#e6eef9', color: '#24508f' }, // blue
@@ -136,7 +141,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   WONT_FIX:      { bg: '#eef0f2', color: '#6b7280' }, // grey
 };
 
-const SEVERITY_COLORS: Record<string, { bg: string; color: string }> = {
+export const SEVERITY_COLORS: Record<string, { bg: string; color: string }> = {
   LOW:      { bg: '#e5ecf3', color: '#364a5e' }, // slate
   MEDIUM:   { bg: '#e6eef9', color: '#24508f' }, // blue
   HIGH:     { bg: '#fbe9d9', color: '#9a4a0e' }, // amber
@@ -144,14 +149,14 @@ const SEVERITY_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 // Sentence-case a SCREAMING_SNAKE code: "IN_PROGRESS" → "In progress".
-function prettyLabel(code: string): string {
+export function prettyLabel(code: string): string {
   const s = (code || '').replace(/_/g, ' ').toLowerCase();
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 // A sentence-case pill with a leading status dot. OPEN (untriaged) wears a
 // hollow dot so it doesn't read as an in-flight state.
-function dotPill(colors: { bg: string; color: string }, label: string, hollow = false): React.ReactNode {
+export function dotPill(colors: { bg: string; color: string }, label: string, hollow = false): React.ReactNode {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: colors.bg, color: colors.color }}>
       <span style={{ width: 7, height: 7, borderRadius: 4, background: hollow ? 'transparent' : colors.color, boxShadow: hollow ? `inset 0 0 0 1.5px ${colors.color}` : undefined }} />{label}
@@ -252,7 +257,7 @@ function IssueFields({ form, setForm, people, domains, showStatus }: {
 // The expanded row: read-only detail with a view/edit toggle. Edit flips the
 // SAME panel into the field grid and one Save writes PUT /governance-issues/
 // :id — the row's own in-place editor (there's no separate edit form anymore).
-export function ExpandedIssue({ issue, people, domains, orgId, canEdit, onSaved, actionsSlot }: {
+export function ExpandedIssue({ issue, people, domains, orgId, canEdit, onSaved, actionsSlot, hideMeta }: {
   issue: GovernanceIssue;
   people: Person[];
   domains: DataDomain[];
@@ -262,6 +267,9 @@ export function ExpandedIssue({ issue, people, domains, orgId, canEdit, onSaved,
   /** When set, the Edit / Save·Cancel cluster renders into the page header's
    *  actions slot (the detail-page placement) instead of inline. */
   actionsSlot?: HTMLElement | null;
+  /** Hide the bottom domain/created/updated meta row — the detail page owns
+   *  those facts in its rail, so they'd otherwise duplicate. */
+  hideMeta?: boolean;
 }) {
   const m = useDetailEditMode<FormData>(
     {
@@ -295,16 +303,18 @@ export function ExpandedIssue({ issue, people, domains, orgId, canEdit, onSaved,
       ) : (
         <>
           <SectionLabel marginBottom={6}>Description</SectionLabel>
-          <div style={{ fontSize: 12, color: issue.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: issue.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: issue.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: issue.description ? undefined : 'italic', whiteSpace: 'pre-wrap', marginBottom: hideMeta ? 0 : 12 }}>
             {issue.description || 'No description provided.'}
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
-            {issue.domainName && (
-              <div><span style={{ color: 'var(--color-text-muted)' }}>Domain </span><span style={{ fontWeight: 500 }}>{issue.domainName}</span></div>
-            )}
-            <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{fmtDate(issue.createdAt)}</span></div>
-            <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{fmtDate(issue.updatedAt)}</span></div>
-          </div>
+          {!hideMeta && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, fontSize: 11 }}>
+              {issue.domainName && (
+                <div><span style={{ color: 'var(--color-text-muted)' }}>Domain </span><span style={{ fontWeight: 500 }}>{issue.domainName}</span></div>
+              )}
+              <div><span style={{ color: 'var(--color-text-muted)' }}>Created </span><span style={{ fontWeight: 500 }}>{fmtDate(issue.createdAt)}</span></div>
+              <div><span style={{ color: 'var(--color-text-muted)' }}>Updated </span><span style={{ fontWeight: 500 }}>{fmtDate(issue.updatedAt)}</span></div>
+            </div>
+          )}
         </>
       )}
     </div>
