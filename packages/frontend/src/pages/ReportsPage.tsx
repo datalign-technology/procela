@@ -45,14 +45,42 @@ interface UserReportSummary {
 // Column-picker set — the Report (name) and Actions columns are always shown;
 // the rest are user-toggleable (defaulting on, so the list is unchanged until
 // a user hides something).
-type ReportColId = 'description' | 'folder' | 'source' | 'columns' | 'lastRun';
+// The name column carries the description as a sub-line and the Sharing column
+// folds in the folder, so neither is a separate toggle any more.
+type ReportColId = 'sharing' | 'source' | 'columns' | 'lastRun';
 const REPORT_COLUMN_DEFS: Array<{ id: ReportColId; label: string; defaultVisible: boolean }> = [
-  { id: 'description', label: 'Description', defaultVisible: true },
-  { id: 'folder',      label: 'Folder',      defaultVisible: true },
-  { id: 'source',      label: 'Source',      defaultVisible: true },
-  { id: 'columns',     label: 'Columns',     defaultVisible: true },
-  { id: 'lastRun',     label: 'Last run',    defaultVisible: true },
+  { id: 'sharing', label: 'Sharing', defaultVisible: true },
+  { id: 'source',  label: 'Source',  defaultVisible: true },
+  { id: 'columns', label: 'Columns', defaultVisible: true },
+  { id: 'lastRun', label: 'Last run', defaultVisible: true },
 ];
+
+// Friendly fallback for a data-model entity id when /data-model hasn't resolved
+// a label yet: "dataAssets" → "Data assets".
+function prettifyEntity(id: string): string {
+  const s = (id || '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+const rowMenuBtnStyle: React.CSSProperties = {
+  width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8,
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+};
+const rowMenuStyle: React.CSSProperties = {
+  position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 160,
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))',
+  padding: 6, textAlign: 'left',
+};
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+const filterSelectStyle: React.CSSProperties = {
+  border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px',
+  fontSize: 12, background: 'var(--color-surface)', color: 'var(--color-text)', appearance: 'auto',
+};
 
 interface RunResult {
   columns: Array<{ field: string; label: string }>;
@@ -236,6 +264,32 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
   const [moveTarget, setMoveTarget] = useState<string>(''); // '' = no folder
   const [busy, setBusy] = useState(false);
 
+  // Friendly source labels pulled from the live data model (same source the
+  // Builder uses), so the list shows "Data assets", not the code "dataAssets".
+  const [entityLabels, setEntityLabels] = useState<Record<string, string>>({});
+  const entityLabel = (id: string) => entityLabels[id] || prettifyEntity(id);
+
+  // Above-the-table filters + search.
+  const [search, setSearch] = useState('');
+  const [filterSource, setFilterSource] = useState('');
+  const [filterSharing, setFilterSharing] = useState('');
+  const [filterSchedule, setFilterSchedule] = useState('');
+
+  // Row ⋯ overflow menu.
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
+
+  useEffect(() => {
+    apiClient.get<{ success: boolean; data: { entities: Array<{ id: string; label: string }> } }>('/data-model')
+      .then((r) => setEntityLabels(Object.fromEntries((r.data?.entities || []).map((e) => [e.id, e.label]))))
+      .catch(() => {});
+  }, []);
+
   const load = useCallback(() => {
     if (!activeOrgId) { setReports([]); return; }
     apiClient.get<{ success: boolean; data: UserReportSummary[] }>(`/reports?orgId=${activeOrgId}`)
@@ -319,13 +373,50 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
     }
   };
 
-  // Reports narrowed to the selected folder (the rail filter).
+  // Reports narrowed to the selected folder (the rail filter) plus the
+  // above-the-table search / source / sharing / schedule filters.
   const visibleReports = useMemo(() => {
-    const list = reports || [];
-    if (selectedFolder === 'all') return list;
-    if (selectedFolder === NO_FOLDER) return list.filter((r) => !r.folderId);
-    return list.filter((r) => r.folderId === selectedFolder);
-  }, [reports, selectedFolder]);
+    let list = reports || [];
+    if (selectedFolder === NO_FOLDER) list = list.filter((r) => !r.folderId);
+    else if (selectedFolder !== 'all') list = list.filter((r) => r.folderId === selectedFolder);
+    if (filterSource) list = list.filter((r) => r.primaryEntity === filterSource);
+    if (filterSharing) list = list.filter((r) => r.visibility === filterSharing);
+    if (filterSchedule) list = list.filter((r) => (filterSchedule === 'off' ? r.scheduleFrequency === 'off' : r.scheduleFrequency === filterSchedule));
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((r) => r.name.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q));
+    }
+    return list;
+  }, [reports, selectedFolder, filterSource, filterSharing, filterSchedule, search]);
+
+  // Distinct sources present, for the Source filter dropdown.
+  const sourceOptions = useMemo(() => {
+    const ids = Array.from(new Set((reports || []).map((r) => r.primaryEntity)));
+    return ids.map((id) => ({ id, label: entityLabel(id) })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [reports, entityLabels]);
+
+  const hasFilters = !!(search || filterSource || filterSharing || filterSchedule);
+
+  // Duplicate: fetch the full definition, then create a copy owned by the
+  // current user (private, same folder) and refresh the list.
+  const duplicate = async (r: UserReportSummary) => {
+    if (!activeOrgId) return;
+    try {
+      const full = await apiClient.get<{ success: boolean; data: { definition: unknown; schedule?: unknown } }>(`/reports/${r.id}`);
+      await apiClient.post('/reports', {
+        orgId: activeOrgId,
+        name: `${r.name} (copy)`,
+        description: r.description || undefined,
+        folderId: r.folderId || undefined,
+        visibility: r.visibility,
+        definition: full.data.definition,
+      });
+      addToast('success', `Duplicated "${r.name}".`);
+      load();
+    } catch {
+      addToast('error', 'Could not duplicate the report.');
+    }
+  };
 
   const remove = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
@@ -429,45 +520,43 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
     {
       key: 'name', header: 'Report', sortable: true,
       render: (r: UserReportSummary) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)' }}>{renderNavIcon('/reports', { size: 16 })}</span>
-          <button
-            type="button"
-            onClick={() => navigate(`/reports/${r.id}`)}
-            title={r.name}
-            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 600, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
-          >
-            {r.name}
-          </button>
-          {r.visibility === 'org'
-            ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>SHARED</span>
-            : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
+        // Name on top, description as a muted sub-line beneath it (freed from
+        // its own column so long names stop truncating early).
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 0 }}>
+          <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)', marginTop: 2 }}>{renderNavIcon('/reports', { size: 16 })}</span>
+          <div style={{ minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/reports/${r.id}`)}
+              title={r.name}
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 600, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', display: 'block' }}
+            >
+              {r.name}
+            </button>
+            {r.description && <TruncatedText text={r.description} style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)' }} />}
+          </div>
         </div>
       ),
     },
-    reportCols.isVisible('description') && {
-      key: 'description', header: 'Description',
-      render: (r: UserReportSummary) => r.description
-        ? <TruncatedText text={r.description} style={{ color: 'var(--color-text-secondary)' }} />
-        : <span style={{ color: 'var(--color-text-muted)' }}>—</span>,
-    },
-    reportCols.isVisible('folder') && {
-      key: 'folder', header: 'Folder', width: 150,
+    reportCols.isVisible('sharing') && {
+      key: 'sharing', header: 'Sharing', width: 150,
       render: (r: UserReportSummary) => {
-        const name = folderName(r.folderId);
-        return name
-          ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-text-secondary)', minWidth: 0 }}>
-              <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-text-muted)' }}><Icon name="folder" size={13} /></span>
-              <TruncatedText text={name} />
+        const fname = folderName(r.folderId);
+        return (
+          <div style={{ minWidth: 0 }}>
+            {r.visibility === 'org'
+              ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>Shared</span>
+              : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>Private</span>}
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fname ? fname : 'No folder'}
             </span>
-          )
-          : <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
+          </div>
+        );
       },
     },
     reportCols.isVisible('source') && {
-      key: 'source', header: 'Source', sortable: true, width: 140,
-      render: (r: UserReportSummary) => <span style={{ color: 'var(--color-text-secondary)' }}>{r.primaryEntity}</span>,
+      key: 'source', header: 'Source', sortable: true, width: 150,
+      render: (r: UserReportSummary) => <span style={{ color: 'var(--color-text-secondary)' }}>{entityLabel(r.primaryEntity)}</span>,
     },
     reportCols.isVisible('columns') && {
       key: 'columns', header: 'Columns', align: 'center', width: 90,
@@ -485,12 +574,28 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
       ),
     },
     {
-      key: 'actions', header: 'Actions', align: 'center', width: 160,
+      key: 'actions', header: '', align: 'center', width: 140,
       render: (r: UserReportSummary) => (
-        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap' }}>
-          <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => runReport(r)} />
-          <IconButton size="sm" icon="folder" label="Move to folder" onClick={() => { setMoveReport(r); setMoveTarget(r.folderId || ''); }} />
-          <IconButton size="sm" icon="trash" label="Delete report" variant="danger" onClick={() => remove(r.id, r.name)} />
+        // One Run button; move / edit / duplicate / delete live in the ⋯ menu
+        // so a mis-click can't delete the report.
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+          <Button size="sm" variant="secondary" leadingIcon={<Icon name="play" size={12} />} disabled={runningId === r.id} onClick={() => runReport(r)}>
+            {runningId === r.id ? 'Running…' : 'Run'}
+          </Button>
+          <button
+            type="button" aria-label="More actions" aria-haspopup="menu"
+            onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === r.id ? null : r.id); }}
+            style={rowMenuBtnStyle}
+          >⋯</button>
+          {rowMenuId === r.id && (
+            <div role="menu" onClick={(e) => e.stopPropagation()} style={rowMenuStyle}>
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); navigate(`/reports/${r.id}`); }}>Open</button>
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); navigate(`/reports/builder/${r.id}`); }}>Edit</button>
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); setMoveReport(r); setMoveTarget(r.folderId || ''); }}>Move to folder</button>
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); duplicate(r); }}>Duplicate</button>
+              <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); remove(r.id, r.name); }}>Delete</button>
+            </div>
+          )}
         </div>
       ),
     },
@@ -593,18 +698,53 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
           {reports === null ? (
             <SkeletonRows rows={4} columnWidths={[220, null, 120]} />
           ) : reports.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '24px 0', textAlign: 'center' }}>
-              No reports yet. Click <strong>+ New report</strong> to build one.
-            </div>
-          ) : (
-            <DataTable
-              rows={sorted}
-              columns={columns}
-              rowKey={(r) => r.id}
-              sort={{ sortKey, sortDir, onSort: toggleSort }}
-              emptyMessage="No reports in this folder."
-              onRowClick={(r) => navigate(`/reports/${r.id}`)}
+            <EmptyState
+              icon={renderNavIcon('/reports')}
+              title="No reports yet"
+              description="Reports pull live rows from your governed catalog — data assets, systems, processes, issues — into a table you can filter, run, export, and schedule by email. Start from any entity and pick the columns you want."
+              action={{ label: '+ New report', onClick: () => navigate('/reports/builder') }}
             />
+          ) : (
+            <>
+              {/* Search + Source / Sharing / Schedule filters above the table. */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                <input
+                  type="text" aria-label="Search reports" placeholder="Search reports..."
+                  value={search} onChange={(e) => setSearch(e.target.value)}
+                  style={{ ...filterSelectStyle, width: 200 }}
+                />
+                <select aria-label="Filter by source" style={filterSelectStyle} value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
+                  <option value="">All sources</option>
+                  {sourceOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+                <select aria-label="Filter by sharing" style={filterSelectStyle} value={filterSharing} onChange={(e) => setFilterSharing(e.target.value)}>
+                  <option value="">All sharing</option>
+                  <option value="private">Private</option>
+                  <option value="org">Shared</option>
+                </select>
+                <select aria-label="Filter by schedule" style={filterSelectStyle} value={filterSchedule} onChange={(e) => setFilterSchedule(e.target.value)}>
+                  <option value="">Any schedule</option>
+                  <option value="off">Not scheduled</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+                {hasFilters && (
+                  <>
+                    <SecondaryButton onClick={() => { setSearch(''); setFilterSource(''); setFilterSharing(''); setFilterSchedule(''); }}>Clear filters</SecondaryButton>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Showing {visibleReports.length} of {reports.length}</span>
+                  </>
+                )}
+              </div>
+              <DataTable
+                rows={sorted}
+                columns={columns}
+                rowKey={(r) => r.id}
+                sort={{ sortKey, sortDir, onSort: toggleSort }}
+                emptyMessage={hasFilters ? 'No reports match these filters.' : 'No reports in this folder.'}
+                onRowClick={(r) => navigate(`/reports/${r.id}`)}
+              />
+            </>
           )}
         </div>
       </div>
@@ -882,7 +1022,7 @@ export default function ReportsPage({ focusReportId }: { focusReportId?: string 
   const navigate = useNavigate();
   // Column-picker state lives here (the toolbar is on this page header) and is
   // passed into the tab, which owns the table.
-  const reportCols = useColumnPicker<ReportColId>('procela.reports.visibleCols.v1', REPORT_COLUMN_DEFS);
+  const reportCols = useColumnPicker<ReportColId>('procela.reports.visibleCols.v2', REPORT_COLUMN_DEFS);
   // Reports is the report catalog + Builder. The Executive Report and
   // Governance Maturity Scorecard tabs were removed, so there's no tab bar.
   // On the /reports/:id detail route the tab renders its own detail header,
@@ -898,7 +1038,7 @@ export default function ReportsPage({ focusReportId }: { focusReportId?: string 
         actions={
           <ListToolbar
             columns={<ColumnPicker state={reportCols} />}
-            primary={<IconButton icon="plus" label="New report" variant="primary" onClick={() => navigate('/reports/builder')} />}
+            primary={<Button variant="primary" leadingIcon={<Icon name="plus" size={13} />} onClick={() => navigate('/reports/builder')}>New report</Button>}
           />
         }
       />
