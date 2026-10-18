@@ -486,6 +486,19 @@ export default function CouncilPage() {
     );
   };
 
+  // Enterprise verdict — the one-word call that leads the page. Its colour
+  // mirrors the status pills; the blurb says why in plain words.
+  const verdict = resolvedStatus(derived.enterprise);
+  const verdictColor = ({
+    'on track': 'var(--color-success)', behind: 'var(--color-warning)',
+    'at risk': 'var(--color-error)', 'no data': 'var(--color-text-muted)',
+  } as Record<string, string>)[verdict.toLowerCase()] || 'var(--color-text-muted)';
+  const verdictBlurb = verdict.toLowerCase() === 'on track'
+    ? 'Every governance measure is on target across the enterprise.'
+    : verdict.toLowerCase() === 'no data'
+      ? 'Not enough measured data yet to form a verdict.'
+      : `${escalations.length} measure${escalations.length === 1 ? '' : 's'} ${escalations.length === 1 ? 'is' : 'are'} off target — see the decisions on the right.`;
+
   return (
     <div className="council-page">
       {/* Print rules — landscape, hide the app's action bar, show the branded
@@ -664,6 +677,64 @@ export default function CouncilPage() {
       {/* No status pill on the heading — the enterprise verdict already shows
           in the STATUS column of the highlighted rollup row below, so a header
           pill would just repeat it. */}
+      {/* ── Verdict + decisions — the enterprise call and what needs one, above
+          the scorecard table (the first thing a council member reads). ── */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16, alignItems: 'stretch' }}>
+        <Card padding={16} style={{ flex: '1 1 240px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 8 }}>Verdict</div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <span style={{ width: 12, height: 12, borderRadius: 999, background: verdictColor }} />
+            <span style={{ fontSize: 26, fontWeight: 700, color: verdictColor }}>{verdict}</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{verdictBlurb}</div>
+        </Card>
+
+        <div style={{ flex: '2 1 360px', display: 'flex', flexDirection: 'column' }}>
+          <SectionHeading title="Needs a decision" as="h3" marginBottom={8} {...sec('needsDecision')} />
+          {shown('needsDecision') && (
+          <Card padding={16} style={{ flex: 1 }}>
+            {escalations.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {escalations.map((m) => (
+                  <Link key={m.key} to={m.href} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
+                    <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-warning)', minWidth: 30, fontVariantNumeric: 'tabular-nums' }}>{m.val}{m.kind === 'pct' ? '%' : ''}</span>
+                    <span style={{ fontSize: 13, flex: 1 }}>{m.label} <span style={{ color: 'var(--color-text-muted)' }}>· {m.sub}</span></span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Review →</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '6px 0 10px', color: 'var(--color-success)', fontSize: 13, fontWeight: 500 }}>
+                ✓ Every measure is on target — nothing to escalate this period.
+              </div>
+            )}
+            {/* Council note — the auto-derived / editable summary, folded in from
+                the old "For the council" narrative card so the page has a single
+                decision surface instead of two that said much the same thing. */}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                Council note
+                {narrative.forCouncilAuto && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '1px 6px', borderRadius: 999 }}>Auto-derived</span>}
+              </div>
+              {editing && canEdit ? (
+                <textarea
+                  value={narrative.forCouncil || ''}
+                  onChange={(e) => setNarrative((p) => ({ ...p, forCouncil: e.target.value, forCouncilAuto: false }))}
+                  rows={3}
+                  style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 6, padding: 10, fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-text)', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                />
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{narrative.forCouncil || '—'}</div>
+              )}
+            </div>
+            <div style={{ marginTop: 12 }}><Link to="/gap-detection" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>Review all gaps →</Link></div>
+          </Card>
+          )}
+        </div>
+      </div>
+
       <SectionHeading title="Scorecard" as="h3" marginBottom={8} {...sec('scorecard')} />
       {shown('scorecard') && (
       <Card padding={0} marginBottom={16}>
@@ -839,14 +910,12 @@ export default function CouncilPage() {
         </>
       )}
 
-      {/* ── Maturity trend + escalations — are we improving, and what needs a call ── */}
+      {/* ── Maturity trend — are we improving? (The "Needs a decision" card it
+          used to sit beside now leads the page, above the scorecard.) ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginBottom: 16 }}>
-        {/* Maturity trend — reorganized to sit at the same height as the
-            "Needs a decision" card beside it: the sparkline shares the headline
-            row (wrapping just under it on a narrow card) and the five dimension
-            bars flow in a two-column grid, so the card stays compact without
-            shrinking any of the labels — only the big overall number steps down
-            from 30 to 24. Both cards flex to equal height within the grid row. */}
+        {/* The sparkline shares the headline row (wrapping just under it on a
+            narrow card) and the five dimension bars flow in a two-column grid,
+            so the card stays compact without shrinking any of the labels. */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <SectionHeading title="Maturity trend" as="h3" marginBottom={8} {...sec('maturity')} />
           {shown('maturity') && (
@@ -883,51 +952,6 @@ export default function CouncilPage() {
                 No maturity snapshots recorded yet. Maturity trend builds as assessments are captured over time.
               </div>
             )}
-          </Card>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <SectionHeading title="Needs a decision" as="h3" marginBottom={8} {...sec('needsDecision')} />
-          {shown('needsDecision') && (
-          <Card padding={16} style={{ flex: 1 }}>
-            {escalations.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {escalations.map((m) => (
-                  <Link key={m.key} to={m.href} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
-                    <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-warning)', minWidth: 30, fontVariantNumeric: 'tabular-nums' }}>{m.val}{m.kind === 'pct' ? '%' : ''}</span>
-                    <span style={{ fontSize: 13, flex: 1 }}>{m.label} <span style={{ color: 'var(--color-text-muted)' }}>· {m.sub}</span></span>
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Review →</span>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div style={{ padding: '6px 0 10px', color: 'var(--color-success)', fontSize: 13, fontWeight: 500 }}>
-                ✓ Every measure is on target — nothing to escalate this period.
-              </div>
-            )}
-            {/* Council note — the auto-derived / editable summary, folded in from
-                the old "For the council" narrative card so the page has a single
-                decision surface instead of two that said much the same thing. */}
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                Council note
-                {narrative.forCouncilAuto && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '1px 6px', borderRadius: 999 }}>Auto-derived</span>}
-              </div>
-              {editing && canEdit ? (
-                <textarea
-                  value={narrative.forCouncil || ''}
-                  onChange={(e) => setNarrative((p) => ({ ...p, forCouncil: e.target.value, forCouncilAuto: false }))}
-                  rows={3}
-                  style={{ width: '100%', border: '1px solid var(--color-border)', borderRadius: 6, padding: 10, fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-text)', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-                />
-              ) : (
-                <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{narrative.forCouncil || '—'}</div>
-              )}
-            </div>
-            <div style={{ marginTop: 12 }}><Link to="/gap-detection" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>Review all gaps →</Link></div>
           </Card>
           )}
         </div>
