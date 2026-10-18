@@ -123,6 +123,25 @@ const inputStyle: React.CSSProperties = {
   background: 'var(--color-surface)',
 };
 
+// Two-column builder shell: the numbered build steps on the left, a sticky
+// "Report details" rail on the right. `order` puts the rail right of the
+// steps even though it comes first in source, and flex-wrap stacks them
+// (steps above details) at narrow widths.
+const builderGrid: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' };
+const builderMain: React.CSSProperties = { order: 1, flex: '999 1 520px', minWidth: 0 };
+const builderAside: React.CSSProperties = { order: 2, flex: '1 1 300px', minWidth: 0, position: 'sticky', top: 12 };
+
+// A numbered step header ("1 · Starting entity"), so the whole path is visible
+// up front rather than appearing card-by-card.
+function StepHeader({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+      <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{children}</span>
+    </div>
+  );
+}
+
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /** 1 → "1st", 2 → "2nd", 21 → "21st", etc. — for the day-of-month picker. */
@@ -193,21 +212,16 @@ export default function ReportBuilderPage() {
       .finally(() => setEntitiesLoaded(true));
   }, [addToast]);
 
-  // Load the org's report folders for the audience picker. For a brand-new
-  // report (not an edit or clone), default to the shared Public folder so a
-  // freshly-built report is org-visible by default, matching the prior model.
+  // Load the org's report folders for the audience picker. A brand-new report
+  // starts with no folder — private to its author — so building one never
+  // shares it org-wide by surprise; the author files it into a shared folder
+  // deliberately.
   useEffect(() => {
     if (!activeOrgId) return;
     fetchReportFolders(activeOrgId)
-      .then((fs) => {
-        setFolders(fs);
-        if (!reportId && !cloneFrom) {
-          const pub = fs.find((f) => f.kind === 'system');
-          if (pub) setFolderId(pub.id);
-        }
-      })
+      .then(setFolders)
       .catch(() => { /* folders are optional; the picker just stays empty */ });
-  }, [activeOrgId, reportId, cloneFrom]);
+  }, [activeOrgId]);
 
   // Load an existing report (edit) or a clone source (new from clone).
   useEffect(() => {
@@ -311,6 +325,14 @@ export default function ReportBuilderPage() {
 
   // ── Save ───────────────────────────────────────────────────────────────
   const canSave = activeOrgId && name.trim() && def.entity && def.columns.length > 0;
+  // Spell out what's still missing, so a greyed-out Save isn't a mystery.
+  const saveHint = !def.entity
+    ? 'Pick a starting entity to begin.'
+    : def.columns.length === 0
+      ? 'Add at least one column.'
+      : !name.trim()
+        ? 'Add a name to save.'
+        : null;
 
   const save = useCallback(async () => {
     if (!canSave || !activeOrgId) return;
@@ -378,29 +400,18 @@ export default function ReportBuilderPage() {
         title={reportId ? 'Edit Report' : 'New Report'}
         subtitle="Build a report against the Procela data model. Pick a starting entity, add columns and filters, preview live."
         actions={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Link to="/reports?tab=user" style={{ ...inputStyle, color: 'var(--color-text-secondary)', textDecoration: 'none', display: 'inline-block' }}>
-              Cancel
-            </Link>
-            <button
-              onClick={save}
-              disabled={!canSave || saving}
-              style={{
-                ...inputStyle,
-                background: canSave ? 'var(--color-primary)' : '#e5e7eb',
-                color: canSave ? '#fff' : 'var(--color-text-muted)',
-                fontWeight: 600, border: 'none', cursor: canSave ? 'pointer' : 'default',
-              }}
-            >
-              {saving ? 'Saving…' : reportId ? 'Save changes' : 'Save report'}
-            </button>
-          </div>
+          <Link to="/reports?tab=user" style={{ ...inputStyle, color: 'var(--color-text-secondary)', textDecoration: 'none', display: 'inline-block' }}>
+            Cancel
+          </Link>
         }
       />
 
-      {/* Save metadata */}
+      <div style={builderGrid}>
+      {/* ── Report details rail (name / description / sharing / save) ── */}
+      <aside style={builderAside}>
       <div style={cardStyle}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 200px', gap: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Report details</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label style={labelStyle}>Name</label>
             <input
@@ -422,28 +433,61 @@ export default function ReportBuilderPage() {
             />
           </div>
           <div>
-            <label style={labelStyle}>Folder</label>
+            <label style={labelStyle}>Folder &amp; sharing</label>
             <select
               aria-label="Folder"
               value={folderId}
               onChange={(e) => setFolderId(e.target.value)}
               style={{ ...inputStyle, width: '100%' }}
             >
-              <option value="">No folder (private to me)</option>
+              <option value="">No folder — private to me</option>
               {folders.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}{f.shared ? ' · shared' : ''}
                 </option>
               ))}
             </select>
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
+              {folderId
+                ? (folders.find((f) => f.id === folderId)?.shared
+                    ? 'In a shared folder — visible to everyone in your org.'
+                    : 'In a private folder — visible only to you.')
+                : 'No folder — private to you until you file it somewhere.'}
+            </p>
+          </div>
+          <div>
+            <button
+              onClick={save}
+              disabled={!canSave || saving}
+              style={{
+                ...inputStyle, width: '100%', textAlign: 'center',
+                background: canSave ? 'var(--color-primary)' : '#e5e7eb',
+                color: canSave ? '#fff' : 'var(--color-text-muted)',
+                fontWeight: 600, border: 'none', cursor: canSave ? 'pointer' : 'default',
+              }}
+            >
+              {saving ? 'Saving…' : reportId ? 'Save changes' : 'Save report'}
+            </button>
+            {saveHint && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '6px 0 0', textAlign: 'center' }}>{saveHint}</p>}
           </div>
         </div>
       </div>
 
-      {/* Scheduled delivery — edit mode only (an unsaved report can't be
-          scheduled). Emails the rendered report (CSV attachment) to the
-          listed recipients on the chosen cadence. All times are UTC. */}
-      {reportId && (
+      {/* Scheduled delivery. Shown even for a new report (so people learn it
+          exists) but locked until the report is saved — an unsaved report has
+          no id to schedule against. Emails the rendered report to the listed
+          recipients on the chosen cadence. All times are UTC. */}
+      {!reportId ? (
+        <div style={cardStyle}>
+          <label style={labelStyle}>Email delivery</label>
+          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '0 0 6px' }}>
+            Send this report on a daily, weekly, or monthly schedule.
+          </p>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', padding: '3px 8px', borderRadius: 12, background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
+            🔒 Unlocks after saving
+          </span>
+        </div>
+      ) : (
         <div style={cardStyle}>
           <label style={labelStyle}>Email delivery</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
@@ -543,26 +587,40 @@ export default function ReportBuilderPage() {
         </div>
       )}
 
-      {/* Entity picker */}
+      </aside>
+
+      {/* ── The numbered build steps ── */}
+      <main style={builderMain}>
+      {/* Step 1 — starting entity (clickable cards, not a bare dropdown). */}
       <div style={cardStyle}>
-        <label style={labelStyle}>Starting entity</label>
+        <StepHeader n={1}>Starting entity</StepHeader>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
+          What each row of the report is. This drives the columns and filters below.
+        </p>
         {!entitiesLoaded ? (
           <Spinner label="Loading…" />
         ) : (
-          <select
-            aria-label="Starting entity"
-            value={def.entity}
-            onChange={(e) => pickEntity(e.target.value)}
-            style={{ ...inputStyle, minWidth: 280 }}
-          >
-            <option value="">— pick an entity —</option>
-            {entities.map((e) => (
-              <option key={e.id} value={e.id}>{e.label}</option>
-            ))}
-          </select>
-        )}
-        {entity && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>{entity.description}</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+            {entities.map((e) => {
+              const selected = def.entity === e.id;
+              return (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => pickEntity(e.id)}
+                  aria-pressed={selected}
+                  style={{
+                    textAlign: 'left', cursor: 'pointer', font: 'inherit', padding: '10px 12px', borderRadius: 'var(--radius-md)',
+                    border: '1px solid ' + (selected ? 'var(--color-primary)' : 'var(--color-border)'),
+                    background: selected ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                  }}
+                >
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: selected ? 'var(--color-primary)' : 'var(--color-text)' }}>{e.label}</span>
+                  {e.description && <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{e.description}</span>}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -570,9 +628,9 @@ export default function ReportBuilderPage() {
         <>
           {/* Columns */}
           <div style={cardStyle}>
-            <label style={labelStyle}>Columns</label>
+            <StepHeader n={2}>Columns</StepHeader>
             <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
-              Direct fields on {entity.singular}, plus joined fields via its relationships.
+              Direct fields on {entity.singular}, plus joined fields via its relationships. Click to add or remove.
             </p>
 
             <div style={{ marginBottom: 10 }}>
@@ -643,7 +701,7 @@ export default function ReportBuilderPage() {
           {/* Filters */}
           <div style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>Filters</label>
+              <StepHeader n={3}>Filters</StepHeader>
               <button onClick={addFilter} style={{ ...inputStyle, padding: '4px 10px', cursor: 'pointer', background: 'var(--color-bg)' }}>
                 + Add filter
               </button>
@@ -720,7 +778,7 @@ export default function ReportBuilderPage() {
 
           {/* Sort */}
           <div style={cardStyle}>
-            <label style={labelStyle}>Sort by</label>
+            <StepHeader n={4}>Sort by</StepHeader>
             <div style={{ display: 'flex', gap: 8 }}>
               <select
                 aria-label="Sort field"
@@ -754,7 +812,7 @@ export default function ReportBuilderPage() {
           {/* Preview */}
           <div style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>Preview</label>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>Live preview</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {preview && (
                   <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
@@ -811,6 +869,8 @@ export default function ReportBuilderPage() {
           </div>
         </>
       )}
+      </main>
+      </div>
     </Page>
   );
 }
