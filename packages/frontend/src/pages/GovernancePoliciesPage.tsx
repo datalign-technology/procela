@@ -9,6 +9,10 @@ import { HeaderEditActions } from '../components/DetailEditActions';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
+import SecondaryButton from '../components/SecondaryButton';
+import Tabs from '../components/Tabs';
+import ActivityFeed from '../components/ActivityFeed';
 import StatusBadge from '../components/StatusBadge';
 import Button from '../components/Button';
 import OwnerCell from '../components/OwnerCell';
@@ -157,6 +161,35 @@ const backLinkStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none',
 };
 
+// Detail-page section card (used across the document detail tabs).
+const panelStyle: React.CSSProperties = {
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', padding: 20,
+};
+// Inline mini-form (Link existing / New procedure) inside a section.
+const inlineFormBox: React.CSSProperties = {
+  background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', padding: 12, marginTop: 10,
+};
+// A single clickable reference row (procedure, mapped step, exception).
+const rowLinkStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, width: '100%', maxWidth: 520,
+  background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4,
+  padding: '6px 10px', cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-primary)',
+  textDecoration: 'none', textAlign: 'left',
+};
+// The header "⋯" overflow button + its dropdown (matches the list row menu).
+const headerMenuBtnStyle: React.CSSProperties = {
+  width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8,
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+};
+const headerMenuStyle: React.CSSProperties = {
+  position: 'absolute', top: 36, right: 0, zIndex: 30, minWidth: 180,
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))',
+  padding: 6, textAlign: 'left',
+};
+
 // Code + category fold into the name cell's sub-line, type is plain text, and
 // Next review is surfaced — so the picker manages the optional columns only.
 type PolicyColId = 'type' | 'status' | 'owner' | 'controls' | 'nextReview' | 'updated';
@@ -175,6 +208,20 @@ const DOCUMENT_TYPE_HINT: Record<DocumentType, string> = {
   FRAMEWORK: 'How the program is organised and run.',
   STANDARD:  'Measurable rules data must meet.',
   POLICY:    'What people must or must not do, with controls.',
+};
+
+// Longer "what this document is" copy for the detail-page explainer rail.
+const DOCUMENT_TYPE_EXPLAINER: Record<DocumentType, string> = {
+  CHARTER:   'A charter sets out why the governance program exists, its scope, and who holds authority. It sits at the top of the document hierarchy — frameworks, standards and policies all answer to it.',
+  FRAMEWORK: 'A framework describes how the program is organised and run: the operating model, roles and decision forums that put the charter into practice.',
+  STANDARD:  'A standard sets measurable rules data must meet — thresholds, formats, tiers. Standards are testable, and policies point to them.',
+  POLICY:    'A policy states what people must or must not do, and carries the controls that enforce it. Policies are the only document type with controls.',
+};
+
+// Review cadence → plain label, for the Facts rail and the review-schedule card.
+const REVIEW_FREQUENCY_LABEL: Record<string, string> = {
+  QUARTERLY: 'Quarterly', SEMI_ANNUAL: 'Every 6 months', ANNUAL: 'Annually',
+  BIENNIAL: 'Every 2 years', NONE: 'Not scheduled',
 };
 
 // ── Component ──
@@ -230,7 +277,7 @@ function PolicyFields({ form, setForm, people }: {
 // Save writes PUT /governance-policies/:id (round-tripping the stored content /
 // reviewFrequency that the form doesn't surface). Replaces the per-row Edit
 // icon → top-of-page form.
-function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved, actionsSlot }: {
+function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved, actionsSlot, hideViewBody }: {
   policy: Policy;
   people: Person[];
   canEdit: boolean;
@@ -239,6 +286,10 @@ function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved, actionsSl
   /** When set, the Edit / Save·Cancel cluster renders into the page header's
    *  actions slot (the detail-page placement) instead of in the card header. */
   actionsSlot?: HTMLElement | null;
+  /** Detail-page mode: the read-only fields live in the Facts rail, so at rest
+   *  this renders nothing but the portaled Edit button. Clicking Edit flips to
+   *  the in-place form card. */
+  hideViewBody?: boolean;
 }) {
   const m = useDetailEditMode<PolicyForm>(
     {
@@ -274,10 +325,15 @@ function PolicyDetailsPanel({ policy, people, canEdit, orgId, onSaved, actionsSl
     </div>
   );
   const emptyEm = <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
+  // Detail-page: facts are in the rail, so at rest surface only the Edit
+  // button (portaled into the header). Editing falls through to the form card.
+  if (hideViewBody && !m.isEditing) {
+    return <HeaderEditActions slot={actionsSlot} editing={m.isEditing} canEdit={canEdit} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />;
+  }
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: m.isEditing ? 12 : 10 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Document details</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 600 }}>{m.isEditing ? 'Edit document' : 'Document details'}</h3>
         <HeaderEditActions slot={actionsSlot} editing={m.isEditing} canEdit={canEdit} dirty={m.dirty} saving={m.saving} onEdit={m.enter} onCancel={m.cancel} onSave={m.save} />
       </div>
       {m.isEditing ? (
@@ -365,6 +421,29 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   const [controlForm, setControlForm] = useState<ControlForm>(emptyControlForm);
   const [confirmDeleteControl, setConfirmDeleteControl] = useState<string | null>(null);
 
+  // ── Detail-page (/governance-policies/:id) state ──
+  // Live attachment count drives the "source linked" completeness card; the
+  // AttachmentsPanel keeps it in sync via onCount once Overview is mounted.
+  const [attachmentCount, setAttachmentCount] = useState<number | null>(null);
+  // Reverse-links for the "Used by" tab: process steps mapped to this document
+  // and governance exceptions filed against it. Fetched only on the detail page.
+  const [policyMappings, setPolicyMappings] = useState<any[]>([]);
+  const [policyExceptions, setPolicyExceptions] = useState<any[]>([]);
+  // Header "⋯" overflow menu (Finish review / Delete).
+  const [docMenuOpen, setDocMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!docMenuOpen) return;
+    const close = () => setDocMenuOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [docMenuOpen]);
+  // "Link existing" / "New procedure" inline actions in the Procedures section.
+  const [procAction, setProcAction] = useState<'none' | 'link' | 'new'>('none');
+  const [linkProcId, setLinkProcId] = useState('');
+  const [newProcTitle, setNewProcTitle] = useState('');
+  const [procSaving, setProcSaving] = useState(false);
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState(false);
+
   const fetchData = useCallback(async () => {
     try {
       setLoadError(null);
@@ -414,6 +493,26 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   const focusedPolicy = focusPolicyId ? policies.find((p) => p.id === focusPolicyId) : null;
   useBreadcrumbLeaf(focusedPolicy?.name);
 
+  // Detail-page reverse-links + attachment count — only the /:id route pays
+  // for these, so the list load stays lean.
+  useEffect(() => {
+    if (!focusPolicyId) { setAttachmentCount(null); return; }
+    apiClient.get<{ data: Array<unknown> }>(`/attachments?entityType=GovernancePolicy&entityId=${focusPolicyId}`)
+      .then((r) => setAttachmentCount((r.data || []).length))
+      .catch(() => setAttachmentCount(null));
+  }, [focusPolicyId]);
+  useEffect(() => {
+    if (!focusPolicyId) return;
+    const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+    Promise.all([
+      apiClient.get<{ data: any[] }>(`/mappings${query}`).catch(() => ({ data: [] as any[] })),
+      apiClient.get<{ data: any[] }>(`/governance-exceptions${query}`).catch(() => ({ data: [] as any[] })),
+    ]).then(([m, e]) => {
+      setPolicyMappings((m.data || []).filter((row: any) => row?.policyId === focusPolicyId));
+      setPolicyExceptions((e.data || []).filter((row: any) => row?.policyId === focusPolicyId));
+    });
+  }, [focusPolicyId, activeOrgId]);
+
   // ── Policy CRUD ──
 
   const openAdd = () => {
@@ -462,6 +561,37 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
     } catch (err) {
       addToast('error', errorMessage(err, 'Failed to update document'));
     }
+  };
+
+  // ── Procedures (SOPs) implementing this document ──
+  // Link an existing standalone procedure, or create a new one already
+  // pointed at this document — so a user never has to leave the page to make
+  // the procedure→document connection.
+  const handleLinkProcedure = async (pol: Policy) => {
+    if (!linkProcId) return;
+    setProcSaving(true);
+    try {
+      await apiClient.put(`/sops/${linkProcId}`, { governancePolicyId: pol.id });
+      addToast('success', 'Procedure linked');
+      setProcAction('none'); setLinkProcId('');
+      await fetchData();
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to link procedure'));
+    } finally { setProcSaving(false); }
+  };
+  const handleCreateProcedure = async (pol: Policy) => {
+    if (!newProcTitle.trim()) return;
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    setProcSaving(true);
+    try {
+      await apiClient.post('/sops', { title: newProcTitle.trim(), orgId: activeOrgId, governancePolicyId: pol.id });
+      addToast('success', 'Procedure created and linked');
+      setProcAction('none'); setNewProcTitle('');
+      await fetchData();
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to create procedure'));
+    } finally { setProcSaving(false); }
   };
 
   // ── Control CRUD ──
@@ -629,189 +759,363 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
   // documents" panel (point at the real file on SharePoint, a web page, a file
   // server, or upload a copy), plus Controls (POLICY docType) and a Source
   // panel (promoted from an agent draft) when those apply.
-  const renderPolicyExpansion = (pol: Policy, detailActionsSlot?: HTMLElement | null) => {
-    const promo = promotionsByPolicy[pol.id];
+  // ── Document-detail section helpers (the /:id route) ──
+  // Each builds one card/panel; the focus block below composes them into the
+  // two-column Overview and the Content / Used by / Activity tabs.
+
+  const twoColDetail = (main: React.ReactNode, aside: React.ReactNode) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+      <main style={{ flex: '999 1 540px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{main}</main>
+      <aside style={{ flex: '1 1 260px', display: 'flex', flexDirection: 'column', gap: 16 }}>{aside}</aside>
+    </div>
+  );
+
+  // One completeness/gap card for the strip under the document header.
+  const gapCard = (tone: 'warn' | 'ok' | 'info', title: string, detail: React.ReactNode) => {
+    const palette = tone === 'warn'
+      ? { bg: 'var(--color-warning-light, #fffbeb)', border: '#fcd9a5', color: 'var(--color-warning)' }
+      : tone === 'ok'
+        ? { bg: '#ecfdf5', border: '#a7f3d0', color: 'var(--color-success)' }
+        : { bg: '#eff6ff', border: '#bfdbfe', color: '#1e40af' };
+    return (
+      <div style={{ flex: '1 1 200px', minWidth: 180, background: palette.bg, border: `1px solid ${palette.border}`, borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: palette.color, marginBottom: 2 }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>{detail}</div>
+      </div>
+    );
+  };
+
+  const renderGapStrip = (pol: Policy) => {
+    const procs = proceduresForPolicy(pol.id);
+    const hasSource = (attachmentCount ?? 0) > 0;
+    const freq = pol.reviewFrequency || 'NONE';
+    const hasSchedule = freq !== 'NONE' && !!pol.nextReviewDate;
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        {hasSource
+          ? gapCard('ok', 'Source linked', <>{attachmentCount} source {attachmentCount === 1 ? 'link' : 'links'} on file.</>)
+          : gapCard('warn', 'No source linked', <>Point this document at the file people actually read. <strong>Link a source in Overview.</strong></>)}
+        {procs.length > 0
+          ? gapCard('ok', 'Put into practice', <>{procs.length} procedure{procs.length === 1 ? '' : 's'} carr{procs.length === 1 ? 'ies' : 'y'} this out.</>)
+          : gapCard('warn', 'No procedures put it into practice', <>A document no procedure carries out is just words. <strong>Link or add one in Overview.</strong></>)}
+        {hasSchedule
+          ? gapCard('info', 'Review schedule', <>{REVIEW_FREQUENCY_LABEL[freq]} · next {new Date(pol.nextReviewDate!).toLocaleDateString()}.</>)
+          : gapCard('warn', 'No review schedule', <>Nothing says when this is re-checked, so it can quietly go stale.</>)}
+      </div>
+    );
+  };
+
+  const factRow = (label: string, node: React.ReactNode) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--color-text)' }}>{node}</span>
+    </div>
+  );
+
+  const renderFactsRail = (pol: Policy) => {
+    const docType = pol.documentType || 'POLICY';
+    const freq = pol.reviewFrequency || 'NONE';
+    const dash = <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
+    return (
+      <Card>
+        <SectionLabel>Facts</SectionLabel>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 2 }}>
+          {factRow('Type', <span style={badgeStyle(DOCUMENT_TYPE_COLORS[docType])}>{DOCUMENT_TYPE_LABEL[docType]}</span>)}
+          {factRow('Category', <span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span>)}
+          {factRow('Status', <span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span>)}
+          {factRow('Owner', pol.ownerName || dash)}
+          {factRow('Reviewed', REVIEW_FREQUENCY_LABEL[freq] || freq)}
+          {factRow('Next review', pol.nextReviewDate ? <span title={absoluteTime(pol.nextReviewDate)}>{new Date(pol.nextReviewDate).toLocaleDateString()}</span> : dash)}
+          {factRow('Updated', <span title={absoluteTime(pol.updatedAt)}>{relativeTime(pol.updatedAt)}</span>)}
+        </div>
+      </Card>
+    );
+  };
+
+  const renderExplainer = (pol: Policy) => {
     const docType = pol.documentType || 'POLICY';
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Document's own fields — read-only with an in-place Edit toggle. On
-            the detail route the toggle portals up to the page header. */}
-        <PolicyDetailsPanel policy={pol} people={people} canEdit={isAdmin} orgId={activeOrgId} onSaved={fetchData} actionsSlot={detailActionsSlot} />
+      <Card>
+        <SectionLabel>What a {DOCUMENT_TYPE_LABEL[docType].toLowerCase()} is</SectionLabel>
+        <p style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.55, margin: '2px 0 0' }}>
+          {DOCUMENT_TYPE_EXPLAINER[docType]}
+        </p>
+      </Card>
+    );
+  };
 
-        {/* Source / provenance — shown for ANY documentType promoted from an
-            agent draft, so the round-trip to the source activity is reachable. */}
-        {promo && (
-          <div style={{ background: '#faf5ff', border: '1px solid #d8b4fe', borderRadius: 'var(--radius-md)', padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <StatusBadge variant="agent" icon={<Bot size={12} strokeWidth={2.4} />}>Source</StatusBadge>
-              <h3 style={{ fontSize: 14, fontWeight: 600, color: '#5b21b6' }}>Promoted from agent draft</h3>
+  const renderSourceSection = (pol: Policy) => (
+    <div style={panelStyle}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Source document</h3>
+      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
+        Point to where the real document lives (SharePoint, a web page, a file server) or upload a copy. Procela stores the link, not the document&rsquo;s contents.
+      </p>
+      <AttachmentsPanel entityType="GovernancePolicy" entityId={pol.id} orgId={activeOrgId ?? undefined} disabled={!canWrite} hideHeader onCount={setAttachmentCount} />
+    </div>
+  );
+
+  const renderProceduresSection = (pol: Policy) => {
+    const procs = proceduresForPolicy(pol.id);
+    const unlinked = sops.filter((s) => !s.governancePolicyId);
+    return (
+      <div style={panelStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Procedures implementing this</h3>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
+              Step-by-step procedures that carry out this document.
+            </p>
+          </div>
+          {canWrite && procAction === 'none' && (
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <SecondaryButton onClick={() => { setProcAction('link'); setLinkProcId(''); }}>Link existing</SecondaryButton>
+              <Button variant="primary" size="sm" onClick={() => { setProcAction('new'); setNewProcTitle(''); }}>+ New procedure</Button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 6, fontSize: 13 }}>
-              <span style={{ color: 'var(--color-text-muted)' }}>Source activity</span>
-              <a href={`/processes?node=${encodeURIComponent(promo.activityId)}`} title="Open the activity in the Process Catalog" style={{ color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'none' }}>{promo.activityName}</a>
+          )}
+        </div>
 
-              <span style={{ color: 'var(--color-text-muted)' }}>Agent</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} style={{ color: '#5b21b6' }} /> {promo.agentName}</span>
+        {procAction === 'link' && (
+          <div style={inlineFormBox}>
+            {unlinked.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
+                Every procedure is already linked to a document. Create a new one instead.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select aria-label="Procedure to link" style={{ ...selectStyle, maxWidth: 360, width: 'auto' }} value={linkProcId} onChange={(e) => setLinkProcId(e.target.value)}>
+                  <option value="">— Choose a procedure —</option>
+                  {unlinked.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.title}</option>)}
+                </select>
+                <Button variant="primary" size="sm" disabled={!linkProcId || procSaving} onClick={() => handleLinkProcedure(pol)}>Link</Button>
+                <SecondaryButton onClick={() => { setProcAction('none'); setLinkProcId(''); }}>Cancel</SecondaryButton>
+              </div>
+            )}
+          </div>
+        )}
 
-              <span style={{ color: 'var(--color-text-muted)' }}>Approved by</span>
-              <span>{promo.reviewedBy || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
-
-              <span style={{ color: 'var(--color-text-muted)' }}>Approved at</span>
-              <span>{promo.reviewedAt ? new Date(promo.reviewedAt).toLocaleString() : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
+        {procAction === 'new' && (
+          <div style={inlineFormBox}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input autoFocus aria-label="New procedure title" placeholder="e.g. Classify a new data asset" style={{ ...inputStyle, maxWidth: 360, width: 'auto', flex: '1 1 240px' }} value={newProcTitle} onChange={(e) => setNewProcTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleCreateProcedure(pol); }} />
+              <Button variant="primary" size="sm" disabled={!newProcTitle.trim() || procSaving} onClick={() => handleCreateProcedure(pol)}>Create &amp; link</Button>
+              <SecondaryButton onClick={() => { setProcAction('none'); setNewProcTitle(''); }}>Cancel</SecondaryButton>
             </div>
-            <p style={{ marginTop: 10, fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-              <strong>{pol.name}</strong> was created by promoting an approved AI-generated draft from the activity above. The draft's source-status note is preserved in the document's <em>Description</em>.
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
+              Creates a draft procedure already linked to this document. Add its steps on the Procedures page.
             </p>
           </div>
         )}
 
-        {/* Controls — only for documentType POLICY. Charters, frameworks and
-            standards don't have rule-shaped controls hanging off them. */}
-        {docType === 'POLICY' && (
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Controls for {pol.name}</h3>
-              {isAdmin && <Button variant="primary" size="sm" onClick={openAddControl}>+ Add Control</Button>}
-            </div>
-
-            {/* Control Add/Edit Form */}
-            {showControlForm && (
-              <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12 }}>
-                <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{editingControlId ? 'Edit Control' : 'Add Control'}</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={labelStyle}>Name *</label>
-                    <input autoFocus aria-label="Name" style={inputStyle} value={controlForm.name} onChange={(e) => setControlForm({ ...controlForm, name: e.target.value })} />
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={labelStyle}>Description</label>
-                    <textarea aria-label="Description" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={controlForm.description} onChange={(e) => setControlForm({ ...controlForm, description: e.target.value })} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Control Type</label>
-                    <select aria-label="Control Type" style={selectStyle} value={controlForm.controlType} onChange={(e) => setControlForm({ ...controlForm, controlType: e.target.value })}>
-                      {CONTROL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Automation Mode</label>
-                    <select aria-label="Automation Mode" style={selectStyle} value={controlForm.automationMode} onChange={(e) => setControlForm({ ...controlForm, automationMode: e.target.value })}>
-                      {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
-                    <input type="checkbox" checked={controlForm.evidenceRequired} onChange={(e) => setControlForm({ ...controlForm, evidenceRequired: e.target.checked })} />
-                    <label style={{ fontSize: 12, fontWeight: 500 }}>Evidence Required</label>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-                  <Button variant="secondary" size="sm" onClick={closeControlForm}>Cancel</Button>
-                  <Button variant="primary" size="sm"
-                    disabled={!controlForm.name.trim()} onClick={handleSaveControl}>
-                    {editingControlId ? 'Save' : 'Add'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Controls Table */}
-            {controlsForPolicy(pol.id).length === 0 && !showControlForm ? (
-              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center', padding: 20 }}>No controls defined for this policy.</p>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg)' }}>
-                    <th scope="col" style={thStyle}>Code</th>
-                    <th scope="col" style={thStyle}>Name</th>
-                    <th scope="col" style={thStyle}>Type</th>
-                    <th scope="col" style={thStyle}>Mode</th>
-                    <th scope="col" style={thStyle}>Evidence</th>
-                    <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {controlsForPolicy(pol.id).map((ctl) => (
-                    <tr key={ctl.id} style={{ transition: 'background 0.1s' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
-                      <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{ctl.code}</td>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>{ctl.name}</td>
-                      <td style={tdStyle}><span style={badgeStyle({ bg: '#e0e7ff', color: '#3730a3' })}>{ctl.controlType}</span></td>
-                      <td style={tdStyle}><span style={badgeStyle({ bg: '#ccfbf1', color: '#115e59' })}>{ctl.automationMode}</span></td>
-                      <td style={tdStyle}>{ctl.evidenceRequired ? 'Yes' : 'No'}</td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', gap: 4 }}>
-                          {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditControl(ctl)} />}
-                          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeleteControl(ctl.id)} />}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Procedures implementing this — the reverse of the procedure→document
-            link. Lists the SOPs that carry out this document, each linking to
-            the Procedures page. Shown for every document type. */}
-        {(() => {
-          const procs = proceduresForPolicy(pol.id);
-          return (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Procedures implementing this</h3>
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
-                Step-by-step procedures that carry out this document. Link one from a procedure&rsquo;s <em>Implements document</em> field on the Procedures page.
-              </p>
-              {procs.length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>No procedures implement this document yet.</p>
-              ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {procs.map((s) => (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); navigate('/documentation?tab=procedures'); }}
-                        title={`Open ${s.code} on the Procedures page`}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 8, width: '100%', maxWidth: 480,
-                          background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4,
-                          padding: '6px 10px', cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-primary)',
-                        }}
-                      >
-                        <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/documentation', { size: 13 })}</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flexShrink: 0 }}>{s.code}</span>
-                        <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
-                        <span aria-hidden="true" style={{ marginLeft: 'auto', flexShrink: 0 }}>&rarr;</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })()}
-
-        {/* Linked documents — point this governance document at the real file
-            wherever it lives (SharePoint, a web page, a file server) or upload
-            a copy. Shown for every document type. */}
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Linked documents</h3>
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 6px' }}>
-            Point to the source document (SharePoint, a website, a file server) or upload a copy. Procela stores the link, not the document&rsquo;s contents.
-          </p>
-          <AttachmentsPanel entityType="GovernancePolicy" entityId={pol.id} orgId={activeOrgId ?? undefined} disabled={!canWrite} hideHeader />
+        <div style={{ marginTop: 12 }}>
+          {procs.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>No procedures implement this document yet.</p>
+          ) : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {procs.map((s) => (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); navigate('/documentation?tab=procedures'); }}
+                    title={`Open ${s.code} on the Procedures page`}
+                    style={rowLinkStyle}
+                  >
+                    <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/documentation', { size: 13 })}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flexShrink: 0 }}>{s.code}</span>
+                    <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
+                    <span aria-hidden="true" style={{ marginLeft: 'auto', flexShrink: 0 }}>&rarr;</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     );
   };
 
+  const renderControlsSection = (pol: Policy) => (
+    <div style={panelStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Controls for {pol.name}</h3>
+        {isAdmin && <Button variant="primary" size="sm" onClick={openAddControl}>+ Add Control</Button>}
+      </div>
+
+      {showControlForm && (
+        <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{editingControlId ? 'Edit Control' : 'Add Control'}</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Name *</label>
+              <input autoFocus aria-label="Name" style={inputStyle} value={controlForm.name} onChange={(e) => setControlForm({ ...controlForm, name: e.target.value })} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Description</label>
+              <textarea aria-label="Description" style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={controlForm.description} onChange={(e) => setControlForm({ ...controlForm, description: e.target.value })} />
+            </div>
+            <div>
+              <label style={labelStyle}>Control Type</label>
+              <select aria-label="Control Type" style={selectStyle} value={controlForm.controlType} onChange={(e) => setControlForm({ ...controlForm, controlType: e.target.value })}>
+                {CONTROL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Automation Mode</label>
+              <select aria-label="Automation Mode" style={selectStyle} value={controlForm.automationMode} onChange={(e) => setControlForm({ ...controlForm, automationMode: e.target.value })}>
+                {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
+              <input type="checkbox" checked={controlForm.evidenceRequired} onChange={(e) => setControlForm({ ...controlForm, evidenceRequired: e.target.checked })} />
+              <label style={{ fontSize: 12, fontWeight: 500 }}>Evidence Required</label>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+            <Button variant="secondary" size="sm" onClick={closeControlForm}>Cancel</Button>
+            <Button variant="primary" size="sm" disabled={!controlForm.name.trim()} onClick={handleSaveControl}>
+              {editingControlId ? 'Save' : 'Add'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {controlsForPolicy(pol.id).length === 0 && !showControlForm ? (
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center', padding: 20 }}>No controls defined for this policy.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--color-bg)' }}>
+                <th scope="col" style={thStyle}>Code</th>
+                <th scope="col" style={thStyle}>Name</th>
+                <th scope="col" style={thStyle}>Type</th>
+                <th scope="col" style={thStyle}>Mode</th>
+                <th scope="col" style={thStyle}>Evidence</th>
+                <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {controlsForPolicy(pol.id).map((ctl) => (
+                <tr key={ctl.id} style={{ transition: 'background 0.1s' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
+                  <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{ctl.code}</td>
+                  <td style={{ ...tdStyle, fontWeight: 500 }}>{ctl.name}</td>
+                  <td style={tdStyle}><span style={badgeStyle({ bg: '#e0e7ff', color: '#3730a3' })}>{ctl.controlType}</span></td>
+                  <td style={tdStyle}><span style={badgeStyle({ bg: '#ccfbf1', color: '#115e59' })}>{ctl.automationMode}</span></td>
+                  <td style={tdStyle}>{ctl.evidenceRequired ? 'Yes' : 'No'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    <div style={{ display: 'inline-flex', gap: 4 }}>
+                      {isAdmin && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditControl(ctl)} />}
+                      {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeleteControl(ctl.id)} />}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderProvenance = (pol: Policy) => {
+    const promo = promotionsByPolicy[pol.id];
+    if (!promo) return null;
+    return (
+      <div style={{ background: '#faf5ff', border: '1px solid #d8b4fe', borderRadius: 'var(--radius-md)', padding: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <StatusBadge variant="agent" icon={<Bot size={12} strokeWidth={2.4} />}>Source</StatusBadge>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: '#5b21b6' }}>Promoted from agent draft</h3>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 6, fontSize: 13 }}>
+          <span style={{ color: 'var(--color-text-muted)' }}>Source activity</span>
+          <a href={`/processes?node=${encodeURIComponent(promo.activityId)}`} title="Open the activity in the Process Catalog" style={{ color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'none' }}>{promo.activityName}</a>
+
+          <span style={{ color: 'var(--color-text-muted)' }}>Agent</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} style={{ color: '#5b21b6' }} /> {promo.agentName}</span>
+
+          <span style={{ color: 'var(--color-text-muted)' }}>Approved by</span>
+          <span>{promo.reviewedBy || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
+
+          <span style={{ color: 'var(--color-text-muted)' }}>Approved at</span>
+          <span>{promo.reviewedAt ? new Date(promo.reviewedAt).toLocaleString() : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
+        </div>
+        <p style={{ marginTop: 10, fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+          <strong>{pol.name}</strong> was created by promoting an approved AI-generated draft from the activity above. The draft&rsquo;s source-status note is preserved in the document&rsquo;s <em>Description</em>.
+        </p>
+      </div>
+    );
+  };
+
+  const renderContent = (pol: Policy) => (
+    <div style={panelStyle}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Document content</h3>
+      {pol.content && pol.content.trim() ? (
+        <div style={{ fontSize: 13.5, color: 'var(--color-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{pol.content}</div>
+      ) : (
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
+          This document has no body text stored in Procela. The full text usually lives in the linked source file — add it under <strong>Overview → Source document</strong>.
+        </p>
+      )}
+    </div>
+  );
+
+  const renderUsedBy = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={panelStyle}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Process steps governed by this</h3>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
+          Steps in the process catalog mapped to this document.
+        </p>
+        {policyMappings.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>No process steps reference this document yet.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {policyMappings.map((m: any) => {
+              const info = m.stepInfo;
+              const label = info?.path || info?.stepName || 'Process step';
+              return (
+                <li key={m.id}>
+                  <a href={info?.activityId ? `/processes?node=${encodeURIComponent(info.activityId)}` : '/processes'} title="Open in the Process Catalog" style={rowLinkStyle}>
+                    <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/processes', { size: 13 })}</span>
+                    <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                    <span aria-hidden="true" style={{ marginLeft: 'auto', flexShrink: 0 }}>&rarr;</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      <div style={panelStyle}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Exceptions against this</h3>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 10px' }}>
+          Where this document is knowingly not met, for a named reason and a set expiry.
+        </p>
+        {policyExceptions.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>No exceptions filed against this document.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {policyExceptions.map((ex: any) => (
+              <li key={ex.id}>
+                <button type="button" onClick={() => navigate('/governance-exceptions')} title="Open the Exceptions register" style={rowLinkStyle}>
+                  <span style={{ display: 'inline-flex', flexShrink: 0 }}>{renderNavIcon('/governance-exceptions', { size: 13 })}</span>
+                  <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.title}</span>
+                  <span style={badgeStyle(ex.status === 'ACTIVE' ? { bg: '#fef3c7', color: '#92400e' } : { bg: '#f3f4f6', color: '#6b7280' })}>{ex.status === 'ACTIVE' ? 'Active' : 'Closed'}</span>
+                  {ex.expiresAt && <span style={{ fontSize: 11, color: 'var(--color-text-muted)', flexShrink: 0 }}>expires {new Date(ex.expiresAt).toLocaleDateString()}</span>}
+                  <span aria-hidden="true" style={{ marginLeft: 'auto', flexShrink: 0 }}>&rarr;</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+
   // ── Single-document detail (the /governance-policies/:id route) ──
-  // Reuses the same body the modal rendered (details + source + controls +
-  // procedures + linked docs), as the page content with People-style chrome.
+  // A tabbed detail page: header (code + status) → completeness strip → the
+  // Edit-in-place panel → Overview / Content / Used by / Activity tabs.
   if (focusPolicyId) {
     const backLink = <Link to="/governance-policies" style={backLinkStyle}>{'←'} Back to Documents</Link>;
     if (loadError) {
@@ -834,24 +1138,90 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
         />
       );
     }
+    const pol = focusedPolicy;
+    const docType = pol.documentType || 'POLICY';
+    const typeLabel = DOCUMENT_TYPE_LABEL[docType];
+    const promo = promotionsByPolicy[pol.id];
+
+    const header = (
+      <PageHeader
+        kicker={`Governance document · ${typeLabel}`}
+        title={pol.name}
+        copyId={pol.id}
+        copyLabel="Copy document ID"
+        subtitle={pol.description || undefined}
+        meta={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 7px' }}>{pol.code}</span>
+            <span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span>
+          </div>
+        }
+        actions={<>
+          {backLink}
+          <span ref={setDocActionsSlot} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }} />
+          {isAdmin && (
+            <span style={{ position: 'relative', display: 'inline-flex' }}>
+              <button type="button" aria-label="More document actions" aria-haspopup="menu" aria-expanded={docMenuOpen}
+                onClick={(e) => { e.stopPropagation(); setDocMenuOpen((o) => !o); }} style={headerMenuBtnStyle}>⋯</button>
+              {docMenuOpen && (
+                <div role="menu" onClick={(e) => e.stopPropagation()} style={headerMenuStyle}>
+                  {pol.status === 'UNDER_REVIEW' && (
+                    <button type="button" role="menuitem" style={docMenuItemStyle} onClick={() => { setDocMenuOpen(false); finishReview(pol); }}>Finish review</button>
+                  )}
+                  {promo && (
+                    <button type="button" role="menuitem" style={docMenuItemStyle} onClick={() => { setDocMenuOpen(false); navigate(`/processes?node=${encodeURIComponent(promo.activityId)}`); }}>Open source activity</button>
+                  )}
+                  <button type="button" role="menuitem" style={{ ...docMenuItemStyle, color: 'var(--color-error)' }} onClick={() => { setDocMenuOpen(false); setConfirmDeleteDoc(true); }}>Delete document</button>
+                </div>
+              )}
+            </span>
+          )}
+        </>}
+      />
+    );
+
     return (
       <div>
-        <PageHeader
-          kicker="Governance document"
-          title={focusedPolicy.name}
-          copyId={focusedPolicy.id}
-          copyLabel="Copy document ID"
-          subtitle={focusedPolicy.code}
-          actions={<>
-            {backLink}
-            <span ref={setDocActionsSlot} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }} />
-          </>}
-        />
         <ConfirmDialog open={confirmDeleteControl !== null} title="Delete Control?"
           message="This will permanently delete this control." confirmLabel="Delete"
           onConfirm={async () => { const id = confirmDeleteControl; setConfirmDeleteControl(null); if (id) await handleDeleteControl(id); }}
           onCancel={() => setConfirmDeleteControl(null)} />
-        {renderPolicyExpansion(focusedPolicy, docActionsSlot)}
+        <ConfirmDialog open={confirmDeleteDoc} title={`Delete ${typeLabel.toLowerCase()}?`}
+          message={`This permanently deletes "${pol.name}"${docType === 'POLICY' ? ' and its controls' : ''}.`} confirmLabel="Delete"
+          onConfirm={async () => { setConfirmDeleteDoc(false); await handleDelete(pol.id); navigate('/governance-policies'); }}
+          onCancel={() => setConfirmDeleteDoc(false)} />
+
+        {header}
+        {renderGapStrip(pol)}
+        {/* At rest this renders only the header Edit button; Edit flips to the
+            in-place field form here, above the tabs. */}
+        <div style={{ marginBottom: 16 }}>
+          <PolicyDetailsPanel policy={pol} people={people} canEdit={isAdmin} orgId={activeOrgId} onSaved={fetchData} actionsSlot={docActionsSlot} hideViewBody />
+        </div>
+
+        <Tabs
+          tabs={[
+            { id: 'overview', label: 'Overview', render: () => twoColDetail(
+              <>
+                {renderSourceSection(pol)}
+                {renderProceduresSection(pol)}
+                {docType === 'POLICY' && renderControlsSection(pol)}
+                {renderProvenance(pol)}
+              </>,
+              <>
+                {renderFactsRail(pol)}
+                {renderExplainer(pol)}
+              </>,
+            ) },
+            { id: 'content', label: 'Content', render: () => renderContent(pol) },
+            { id: 'used-by', label: `Used by ${policyMappings.length + policyExceptions.length}`, render: () => renderUsedBy() },
+            { id: 'activity', label: 'Activity', render: () => (
+              <div style={panelStyle}>
+                <ActivityFeed entityType="GovernancePolicy" entityId={pol.id} inline initialRows={20} />
+              </div>
+            ) },
+          ]}
+        />
       </div>
     );
   }
