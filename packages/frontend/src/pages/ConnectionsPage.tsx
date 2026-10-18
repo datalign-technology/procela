@@ -1167,7 +1167,10 @@ export default function ConnectionsPage({
                   <SectionLabel>Needs attention</SectionLabel>
                   <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Click a card to filter</span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+                {/* auto-fill (not auto-fit) so a short card set stays tile-sized
+                    and left-aligned instead of ballooning to full width — matches
+                    the Data Assets needs-attention tiles. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
                   <button type="button" disabled={noSystemCount === 0} aria-pressed={attentionFilter === 'noSystem'}
                     onClick={() => setAttentionFilter(attentionFilter === 'noSystem' ? '' : 'noSystem')}
                     style={card(attentionFilter === 'noSystem', noSystemCount === 0)}>

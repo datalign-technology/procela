@@ -746,7 +746,9 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
         {rail}
         <div>
           {reports === null ? (
-            <SkeletonRows rows={4} columnWidths={[220, null, 120]} />
+            <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+              <SkeletonRows rows={4} columnWidths={[220, null, 120]} />
+            </div>
           ) : reports.length === 0 ? (
             <EmptyState
               icon={renderNavIcon('/reports')}
@@ -786,14 +788,18 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
                   </>
                 )}
               </div>
-              <DataTable
-                rows={sorted}
-                columns={columns}
-                rowKey={(r) => r.id}
-                sort={{ sortKey, sortDir, onSort: toggleSort }}
-                emptyMessage={hasFilters ? 'No reports match these filters.' : 'No reports in this folder.'}
-                onRowClick={(r) => navigate(`/reports/${r.id}`)}
-              />
+              {/* Surface wrapper so the table reads as a white card against the
+                  greyish page ground — matches Data Assets / Systems lists. */}
+              <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+                <DataTable
+                  rows={sorted}
+                  columns={columns}
+                  rowKey={(r) => r.id}
+                  sort={{ sortKey, sortDir, onSort: toggleSort }}
+                  emptyMessage={hasFilters ? 'No reports match these filters.' : 'No reports in this folder.'}
+                  onRowClick={(r) => navigate(`/reports/${r.id}`)}
+                />
+              </div>
             </>
           )}
         </div>
