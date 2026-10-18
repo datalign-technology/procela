@@ -104,11 +104,33 @@ interface ReportDetail {
   schedule?: { frequency?: string } | null;
 }
 
-const FILTER_OP_LABELS: Record<string, string> = {
-  eq: '=', neq: '≠', gt: '>', gte: '≥', lt: '<', lte: '≤',
-  contains: 'contains', startsWith: 'starts with', endsWith: 'ends with',
-  in: 'in', notIn: 'not in', isNull: 'is empty', isNotNull: 'is not empty',
+// Plain-English operator words, so a filter reads as a sentence
+// ("Governance tier is Bronze") instead of a field code + symbol.
+const FILTER_OP_WORDS: Record<string, string> = {
+  eq: 'is', neq: 'is not', gt: 'is greater than', gte: 'is at least',
+  lt: 'is less than', lte: 'is at most', contains: 'contains',
+  startsWith: 'starts with', endsWith: 'ends with', in: 'is one of',
+  notIn: 'is not one of', isNull: 'is empty', isNotNull: 'is not empty',
 };
+
+// Turn a field key into a readable label: "governanceTier" → "Governance
+// tier", "owner.name" → "Owner name" (joined-field path flattened).
+// Render a result cell as readable text for the inline results table.
+function formatReportCell(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (Array.isArray(v)) return v.join(', ');
+  return String(v);
+}
+
+function prettyField(key: string): string {
+  return (key || '')
+    .split('.')
+    .map((part) => part.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' '))
+    .join(' ')
+    .toLowerCase()
+    .replace(/^./, (c) => c.toUpperCase());
+}
 
 // Download formats offered in the results modal (Print is a separate action,
 // so PDF is not listed here — see the decoupled Print button).
@@ -254,6 +276,12 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
   const [viewingReport, setViewingReport] = useState<UserReportSummary | null>(null);
   const [detail, setDetail] = useState<ReportDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  // Detail page (/reports/:id): Results / Definition / Schedule tabs, and the
+  // report run inline on the page (no pop-up) under the Results tab.
+  const [detailTab, setDetailTab] = useState<'results' | 'definition' | 'schedule'>('results');
+  const [inlineRun, setInlineRun] = useState<RunResult | null>(null);
+  const [inlineRunning, setInlineRunning] = useState(false);
+  const [inlineError, setInlineError] = useState<string | null>(null);
 
   // Folder rail: the org's folders, the selected filter, and the two folder
   // dialogs (create/edit a folder; move a report into a folder).
@@ -318,6 +346,28 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
       .finally(() => { if (!cancelled) setDetailLoading(false); });
     return () => { cancelled = true; };
   }, [viewingReport]);
+
+  // Run the report inline on the detail page (no pop-up). Uses the preview
+  // endpoint against the saved definition so the Results tab shows live rows.
+  const runInline = useCallback(async () => {
+    if (!activeOrgId || !detail) return;
+    setInlineRunning(true); setInlineError(null);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: RunResult }>(`/reports/preview`, {
+        orgId: activeOrgId, definition: { ...detail.definition, limit: 100 },
+      });
+      setInlineRun(res.data);
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      setInlineError(e?.response?.data?.error || 'Run failed'); setInlineRun(null);
+    } finally { setInlineRunning(false); }
+  }, [activeOrgId, detail]);
+
+  // Auto-run once the definition loads on the detail page, so Results isn't empty.
+  useEffect(() => {
+    setInlineRun(null); setInlineError(null);
+    if (focusReportId && detail) runInline();
+  }, [focusReportId, detail, runInline]);
 
   // Detail route (/reports/:id): once the list has loaded, select the focused
   // report so the definition-fetch effect above runs; end the trail on its name.
@@ -834,99 +884,180 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
         const cols = detail?.definition.columns || [];
         const filters = detail?.definition.filters || [];
         const sort = detail?.definition.sort;
+        const tabStyle = (t: string): React.CSSProperties => ({
+          font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none',
+          padding: '8px 12px', textTransform: 'capitalize', marginBottom: -1,
+          color: detailTab === t ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+          borderBottom: `2px solid ${detailTab === t ? 'var(--color-primary)' : 'transparent'}`,
+        });
+        const copyReportId = () => { navigator.clipboard?.writeText(r.id).then(() => addToast('success', 'Report ID copied'), () => {}); };
         return (
           <div>
             <PageHeader
-              kicker={r.primaryEntity}
+              kicker={entityLabel(r.primaryEntity)}
               title={r.name}
               copyId={r.id}
               copyLabel="Copy report ID"
               subtitle={
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   {r.visibility === 'org'
-                    ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>SHARED</span>
-                    : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>PRIVATE</span>}
-                  {fname && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="folder" size={12} />{fname}</span>}
+                    ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>Shared</span>
+                    : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>Private</span>}
+                  {r.scheduleFrequency !== 'off' && <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>Emailed {r.scheduleFrequency}</span>}
+                  {fname && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}><Icon name="folder" size={12} />{fname}</span>}
                 </span>
               }
               actions={
                 <>
                   <Link to="/reports" style={backLinkStyle}>{'←'} Back to Reports</Link>
-                  <IconButton size="sm" icon="play" label={runningId === r.id ? 'Running…' : 'Run report'} disabled={runningId === r.id} onClick={() => runReport(r)} />
+                  <Button size="sm" variant="primary" leadingIcon={<Icon name="play" size={13} />} disabled={inlineRunning || !detail} onClick={() => { setDetailTab('results'); runInline(); }}>{inlineRunning ? 'Running…' : 'Run'}</Button>
                   <Button size="sm" leadingIcon={<Icon name="edit" size={13} />} onClick={() => navigate(`/reports/builder/${r.id}`)}>Edit</Button>
                 </>
               }
             />
-            <Card>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {/* Description */}
-              <div>
-                <div style={labelStyle}>Description</div>
-                <div style={{ fontSize: 13, color: r.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', fontStyle: r.description ? undefined : 'italic', whiteSpace: 'pre-wrap' }}>
-                  {r.description || 'No description'}
-                </div>
-              </div>
 
-              {/* Meta grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
-                <div><div style={labelStyle}>Source</div><div style={{ fontSize: 13 }}>{r.primaryEntity}</div></div>
-                <div><div style={labelStyle}>Columns</div><div style={{ fontSize: 13 }}>{r.columnCount}</div></div>
-                <div><div style={labelStyle}>Schedule</div><div style={{ fontSize: 13 }}>{r.scheduleFrequency === 'off' ? 'Not scheduled' : r.scheduleFrequency.charAt(0).toUpperCase() + r.scheduleFrequency.slice(1)}</div></div>
-                <div>
-                  <div style={labelStyle}>Last run</div>
-                  <div style={{ fontSize: 13 }}>
-                    {r.lastRunAt
-                      ? <>{timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
-                      : <span style={{ color: 'var(--color-text-muted)' }}>Never run</span>}
-                  </div>
-                </div>
-              </div>
+            {r.description && <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--color-text-secondary)', maxWidth: 680 }}>{r.description}</p>}
 
-              {/* Columns */}
-              <div>
-                <div style={labelStyle}>Columns ({detailLoading ? '…' : cols.length})</div>
-                {detailLoading ? (
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</div>
-                ) : cols.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No columns selected</div>
-                ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {cols.map((c) => (
-                      <span key={c.field} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: 'var(--color-text)' }}>
-                        {c.label || c.field}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+              <main style={{ flex: '999 1 540px', minWidth: 0 }}>
+                <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
+                  {(['results', 'definition', 'schedule'] as const).map((t) => (
+                    <button key={t} type="button" onClick={() => setDetailTab(t)} style={tabStyle(t)}>{t}</button>
+                  ))}
+                </div>
+
+                {/* Results — the report run inline on the page, no pop-up. */}
+                {detailTab === 'results' && (
+                  <Card>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                        {inlineRunning && !inlineRun ? 'Running…'
+                          : inlineRun ? `${inlineRun.totalMatched.toLocaleString()} ${inlineRun.totalMatched === 1 ? 'row' : 'rows'} matched${inlineRun.totalMatched > inlineRun.rows.length ? ` · showing first ${inlineRun.rows.length.toLocaleString()}` : ''}` : ''}
                       </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Filters */}
-              {!detailLoading && filters.length > 0 && (
-                <div>
-                  <div style={labelStyle}>Filters ({filters.length})</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {filters.map((f, i) => (
-                      <div key={i} style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)' }}>{f.field}</span>{' '}
-                        <span style={{ color: 'var(--color-text-muted)' }}>{FILTER_OP_LABELS[f.op] || f.op}</span>
-                        {f.op !== 'isNull' && f.op !== 'isNotNull' && f.value !== undefined && f.value !== '' && <> <span style={{ fontWeight: 500 }}>{String(f.value)}</span></>}
+                      {inlineRun && inlineRun.rows.length > 0 && (
+                        <ExportMenu label="Download" formats={[...DOWNLOAD_FORMATS]} build={() => resultToPayload(r, inlineRun, { logoUrl, companyName, userName })} />
+                      )}
+                    </div>
+                    {inlineError ? (
+                      <div style={{ fontSize: 12, color: 'var(--color-error)', padding: '8px 10px', background: '#fee2e2', borderRadius: 4 }}>{inlineError}</div>
+                    ) : inlineRunning && !inlineRun ? (
+                      <SkeletonRows rows={5} columns={Math.max(2, (detail?.definition.columns.length || 3))} />
+                    ) : !inlineRun || inlineRun.rows.length === 0 ? (
+                      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>No rows match this report's filters.</p>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ background: 'var(--color-bg)' }}>
+                              {inlineRun.columns.map((c) => (
+                                <th key={c.field} style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>{c.label}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {inlineRun.rows.map((row, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                {inlineRun.columns.map((c) => <td key={c.field} style={{ padding: '6px 10px' }}>{formatReportCell(row[c.field])}</td>)}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    )}
+                  </Card>
+                )}
 
-              {/* Sort */}
-              {!detailLoading && sort && (
-                <div>
-                  <div style={labelStyle}>Sort</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)' }}>{sort.field}</span>{' · '}{sort.direction === 'asc' ? 'ascending' : 'descending'}
+                {/* Definition — columns, filters (plain sentences), sort. */}
+                {detailTab === 'definition' && (
+                  <Card>
+                    {detailLoading ? (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                        <div>
+                          <div style={labelStyle}>Columns ({cols.length})</div>
+                          {cols.length === 0 ? (
+                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No columns selected</div>
+                          ) : (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {cols.map((c) => (
+                                <span key={c.field} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: 'var(--color-text)' }}>{c.label || prettyField(c.field)}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div style={labelStyle}>Filters</div>
+                          {filters.length === 0 ? (
+                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No filters — returns every {entityLabel(r.primaryEntity).toLowerCase()} row in this org.</div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {filters.map((f, i) => (
+                                <div key={i} style={{ fontSize: 13, color: 'var(--color-text)' }}>
+                                  <span style={{ fontWeight: 600 }}>{prettyField(f.field)}</span>{' '}
+                                  <span style={{ color: 'var(--color-text-muted)' }}>{FILTER_OP_WORDS[f.op] || f.op}</span>
+                                  {f.op !== 'isNull' && f.op !== 'isNotNull' && f.value !== undefined && f.value !== '' && <> <span style={{ fontWeight: 600 }}>{String(f.value)}</span></>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div style={labelStyle}>Sort</div>
+                          <div style={{ fontSize: 13, color: sort ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                            {sort ? <>{prettyField(sort.field)} · {sort.direction === 'asc' ? 'ascending' : 'descending'}</> : 'No sort'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                )}
+
+                {/* Schedule — summary + a link into the builder, where delivery is edited. */}
+                {detailTab === 'schedule' && (
+                  <Card>
+                    <div style={labelStyle}>Email delivery</div>
+                    {r.scheduleFrequency === 'off' ? (
+                      <>
+                        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 8px' }}>This report isn't emailed on a schedule.</p>
+                        <button type="button" onClick={() => navigate(`/reports/builder/${r.id}`)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', cursor: 'pointer' }}>Set up email delivery</button>
+                      </>
+                    ) : (
+                      <>
+                        <p style={{ fontSize: 13, color: 'var(--color-text)', margin: '0 0 8px' }}>Emailed <strong>{r.scheduleFrequency}</strong> to its recipients.</p>
+                        <button type="button" onClick={() => navigate(`/reports/builder/${r.id}`)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', cursor: 'pointer' }}>Edit schedule</button>
+                      </>
+                    )}
+                  </Card>
+                )}
+              </main>
+
+              {/* Facts rail. */}
+              <aside style={{ flex: '1 1 260px', minWidth: 0 }}>
+                <Card>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Facts</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div><div style={labelStyle}>Source</div><div style={{ fontSize: 13 }}>{entityLabel(r.primaryEntity)}</div></div>
+                    <div><div style={labelStyle}>Sharing</div><div style={{ fontSize: 13 }}>{r.visibility === 'org' ? 'Shared with the org' : 'Private to you'}{fname ? ` · ${fname}` : ''}</div></div>
+                    <div><div style={labelStyle}>Columns</div><div style={{ fontSize: 13 }}>{r.columnCount}</div></div>
+                    <div>
+                      <div style={labelStyle}>Last run</div>
+                      <div style={{ fontSize: 13 }}>
+                        {r.lastRunAt
+                          ? <>{timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
+                          : <span style={{ color: 'var(--color-text-muted)' }}>Never run</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>Report ID</div>
+                      <button type="button" onClick={copyReportId} title="Copy report ID" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        {r.id.slice(0, 8)}…<Icon name="copy" size={12} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                </Card>
+              </aside>
             </div>
-            </Card>
           </div>
         );
       })()}
