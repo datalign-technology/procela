@@ -13,10 +13,11 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import Avatar from '../components/Avatar';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
-import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useAuthStore } from '../stores/authStore';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
@@ -97,34 +98,61 @@ const inputStyle: React.CSSProperties = {
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 
+const rowMenuBtnStyle: React.CSSProperties = {
+  width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8,
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+};
+const rowMenuStyle: React.CSSProperties = {
+  position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 170,
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))',
+  padding: 6, textAlign: 'left',
+};
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+
 // ── Badge helpers ──
+// Dotted pills (leading status dot) matching the rest of the governance
+// surface. Priority runs a cool→warm ramp; status uses the shared slate /
+// blue / green set.
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  OPEN:        { bg: '#dbeafe', color: '#1e40af' },
-  IN_PROGRESS: { bg: '#fef3c7', color: '#92400e' },
-  COMPLETED:   { bg: '#d1fae5', color: '#065f46' },
-  CANCELLED:   { bg: '#f3f4f6', color: '#6b7280' },
+  OPEN:        { bg: '#e5ecf3', color: '#364a5e' }, // slate — not started
+  IN_PROGRESS: { bg: '#e6eef9', color: '#24508f' }, // blue — underway
+  COMPLETED:   { bg: '#dcefe5', color: '#17604b' }, // green — done
+  CANCELLED:   { bg: '#eef0f2', color: '#6b7280' }, // muted grey
 };
 
 const PRIORITY_COLORS: Record<string, { bg: string; color: string }> = {
-  LOW:      { bg: '#f3f4f6', color: '#6b7280' },
-  MEDIUM:   { bg: '#dbeafe', color: '#1e40af' },
-  HIGH:     { bg: '#fef3c7', color: '#92400e' },
-  CRITICAL: { bg: '#fee2e2', color: '#991b1b' },
+  LOW:      { bg: '#e5ecf3', color: '#364a5e' }, // slate
+  MEDIUM:   { bg: '#e6eef9', color: '#24508f' }, // blue
+  HIGH:     { bg: '#fbe9d9', color: '#9a4a0e' }, // amber
+  CRITICAL: { bg: '#fbe4e4', color: '#9a1c1c' }, // red
 };
 
 const MODE_COLORS: Record<string, { bg: string; color: string }> = {
-  HUMAN:  { bg: '#dbeafe', color: '#1e40af' },
+  HUMAN:  { bg: '#e6eef9', color: '#24508f' },
   AGENT:  { bg: '#ede9fe', color: '#5b21b6' },
   HYBRID: { bg: '#ccfbf1', color: '#115e59' },
 };
 
-function badge(_text: string, colors: { bg: string; color: string }): React.CSSProperties {
-  return {
-    display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-    fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color,
-    whiteSpace: 'nowrap',
-  };
+// Sentence-case a SCREAMING_SNAKE code: "IN_PROGRESS" → "In progress".
+function prettyLabel(code: string): string {
+  const s = (code || '').replace(/_/g, ' ').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// A sentence-case pill with a leading status dot. OPEN (not-yet-started) wears
+// a hollow dot so an open task doesn't read as an active/closed state.
+function dotPill(colors: { bg: string; color: string }, label: string, hollow = false): React.ReactNode {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: colors.bg, color: colors.color }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: hollow ? 'transparent' : colors.color, boxShadow: hollow ? `inset 0 0 0 1.5px ${colors.color}` : undefined }} />{label}
+    </span>
+  );
 }
 
 type TaskColId = 'title' | 'type' | 'status' | 'priority' | 'assignee' | 'dueDate' | 'mode';
@@ -142,7 +170,30 @@ const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display
 
 function fmtDate(d: string | null): string {
   if (!d) return '--';
-  return new Date(d).toLocaleDateString();
+  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Whole days from today to a due date, local calendar day (a date-only ISO is
+// otherwise read as UTC midnight and lands a day early behind UTC).
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
+}
+
+// "Overdue 3 days" / "Due today" / "in 3 days" — the urgency cue the US
+// numeric date alone never gave. null for no due date.
+function relativeDue(iso: string | null): string | null {
+  const n = daysUntil(iso);
+  if (n == null) return null;
+  if (n < 0) return `Overdue ${-n} day${n === -1 ? '' : 's'}`;
+  if (n === 0) return 'Due today';
+  if (n === 1) return 'Due tomorrow';
+  return `in ${n} days`;
 }
 
 // Shared task field grid — used by both the top-of-page "Add" form (create)
@@ -286,6 +337,7 @@ export default function GovernanceTasksPage({
   const { activeOrgId } = useOrgContext();
   const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
+  const currentUser = useAuthStore((s) => s.user);
 
   const taskCols = useColumnPicker<TaskColId>('procela.governanceTasks.visibleCols.v1', TASK_COLUMN_DEFS);
   const [tasks, setTasks] = useState<GovernanceTask[]>([]);
@@ -296,6 +348,7 @@ export default function GovernanceTasksPage({
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   // Row click opens a task's full detail on its own page (/governance-work/
   // tasks/:id), matching the People detail-page family.
 
@@ -304,7 +357,18 @@ export default function GovernanceTasksPage({
   const [filterPriority, setFilterPriority] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [assignedToMe, setAssignedToMe] = useState(false);
+  // One-click "needs attention" lens: 'overdue' | 'dueThisWeek' | 'highPriority'.
+  const [attention, setAttention] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Close the row ⋯ menu on any outside click.
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -323,18 +387,53 @@ export default function GovernanceTasksPage({
   useEffect(() => { fetchData(); }, [fetchData]);
   useRefreshOnFocus(fetchData);
 
+  // The current user's person record (best-effort name match), so "Assigned to
+  // me" works without a server-side me→person link.
+  const myPersonId = currentUser ? (people.find((p) => p.name === currentUser.name)?.id ?? null) : null;
+  const isMine = (t: GovernanceTask) =>
+    (myPersonId != null && t.assigneeId === myPersonId) ||
+    (!!currentUser && !!t.assigneeName && t.assigneeName === currentUser.name);
+
+  const isOpenish = (t: GovernanceTask) => t.status === 'OPEN' || t.status === 'IN_PROGRESS';
+
+  // ── Needs-attention counts (over the full task set, open work only) ──
+  const overdueCount = tasks.filter((t) => isOpenish(t) && (daysUntil(t.dueDate) ?? 99) < 0).length;
+  const dueThisWeekCount = tasks.filter((t) => {
+    const n = daysUntil(t.dueDate);
+    return isOpenish(t) && n != null && n >= 0 && n <= 7;
+  }).length;
+  const highPriorityCount = tasks.filter((t) => isOpenish(t) && (t.priority === 'HIGH' || t.priority === 'CRITICAL')).length;
+
+  const matchesAttention = (t: GovernanceTask) => {
+    if (!attention) return true;
+    if (!isOpenish(t)) return false;
+    if (attention === 'overdue') return (daysUntil(t.dueDate) ?? 99) < 0;
+    if (attention === 'dueThisWeek') { const n = daysUntil(t.dueDate); return n != null && n >= 0 && n <= 7; }
+    if (attention === 'highPriority') return t.priority === 'HIGH' || t.priority === 'CRITICAL';
+    return true;
+  };
+
   // ── Filtering ──
   const filtered = tasks.filter((t) => {
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterType && t.taskType !== filterType) return false;
     if (filterAssignee && t.assigneeId !== filterAssignee) return false;
+    if (assignedToMe && !isMine(t)) return false;
+    if (!matchesAttention(t)) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       if (!t.title.toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false;
     }
     return true;
   });
+
+  // Compact assignee options: only people who actually own a task, deduped by
+  // id — avoids the full directory (and the duplicate-name confusion) in the
+  // filter dropdown.
+  const assigneeOptions = Array.from(
+    new Map(tasks.filter((t) => t.assigneeId).map((t) => [t.assigneeId as string, t.assigneeName || 'Unknown'])).entries(),
+  ).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 
   // ── Sorting ──
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -348,10 +447,16 @@ export default function GovernanceTasksPage({
         return (order[a.priority as keyof typeof order] ?? 4) - (order[b.priority as keyof typeof order] ?? 4);
       },
       assignee: (a, b) => (a.assigneeName || '').localeCompare(b.assigneeName || ''),
-      dueDate:  (a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''),
+      // Soonest-due first; tasks with no due date sort to the bottom.
+      dueDate:  (a, b) => {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      },
       mode:     (a, b) => a.automationMode.localeCompare(b.automationMode),
     },
-    'title',
+    'dueDate',
   );
 
   const sel = useRowSelection(sorted, (t) => t.id);
@@ -430,82 +535,127 @@ export default function GovernanceTasksPage({
 
   // ── Helpers ──
   const isOverdue = (t: GovernanceTask) => {
-    if (!t.dueDate || t.status === 'COMPLETED' || t.status === 'CANCELLED') return false;
-    return new Date(t.dueDate) < new Date();
-  };
-
-  const formatDate = (d: string | null) => {
-    if (!d) return '--';
-    return new Date(d).toLocaleDateString();
+    if (t.status === 'COMPLETED' || t.status === 'CANCELLED') return false;
+    return (daysUntil(t.dueDate) ?? 99) < 0;
   };
 
   const taskColumns = ([
     taskCols.isVisible('title') && {
-      key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
-      render: (t: GovernanceTask) => (
-        <>
-          <button
-            type="button"
-            onClick={() => navigate(`/governance-work/tasks/${t.id}`)}
-            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
-          >
-            {t.title}
-          </button>
-          {isOverdue(t) && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-error)', fontWeight: 600 }}>OVERDUE</span>}
-        </>
-      ),
+      key: 'title', header: 'Task', sortable: true,
+      render: (t: GovernanceTask) => {
+        // Sub-line: task type, and the item it's attached to when linked.
+        const sub = t.linkedObjectType
+          ? `${prettyLabel(t.taskType)} · on ${prettyLabel(t.linkedObjectType)}`
+          : prettyLabel(t.taskType);
+        return (
+          <div style={{ minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/governance-work/tasks/${t.id}`)}
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 600, textAlign: 'left', display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {t.title}
+            </button>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span>
+          </div>
+        );
+      },
     },
     taskCols.isVisible('type') && {
       key: 'type', header: 'Type', sortable: true,
-      render: (t: GovernanceTask) => <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{t.taskType.replace(/_/g, ' ')}</span>,
+      render: (t: GovernanceTask) => <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{prettyLabel(t.taskType)}</span>,
     },
     taskCols.isVisible('status') && {
       key: 'status', header: 'Status', sortable: true,
-      render: (t: GovernanceTask) => <span style={badge(t.status, STATUS_COLORS[t.status] || { bg: '#f3f4f6', color: '#6b7280' })}>{t.status.replace(/_/g, ' ')}</span>,
+      render: (t: GovernanceTask) => dotPill(STATUS_COLORS[t.status] || STATUS_COLORS.OPEN, prettyLabel(t.status), t.status === 'OPEN'),
     },
     taskCols.isVisible('priority') && {
       key: 'priority', header: 'Priority', sortable: true,
-      render: (t: GovernanceTask) => <span style={badge(t.priority, PRIORITY_COLORS[t.priority] || { bg: '#f3f4f6', color: '#6b7280' })}>{t.priority}</span>,
+      render: (t: GovernanceTask) => dotPill(PRIORITY_COLORS[t.priority] || PRIORITY_COLORS.LOW, prettyLabel(t.priority)),
     },
     taskCols.isVisible('assignee') && {
       key: 'assignee', header: 'Assignee', sortable: true,
-      render: (t: GovernanceTask) => t.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>,
+      render: (t: GovernanceTask) => (
+        t.assigneeName ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <Avatar name={t.assigneeName} size="sm" />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assigneeName}</span>
+          </span>
+        ) : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>
+      ),
     },
     taskCols.isVisible('dueDate') && {
-      key: 'dueDate', header: 'Due Date', sortable: true,
-      render: (t: GovernanceTask) => (
-        <span style={{ color: isOverdue(t) ? 'var(--color-error)' : undefined, fontWeight: isOverdue(t) ? 600 : undefined }}>{formatDate(t.dueDate)}</span>
-      ),
+      key: 'dueDate', header: 'Due', sortable: true,
+      render: (t: GovernanceTask) => {
+        if (!t.dueDate) return <span style={{ color: 'var(--color-text-muted)' }}>No due date</span>;
+        const rel = relativeDue(t.dueDate);
+        const overdue = isOverdue(t);
+        const soon = !overdue && (daysUntil(t.dueDate) ?? 99) <= 7 && t.status !== 'COMPLETED' && t.status !== 'CANCELLED';
+        return (
+          <div style={{ minWidth: 0 }}>
+            <span style={{ display: 'block', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(t.dueDate)}</span>
+            {rel && (
+              <span style={{ display: 'block', fontSize: 11, fontWeight: overdue ? 700 : 500, color: overdue ? 'var(--color-error)' : soon ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>{rel}</span>
+            )}
+          </div>
+        );
+      },
     },
     taskCols.isVisible('mode') && {
       key: 'mode', header: 'Mode', sortable: true,
-      render: (t: GovernanceTask) => <span style={badge(t.automationMode, MODE_COLORS[t.automationMode] || { bg: '#f3f4f6', color: '#6b7280' })}>{t.automationMode}</span>,
+      render: (t: GovernanceTask) => dotPill(MODE_COLORS[t.automationMode] || MODE_COLORS.HUMAN, prettyLabel(t.automationMode)),
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 190,
-      render: (t: GovernanceTask) => (
-        // Keep every action on a single line so rows stay the same height as
-        // other entity lists — the transition buttons + edit/delete icons must
-        // not wrap onto a second row.
-        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'center' }}>
-          {(STATUS_TRANSITIONS[t.status] || []).map((tr) => (
-            <button
-              key={tr.target}
-              onClick={() => handleStatusTransition(t.id, tr.target)}
-              title={`${tr.label} (${tr.target.replace(/_/g, ' ')})`}
-              style={{
-                padding: '2px 8px', fontSize: 10, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
-                border: 'none',
-                background: tr.style === 'primary' ? 'var(--color-primary)' : tr.style === 'danger' ? '#fee2e2' : 'var(--color-bg)',
-                color: tr.style === 'primary' ? '#fff' : tr.style === 'danger' ? '#991b1b' : 'var(--color-text)',
-              }}
-            >
-              {tr.label}
-            </button>
-          ))}
-          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
-        </div>
-      ),
+      key: 'actions', header: '', align: 'center' as const, width: 150,
+      render: (t: GovernanceTask) => {
+        // One primary action (Start / Complete / Reopen) per row; the rest —
+        // Cancel, Delete — live in the ⋯ menu so the row isn't a cluster of
+        // same-size buttons that are easy to mis-click.
+        const trs = STATUS_TRANSITIONS[t.status] || [];
+        const primary = trs.find((x) => x.style === 'primary') || trs[0];
+        const rest = trs.filter((x) => x !== primary);
+        const hasMenu = rest.length > 0 || isAdmin;
+        return (
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+            {primary && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleStatusTransition(t.id, primary.target); }}
+                title={`${primary.label} (${prettyLabel(primary.target)})`}
+                style={{
+                  padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer', font: 'inherit',
+                  border: primary.style === 'primary' ? 'none' : '1px solid var(--color-border)',
+                  background: primary.style === 'primary' ? 'var(--color-primary)' : 'var(--color-surface)',
+                  color: primary.style === 'primary' ? '#fff' : 'var(--color-text)',
+                }}
+              >
+                {primary.label}
+              </button>
+            )}
+            {hasMenu && (
+              <>
+                <button
+                  type="button" aria-label="More actions" aria-haspopup="menu"
+                  onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === t.id ? null : t.id); }}
+                  style={rowMenuBtnStyle}
+                >⋯</button>
+                {rowMenuId === t.id && (
+                  <div role="menu" onClick={(e) => e.stopPropagation()} style={rowMenuStyle}>
+                    {rest.map((tr) => (
+                      <button
+                        key={tr.target} type="button" role="menuitem" style={menuItemStyle}
+                        onClick={() => { setRowMenuId(null); handleStatusTransition(t.id, tr.target); }}
+                      >{tr.label}</button>
+                    ))}
+                    <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); navigate(`/governance-work/tasks/${t.id}`); }}>Open &amp; edit</button>
+                    {isAdmin && <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); setConfirmDelete(t.id); }}>Delete</button>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ].filter(Boolean) as DataTableColumn<GovernanceTask>[]);
 
@@ -521,11 +671,43 @@ export default function GovernanceTasksPage({
           <>
             <ColumnPicker state={taskCols} />
             {isAdmin && (
-              <IconButton icon="plus" label="Add task" variant="primary" onClick={openAdd} />
+              <Button variant="primary" size="sm" onClick={openAdd}>+ Add task</Button>
             )}
           </>
         }
       />
+
+      {/* Needs attention — one tap filters the list to the work that can't wait. */}
+      {tasks.length > 0 && (overdueCount > 0 || dueThisWeekCount > 0 || highPriorityCount > 0) && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+          {[
+            { key: 'overdue', count: overdueCount, label: 'Overdue', colors: { bg: 'var(--color-error)', tint: '#fbe4e4', fg: '#9a1c1c' } },
+            { key: 'dueThisWeek', count: dueThisWeekCount, label: 'Due this week', colors: { bg: 'var(--color-warning)', tint: 'var(--color-warning-light)', fg: '#9a4a0e' } },
+            { key: 'highPriority', count: highPriorityCount, label: 'High priority', colors: { bg: 'var(--color-primary)', tint: 'var(--color-primary-light)', fg: 'var(--color-primary)' } },
+          ].filter((c) => c.count > 0).map((c) => {
+            const active = attention === c.key;
+            return (
+              <button
+                key={c.key} type="button"
+                onClick={() => setAttention(active ? null : c.key)}
+                aria-pressed={active}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', font: 'inherit',
+                  padding: '10px 14px', borderRadius: 'var(--radius-md)', textAlign: 'left',
+                  background: active ? c.colors.tint : 'var(--color-surface)',
+                  border: `1px solid ${active ? c.colors.fg : 'var(--color-border)'}`,
+                }}
+              >
+                <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: c.colors.fg, fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
+                <span style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{active ? 'Filtering · tap to clear' : 'Tap to filter'}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
       {tasks.length > 0 && (
@@ -538,29 +720,46 @@ export default function GovernanceTasksPage({
             style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
           />
           <select aria-label="Filter by status" style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            <option value="">All Statuses</option>
-            {TASK_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            <option value="">All statuses</option>
+            {TASK_STATUSES.map((s) => <option key={s} value={s}>{prettyLabel(s)}</option>)}
           </select>
           <select aria-label="Filter by priority" style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-            <option value="">All Priorities</option>
-            {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            <option value="">All priorities</option>
+            {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{prettyLabel(p)}</option>)}
           </select>
           <select aria-label="Filter by type" style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="">All Types</option>
-            {TASK_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+            <option value="">All types</option>
+            {TASK_TYPES.map((t) => <option key={t} value={t}>{prettyLabel(t)}</option>)}
           </select>
-          <select aria-label="Filter by assignee" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
-            <option value="">All Assignees</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-          </select>
-          {(filterStatus || filterPriority || filterType || filterAssignee || searchQuery) && (
+          {assigneeOptions.length > 0 && (
+            <select aria-label="Filter by assignee" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
+              <option value="">All assignees</option>
+              {assigneeOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+          {/* Compact "mine" toggle in place of selecting yourself in the dropdown. */}
+          <button
+            type="button" aria-pressed={assignedToMe}
+            onClick={() => setAssignedToMe((v) => !v)}
+            disabled={!currentUser}
+            style={{
+              font: 'inherit', fontSize: 12, fontWeight: 600, cursor: currentUser ? 'pointer' : 'not-allowed',
+              padding: '6px 12px', borderRadius: 16,
+              background: assignedToMe ? 'var(--color-primary)' : 'var(--color-surface)',
+              color: assignedToMe ? '#fff' : 'var(--color-text-secondary)',
+              border: `1px solid ${assignedToMe ? 'var(--color-primary)' : 'var(--color-border)'}`,
+            }}
+          >
+            Assigned to me
+          </button>
+          {(filterStatus || filterPriority || filterType || filterAssignee || assignedToMe || attention || searchQuery) && (
             <>
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterType(''); setFilterAssignee(''); setSearchQuery(''); }}
+                onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterType(''); setFilterAssignee(''); setAssignedToMe(false); setAttention(null); setSearchQuery(''); }}
               >
-                Clear Filters
+                Clear filters
               </Button>
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                 Showing {filtered.length} of {tasks.length}
@@ -644,6 +843,13 @@ export default function GovernanceTasksPage({
           />
         )}
       </div>
+
+      {!loading && !loadError && sorted.length > 0 && (
+        <p style={{ margin: '10px 2px 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+          {sorted.length} task{sorted.length === 1 ? '' : 's'} shown
+          {sortKey === 'dueDate' && ' · sorted by due date'}
+        </p>
+      )}
     </div>
   );
 }

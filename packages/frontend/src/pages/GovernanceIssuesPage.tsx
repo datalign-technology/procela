@@ -12,10 +12,11 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import Avatar from '../components/Avatar';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
-import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useAuthStore } from '../stores/authStore';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
 import { renderNavIcon } from '../components/navIcons';
@@ -24,7 +25,6 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
-import FilterBar from '../components/FilterBar';
 import Button from '../components/Button';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -45,6 +45,8 @@ export interface GovernanceIssue {
   status: string;
   domainId: string | null;
   domainName: string | null;
+  dataAssetName: string | null;
+  reporterName: string | null;
   assignedTo: string | null;
   assigneeName: string | null;
   createdAt: string;
@@ -83,6 +85,20 @@ const ISSUE_STATUSES = ['OPEN', 'INVESTIGATING', 'IN_PROGRESS', 'RESOLVED', 'CLO
 const ISSUE_SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 const ISSUE_TYPES = ['METADATA', 'DATA_QUALITY', 'CLASSIFICATION', 'OWNERSHIP', 'POLICY', 'ACCESS', 'LINEAGE', 'COMPLIANCE', 'WORKFLOW'] as const;
 
+// Still-open statuses — the ones that count toward "needs attention".
+const OPEN_ISSUE_STATUSES = new Set(['OPEN', 'INVESTIGATING', 'IN_PROGRESS']);
+
+// One primary action per status drives the issue toward resolution; the rest
+// (and "Won't fix") move into the row ⋯ menu.
+const ISSUE_STATUS_TRANSITIONS: Record<string, { label: string; target: string; style: 'primary' | 'secondary' | 'danger' }[]> = {
+  OPEN:          [{ label: 'Investigate', target: 'INVESTIGATING', style: 'primary' }, { label: 'Start work', target: 'IN_PROGRESS', style: 'secondary' }, { label: "Won't fix", target: 'WONT_FIX', style: 'danger' }],
+  INVESTIGATING: [{ label: 'Start work', target: 'IN_PROGRESS', style: 'primary' }, { label: 'Resolve', target: 'RESOLVED', style: 'secondary' }, { label: "Won't fix", target: 'WONT_FIX', style: 'danger' }],
+  IN_PROGRESS:   [{ label: 'Resolve', target: 'RESOLVED', style: 'primary' }, { label: "Won't fix", target: 'WONT_FIX', style: 'danger' }],
+  RESOLVED:      [{ label: 'Close', target: 'CLOSED', style: 'primary' }, { label: 'Reopen', target: 'OPEN', style: 'secondary' }],
+  CLOSED:        [{ label: 'Reopen', target: 'OPEN', style: 'secondary' }],
+  WONT_FIX:      [{ label: 'Reopen', target: 'OPEN', style: 'secondary' }],
+};
+
 // ── Styles ──
 
 const inputStyle: React.CSSProperties = {
@@ -91,51 +107,67 @@ const inputStyle: React.CSSProperties = {
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 
+const rowMenuBtnStyle: React.CSSProperties = {
+  width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8,
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+};
+const rowMenuStyle: React.CSSProperties = {
+  position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 170,
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))',
+  padding: 6, textAlign: 'left',
+};
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+
 // ── Badge helpers ──
+// Dotted pills (leading status dot). Severity carries the warm cue; status and
+// type stay neutral so colour reads as one signal, not three competing ones.
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  OPEN:          { bg: '#dbeafe', color: '#1e40af' },
-  INVESTIGATING: { bg: '#ede9fe', color: '#5b21b6' },
-  IN_PROGRESS:   { bg: '#fef3c7', color: '#92400e' },
-  RESOLVED:      { bg: '#d1fae5', color: '#065f46' },
-  CLOSED:        { bg: '#f3f4f6', color: '#6b7280' },
-  WONT_FIX:      { bg: '#f3f4f6', color: '#6b7280' },
+  OPEN:          { bg: '#e5ecf3', color: '#364a5e' }, // slate — needs triage
+  INVESTIGATING: { bg: '#ede9fe', color: '#5b21b6' }, // purple
+  IN_PROGRESS:   { bg: '#e6eef9', color: '#24508f' }, // blue
+  RESOLVED:      { bg: '#dcefe5', color: '#17604b' }, // green
+  CLOSED:        { bg: '#eef0f2', color: '#6b7280' }, // grey
+  WONT_FIX:      { bg: '#eef0f2', color: '#6b7280' }, // grey
 };
 
 const SEVERITY_COLORS: Record<string, { bg: string; color: string }> = {
-  LOW:      { bg: '#f3f4f6', color: '#6b7280' },
-  MEDIUM:   { bg: '#dbeafe', color: '#1e40af' },
-  HIGH:     { bg: '#fef3c7', color: '#92400e' },
-  CRITICAL: { bg: '#fee2e2', color: '#991b1b' },
+  LOW:      { bg: '#e5ecf3', color: '#364a5e' }, // slate
+  MEDIUM:   { bg: '#e6eef9', color: '#24508f' }, // blue
+  HIGH:     { bg: '#fbe9d9', color: '#9a4a0e' }, // amber
+  CRITICAL: { bg: '#fbe4e4', color: '#9a1c1c' }, // red
 };
 
-const ISSUE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
-  METADATA:       { bg: '#dbeafe', color: '#1e40af' },
-  DATA_QUALITY:   { bg: '#fef3c7', color: '#92400e' },
-  CLASSIFICATION: { bg: '#ede9fe', color: '#5b21b6' },
-  OWNERSHIP:      { bg: '#fce7f3', color: '#9d174d' },
-  POLICY:         { bg: '#ccfbf1', color: '#115e59' },
-  ACCESS:         { bg: '#fee2e2', color: '#991b1b' },
-  LINEAGE:        { bg: '#e0e7ff', color: '#3730a3' },
-  COMPLIANCE:     { bg: '#fef9c3', color: '#854d0e' },
-  WORKFLOW:       { bg: '#d1fae5', color: '#065f46' },
-};
-
-function badge(_text: string, colors: { bg: string; color: string }): React.CSSProperties {
-  return {
-    display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-    fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color,
-    whiteSpace: 'nowrap',
-  };
+// Sentence-case a SCREAMING_SNAKE code: "IN_PROGRESS" → "In progress".
+function prettyLabel(code: string): string {
+  const s = (code || '').replace(/_/g, ' ').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// A sentence-case pill with a leading status dot. OPEN (untriaged) wears a
+// hollow dot so it doesn't read as an in-flight state.
+function dotPill(colors: { bg: string; color: string }, label: string, hollow = false): React.ReactNode {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: colors.bg, color: colors.color }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: hollow ? 'transparent' : colors.color, boxShadow: hollow ? `inset 0 0 0 1.5px ${colors.color}` : undefined }} />{label}
+    </span>
+  );
+}
+
+// Issue type is deliberately NOT a coloured pill — a pink OWNERSHIP chip read
+// as a severity. It rides the title sub-line as plain muted text instead.
 type IssueColId = 'title' | 'type' | 'severity' | 'status' | 'domain' | 'assignee' | 'created';
 const ISSUE_COLUMN_DEFS: Array<{ id: IssueColId; label: string; defaultVisible: boolean }> = [
-  { id: 'title',    label: 'Title',       defaultVisible: true  },
-  { id: 'type',     label: 'Type',        defaultVisible: true  },
+  { id: 'title',    label: 'Issue',       defaultVisible: true  },
+  { id: 'type',     label: 'Type',        defaultVisible: false },
   { id: 'severity', label: 'Severity',    defaultVisible: true  },
   { id: 'status',   label: 'Status',      defaultVisible: true  },
-  { id: 'domain',   label: 'Domain',      defaultVisible: true  },
+  { id: 'domain',   label: 'Domain',      defaultVisible: false },
   { id: 'assignee', label: 'Assigned To', defaultVisible: true  },
   { id: 'created',  label: 'Created',     defaultVisible: false },
 ];
@@ -144,7 +176,7 @@ const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display
 
 function fmtDate(d: string | null): string {
   if (!d) return '--';
-  return new Date(d).toLocaleDateString();
+  return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // Shared issue field grid — used by both the top-of-page "Add" form (create,
@@ -292,6 +324,7 @@ export default function GovernanceIssuesPage({
   const { activeOrgId } = useOrgContext();
   const { isAdmin } = usePermissions();
   const { addToast } = useToastStore();
+  const currentUser = useAuthStore((s) => s.user);
 
   const issueCols = useColumnPicker<IssueColId>('procela.governanceIssues.visibleCols.v1', ISSUE_COLUMN_DEFS);
   const [issues, setIssues] = useState<GovernanceIssue[]>([]);
@@ -303,6 +336,7 @@ export default function GovernanceIssuesPage({
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   // Row click opens an issue's full detail on its own page (/governance-work/
   // issues/:id), matching the People detail-page family.
 
@@ -310,7 +344,19 @@ export default function GovernanceIssuesPage({
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState('');
+  const [assignedToMe, setAssignedToMe] = useState(false);
+  // One-click "needs attention" lens: 'triage' | 'highSeverity' | 'unassigned'.
+  const [attention, setAttention] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Close the row ⋯ menu on any outside click.
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -331,17 +377,49 @@ export default function GovernanceIssuesPage({
   useEffect(() => { fetchData(); }, [fetchData]);
   useRefreshOnFocus(fetchData);
 
+  // The current user's person record (best-effort name match), so "Assigned to
+  // me" works without a server-side me→person link.
+  const myPersonId = currentUser ? (people.find((p) => p.name === currentUser.name)?.id ?? null) : null;
+  const isMine = (i: GovernanceIssue) =>
+    (myPersonId != null && i.assignedTo === myPersonId) ||
+    (!!currentUser && !!i.assigneeName && i.assigneeName === currentUser.name);
+
+  const isOpenIssue = (i: GovernanceIssue) => OPEN_ISSUE_STATUSES.has(i.status);
+  const isHighSeverity = (i: GovernanceIssue) => i.severity === 'HIGH' || i.severity === 'CRITICAL';
+
+  // ── Needs-attention counts (open issues only) ──
+  const triageCount = issues.filter((i) => i.status === 'OPEN').length;
+  const highSeverityCount = issues.filter((i) => isOpenIssue(i) && isHighSeverity(i)).length;
+  const unassignedCount = issues.filter((i) => isOpenIssue(i) && !i.assignedTo).length;
+
+  const matchesAttention = (i: GovernanceIssue) => {
+    if (!attention) return true;
+    if (attention === 'triage') return i.status === 'OPEN';
+    if (attention === 'highSeverity') return isOpenIssue(i) && isHighSeverity(i);
+    if (attention === 'unassigned') return isOpenIssue(i) && !i.assignedTo;
+    return true;
+  };
+
   // ── Filtering ──
   const filtered = issues.filter((i) => {
     if (filterStatus && i.status !== filterStatus) return false;
     if (filterSeverity && i.severity !== filterSeverity) return false;
     if (filterType && i.issueType !== filterType) return false;
+    if (filterAssignee && i.assignedTo !== filterAssignee) return false;
+    if (assignedToMe && !isMine(i)) return false;
+    if (!matchesAttention(i)) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       if (!i.title.toLowerCase().includes(q) && !(i.description || '').toLowerCase().includes(q)) return false;
     }
     return true;
   });
+
+  // Compact assignee options: only people who actually own an issue, deduped by
+  // id — avoids the full directory (and duplicate-name confusion) in the filter.
+  const assigneeOptions = Array.from(
+    new Map(issues.filter((i) => i.assignedTo).map((i) => [i.assignedTo as string, i.assigneeName || 'Unknown'])).entries(),
+  ).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 
   // ── Sorting ──
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -358,7 +436,7 @@ export default function GovernanceIssuesPage({
       assignee: (a, b) => (a.assigneeName || '').localeCompare(b.assigneeName || ''),
       created:  (a, b) => a.createdAt.localeCompare(b.createdAt),
     },
-    'title',
+    'severity',
   );
 
   const sel = useRowSelection(sorted, (i) => i.id);
@@ -408,6 +486,17 @@ export default function GovernanceIssuesPage({
     }
   };
 
+  const handleStatusTransition = async (issueId: string, newStatus: string) => {
+    try {
+      await apiClient.put(`/governance-issues/${issueId}`, { status: newStatus });
+      addToast('success', `Issue status changed to ${prettyLabel(newStatus)}`);
+      fetchData();
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to update status'));
+    }
+  };
+
   // ── Bulk select ──
   const handleBulkDelete = async () => {
     if (sel.count === 0) return;
@@ -422,37 +511,42 @@ export default function GovernanceIssuesPage({
     }
   };
 
-  // ── Helpers ──
-  const formatDate = (d: string | null) => {
-    if (!d) return '--';
-    return new Date(d).toLocaleDateString();
-  };
-
   const mutedDash = <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>;
   const issueColumns = ([
     issueCols.isVisible('title') && {
-      key: 'title', header: 'Title', sortable: true, cellStyle: { fontWeight: 500 },
-      render: (i: GovernanceIssue) => (
-        <button
-          type="button"
-          onClick={() => navigate(`/governance-work/issues/${i.id}`)}
-          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 500, textAlign: 'left' }}
-        >
-          {i.title}
-        </button>
-      ),
+      key: 'title', header: 'Issue', sortable: true,
+      render: (i: GovernanceIssue) => {
+        // Sub-line: issue type (plain text, no coloured pill), then the thing
+        // it affects (asset / domain) and who raised it, when known.
+        const bits = [prettyLabel(i.issueType)];
+        if (i.dataAssetName) bits.push(i.dataAssetName);
+        else if (i.domainName) bits.push(i.domainName);
+        if (i.reporterName) bits.push(`by ${i.reporterName}`);
+        return (
+          <div style={{ minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/governance-work/issues/${i.id}`)}
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', cursor: 'pointer', font: 'inherit', fontWeight: 600, textAlign: 'left', display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {i.title}
+            </button>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bits.join(' · ')}</span>
+          </div>
+        );
+      },
     },
     issueCols.isVisible('type') && {
       key: 'type', header: 'Type', sortable: true,
-      render: (i: GovernanceIssue) => <span style={badge(i.issueType, ISSUE_TYPE_COLORS[i.issueType] || { bg: '#f3f4f6', color: '#6b7280' })}>{i.issueType.replace(/_/g, ' ')}</span>,
+      render: (i: GovernanceIssue) => <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{prettyLabel(i.issueType)}</span>,
     },
     issueCols.isVisible('severity') && {
       key: 'severity', header: 'Severity', sortable: true,
-      render: (i: GovernanceIssue) => <span style={badge(i.severity, SEVERITY_COLORS[i.severity] || { bg: '#f3f4f6', color: '#6b7280' })}>{i.severity}</span>,
+      render: (i: GovernanceIssue) => dotPill(SEVERITY_COLORS[i.severity] || SEVERITY_COLORS.LOW, prettyLabel(i.severity)),
     },
     issueCols.isVisible('status') && {
       key: 'status', header: 'Status', sortable: true,
-      render: (i: GovernanceIssue) => <span style={badge(i.status, STATUS_COLORS[i.status] || { bg: '#f3f4f6', color: '#6b7280' })}>{i.status.replace(/_/g, ' ')}</span>,
+      render: (i: GovernanceIssue) => dotPill(STATUS_COLORS[i.status] || STATUS_COLORS.OPEN, prettyLabel(i.status), i.status === 'OPEN'),
     },
     issueCols.isVisible('domain') && {
       key: 'domain', header: 'Domain', sortable: true,
@@ -460,19 +554,70 @@ export default function GovernanceIssuesPage({
     },
     issueCols.isVisible('assignee') && {
       key: 'assignee', header: 'Assigned To', sortable: true,
-      render: (i: GovernanceIssue) => i.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>,
+      render: (i: GovernanceIssue) => (
+        i.assigneeName ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <Avatar name={i.assigneeName} size="sm" />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.assigneeName}</span>
+          </span>
+        ) : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>
+      ),
     },
     issueCols.isVisible('created') && {
       key: 'created', header: 'Created', sortable: true,
-      render: (i: GovernanceIssue) => formatDate(i.createdAt),
+      render: (i: GovernanceIssue) => fmtDate(i.createdAt),
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 100,
-      render: (i: GovernanceIssue) => (
-        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(i.id)} />}
-        </div>
-      ),
+      key: 'actions', header: '', align: 'center' as const, width: 160,
+      render: (i: GovernanceIssue) => {
+        // One primary action (Investigate / Resolve / Close / Reopen) per row;
+        // the rest — Won't fix, Delete — live in the ⋯ menu.
+        const trs = ISSUE_STATUS_TRANSITIONS[i.status] || [];
+        const primary = trs.find((x) => x.style === 'primary') || trs[0];
+        const rest = trs.filter((x) => x !== primary);
+        const hasMenu = rest.length > 0 || isAdmin;
+        return (
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+            {primary && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleStatusTransition(i.id, primary.target); }}
+                title={`${primary.label} (${prettyLabel(primary.target)})`}
+                style={{
+                  padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer', font: 'inherit',
+                  border: primary.style === 'primary' ? 'none' : '1px solid var(--color-border)',
+                  background: primary.style === 'primary' ? 'var(--color-primary)' : 'var(--color-surface)',
+                  color: primary.style === 'primary' ? '#fff' : 'var(--color-text)',
+                }}
+              >
+                {primary.label}
+              </button>
+            )}
+            {hasMenu && (
+              <>
+                <button
+                  type="button" aria-label="More actions" aria-haspopup="menu"
+                  onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === i.id ? null : i.id); }}
+                  style={rowMenuBtnStyle}
+                >⋯</button>
+                {rowMenuId === i.id && (
+                  <div role="menu" onClick={(e) => e.stopPropagation()} style={rowMenuStyle}>
+                    {rest.map((tr) => (
+                      <button
+                        key={tr.target} type="button" role="menuitem"
+                        style={tr.style === 'danger' ? { ...menuItemStyle, color: 'var(--color-error)' } : menuItemStyle}
+                        onClick={() => { setRowMenuId(null); handleStatusTransition(i.id, tr.target); }}
+                      >{tr.label}</button>
+                    ))}
+                    <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); navigate(`/governance-work/issues/${i.id}`); }}>Open &amp; edit</button>
+                    {isAdmin && <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); setConfirmDelete(i.id); }}>Delete</button>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ].filter(Boolean) as DataTableColumn<GovernanceIssue>[]);
 
@@ -488,31 +633,101 @@ export default function GovernanceIssuesPage({
           <>
             <ColumnPicker state={issueCols} />
             {isAdmin && (
-              <IconButton icon="plus" label="Add issue" variant="primary" onClick={openAdd} />
+              <Button variant="primary" size="sm" onClick={openAdd}>+ Report issue</Button>
             )}
           </>
         }
       />
 
+      {/* Needs attention — one tap filters to the issues that can't wait. */}
+      {issues.length > 0 && (triageCount > 0 || highSeverityCount > 0 || unassignedCount > 0) && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+          {[
+            { key: 'highSeverity', count: highSeverityCount, label: 'High severity', fg: '#9a1c1c', tint: '#fbe4e4' },
+            { key: 'triage', count: triageCount, label: 'Awaiting triage', fg: '#9a4a0e', tint: 'var(--color-warning-light)' },
+            { key: 'unassigned', count: unassignedCount, label: 'Unassigned', fg: 'var(--color-primary)', tint: 'var(--color-primary-light)' },
+          ].filter((c) => c.count > 0).map((c) => {
+            const active = attention === c.key;
+            return (
+              <button
+                key={c.key} type="button"
+                onClick={() => setAttention(active ? null : c.key)}
+                aria-pressed={active}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', font: 'inherit',
+                  padding: '10px 14px', borderRadius: 'var(--radius-md)', textAlign: 'left',
+                  background: active ? c.tint : 'var(--color-surface)',
+                  border: `1px solid ${active ? c.fg : 'var(--color-border)'}`,
+                }}
+              >
+                <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: c.fg, fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
+                <span style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{active ? 'Filtering · tap to clear' : 'Tap to filter'}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Filters (left-aligned, mirrors the Tasks tab) */}
       {issues.length > 0 && (
-        <FilterBar
-          search={{ value: searchQuery, onChange: setSearchQuery, placeholder: 'Search issues…', width: 200 }}
-          filters={[
-            { id: 'status',   label: 'All Statuses',   value: filterStatus,   onChange: setFilterStatus,   width: 140, options: ISSUE_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') })) },
-            { id: 'severity', label: 'All Severities', value: filterSeverity, onChange: setFilterSeverity, width: 140, options: ISSUE_SEVERITIES.map((s) => ({ value: s, label: s })) },
-            { id: 'type',     label: 'All Types',      value: filterType,     onChange: setFilterType,     width: 160, options: ISSUE_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ') })) },
-          ]}
-          leftActions={(filterStatus || filterSeverity || filterType || searchQuery) ? (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="text"
+            aria-label="Search issues" placeholder="Search issues..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+          />
+          <select aria-label="Filter by status" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <option value="">All statuses</option>
+            {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{prettyLabel(s)}</option>)}
+          </select>
+          <select aria-label="Filter by severity" style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
+            <option value="">All severities</option>
+            {ISSUE_SEVERITIES.map((s) => <option key={s} value={s}>{prettyLabel(s)}</option>)}
+          </select>
+          <select aria-label="Filter by type" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <option value="">All types</option>
+            {ISSUE_TYPES.map((t) => <option key={t} value={t}>{prettyLabel(t)}</option>)}
+          </select>
+          {assigneeOptions.length > 0 && (
+            <select aria-label="Filter by assignee" style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
+              <option value="">All assignees</option>
+              {assigneeOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+          <button
+            type="button" aria-pressed={assignedToMe}
+            onClick={() => setAssignedToMe((v) => !v)}
+            disabled={!currentUser}
+            style={{
+              font: 'inherit', fontSize: 12, fontWeight: 600, cursor: currentUser ? 'pointer' : 'not-allowed',
+              padding: '6px 12px', borderRadius: 16,
+              background: assignedToMe ? 'var(--color-primary)' : 'var(--color-surface)',
+              color: assignedToMe ? '#fff' : 'var(--color-text-secondary)',
+              border: `1px solid ${assignedToMe ? 'var(--color-primary)' : 'var(--color-border)'}`,
+            }}
+          >
+            Assigned to me
+          </button>
+          {(filterStatus || filterSeverity || filterType || filterAssignee || assignedToMe || attention || searchQuery) && (
             <>
-              <Button size="sm" onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterType(''); setSearchQuery(''); }}>
-                Clear Filters
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterType(''); setFilterAssignee(''); setAssignedToMe(false); setAttention(null); setSearchQuery(''); }}
+              >
+                Clear filters
               </Button>
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                 Showing {filtered.length} of {issues.length}
               </span>
             </>
-          ) : null}
-        />
+          )}
+        </div>
       )}
 
       <BulkActionBar count={sel.count} onClear={sel.clear}>
@@ -585,6 +800,13 @@ export default function GovernanceIssuesPage({
           />
         )}
       </div>
+
+      {!loading && !loadError && sorted.length > 0 && (
+        <p style={{ margin: '10px 2px 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+          {sorted.length} issue{sorted.length === 1 ? '' : 's'} shown
+          {sortKey === 'severity' && ' · sorted by severity'}
+        </p>
+      )}
     </div>
   );
 }
