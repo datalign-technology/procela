@@ -168,7 +168,7 @@ function fmtMoney(n: number, currency: string): string {
 const MEASURE_DEST: Record<'coverage' | 'classification' | 'openIssues' | 'exceptions', string> = {
   coverage: 'Data Domains',
   classification: 'Data Assets',
-  openIssues: 'Tasks & Issues',
+  openIssues: 'Governance Work',
   exceptions: 'Governance Exceptions',
 };
 

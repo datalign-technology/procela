@@ -25,7 +25,7 @@ The sidebar leads with the platform's "who" and "what does work" before fanning 
 - Processes — the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings is the Table view of Insights → Process ↔ Data Map.)
 - Data — Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.
 - Systems — Systems and Connections (databases, APIs, files).
-- Governance — grouped into Set up (Foundation, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and Operate (Documentation with Manual + Procedures tabs, Calendar, Tasks & Issues, Exceptions). The sub-labels are visual dividers in the expanded section — every item still navigates directly. (There is no separate Program page; the program's scope, principles, and operating model live on Foundation.)
+- Governance — grouped into Set up (Foundation, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and Operate (Documentation with Manual + Procedures tabs, Calendar, Governance Work, Exceptions). The sub-labels are visual dividers in the expanded section — every item still navigates directly. (There is no separate Program page; the program's scope, principles, and operating model live on Foundation.)
 - Insights — grouped into Explore (Enterprise View, Analysis, Process ↔ Data Map) and Review (Reports, Council, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance — promoted out of Governance so they're easier to find. (The former Council Dashboard and Council Scorecard are now a single **Council** page; the old `/council-dashboard` and `/council-scorecard` links redirect there.)
 
 Settings sits at the bottom of the sidebar. Help lives only in the top bar (next to Ask AI) — it opens the guide in a separate popup window so you keep whatever page you're on. The Training Guide follows the same pattern, and a **Status &amp; roadmap ↗** button on the Help guide's header opens the live status &amp; roadmap doc — rendered from `docs/STATUS.md`, the single source of truth — in its own window. The `/help` and `/roadmap` URLs still work if you have deep links saved (e.g. `/help#connectors`).
@@ -344,7 +344,7 @@ Skills drive four cross-page workflows:
 - Recurring events (Council meetings, Committee syncs, stewardship huddles) with cadence options weekly through annual.
 - Auto-generates governance tasks per attendee when an event occurs.
 
-### Tasks & Issues
+### Governance Work (Tasks & Issues)
 
 - Tasks — workflow states (Draft → Open → In Progress → Pending Review → Completed), priority, assignee, due dates.
 - Issues — 9 types (Metadata, Data Quality, Classification, Ownership, Policy, Access, Lineage, Compliance, Workflow), severity levels.
