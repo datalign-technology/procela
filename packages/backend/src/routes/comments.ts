@@ -132,6 +132,8 @@ function entityLinkFor(entityType: string, entityId: string): string {
     case 'dataasset':    return `/data-assets?detail=${entityId}`;
     case 'person':       return `/people/${entityId}`;
     case 'processnode':  return `/processes?node=${entityId}`;
+    case 'governancetask':  return `/governance-work/tasks/${entityId}`;
+    case 'governanceissue': return `/governance-work/issues/${entityId}`;
     default:             return '/';
   }
 }
