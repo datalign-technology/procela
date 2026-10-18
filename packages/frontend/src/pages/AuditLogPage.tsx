@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import { useOrgContext } from '../stores/orgContext';
 import PageHeader from '../components/PageHeader';
+import Button from '../components/Button';
+import Avatar from '../components/Avatar';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
@@ -15,9 +17,9 @@ import Pager from '../components/Pager';
 //
 // The Dashboard's Recent Activity widget shows the most recent ~5 entries;
 // per-entity detail pages show what happened to that record; this page is
-// the catch-all "who did what" view across the whole org with filters and
-// CSV export, so questions like "who deleted my value stream last week"
-// have an answer that doesn't require digging through individual records.
+// the catch-all "who did what" view across the whole org with filters, a
+// one-click integrity check, and CSV export — so questions like "who deleted
+// my value stream last week" have an answer without digging through records.
 // ──────────────────────────────────────────────────────────────────────────
 
 interface AuditEntry {
@@ -30,8 +32,8 @@ interface AuditEntry {
   timestamp: string;
   entityName: string | null;
   userName: string | null;
-  // Optional payload — some emitters include a `before` / `after` blob, but
-  // the route enrichment doesn't strip them, so make them visible if present.
+  // Optional payload — some emitters include a `before` / `after` blob, used
+  // to summarize what actually changed on an update.
   before?: unknown;
   after?: unknown;
 }
@@ -40,6 +42,13 @@ interface Person { id: string; name: string }
 
 const PAGE_LIMIT = 500;
 
+const WHEN_OPTIONS: Array<{ value: string; label: string; ms: number | null }> = [
+  { value: 'all', label: 'Any time', ms: null },
+  { value: '24h', label: 'Last 24 hours', ms: 86400000 },
+  { value: '7d', label: 'Last 7 days', ms: 7 * 86400000 },
+  { value: '30d', label: 'Last 30 days', ms: 30 * 86400000 },
+];
+
 export default function AuditLogPage() {
   const { activeOrgId } = useOrgContext();
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
@@ -47,7 +56,31 @@ export default function AuditLogPage() {
   const [entityFilter, setEntityFilter] = useState<string>('');
   const [userFilter, setUserFilter] = useState<string>('');
   const [actionFilter, setActionFilter] = useState<string>('');
+  const [whenFilter, setWhenFilter] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
+
+  // Integrity check — lifted here so its outcome can render as a result strip
+  // under the header, explaining what a pass/fail actually proves.
+  const [integrity, setIntegrity] = useState<{ state: 'idle' | 'checking' | 'ok' | 'broken'; brokenAt?: number; total?: number; reason?: string }>({ state: 'idle' });
+  const runIntegrity = async () => {
+    setIntegrity({ state: 'checking' });
+    try {
+      const res = await apiClient.get<{ data: { valid: boolean; brokenAt: number; total: number; reason?: string } }>('/audit/verify');
+      setIntegrity({ state: res.data.valid ? 'ok' : 'broken', brokenAt: res.data.brokenAt, total: res.data.total, reason: res.data.reason });
+    } catch {
+      setIntegrity({ state: 'broken', brokenAt: -1, total: 0, reason: 'The verifier endpoint could not be reached.' });
+    }
+  };
+
+  // Export menu (one control, two scopes).
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!exportOpen) return;
+    const close = (e: MouseEvent) => { if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [exportOpen]);
 
   useEffect(() => {
     if (!activeOrgId) { setEntries([]); return; }
@@ -68,9 +101,7 @@ export default function AuditLogPage() {
       .catch(() => setPeople([]));
   }, [activeOrgId]);
 
-  // Distinct entity types + actions in the current result set, sorted —
-  // so the dropdown options reflect what's actually present rather than
-  // a hardcoded list that might drift from the backend.
+  // Distinct record types + actions present in the current result set.
   const entityTypes = useMemo(
     () => Array.from(new Set((entries || []).map((e) => e.entityType))).sort(),
     [entries],
@@ -80,25 +111,27 @@ export default function AuditLogPage() {
     [entries],
   );
 
+  const whenMs = WHEN_OPTIONS.find((o) => o.value === whenFilter)?.ms ?? null;
   const filtered = useMemo(() => {
     if (!entries) return [];
     const q = search.trim().toLowerCase();
+    const cutoff = whenMs == null ? null : Date.now() - whenMs;
     return entries.filter((e) => {
       if (actionFilter && e.action !== actionFilter) return false;
+      if (cutoff != null && new Date(e.timestamp).getTime() < cutoff) return false;
       if (q) {
         const hay = `${e.entityName || ''} ${e.userName || ''} ${e.action} ${e.entityType}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [entries, actionFilter, search]);
+  }, [entries, actionFilter, whenMs, search]);
 
-  // Page the loaded entries so a long history stays a fixed height. Export
-  // actions (below) still cover the whole filtered / server-side set.
   const auditPage = usePagination(filtered, 20);
 
   const exportCsv = () => {
-    const header = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity', 'Entity ID'];
+    setExportOpen(false);
+    const header = ['Timestamp', 'User', 'Action', 'Record type', 'Record', 'Record ID'];
     const rows = filtered.map((e) => [
       e.timestamp, e.userName || '', e.action, e.entityType,
       e.entityName || '', e.entityId,
@@ -115,12 +148,11 @@ export default function AuditLogPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Full server-side export. The in-page export above only covers what
-  // was loaded (capped at PAGE_LIMIT and post-filter); this one hits
-  // the backend endpoint that bypasses the page limit and includes
-  // the entryHash column so a compliance reviewer can verify chain
-  // integrity offline.
+  // Full server-side export — bypasses the page limit and includes the
+  // entryHash column so a compliance reviewer can verify chain integrity
+  // offline.
   const exportFullCsv = async () => {
+    setExportOpen(false);
     if (!activeOrgId) return;
     const params = new URLSearchParams({ orgId: activeOrgId });
     if (userFilter)   params.set('userId', userFilter);
@@ -153,6 +185,8 @@ export default function AuditLogPage() {
     );
   }
 
+  const integrityVerb = integrity.state === 'ok' ? 'Verified' : integrity.state === 'broken' ? 'Integrity check failed' : 'Verify integrity';
+
   return (
     <div>
       <PageHeader
@@ -160,39 +194,50 @@ export default function AuditLogPage() {
         subtitle="Every create, update and delete recorded across the org — the answer to 'who changed this and when'."
         actions={(
           <div style={{ display: 'flex', gap: 8 }}>
-            <IntegrityCheckButton />
-            <button
-              onClick={exportCsv}
-              disabled={filtered.length === 0}
-              title="Export the currently-loaded, filtered view (capped at the page limit)."
-              style={{
-                padding: '6px 14px', fontSize: 12, fontWeight: 500,
-                background: 'var(--color-surface)', color: 'var(--color-text)',
-                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-                cursor: filtered.length === 0 ? 'not-allowed' : 'pointer',
-                opacity: filtered.length === 0 ? 0.5 : 1,
-              }}
-            >
-              Export view (CSV)
-            </button>
-            <button
-              onClick={exportFullCsv}
-              disabled={!activeOrgId}
-              title="Download the full audit log for this org from the server — bypasses the page limit, includes the entryHash for chain-integrity verification. Use for compliance reviews."
-              style={{
-                padding: '6px 14px', fontSize: 12, fontWeight: 500,
-                background: 'var(--color-surface)', color: 'var(--color-text)',
-                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-                cursor: !activeOrgId ? 'not-allowed' : 'pointer',
-                opacity: !activeOrgId ? 0.5 : 1,
-              }}
-            >
-              Full log (CSV)
-            </button>
+            <Button variant="primary" onClick={runIntegrity} disabled={integrity.state === 'checking'}>
+              {integrity.state === 'checking' ? 'Verifying…' : 'Verify integrity'}
+            </Button>
+            <div ref={exportRef} style={{ position: 'relative' }}>
+              <Button variant="secondary" onClick={() => setExportOpen((v) => !v)} aria-haspopup="menu" aria-expanded={exportOpen} disabled={filtered.length === 0}>
+                Export ▾
+              </Button>
+              {exportOpen && (
+                <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 30, minWidth: 260, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6 }}>
+                  <button type="button" role="menuitem" onClick={exportCsv} style={exportItem}>
+                    <div style={{ fontWeight: 600 }}>This view (CSV)</div>
+                    <div style={exportItemSub}>The {filtered.length.toLocaleString()} filtered {filtered.length === 1 ? 'entry' : 'entries'} shown here.</div>
+                  </button>
+                  <button type="button" role="menuitem" onClick={exportFullCsv} style={exportItem}>
+                    <div style={{ fontWeight: 600 }}>Full log · with checksums (CSV)</div>
+                    <div style={exportItemSub}>The complete log from the server, including each entry's hash for offline integrity checks.</div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
-      >
-      </PageHeader>
+      />
+
+      {/* Integrity result strip — explains what the check proves. */}
+      {integrity.state !== 'idle' && integrity.state !== 'checking' && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 14px',
+          borderRadius: 'var(--radius-md)', fontSize: 13,
+          background: integrity.state === 'ok' ? '#d1fae5' : '#fee2e2',
+          color: integrity.state === 'ok' ? '#065f46' : '#991b1b',
+          border: `1px solid ${integrity.state === 'ok' ? '#6ee7b7' : '#fca5a5'}`,
+        }}>
+          <span style={{ fontSize: 16 }}>{integrity.state === 'ok' ? '🔒' : '⚠️'}</span>
+          <span>
+            <strong>{integrityVerb}.</strong>{' '}
+            {integrity.state === 'ok'
+              ? `All ${integrity.total?.toLocaleString() ?? ''} entries form an unbroken hash chain — nothing has been inserted, deleted, reordered or altered since they were written.`
+              : integrity.brokenAt != null && integrity.brokenAt >= 0
+                ? `The hash chain breaks at entry #${integrity.brokenAt + 1} — the log may have been tampered with. ${integrity.reason || ''}`
+                : (integrity.reason || 'The audit log could not be verified.')}
+          </span>
+        </div>
+      )}
 
       {/* Filter row */}
       <div style={{
@@ -205,33 +250,36 @@ export default function AuditLogPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search audit log" placeholder="Search entity, user, action…"
+          aria-label="Search audit log" placeholder="Search record, person, action…"
           style={{
-            flex: '1 1 240px', minWidth: 200,
+            flex: '1 1 220px', minWidth: 180,
             padding: '6px 12px', fontSize: 13,
             border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
           }}
         />
-        <FilterSelect label="Entity" value={entityFilter} onChange={setEntityFilter}
-          options={entityTypes} placeholder="All entity types" />
+        <FilterSelect label="When" value={whenFilter} onChange={setWhenFilter}
+          options={WHEN_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} />
+        <FilterSelect label="Record type" value={entityFilter} onChange={setEntityFilter}
+          options={entityTypes.map((t) => ({ value: t, label: prettyEntity(t) }))} placeholder="All record types" />
         <FilterSelect label="Action" value={actionFilter} onChange={setActionFilter}
-          options={actions} placeholder="All actions" />
-        <FilterSelect label="User" value={userFilter} onChange={setUserFilter}
-          options={people.map((p) => ({ value: p.id, label: p.name }))} placeholder="All users" />
+          options={actions.map((a) => ({ value: a, label: prettyLabel(a) }))} placeholder="All actions" />
+        <FilterSelect label="Person" value={userFilter} onChange={setUserFilter}
+          options={people.map((p) => ({ value: p.id, label: p.name }))} placeholder="All people" />
         <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-muted)' }}>
           {entries === null ? 'Loading…' : `${filtered.length} of ${entries.length} ${entries.length >= PAGE_LIMIT ? `(latest ${PAGE_LIMIT})` : ''}`}
         </div>
       </div>
 
       {entries === null ? (
-        <SkeletonRows rows={8} columnWidths={[140, 140, 100, null]} />
+        <SkeletonRows rows={8} columnWidths={[140, 160, 110, null, null]} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={renderNavIcon('/audit-log', { size: 36 })}
           title={entries.length === 0 ? 'No activity recorded yet' : 'No entries match these filters'}
           description={entries.length === 0
-            ? 'As soon as someone creates, edits or deletes anything in this organization, it will show up here.'
+            ? 'The audit log records who created, edited or deleted anything in this organization, as a tamper-evident hash chain. It’s empty because nothing has been changed here yet — try editing a data asset, then come back.'
             : 'Loosen the filters above to see more entries.'}
+          action={entries.length === 0 ? { label: 'Go to Data Assets', onClick: () => { window.location.href = '/data-assets'; } } : undefined}
         />
       ) : (
         <div style={{
@@ -246,31 +294,41 @@ export default function AuditLogPage() {
                 <th style={th}>Who</th>
                 <th style={th}>Did</th>
                 <th style={th}>To</th>
+                <th style={th}>What changed</th>
               </tr>
             </thead>
             <tbody>
-              {auditPage.pageItems.map((e) => (
-                <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                  <td style={td}>
-                    <div>{relativeTime(e.timestamp)}</div>
-                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{absoluteTime(e.timestamp)}</div>
-                  </td>
-                  <td style={td}>{e.userName || <span style={{ color: 'var(--color-text-muted)' }}>system</span>}</td>
-                  <td style={td}>
-                    <span style={{
-                      display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-                      background: actionColor(e.action).bg, color: actionColor(e.action).fg,
-                      fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3,
-                    }}>{e.action}</span>
-                  </td>
-                  <td style={td}>
-                    <div>
-                      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginRight: 6 }}>{e.entityType}</span>
-                      {e.entityName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {auditPage.pageItems.map((e) => {
+                const ac = actionColor(e.action);
+                return (
+                  <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                    <td style={td}>
+                      <div>{relativeTime(e.timestamp)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{absoluteTime(e.timestamp)}</div>
+                    </td>
+                    <td style={td}>
+                      {e.userName
+                        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Avatar name={e.userName} size="sm" /><span>{e.userName}</span></span>
+                        : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--color-text-muted)' }}><Avatar name="System" size="sm" /><span>System</span></span>}
+                    </td>
+                    <td style={td}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 10px', borderRadius: 999,
+                        background: ac.bg, color: ac.fg, fontSize: 12, fontWeight: 600,
+                      }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 3, background: ac.fg }} />{prettyLabel(e.action)}
+                      </span>
+                    </td>
+                    <td style={td}>
+                      <div>
+                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginRight: 6 }}>{prettyEntity(e.entityType)}</span>
+                        {e.entityName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}
+                      </div>
+                    </td>
+                    <td style={{ ...td, color: 'var(--color-text-secondary)' }}>{whatChanged(e)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           </div>
@@ -278,8 +336,8 @@ export default function AuditLogPage() {
         </div>
       )}
 
-      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 12 }}>
-        Need per-record history instead? Open the record (a process node, data asset, system) and use its inline timeline. <Link to="/help">Help guide</Link>
+      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 12, lineHeight: 1.5 }}>
+        Looking for the history of one record? Open it — a process node, data asset, system or person — and read its <strong style={{ color: 'var(--color-text)' }}>Activity</strong> tab, which shows just that record's timeline. This page is the org-wide view. <Link to="/help" style={{ color: 'var(--color-primary)' }}>Help guide</Link>
       </p>
     </div>
   );
@@ -290,7 +348,7 @@ function FilterSelect({ label, value, onChange, options, placeholder }: {
   value: string;
   onChange: (v: string) => void;
   options: Array<string | { value: string; label: string }>;
-  placeholder: string;
+  placeholder?: string;
 }) {
   return (
     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-muted)' }}>
@@ -304,7 +362,7 @@ function FilterSelect({ label, value, onChange, options, placeholder }: {
           background: 'var(--color-surface)', color: 'var(--color-text)',
         }}
       >
-        <option value="">{placeholder}</option>
+        {placeholder && <option value="">{placeholder}</option>}
         {options.map((o) => {
           const v = typeof o === 'string' ? o : o.value;
           const l = typeof o === 'string' ? o : o.label;
@@ -317,13 +375,55 @@ function FilterSelect({ label, value, onChange, options, placeholder }: {
 
 const th: React.CSSProperties = { padding: '8px 12px', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 };
 const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'top' };
+const exportItem: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
+  background: 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', font: 'inherit', fontSize: 13, color: 'var(--color-text)',
+};
+const exportItemSub: React.CSSProperties = { fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, lineHeight: 1.4 };
 
 function actionColor(action: string): { bg: string; fg: string } {
   const a = action.toLowerCase();
-  if (a.includes('delete')) return { bg: '#fef2f2', fg: '#b91c1c' };
-  if (a.includes('create')) return { bg: '#ecfdf5', fg: '#047857' };
-  if (a.includes('update') || a.includes('edit')) return { bg: '#eff6ff', fg: '#1d4ed8' };
+  if (a.includes('delete')) return { bg: '#fbe4e4', fg: '#9a1c1c' };
+  if (a.includes('create')) return { bg: '#dcefe5', fg: '#17604b' };
+  if (a.includes('update') || a.includes('edit')) return { bg: '#e6eef9', fg: '#24508f' };
   return { bg: 'var(--color-bg)', fg: 'var(--color-text-secondary)' };
+}
+
+// Sentence-case a SCREAMING_SNAKE action: "AUTO_CREATED" → "Auto created".
+function prettyLabel(code: string): string {
+  const s = (code || '').replace(/_/g, ' ').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// "GovernanceTask" / "data_asset" → "Governance task" / "Data asset".
+function prettyEntity(code: string): string {
+  const s = (code || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function prettyField(key: string): string {
+  const s = (key || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// One-line "what changed": the created/deleted verb, or — for an update with a
+// before/after blob — the fields that actually differ.
+function whatChanged(e: AuditEntry): string {
+  const a = e.action.toLowerCase();
+  if (a.includes('create')) return 'Created the record';
+  if (a.includes('delete')) return 'Removed the record';
+  if ((a.includes('update') || a.includes('edit')) && e.before && e.after && typeof e.before === 'object' && typeof e.after === 'object') {
+    const b = e.before as Record<string, unknown>;
+    const af = e.after as Record<string, unknown>;
+    const ignore = new Set(['updatedAt', 'updatedBy', 'createdAt', 'createdBy']);
+    const keys = Array.from(new Set([...Object.keys(b), ...Object.keys(af)]));
+    const changed = keys.filter((k) => !ignore.has(k) && JSON.stringify(b[k]) !== JSON.stringify(af[k]));
+    if (changed.length > 0) {
+      return `Changed ${changed.slice(0, 3).map(prettyField).join(', ')}${changed.length > 3 ? `, +${changed.length - 3} more` : ''}`;
+    }
+    return 'Updated';
+  }
+  return prettyLabel(e.action);
 }
 
 function relativeTime(iso: string): string {
@@ -337,56 +437,4 @@ function relativeTime(iso: string): string {
 
 function absoluteTime(iso: string): string {
   return new Date(iso).toLocaleString();
-}
-
-// IntegrityCheckButton — runs the hash-chain verifier on demand and
-// shows the result inline. Green = the log hasn't been touched since
-// the entries were written. Red = something was inserted, deleted,
-// reordered, or modified. Surface the broken index so an admin can
-// open the row in the table and investigate.
-function IntegrityCheckButton() {
-  const [state, setState] = useState<'idle' | 'checking' | 'ok' | 'broken'>('idle');
-  const [info, setInfo] = useState<{ brokenAt: number; total: number; reason?: string } | null>(null);
-
-  const run = async () => {
-    setState('checking');
-    setInfo(null);
-    try {
-      const res = await apiClient.get<{ data: { valid: boolean; brokenAt: number; total: number; reason?: string } }>(
-        '/audit/verify');
-      setInfo({ brokenAt: res.data.brokenAt, total: res.data.total, reason: res.data.reason });
-      setState(res.data.valid ? 'ok' : 'broken');
-    } catch {
-      setState('broken');
-      setInfo({ brokenAt: -1, total: 0, reason: 'verifier endpoint failed' });
-    }
-  };
-
-  let label = 'Verify integrity';
-  let bg = 'var(--color-surface)';
-  let color = 'var(--color-text)';
-  let title = 'Walk the hash chain and confirm no entries have been altered.';
-  if (state === 'checking') { label = 'Verifying…'; }
-  else if (state === 'ok' && info) { label = `Verified · ${info.total} entries`; bg = '#d1fae5'; color = '#065f46'; title = 'Hash chain intact across the entire audit log.'; }
-  else if (state === 'broken' && info) {
-    label = info.brokenAt >= 0 ? `Broken at #${info.brokenAt + 1}` : 'Verify failed';
-    bg = '#fee2e2'; color = '#991b1b';
-    title = info.reason || 'The audit log appears to have been tampered with.';
-  }
-
-  return (
-    <button
-      onClick={run}
-      disabled={state === 'checking'}
-      title={title}
-      style={{
-        padding: '6px 14px', fontSize: 12, fontWeight: 500,
-        background: bg, color, border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        cursor: state === 'checking' ? 'default' : 'pointer',
-      }}
-    >
-      {label}
-    </button>
-  );
 }
