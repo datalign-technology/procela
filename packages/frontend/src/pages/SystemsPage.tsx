@@ -1085,7 +1085,10 @@ export default function SystemsPage({
               <SectionLabel>Needs attention</SectionLabel>
               <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Click a card to filter the table</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+            {/* auto-fill (not auto-fit) so a short card set stays tile-sized and
+                left-aligned instead of ballooning to full width — matches the
+                Data Assets needs-attention tiles. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
               {([
                 { key: 'notConnected' as const, count: notConnectedCount, label: 'Not connected', hint: 'Procela cannot read data or measure health', tag: 'Fix first' },
                 { key: 'noCriticality' as const, count: noCriticalityCount, label: 'Criticality not set', hint: 'Impact of an outage is unknown', tag: '' },

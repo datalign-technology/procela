@@ -764,7 +764,10 @@ export default function BusinessGlossaryPage() {
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
                 <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the table</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+              {/* auto-fill (not auto-fit) so a short card set stays tile-sized
+                  and left-aligned instead of ballooning to full width — matches
+                  the Data Assets needs-attention tiles. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
                 {([
                   { key: 'proposed' as const, count: proposedCount, label: 'Waiting for approval', hint: 'Proposed terms to review', priority: true },
                   { key: 'noOwner' as const, count: noOwnerCount, label: 'No owner assigned', hint: 'Nobody accountable for the definition' },

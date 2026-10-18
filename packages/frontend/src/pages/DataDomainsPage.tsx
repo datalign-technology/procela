@@ -1407,7 +1407,10 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Every domain should have an owner, stewards, and assets</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+          {/* auto-fill (not auto-fit) so a short card set stays tile-sized and
+              left-aligned instead of ballooning to full width — matches the
+              Data Assets needs-attention tiles. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
             {(() => {
               const cards = [
                 { key: 'emptySub', count: emptySubCount, label: 'Sub-domains with no assets', hint: 'Assets sit on the parent instead', priority: true, kind: 'filter' as const },
