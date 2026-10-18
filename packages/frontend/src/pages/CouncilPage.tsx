@@ -249,15 +249,16 @@ export default function CouncilPage() {
   // Saved-versions dropdown in the header (next to Save snapshot).
   const [versionsOpen, setVersionsOpen] = useState(false);
   // Collapsible sections — each section can be folded away to keep the page to
-  // one screen; the choice is remembered per viewer. "What moved this month"
-  // (the retrospective) starts collapsed; everything else starts open.
+  // one screen; the choice is remembered per viewer. Every section starts open,
+  // including "What moved this month" (the auto-written retrospective) — it was
+  // collapsed by default before, which hid the one part nobody writes by hand.
   const COLLAPSE_KEY = 'procela:council-collapsed';
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     try {
       const raw = localStorage.getItem(COLLAPSE_KEY);
       if (raw) return JSON.parse(raw);
     } catch { /* ignore */ }
-    return { whatMoved: true };
+    return {};
   });
   useEffect(() => {
     try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); } catch { /* ignore */ }
@@ -461,19 +462,24 @@ export default function CouncilPage() {
         </div>
       );
     }
-    const display = val == null ? '—' : `${val}${m.kind === 'pct' ? '%' : ''}`;
+    // A division with no context domains has nothing to measure a percentage
+    // against, so show "No data" (—) rather than a misleading 0%. Counts (open
+    // issues, exceptions) stay as real zeros.
+    const noContext = !isEnt && m.kind === 'pct' && row.domainsTotal === 0;
+    const effVal = noContext ? null : val;
+    const display = effVal == null ? (noContext ? 'No data' : '—') : `${effVal}${m.kind === 'pct' ? '%' : ''}`;
     return (
       <ActionLink
         to={m.href}
         title={`Open ${m.label} — ${MEASURE_DEST[m.key]}`}
         style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, fontVariantNumeric: 'tabular-nums', fontWeight: isEnt ? 600 : 500 }}
       >
-        <span style={{ color: overridden ? 'var(--color-primary)' : 'var(--color-text)' }}>
+        <span style={{ color: effVal == null ? 'var(--color-text-muted)' : overridden ? 'var(--color-primary)' : 'var(--color-text)', fontSize: noContext ? 11 : undefined }}>
           {display}{overridden && <span title="Overridden" style={{ marginLeft: 4, fontSize: 9, color: 'var(--color-primary)' }}>●</span>}
         </span>
-        {m.kind === 'pct' && val != null && (
+        {m.kind === 'pct' && effVal != null && (
           <span style={{ width: 60, height: 4, borderRadius: 2, background: 'var(--color-bg)', overflow: 'hidden' }}>
-            <span style={{ display: 'block', height: '100%', width: `${Math.min(100, val)}%`, background: pctBarColor(val, m.key === 'coverage' ? derived.targets.coverage : derived.targets.classification), borderRadius: 2 }} />
+            <span style={{ display: 'block', height: '100%', width: `${Math.min(100, effVal)}%`, background: pctBarColor(effVal, m.key === 'coverage' ? derived.targets.coverage : derived.targets.classification), borderRadius: 2 }} />
           </span>
         )}
       </ActionLink>
@@ -516,7 +522,7 @@ export default function CouncilPage() {
             <IconButton icon="printer" label="Print briefing" onClick={printBriefing} />
             {!viewingVersionId && !editing && (
               <div role="group" aria-label="Measure lens" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
-                {([['all', 'All'], ['governed', 'Governed']] as const).map(([mode, label]) => (
+                {([['all', 'All entities'], ['governed', 'Governed only']] as const).map(([mode, label]) => (
                   <button
                     key={mode}
                     type="button"
@@ -538,11 +544,20 @@ export default function CouncilPage() {
             {!editing && (
               <div ref={versionsRef} style={{ position: 'relative', display: 'inline-block' }}>
                 <Button variant="secondary" onClick={() => setVersionsOpen((v) => !v)} aria-haspopup="menu" aria-expanded={versionsOpen}>
-                  Versions{versions.length > 0 ? ` (${versions.length})` : ''} ▾
+                  Saved snapshots{versions.length > 0 ? ` (${versions.length})` : ''} ▾
                 </Button>
                 {versionsOpen && (
                   <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260, maxHeight: 320, overflowY: 'auto', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)', padding: 6 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', padding: '4px 8px 6px' }}>Saved versions</div>
+                    {canEdit && (
+                      <>
+                        <button type="button" role="menuitem" onClick={() => { setVersionsOpen(false); setEditing(true); }}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', marginBottom: 6, border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', font: 'inherit', color: 'var(--color-text)', fontSize: 13, fontWeight: 600 }}>
+                          Edit &amp; override figures
+                        </button>
+                        <div style={{ borderTop: '1px solid var(--color-border)', margin: '0 0 6px' }} />
+                      </>
+                    )}
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', padding: '4px 8px 6px' }}>Saved snapshots</div>
                     {viewingVersionId && (
                       <button type="button" role="menuitem" onClick={() => { setVersionsOpen(false); loadDerived(); }}
                         style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', marginBottom: 4, border: '1px solid var(--color-border)', borderRadius: 6, background: 'var(--color-bg)', cursor: 'pointer', font: 'inherit', color: 'var(--color-primary)', fontWeight: 600, fontSize: 12 }}>
@@ -551,7 +566,7 @@ export default function CouncilPage() {
                     )}
                     {versions.length === 0 ? (
                       <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '4px 8px 8px', lineHeight: 1.4 }}>
-                        No versions saved yet.{canEdit ? ' Click Save snapshot to keep a monthly record.' : ''}
+                        No snapshots saved yet.{canEdit ? ' Click Save snapshot to keep a monthly record.' : ''}
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -568,7 +583,6 @@ export default function CouncilPage() {
                 )}
               </div>
             )}
-            {canEdit && !editing && <Button variant="secondary" onClick={() => setEditing(true)}>Edit &amp; override</Button>}
             {canEdit && !editing && <Button variant="primary" onClick={attemptSave} loading={saving}>Save snapshot</Button>}
             {canEdit && editing && <Button variant="secondary" onClick={cancelEdit} disabled={saving}>Cancel</Button>}
             {canEdit && editing && <Button variant="primary" onClick={attemptSave} loading={saving}>Publish snapshot</Button>}
@@ -580,6 +594,12 @@ export default function CouncilPage() {
       {/* Scope note — driven by what was actually measured (derived.scope), so a
           saved version shows its own basis. Under the governed lens: the scope
           version stamp when it narrowed, or why it didn't (no scope defined). */}
+      {derived.scope && derived.scope.lens === 'all' && (
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 12, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', background: 'var(--color-bg)', border: '1px solid var(--color-border)', padding: '2px 7px', borderRadius: 999 }}>All entities</span>
+          <span>Measured across every catalogued entity, governed or not. Switch to <strong style={{ color: 'var(--color-text)' }}>Governed only</strong> to narrow the scorecard to what your program commits to govern.</span>
+        </div>
+      )}
       {derived.scope && derived.scope.lens === 'governed' && (
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 12, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {derived.scope.applied ? (
@@ -699,7 +719,7 @@ export default function CouncilPage() {
             const v = derived.valueDrivers;
             const tiles: Array<{ label: string; value: string; tip: string; tone?: 'good' | 'risk'; num: number }> = [
               { label: 'Ownership coverage', value: `${v.ownership.pct}%`, tip: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good', num: v.ownership.pct },
-              { label: 'Value at risk', value: `${v.openRisk}`, tip: 'Past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk', num: v.openRisk },
+              { label: 'Open risk items', value: `${v.openRisk}`, tip: 'Count of past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk', num: v.openRisk },
               { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, tip: 'Governance issues moved to a terminal status', tone: 'good', num: v.resolvedLast30 },
               { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, tip: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues', num: v.avgResolutionDays ?? 0 },
             ];
@@ -750,7 +770,7 @@ export default function CouncilPage() {
               { label: 'Estimated annual value', value: fmtMoney(roi.annualValue, cur), tip: 'Ownership value + annualized resolution value', tone: 'good', num: roi.annualValue },
               { label: 'Ownership value', value: fmtMoney(roi.ownershipValue, cur), tip: 'Owned domains & assets × your value per owned entity', num: roi.ownershipValue },
               { label: 'Resolution value (annualized)', value: fmtMoney(roi.resolutionValueAnnualized, cur), tip: `${fmtMoney(roi.resolutionValueMonthly, cur)}/mo run-rate × 12`, num: roi.resolutionValueAnnualized },
-              { label: 'Value at risk', value: fmtMoney(roi.valueAtRisk, cur), tip: 'Open-risk items × your exposure per item — drive down', tone: 'risk', num: roi.valueAtRisk },
+              { label: 'Money at risk', value: fmtMoney(roi.valueAtRisk, cur), tip: 'Open-risk items × your exposure per item — drive down', tone: 'risk', num: roi.valueAtRisk },
             ];
             return (
               <div style={bandStyle}>
@@ -790,7 +810,7 @@ export default function CouncilPage() {
                           <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Value stream</th>
                           <th style={{ padding: '4px 8px', fontWeight: 600 }}>Assets</th>
                           <th style={{ padding: '4px 8px', fontWeight: 600 }}>Annual value</th>
-                          <th style={{ padding: '4px 8px', fontWeight: 600 }}>Value at risk</th>
+                          <th style={{ padding: '4px 8px', fontWeight: 600 }}>Money at risk</th>
                         </tr>
                       </thead>
                       <tbody>
