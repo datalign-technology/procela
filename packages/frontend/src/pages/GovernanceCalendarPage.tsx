@@ -7,7 +7,6 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
-import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import ErrorState from '../components/ErrorState';
@@ -125,6 +124,22 @@ const inputStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
+const rowMenuBtnStyle: React.CSSProperties = {
+  width: 32, height: 32, border: 0, background: 'transparent', borderRadius: 8,
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+};
+const rowMenuStyle: React.CSSProperties = {
+  position: 'absolute', top: 34, right: 0, zIndex: 30, minWidth: 170,
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))',
+  padding: 6, textAlign: 'left',
+};
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  padding: '8px 10px', fontSize: 13, color: 'var(--color-text)',
+  background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
+};
+
 const EVENT_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   COUNCIL_MEETING:     { bg: '#ede9fe', color: '#5b21b6' }, // purple
   COMMITTEE_MEETING:   { bg: '#dbeafe', color: '#1e40af' }, // blue
@@ -135,25 +150,48 @@ const EVENT_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  ACTIVE: { bg: '#d1fae5', color: '#065f46' },
-  PAUSED: { bg: '#fee2e2', color: '#991b1b' },
+  ACTIVE: { bg: '#dcefe5', color: '#17604b' },
+  PAUSED: { bg: '#e5ecf3', color: '#364a5e' },
 };
 
-function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties {
-  return {
-    display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-    fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color, whiteSpace: 'nowrap',
-  };
-}
 
 function formatTypeLabel(type: string): string {
   return type.replace(/_/g, ' ');
 }
 
-function formatOccurrence(iso: string | null): string {
-  if (!iso) return '--';
+// Sentence-case a SCREAMING_SNAKE code: "COMMITTEE_MEETING" → "Committee
+// meeting", "SEMI_ANNUAL" → "Semi annual". Used for every type/cadence/status
+// label and filter option, in place of the raw all-caps codes.
+function prettyLabel(code: string): string {
+  const s = (code || '').replace(/_/g, ' ').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MON_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Parse an occurrence date as a LOCAL calendar day. A date-only ISO string
+// ("2026-10-16") is otherwise read as UTC midnight and renders a day early in
+// timezones behind UTC — the off-by-one the calendar showed ("tomorrow"
+// labelled "today"). Pin to the local calendar day instead.
+function parseLocalDate(iso: string | null): Date | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return '--';
+  return isNaN(d.getTime()) ? null : d;
+}
+function localDaysAway(iso: string | null): number {
+  const d = parseLocalDate(iso);
+  if (!d) return 0;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
+}
+
+function formatOccurrence(iso: string | null): string {
+  const d = parseLocalDate(iso);
+  if (!d) return '--';
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
@@ -162,6 +200,29 @@ function formatDaysAway(days: number): string {
   if (days === 0) return 'today';
   if (days === 1) return 'tomorrow';
   return `in ${days} days`;
+}
+
+// A sentence-case pill with a leading status dot.
+function dotPill(colors: { bg: string; color: string }, label: string): React.ReactNode {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: colors.bg, color: colors.color }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: colors.color }} />{label}
+    </span>
+  );
+}
+
+// "Weekly · Fri 09:00" / "Monthly · day 15 · 14:00" — a plain schedule hint.
+function scheduleHint(ev: CalendarEvent): string {
+  const parts = [prettyLabel(ev.cadence)];
+  if ((ev.cadence === 'WEEKLY' || ev.cadence === 'BIWEEKLY') && ev.dayOfWeek != null) {
+    parts.push(`${DOW_SHORT[ev.dayOfWeek] || ''} ${ev.timeOfDay || ''}`.trim());
+  } else if (ev.dayOfMonth != null) {
+    parts.push(`day ${ev.dayOfMonth}`);
+    if (ev.timeOfDay) parts.push(ev.timeOfDay);
+  } else if (ev.timeOfDay) {
+    parts.push(ev.timeOfDay);
+  }
+  return parts.filter(Boolean).join(' · ');
 }
 
 function eventToForm(e: CalendarEvent): EventForm {
@@ -236,13 +297,13 @@ function EventFields({ form, onChange, people, nameError, onNameBlur }: {
       <div>
         <label style={labelStyle}>Event Type</label>
         <select aria-label="Event Type" style={selectStyle} value={form.eventType} onChange={(e) => onChange({ eventType: e.target.value })}>
-          {EVENT_TYPES.map((t) => <option key={t} value={t}>{formatTypeLabel(t)}</option>)}
+          {EVENT_TYPES.map((t) => <option key={t} value={t}>{prettyLabel(t)}</option>)}
         </select>
       </div>
       <div>
         <label style={labelStyle}>Cadence</label>
         <select aria-label="Cadence" style={selectStyle} value={form.cadence} onChange={(e) => onChange({ cadence: e.target.value })}>
-          {CADENCES.map((c) => <option key={c} value={c}>{formatTypeLabel(c)}</option>)}
+          {CADENCES.map((c) => <option key={c} value={c}>{prettyLabel(c)}</option>)}
         </select>
       </div>
       <div>
@@ -387,6 +448,14 @@ export default function GovernanceCalendarPage() {
   const [form, setForm] = useState<EventForm>(emptyForm);
   // Row click opens one event's detail in a modal.
   const [viewingId, setViewingId] = useState<string | null>(null);
+  // Per-row "⋯" overflow menu.
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const close = () => setRowMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [rowMenuId]);
   const eventValidation = useFormValidation({
     name: (v: any) => !v?.trim() ? 'Event name is required.' : null,
   });
@@ -465,6 +534,14 @@ export default function GovernanceCalendarPage() {
     }
   };
 
+  const handleSetStatus = async (ev: CalendarEvent, status: 'ACTIVE' | 'PAUSED') => {
+    try {
+      await apiClient.put(`/governance-calendar/${ev.id}`, { ...formToPayload(eventToForm({ ...ev, status }), activeOrgId) });
+      addToast('success', status === 'PAUSED' ? 'Event paused' : 'Event resumed');
+      fetchData();
+    } catch (err) { addToast('error', errorMessage(err, 'Failed to update event')); }
+  };
+
   const downloadIcs = (ev: CalendarEvent) => {
     const nextDate = ev.nextOccurrence ? new Date(ev.nextOccurrence) : new Date();
     const endDate = new Date(nextDate.getTime() + (ev.durationMinutes || 60) * 60000);
@@ -530,6 +607,12 @@ export default function GovernanceCalendarPage() {
   const hasActiveFilters = !!(filterType || filterCadence || filterStatus);
 
   const sel = useRowSelection(filteredEvents, (e) => e.id);
+
+  // The next occurrence (for the "Next up" hero), plus its event record for
+  // agenda / attendees / automation.
+  const nextUp = upcoming[0] || null;
+  const nextUpEvent = nextUp ? (events.find((e) => e.id === nextUp.eventId) || null) : null;
+  const agendaItems = (nextUpEvent?.agendaTemplate || '').split(/\r?\n|;/).map((s) => s.trim()).filter(Boolean);
 
   // Calendar grid: compute which events fall on which days of the displayed month
   const calendarDays = useMemo(() => {
@@ -602,30 +685,37 @@ export default function GovernanceCalendarPage() {
     },
     {
       key: 'type', header: 'Type',
-      render: (ev) => (
-        <span style={badgeStyle(EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM)}>
-          {formatTypeLabel(ev.eventType)}
-        </span>
-      ),
+      render: (ev) => dotPill(EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM, prettyLabel(ev.eventType)),
     },
-    { key: 'cadence', header: 'Cadence', render: (ev) => formatTypeLabel(ev.cadence) },
-    { key: 'next', header: 'Next', render: (ev) => formatOccurrence(ev.nextOccurrence) },
+    { key: 'cadence', header: 'Repeats', render: (ev) => <span style={{ color: 'var(--color-text-secondary)' }}>{scheduleHint(ev)}</span> },
+    {
+      key: 'next', header: 'Next',
+      render: (ev) => {
+        if (!ev.nextOccurrence) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
+        const rel = formatDaysAway(localDaysAway(ev.nextOccurrence));
+        return <span title={formatOccurrence(ev.nextOccurrence)} style={{ color: 'var(--color-text-secondary)' }}>{rel.charAt(0).toUpperCase() + rel.slice(1)}</span>;
+      },
+    },
     {
       key: 'status', header: 'Status',
-      render: (ev) => (
-        <span style={badgeStyle(STATUS_COLORS[ev.status] || STATUS_COLORS.ACTIVE)}>
-          {ev.status}
-        </span>
-      ),
+      render: (ev) => dotPill(STATUS_COLORS[ev.status] || STATUS_COLORS.ACTIVE, prettyLabel(ev.status)),
     },
     {
-      key: 'actions', header: 'Actions', align: 'center' as const, width: 140,
+      key: 'actions', header: 'Actions', align: 'center' as const, width: 70,
       render: (ev) => (
-        <div style={{ display: 'inline-flex', gap: 4 }}>
-          {isAdmin && <IconButton size="sm" icon="check" label="Mark occurrence done" onClick={() => handleRun(ev.id)} />}
-          <IconButton size="sm" icon="download" label="Add to calendar (.ics)" onClick={() => downloadIcs(ev)} />
-          {isAdmin && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(ev.id)} />}
-        </div>
+        <span style={{ position: 'relative', display: 'inline-flex' }} onClick={(e) => e.stopPropagation()}>
+          <button type="button" aria-label={`More actions for ${ev.name}`} aria-haspopup="menu" aria-expanded={rowMenuId === ev.id}
+            onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === ev.id ? null : ev.id); }} style={rowMenuBtnStyle}>⋯</button>
+          {rowMenuId === ev.id && (
+            <div role="menu" onClick={(e) => e.stopPropagation()} style={rowMenuStyle}>
+              {isAdmin && <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); handleRun(ev.id); }}>Mark as held</button>}
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); downloadIcs(ev); }}>Add to calendar (.ics)</button>
+              {isAdmin && <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); handleSetStatus(ev, ev.status === 'PAUSED' ? 'ACTIVE' : 'PAUSED'); }}>{ev.status === 'PAUSED' ? 'Resume' : 'Pause'}</button>}
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); setViewingId(ev.id); }}>Open &amp; edit</button>
+              {isAdmin && <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); setConfirmDelete(ev.id); }}>Delete</button>}
+            </div>
+          )}
+        </span>
       ),
     },
   ];
@@ -635,7 +725,7 @@ export default function GovernanceCalendarPage() {
 
       <PageHeader
         title="Governance Calendar"
-        subtitle="Recurring events and activities that keep your program running."
+        subtitle="Recurring meetings and reviews that keep the governance program running."
         actions={
           <ListToolbar
             export={
@@ -666,16 +756,16 @@ export default function GovernanceCalendarPage() {
                     onChange={setViewMode}
                     options={[
                       { value: 'list', label: 'List' },
-                      { value: 'calendar', label: 'Calendar' },
+                      { value: 'calendar', label: 'Month' },
                     ]}
                   />
                 )}
                 {isAdmin && events.length === 0 && (
-                  <Button variant="secondary" onClick={handleSeed}>Seed Standard Events</Button>
+                  <Button variant="secondary" onClick={handleSeed}>Seed standard events</Button>
                 )}
               </>
             }
-            primary={isAdmin ? <IconButton icon="plus" label="Add event" variant="primary" onClick={openAdd} /> : undefined}
+            primary={isAdmin ? <Button variant="primary" onClick={openAdd}>+ Add event</Button> : undefined}
           />
         }
       />
@@ -725,6 +815,49 @@ export default function GovernanceCalendarPage() {
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 
+      {/* Next up — the single most imminent occurrence, with its agenda. */}
+      {!loading && nextUp && (() => {
+        const d = parseLocalDate(nextUp.occursAt);
+        const rel = formatDaysAway(localDaysAway(nextUp.occursAt));
+        const end = (() => {
+          const m = /^(\d{2}):(\d{2})/.exec(nextUpEvent?.timeOfDay || nextUp.timeOfDay || '');
+          if (!m) return '';
+          const total = (+m[1]) * 60 + (+m[2]) + (nextUpEvent?.durationMinutes || nextUp.durationMinutes || 60);
+          return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+        })();
+        const names = nextUp.attendeeNames || [];
+        return (
+          <section style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '18px 20px', display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 16 }}>
+            <div style={{ flex: 'none', width: 76, height: 84, borderRadius: 10, background: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em' }}>{d ? `${DOW_SHORT[d.getDay()].toUpperCase()} ${MON_SHORT[d.getMonth()].toUpperCase()}` : ''}</span>
+              <span style={{ fontSize: 30, fontWeight: 600, lineHeight: 1.1 }}>{d ? d.getDate() : '—'}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{rel}</span>
+            </div>
+            <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Next up</div>
+              <h2 style={{ margin: '2px 0 6px', fontSize: 18, fontWeight: 600 }}>{nextUp.name}</h2>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                <span>{nextUpEvent?.timeOfDay || nextUp.timeOfDay}{end ? ` to ${end}` : ''} · {prettyLabel(nextUp.cadence)}</span>
+                <span>{prettyLabel(nextUp.eventType)}</span>
+                {names.length > 0 && <span>{names.length} attendee{names.length === 1 ? '' : 's'}: {names.slice(0, 4).join(', ')}{names.length > 4 ? ` +${names.length - 4}` : ''}</span>}
+              </div>
+              {agendaItems.length > 0 && (
+                <>
+                  <div style={{ marginTop: 12, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Agenda</div>
+                  <ol style={{ margin: '4px 0 0', paddingLeft: 20, fontSize: 13, color: 'var(--color-text-secondary)', columns: agendaItems.length > 3 ? 2 : 1, columnGap: 24 }}>
+                    {agendaItems.map((a, i) => <li key={i}>{a}</li>)}
+                  </ol>
+                </>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}>
+              {nextUpEvent && <Button variant="secondary" size="sm" onClick={() => downloadIcs(nextUpEvent)}>Add to my calendar</Button>}
+              {isAdmin && nextUpEvent && <Button variant="secondary" size="sm" onClick={() => handleRun(nextUpEvent.id)}>Mark as held</Button>}
+            </div>
+          </section>
+        );
+      })()}
+
       {/* Filters */}
       {events.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -734,8 +867,8 @@ export default function GovernanceCalendarPage() {
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
           >
-            <option value="">All Types</option>
-            {EVENT_TYPES.map((t) => <option key={t} value={t}>{formatTypeLabel(t)}</option>)}
+            <option value="">All types</option>
+            {EVENT_TYPES.map((t) => <option key={t} value={t}>{prettyLabel(t)}</option>)}
           </select>
           <select
             aria-label="Filter by cadence"
@@ -743,8 +876,8 @@ export default function GovernanceCalendarPage() {
             value={filterCadence}
             onChange={(e) => setFilterCadence(e.target.value)}
           >
-            <option value="">All Cadences</option>
-            {CADENCES.map((c) => <option key={c} value={c}>{formatTypeLabel(c)}</option>)}
+            <option value="">All repeats</option>
+            {CADENCES.map((c) => <option key={c} value={c}>{prettyLabel(c)}</option>)}
           </select>
           <select
             aria-label="Filter by status"
@@ -752,8 +885,8 @@ export default function GovernanceCalendarPage() {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
-            <option value="">All Statuses</option>
-            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            <option value="">All statuses</option>
+            {STATUSES.map((s) => <option key={s} value={s}>{prettyLabel(s)}</option>)}
           </select>
           {hasActiveFilters && (
             <Button
@@ -774,147 +907,147 @@ export default function GovernanceCalendarPage() {
 
       {loadError ? (
         <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
-      ) : viewMode === 'calendar' ? (
-        /* ── Calendar Grid View ── */
-        <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
-          {/* Month navigation */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-            <Button variant="secondary" size="sm" onClick={prevMonth}>&larr;</Button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 16, fontWeight: 700 }}>{calMonthLabel}</span>
-              <Button variant="secondary" size="sm" onClick={goToday}>Today</Button>
-            </div>
-            <Button variant="secondary" size="sm" onClick={nextMonth}>&rarr;</Button>
-          </div>
-          {/* Day headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-              <div key={d} style={{ textAlign: 'center', padding: '8px 4px', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border)' }}>
-                {d}
-              </div>
-            ))}
-          </div>
-          {/* Day cells */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-            {calendarDays.map((cell, idx) => {
-              const isToday = cell.date != null && calYear === new Date().getFullYear() && calMonth === new Date().getMonth() && cell.date === new Date().getDate();
-              return (
-                <div key={idx} style={{
-                  minHeight: 90, padding: '4px 6px',
-                  borderRight: (idx + 1) % 7 === 0 ? 'none' : '1px solid var(--color-border)',
-                  borderBottom: '1px solid var(--color-border)',
-                  background: cell.date == null ? 'var(--color-bg)' : isToday ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                  opacity: cell.date == null ? 0.4 : 1,
-                }}>
-                  {cell.date != null && (
-                    <>
-                      <div style={{
-                        fontSize: 12, fontWeight: isToday ? 700 : 500, marginBottom: 4,
-                        color: isToday ? 'var(--color-primary)' : 'var(--color-text)',
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: isToday ? 22 : 'auto', height: isToday ? 22 : 'auto',
-                        borderRadius: isToday ? '50%' : 0,
-                        background: isToday ? 'var(--color-primary)' : 'transparent',
-                        ...(isToday ? { color: '#fff' } : {}),
-                      }}>
-                        {cell.date}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {cell.events.slice(0, 3).map((ev) => {
-                          const colors = EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM;
-                          return (
-                            <div key={ev.id} title={`${ev.name} (${formatTypeLabel(ev.eventType)}) — ${ev.timeOfDay}`}
-                              {...clickable(() => setViewingId(ev.id), { label: `Open ${ev.name}` })}
-                              style={{
-                                fontSize: 10, fontWeight: 500, padding: '1px 4px', borderRadius: 3, cursor: 'pointer',
-                                background: colors.bg, color: colors.color,
-                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                              }}>
-                              {ev.name}
-                            </div>
-                          );
-                        })}
-                        {cell.events.length > 3 && (
-                          <div style={{ fontSize: 9, color: 'var(--color-text-muted)', fontWeight: 500 }}>+{cell.events.length - 3} more</div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
       ) : (
-        /* ── List View (original two-column layout) ── */
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
-          {/* Upcoming panel */}
-          <Card>
-            <h3 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase',
-              letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 12 }}>
-              Upcoming (next 30 days)
-            </h3>
-            {loading ? (
-              <SkeletonRows rows={4} columns={1} />
-            ) : upcoming.length === 0 ? (
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                Nothing scheduled in the next 30 days.
-              </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+          <main style={{ flex: '999 1 540px', minWidth: 0 }}>
+            {viewMode === 'calendar' ? (
+              /* ── Month grid view ── */
+              <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>{calMonthLabel}</span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <Button variant="secondary" size="sm" onClick={prevMonth} aria-label="Previous month">&larr;</Button>
+                    <Button variant="secondary" size="sm" onClick={goToday}>Today</Button>
+                    <Button variant="secondary" size="sm" onClick={nextMonth} aria-label="Next month">&rarr;</Button>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <div style={{ minWidth: 640 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                        <div key={d} style={{ textAlign: 'center', padding: '8px 4px', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border)' }}>{d}</div>
+                      ))}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+                      {calendarDays.map((cell, idx) => {
+                        const isToday = cell.date != null && calYear === new Date().getFullYear() && calMonth === new Date().getMonth() && cell.date === new Date().getDate();
+                        return (
+                          <div key={idx} style={{
+                            minHeight: 84, padding: '6px 8px',
+                            borderRight: (idx + 1) % 7 === 0 ? 'none' : '1px solid var(--color-border)',
+                            borderBottom: '1px solid var(--color-border)',
+                            background: cell.date == null ? 'var(--color-bg)' : 'var(--color-surface)',
+                          }}>
+                            {cell.date != null && (
+                              <>
+                                <span style={{
+                                  display: 'inline-flex', width: 24, height: 24, alignItems: 'center', justifyContent: 'center',
+                                  borderRadius: 12, fontSize: 13, fontWeight: isToday ? 700 : 500,
+                                  color: isToday ? '#fff' : 'var(--color-text)', background: isToday ? 'var(--color-primary)' : 'transparent',
+                                }}>{cell.date}</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+                                  {cell.events.slice(0, 3).map((ev) => {
+                                    const colors = EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM;
+                                    return (
+                                      <div key={ev.id} title={`${ev.name} (${prettyLabel(ev.eventType)}) — ${ev.timeOfDay}`}
+                                        {...clickable(() => setViewingId(ev.id), { label: `Open ${ev.name}` })}
+                                        style={{ fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 6, cursor: 'pointer', background: colors.bg, color: colors.color, borderLeft: `3px solid ${colors.color}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {ev.timeOfDay} {ev.name}
+                                      </div>
+                                    );
+                                  })}
+                                  {cell.events.length > 3 && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 500 }}>+{cell.events.length - 3} more</div>}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </Card>
             ) : (
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {upcoming.map((o, i) => (
-                  <li
-                    key={`${o.eventId}-${i}`}
-                    style={{
-                      padding: 10, border: '1px solid var(--color-border)',
-                      borderRadius: 4, background: 'var(--color-bg)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{o.name}</div>
-                      <span style={badgeStyle(EVENT_TYPE_COLORS[o.eventType] || EVENT_TYPE_COLORS.CUSTOM)}>
-                        {formatTypeLabel(o.eventType)}
-                      </span>
+              /* ── List view ── */
+              <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
+                {loading ? (
+                  <SkeletonRows rows={5} columns={6} />
+                ) : events.length === 0 && !showForm ? (
+                  <EmptyState
+                    icon={renderNavIcon('/governance-calendar')}
+                    title="No governance events yet"
+                    description="Set up recurring councils, committees, and reviews. Seed standard events or add your own."
+                    action={isAdmin ? { label: 'Seed standard events', onClick: handleSeed } : undefined}
+                  />
+                ) : filteredEvents.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>No events match the current filters.</div>
+                ) : (
+                  <>
+                    <div style={{ overflowX: 'auto' }}>
+                      <DataTable
+                        rows={filteredEvents}
+                        columns={calendarColumns}
+                        rowKey={(e) => e.id}
+                        selection={isAdmin ? sel : undefined}
+                        selectAllLabel="Select all events"
+                        emptyMessage="No events match the current filters."
+                        onRowClick={(ev) => setViewingId(ev.id)}
+                      />
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                      {formatOccurrence(o.occursAt)} &middot; {o.timeOfDay} &middot; {formatTypeLabel(o.cadence)}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 2, fontWeight: 500 }}>
-                      {formatDaysAway(o.daysAway)}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                    {isAdmin && events.length <= 1 && !hasActiveFilters && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'var(--color-bg)', borderTop: '1px solid var(--color-border)' }}>
+                        <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Only one recurring event so far. Most programs also run a monthly stewardship sync and a quarterly policy review.</span>
+                        <Button variant="secondary" size="sm" onClick={handleSeed}>Add standard events</Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </Card>
             )}
-          </Card>
+          </main>
 
-          {/* All events table */}
-          <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
-            {loading ? (
-              <SkeletonRows rows={5} columns={7} />
-            ) : events.length === 0 && !showForm ? (
-              <EmptyState
-                icon={renderNavIcon('/governance-calendar')}
-                title="No governance events yet"
-                description="Set up recurring councils, committees, and reviews. Seed standard events or add your own."
-                action={isAdmin ? { label: 'Seed Standard Events', onClick: handleSeed } : undefined}
-              />
-            ) : filteredEvents.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
-                No events match the current filters.
-              </div>
-            ) : (
-              <DataTable
-                rows={filteredEvents}
-                columns={calendarColumns}
-                rowKey={(e) => e.id}
-                selection={isAdmin ? sel : undefined}
-                selectAllLabel="Select all events"
-                emptyMessage="No events match the current filters."
-                onRowClick={(ev) => setViewingId(ev.id)}
-              />
+          {/* Rail — compact next-30 list + automation. */}
+          <aside style={{ flex: '1 1 280px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Card>
+              <SectionLabel marginBottom={10}>Next 30 days · {upcoming.length}</SectionLabel>
+              {loading ? (
+                <SkeletonRows rows={4} columns={1} />
+              ) : upcoming.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>Nothing scheduled in the next 30 days.</p>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {upcoming.map((o, i) => {
+                    const d = parseLocalDate(o.occursAt);
+                    return (
+                      <li key={`${o.eventId}-${i}`} {...clickable(() => setViewingId(o.eventId), { label: `Open ${o.name}` })}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid var(--color-border)', cursor: 'pointer' }}>
+                        <span style={{ flex: 'none', width: 44, textAlign: 'center' }}>
+                          <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.06em' }}>{d ? MON_SHORT[d.getMonth()].toUpperCase() : ''}</span>
+                          <span style={{ display: 'block', fontSize: 18, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d ? d.getDate() : '—'}</span>
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.name}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)' }}>{o.timeOfDay} · {formatDaysAway(localDaysAway(o.occursAt))}</span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+            {nextUpEvent && (
+              <Card>
+                <SectionLabel marginBottom={8}>Automation</SectionLabel>
+                <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: 0 }}>
+                  Auto-create tasks is <strong style={{ fontWeight: 600, color: 'var(--color-text)' }}>{nextUpEvent.autoCreateTasks ? 'on' : 'off'}</strong> for {nextUpEvent.name}.{' '}
+                  {nextUpEvent.autoCreateTasks ? 'A governance task is raised for each occurrence.' : 'Turn it on to raise a governance task for each occurrence.'}
+                </p>
+                <div style={{ marginTop: 10 }}>
+                  <button type="button" onClick={() => setViewingId(nextUpEvent.id)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', cursor: 'pointer' }}>Change in event settings</button>
+                </div>
+              </Card>
             )}
-          </Card>
+          </aside>
         </div>
       )}
 
