@@ -284,7 +284,7 @@ function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionLabel>Today</SectionLabel>
+      <SectionLabel>Needs you</SectionLabel>
       <Card padding={0}><div style={{ padding: 14 }}><SkeletonRows rows={4} columnWidths={[16, null, 60, 60]} /></div></Card>
     </div>
   );
@@ -294,7 +294,7 @@ function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
     // show the prompt to link, not an empty queue.
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionLabel>Today</SectionLabel>
+        <SectionLabel>Needs you</SectionLabel>
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             This is your personal view — the tasks, issues and domains that need you show up here once
@@ -322,10 +322,11 @@ function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <SectionLabel marginBottom={0}>Today</SectionLabel>
+          <SectionLabel marginBottom={0}>Needs you</SectionLabel>
           <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{queue.length}</span>
           {overdue > 0 && <span style={attentionChip}>{overdue} overdue</span>}
           <TrendMini points={trend} metricKey="openTasks" />
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Most urgent first</span>
         </div>
         <div role="group" aria-label="Filter the queue" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
           {segs.map(([key, label, n]) => (
@@ -725,7 +726,7 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
 
   if (loading) return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Domains" />
+      <SectionHeading title="Domains you own or steward" />
       <Card padding={20}><SkeletonRows rows={2} columnWidths={[160, null, 60]} /></Card>
     </div>
   );
@@ -734,7 +735,7 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
   if (!data?.person || domains.length === 0) {
     return (
       <div style={{ marginBottom: 16 }}>
-        <SectionHeading title="Domains" />
+        <SectionHeading title="Domains you own or steward" />
         <Card padding="16px 20px">
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
             {!data?.person
@@ -753,7 +754,7 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeading title="Domains" />
+      <SectionHeading title="Domains you own or steward" />
       {/* alignContent stretch (overriding the half-grid's default `start`) +
           full-height cards so the domain card(s) fill the cell and this widget
           lines up flush with its taller row-partner (Trends) instead of
@@ -870,6 +871,7 @@ function AskProcela() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <Sparkles size={16} aria-hidden="true" style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--color-text)' }}>Ask Procela</h2>
+        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Answers come from your catalog</span>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {ASK_SUGGESTIONS.map((q) => (
@@ -1213,15 +1215,20 @@ export default function DashboardPage() {
               open gaps, classification & ownership coverage, program maturity.
               Organization-wide; the lens below narrows only the portfolio. */}
           <ProgramHealthPulse stats={stats} orgId={activeOrgId} />
-          {/* Concept B — Focus + Portfolio. Left: the ranked action queue
-              (everything that needs you). Right: the portfolio glance (next
-              meeting, portfolio health, coverage, the domains you own). Focus
-              mode drops the right rail so the queue is the whole page; the
-              two-column split only applies on a wide viewport and when the
-              rail is shown (see .dashboard-two-pane in global.css). */}
+          {/* Concept B — Focus + Portfolio. Main column (board A3): the ranked
+              action queue (what needs you), then the domains you own/steward,
+              then Ask Procela. Right rail: the portfolio glance (next meeting,
+              portfolio health, coverage). Focus mode drops the rail AND the
+              domains grid so the queue is the whole page; the two-column split
+              only applies on a wide viewport and when the rail is shown (see
+              .dashboard-two-pane in global.css). */}
           <div className={`dashboard-two-pane${focus ? '' : ' two-col'}`}>
             <div className="dtp-main">
               <TodayQueue lens={lens} orgId={activeOrgId} />
+              {/* Domains you own or steward — a main-column card grid in the
+                  redesign (promoted out of the rail). Portfolio content, so it
+                  hides in Focus mode alongside the rail. */}
+              {!focus && <MyDomains lens={lens} orgId={activeOrgId} />}
               {/* Ask Procela — suggested questions into the AI assistant
                   (mock-up parity). AI-gated, like Run Wizard. */}
               {aiEnabled && <AskProcela />}
@@ -1231,7 +1238,6 @@ export default function DashboardPage() {
                 <NextMeeting lens={lens} orgId={activeOrgId} />
                 <MyPortfolioHealth lens={lens} orgId={activeOrgId} />
                 <MyCoverage lens={lens} orgId={activeOrgId} />
-                <MyDomains lens={lens} orgId={activeOrgId} />
               </div>
             )}
           </div>
