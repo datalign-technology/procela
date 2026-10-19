@@ -121,7 +121,9 @@ interface SeedResponse {
   };
 }
 
-export default function LoadDemoDataPanel() {
+// `flush` renders the panel without its own card chrome or title, for when it
+// sits inside a Settings collapsible row that already provides those.
+export default function LoadDemoDataPanel({ flush = false }: { flush?: boolean }) {
   const { isSuperAdmin } = usePermissions();
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -148,8 +150,8 @@ export default function LoadDemoDataPanel() {
   };
 
   return (
-    <Card marginBottom="1.5rem" padding="1.5rem" borderColor="#0f4f46">
-      <h3 style={sectionTitleStyle}>Load demo data</h3>
+    <Card marginBottom={flush ? 0 : '1.5rem'} padding={flush ? 0 : '1.5rem'} shadow={flush ? 'none' : undefined} borderColor={flush ? 'transparent' : '#0f4f46'}>
+      {!flush && <h3 style={sectionTitleStyle}>Load demo data</h3>}
       <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
         One-click seed of a demo fixture — org tree, people, systems, agents, data domains, data assets, a process hierarchy with mappings, and a CDO persona pre-populated with tasks and issues so <strong>My Dashboard</strong> tells a story. Pick an industry below; all are built to the same feature coverage. Every row is stamped <code>demo-*</code>; a second click wipes the prior seed and reseeds. Safe to run repeatedly.
       </p>
