@@ -555,25 +555,25 @@ export default function OperationsManualPage({
             {(emptySlotExamples.length > 0 || draftRefExamples.length > 0) && (
               <section aria-label="Needs attention" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Needs attention</h2>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
                   {emptySlotExamples.length > 0 && (
-                    <div style={{ borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+                    <div style={{ borderRadius: 'var(--radius-md)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82, boxSizing: 'border-box', border: '1px solid var(--color-border)', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)' }}>
                       <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 28, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{emptySlotExamples.length}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>Review</span>
+                        <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{emptySlotExamples.length}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Review</span>
                       </span>
-                      <span style={{ fontSize: 14, fontWeight: 600 }}>Empty cadence slots</span>
-                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{emptySlotExamples.slice(0, 2).join('; ')}{emptySlotExamples.length > 2 ? '; …' : ''}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>Empty cadence slots</span>
+                      <span className="na-card-hint" title={emptySlotExamples.join('; ')}>{emptySlotExamples.slice(0, 2).join('; ')}{emptySlotExamples.length > 2 ? '; …' : ''}</span>
                     </div>
                   )}
                   {draftRefExamples.length > 0 && (
-                    <button type="button" onClick={() => navigate('/documentation?tab=procedures')} style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+                    <button type="button" onClick={() => navigate('/documentation?tab=procedures')} style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--radius-md)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82, boxSizing: 'border-box', border: '1px solid var(--color-border)', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)' }}>
                       <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 28, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{draftRefExamples.length}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>Fix first</span>
+                        <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{draftRefExamples.length}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Fix first</span>
                       </span>
-                      <span style={{ fontSize: 14, fontWeight: 600 }}>Manual points to a draft procedure</span>
-                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{draftRefExamples.slice(0, 2).join('; ')}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>Manual points to a draft procedure</span>
+                      <span className="na-card-hint" title={draftRefExamples.join('; ')}>{draftRefExamples.slice(0, 2).join('; ')}</span>
                     </button>
                   )}
                 </div>

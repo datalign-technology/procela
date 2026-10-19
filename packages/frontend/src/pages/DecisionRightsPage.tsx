@@ -692,7 +692,7 @@ export default function DecisionRightsPage() {
                 Covered {CATEGORIES.filter((c) => (categoryCounts[c] || 0) > 0).length} of {CATEGORIES.length} · Click an area to filter
               </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
               {CATEGORIES.map((c) => {
                 const n = categoryCounts[c] || 0;
                 const active = categoryFilter === c;
@@ -702,19 +702,20 @@ export default function DecisionRightsPage() {
                     type="button"
                     aria-pressed={active}
                     onClick={() => setCategoryFilter(active ? 'ALL' : c)}
-                    title={CATEGORY_HINT[c]}
                     style={{
-                      textAlign: 'left', cursor: 'pointer', borderRadius: 10, padding: '10px 12px',
-                      minHeight: 62, display: 'flex', flexDirection: 'column', gap: 2,
-                      border: `1px ${n ? 'solid' : 'dashed'} ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      background: active ? 'var(--color-primary-light)' : (n ? 'var(--color-surface)' : 'var(--color-bg)'),
-                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'none',
+                      textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                      minHeight: 82, display: 'flex', flexDirection: 'column', gap: 3, boxSizing: 'border-box',
+                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
                     }}
                   >
-                    <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{CATEGORY_LABELS[c]}</span>
-                    <span style={{ fontSize: 12, color: n ? 'var(--color-text-secondary)' : 'var(--color-warning)' }}>
-                      {n ? `Decisions ${n}` : 'Not defined'}
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: n ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{n}</span>
+                      {!n && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Not defined</span>}
                     </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{CATEGORY_LABELS[c]}</span>
+                    <span className="na-card-hint" title={CATEGORY_HINT[c]}>{CATEGORY_HINT[c]}</span>
                   </button>
                 );
               })}
@@ -722,7 +723,7 @@ export default function DecisionRightsPage() {
           </section>
         )}
 
-        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)', overflow: 'auto' }}>
           {loadError ? (
             <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
           ) : loading ? (

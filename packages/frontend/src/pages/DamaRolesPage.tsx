@@ -910,7 +910,7 @@ export default function DamaRolesPage({
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Role coverage</h2>
             <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Click a card to filter the table</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
             {coverageCards.map((card) => {
               const active = coverageFilter === card.key;
               return (
@@ -920,19 +920,19 @@ export default function DamaRolesPage({
                   onClick={() => setCoverageFilter(active ? null : card.key)}
                   aria-pressed={active}
                   style={{
-                    textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--radius-md)', padding: '14px 16px',
-                    display: 'flex', flexDirection: 'column', gap: 4, minHeight: 88, boxSizing: 'border-box',
+                    textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                    display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82, boxSizing: 'border-box',
                     border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
                     background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
                     boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
                   }}
                 >
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                    <span style={{ fontSize: 28, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: card.count > 0 ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{card.count}</span>
-                    {card.count > 0 && card.tag && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>{card.tag}</span>}
+                    <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: card.count > 0 ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{card.count}</span>
+                    {card.count > 0 && card.tag && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{card.tag}</span>}
                   </span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{card.label}</span>
-                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{card.hint}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{card.label}</span>
+                  <span className="na-card-hint" title={card.hint}>{card.hint}</span>
                 </button>
               );
             })}
