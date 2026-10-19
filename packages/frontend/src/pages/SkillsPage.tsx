@@ -102,6 +102,13 @@ export default function SkillsPage() {
   const orgNameById = new Map(orgs.map((o) => [o.id, o.name]));
   const { addToast } = useToastStore();
   const [skills, setSkills] = useState<Skill[]>([]);
+  // Aux data for the "Needs attention" row — who/what holds or requires each
+  // skill. Best-effort: a failed fetch just disables the dependent card.
+  const [skillHolders, setSkillHolders] = useState<Array<{ id: string; skillIds?: string[] }>>([]);
+  const [skillAgents, setSkillAgents] = useState<Array<{ id: string; skillIds?: string[] }>>([]);
+  const [skillProcNodes, setSkillProcNodes] = useState<Array<{ id: string; requiredSkillIds?: string[] }>>([]);
+  const [auxLoaded, setAuxLoaded] = useState({ people: false, agents: false, proc: false });
+  const [attentionFilter, setAttentionFilter] = useState<'' | 'single' | 'unused' | 'noAgent'>('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -132,6 +139,17 @@ export default function SkillsPage() {
       setSkills(res.data || []);
     } catch (err) { setLoadError(errorMessage(err, 'Failed to load skills.')); }
     finally { setLoading(false); }
+    // Best-effort aux data for the needs-attention signals (holders / agents /
+    // process-step requirements). Joined by skill id, so no org param needed.
+    const [pe, ag, pc] = await Promise.allSettled([
+      apiClient.get<{ success: boolean; data: Array<{ id: string; skillIds?: string[] }> }>('/people'),
+      apiClient.get<{ success: boolean; data: Array<{ id: string; skillIds?: string[] }> }>('/agents'),
+      apiClient.get<{ success: boolean; data: Array<{ id: string; requiredSkillIds?: string[] }> }>('/process-catalog'),
+    ]);
+    if (pe.status === 'fulfilled') setSkillHolders(pe.value.data || []);
+    if (ag.status === 'fulfilled') setSkillAgents(ag.value.data || []);
+    if (pc.status === 'fulfilled') setSkillProcNodes(pc.value.data || []);
+    setAuxLoaded({ people: pe.status === 'fulfilled', agents: ag.status === 'fulfilled', proc: pc.status === 'fulfilled' });
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -173,9 +191,27 @@ export default function SkillsPage() {
       })
     : skills;
 
+  // ── "Needs attention" predicates + counts (over the category/search-scoped
+  // set). A skill is: single = held by exactly one person; unused = required by
+  // no process step; noAgent = held by no agent. ──
+  const holderCount = (id: string) => skillHolders.filter((p) => (p.skillIds || []).includes(id)).length;
+  const requiredSkillIds = new Set(skillProcNodes.flatMap((n) => n.requiredSkillIds || []));
+  const agentSkillIds = new Set(skillAgents.flatMap((a) => a.skillIds || []));
+  const skillPred = {
+    single: (s: Skill) => holderCount(s.id) === 1,
+    unused: (s: Skill) => !requiredSkillIds.has(s.id),
+    noAgent: (s: Skill) => !agentSkillIds.has(s.id),
+  };
+  const attnCounts = {
+    single: filtered.filter(skillPred.single).length,
+    unused: filtered.filter(skillPred.unused).length,
+    noAgent: filtered.filter(skillPred.noAgent).length,
+  };
+  const attentionFiltered = attentionFilter ? filtered.filter(skillPred[attentionFilter]) : filtered;
+
   // Sort
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
-    filtered,
+    attentionFiltered,
     {
       name: (a, b) => a.name.localeCompare(b.name),
       category: (a, b) => a.category.localeCompare(b.category),
@@ -281,7 +317,7 @@ export default function SkillsPage() {
     filenameBase: 'skills',
     sheetName: 'Skills',
     headers: ['Name', 'Category', 'Description'],
-    rows: filtered.map((s) => [s.name, formatCategory(s.category), s.description]),
+    rows: attentionFiltered.map((s) => [s.name, formatCategory(s.category), s.description]),
   });
 
   if (loadError) return (
@@ -442,6 +478,52 @@ export default function SkillsPage() {
         </div>
       )}
 
+      {/* Needs attention — capability-risk gaps as one-click filters. Each
+          card's data is best-effort; an unavailable source shows "—". */}
+      {skills.length > 0 && (
+        <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the list</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {([
+              { key: 'single', count: attnCounts.single, label: 'Held by one person', hint: 'No backup if that person leaves', tag: 'Fix first', loaded: auxLoaded.people },
+              { key: 'unused', count: attnCounts.unused, label: 'Not required by any step', hint: 'Not linked to a process step', tag: '', loaded: auxLoaded.proc },
+              { key: 'noAgent', count: attnCounts.noAgent, label: 'No agent holds it', hint: 'No agent has this skill set', tag: '', loaded: auxLoaded.agents },
+            ] as Array<{ key: 'single' | 'unused' | 'noAgent'; count: number; label: string; hint: string; tag: string; loaded: boolean }>).map((c) => {
+              const active = attentionFilter === c.key;
+              const disabled = !c.loaded || (c.count === 0 && !active);
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  aria-pressed={active}
+                  disabled={disabled}
+                  onClick={() => setAttentionFilter(active ? '' : c.key)}
+                  style={{
+                    textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
+                    borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                    display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
+                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
+                    opacity: disabled ? 0.6 : 1,
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: (!c.loaded || c.count === 0) ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.loaded ? c.count : '—'}</span>
+                    {c.tag && c.loaded && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{c.tag}</span>}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Filters (left-aligned, mirrors Data Assets) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
@@ -460,13 +542,13 @@ export default function SkillsPage() {
           <option value="">All Categories</option>
           {CATEGORIES.map((c) => <option key={c} value={c}>{formatCategory(c)}</option>)}
         </select>
-        {(filterCategory || searchQuery) && (
+        {(filterCategory || searchQuery || attentionFilter) && (
           <>
-            <Button variant="secondary" size="sm" onClick={() => { setFilterCategory(''); setSearchQuery(''); }}>
+            <Button variant="secondary" size="sm" onClick={() => { setFilterCategory(''); setSearchQuery(''); setAttentionFilter(''); }}>
               Clear Filters
             </Button>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-              Showing {filtered.length} of {skills.length}
+              Showing {attentionFiltered.length} of {skills.length}
             </span>
           </>
         )}
@@ -576,7 +658,7 @@ export default function SkillsPage() {
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-        {sorted.length === 0 ? (
+        {sorted.length === 0 && !attentionFilter ? (
           <EmptyState
             icon={renderNavIcon('/skills')}
             title={filterCategory ? 'No skills in this category yet' : 'No skills defined yet'}
