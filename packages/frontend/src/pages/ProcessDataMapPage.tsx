@@ -598,8 +598,8 @@ export default function ProcessDataMapPage() {
 
       {data && data.stats.activityCount > 0 && data.stats.mappedActivityCount < data.stats.activityCount && (
         <div style={{ marginTop: 12, fontSize: 12, color: 'var(--color-text-muted)' }}>
-          {data.stats.activityCount - data.stats.mappedActivityCount} activity
-          {data.stats.activityCount - data.stats.mappedActivityCount === 1 ? ' has' : 'ies have'} no
+          {data.stats.activityCount - data.stats.mappedActivityCount}{' '}
+          {data.stats.activityCount - data.stats.mappedActivityCount === 1 ? 'activity has' : 'activities have'} no
           mapped data assets yet.{' '}
           <Link to="/gap-detection">Open Gap Detection →</Link>
         </div>
