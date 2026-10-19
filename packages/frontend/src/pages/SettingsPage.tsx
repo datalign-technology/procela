@@ -464,32 +464,48 @@ export default function SettingsPage() {
         }
       />
 
-      {/* Settings are grouped into four tabs so each stays roughly one
-          screen instead of a single long scroll. */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
-        {([
-          { key: 'general', label: 'General' },
-          { key: 'security', label: 'Sign-in & Security' },
-          { key: 'integrations', label: 'Integrations' },
-          { key: 'data', label: 'Data' },
-          { key: 'backup', label: 'Backup & Restore' },
-        ] as const).map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setSettingsTab(t.key)}
-            style={{
-              padding: '10px 18px', fontSize: 13,
-              fontWeight: settingsTab === t.key ? 600 : 500,
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: settingsTab === t.key ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              borderBottom: `2px solid ${settingsTab === t.key ? 'var(--color-primary)' : 'transparent'}`,
-              marginBottom: -1,
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Section nav rail + content (redesign board A4 layout): a left list of
+          sections, each with a one-line hint, and the active section's panels
+          on the right. The rail stacks above the content at narrow widths. */}
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <nav
+          aria-label="Settings sections"
+          style={{
+            flex: '1 1 200px', maxWidth: 240,
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)',
+            padding: 8, display: 'flex', flexDirection: 'column', gap: 2,
+          }}
+        >
+          {([
+            { key: 'general', label: 'General', hint: 'Branding, workflow, activation' },
+            { key: 'security', label: 'Sign-in & Security', hint: 'SSO, two-step, sessions' },
+            { key: 'integrations', label: 'Integrations', hint: 'AI, connectors, sync, agents' },
+            { key: 'data', label: 'Data', hint: 'Classification, compliance, demo data' },
+            { key: 'backup', label: 'Backup & Restore', hint: 'Export and import a backup' },
+          ] as const).map((t) => {
+            const active = settingsTab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setSettingsTab(t.key)}
+                aria-current={active ? 'page' : undefined}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                style={{
+                  width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
+                  padding: '9px 11px', border: 'none', borderRadius: 6, cursor: 'pointer', textAlign: 'left',
+                  background: active ? 'var(--color-primary-light)' : 'transparent',
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 600, color: active ? 'var(--color-primary)' : 'var(--color-text)' }}>{t.label}</span>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.hint}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <main style={{ flex: '999 1 520px', minWidth: 0 }}>
 
       {/* ══ General ══ */}
       <div style={{ display: settingsTab === 'general' ? 'block' : 'none' }}>
@@ -1210,6 +1226,8 @@ export default function SettingsPage() {
       />
       </div>{/* ══ /Backup & Restore ══ */}
 
+        </main>
+      </div>
     </div>
   );
 }
