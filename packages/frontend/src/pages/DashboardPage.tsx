@@ -889,8 +889,179 @@ function AskProcela() {
   );
 }
 
+// ── Personalized greeting header ──────────────────────────────────────────
+// The redesign (board A3) leads with a time-of-day greeting + a "role · org ·
+// date" line rather than a generic "Dashboard" title, so the page reads as the
+// user's own home. Title stays at the house PageHeader size (not the mock's
+// 26px) per the frontend design conventions.
+const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: 'Super Admin', ORG_ADMIN: 'Org Admin', EDITOR: 'Editor',
+  CONTRIBUTOR: 'Contributor', VIEWER: 'Viewer',
+};
+function timeGreeting(): string {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+}
+function todayLabel(): string {
+  return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Program health — the org-wide "pulse" strip at the top of the dashboard
+// (redesign board A3 "Program health"). Four leading-indicator tiles, every
+// figure measured from the catalog: open gaps (from /dashboard/stats, already
+// fetched by the page), classification coverage and ownership coverage (the
+// Council Scorecard's un-fakeable value drivers, /council-scorecard/derive),
+// and program maturity (/maturity-trends). It stays organization-wide — the
+// All/Governed lens narrows the *personal* portfolio below, not this
+// program-level readout. When a metric was never captured (maturity with no
+// snapshot) the tile shows a configure prompt, never a fabricated number.
+// ──────────────────────────────────────────────────────────────────────────
+interface PulseDerived {
+  enterprise?: { classification: number | null };
+  targets?: { classification?: number };
+  valueDrivers?: { ownership?: { covered: number; total: number; pct: number } };
+}
+interface PulseTile {
+  key: string; to: string; label: string; hint: string;
+  number: React.ReactNode; muted?: boolean;
+  tag?: { text: string; color: string };
+  meter?: { pct: number; color: string };
+  placeholder?: boolean;
+}
+
+function ProgramHealthPulse({ stats, orgId }: { stats: DashboardStats; orgId: string | null }) {
+  const [derived, setDerived] = useState<PulseDerived | null>(null);
+  const [derivedFailed, setDerivedFailed] = useState(false);
+  const [maturity, setMaturity] = useState<{ overall: number }[] | null>(null);
+
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    setDerived(null); setDerivedFailed(false); setMaturity(null);
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: PulseDerived }>(`/council-scorecard/derive?orgId=${orgId}`);
+        if (!cancelled) setDerived(res.data);
+      } catch { if (!cancelled) setDerivedFailed(true); }
+    })();
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: { overall: number }[] }>(`/maturity-trends?orgId=${orgId}`);
+        if (!cancelled) setMaturity(res.data || []);
+      } catch { if (!cancelled) setMaturity([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [orgId]);
+
+  // Open gaps — the authoritative total mirrors StatsSnapshot.gaps
+  // (unmapped activities + ungoverned assets + ownerless items + ungoverned
+  // domains + orphaned assets), with a true type breakdown in the hint. These
+  // gaps carry no severity, so there is no fabricated "critical" badge.
+  const g = stats.gaps;
+  const totalGaps = (g.unmappedActivities || 0) + (g.ungovernedAssets || 0)
+    + (g.ownerlessItems || 0) + (g.ungovernedDomains || 0) + (g.orphanAssets || 0);
+  const gapParts: string[] = [];
+  if (g.unmappedActivities) gapParts.push(`${g.unmappedActivities} unmapped`);
+  if (g.ungovernedAssets) gapParts.push(`${g.ungovernedAssets} ungoverned`);
+  if (g.ownerlessItems) gapParts.push(`${g.ownerlessItems} ownerless`);
+  if (g.ungovernedDomains) gapParts.push(`${g.ungovernedDomains} domain${g.ungovernedDomains === 1 ? '' : 's'}`);
+  if (g.orphanAssets) gapParts.push(`${g.orphanAssets} orphaned`);
+
+  const tiles: PulseTile[] = [];
+  tiles.push({
+    key: 'gaps', to: '/gap-detection', label: 'Open gaps',
+    number: totalGaps, muted: totalGaps === 0,
+    hint: gapParts.length ? gapParts.join(' · ') : 'No open gaps',
+  });
+
+  // Classification + ownership — from one scorecard derive call. While it is in
+  // flight both render as muted placeholders (stable 4-tile layout, no pop-in);
+  // if the call fails they are dropped rather than shown broken.
+  if (derived) {
+    const cls = derived.enterprise?.classification;
+    const clsTarget = derived.targets?.classification ?? 70;
+    if (typeof cls === 'number') {
+      const pct = Math.round(cls);
+      const meets = pct >= clsTarget;
+      tiles.push({
+        key: 'classified', to: '/council', label: 'Classified', number: `${pct}%`,
+        tag: meets ? undefined : { text: 'Behind', color: 'var(--color-warning)' },
+        hint: `Target ${clsTarget}%`,
+        meter: { pct, color: meets ? 'var(--color-success)' : 'var(--color-warning)' },
+      });
+    }
+    const own = derived.valueDrivers?.ownership;
+    if (own) {
+      tiles.push({
+        key: 'ownership', to: '/council', label: 'Ownership coverage', number: `${own.pct}%`,
+        hint: `${own.covered} of ${own.total} owned`,
+        meter: { pct: own.pct, color: 'var(--color-primary)' },
+      });
+    }
+  } else if (!derivedFailed) {
+    tiles.push({ key: 'classified', to: '/council', label: 'Classified', number: '—', muted: true, hint: 'Loading…', placeholder: true });
+    tiles.push({ key: 'ownership', to: '/council', label: 'Ownership coverage', number: '—', muted: true, hint: 'Loading…', placeholder: true });
+  }
+
+  // Program maturity — the one metric that is captured, not derived. No
+  // snapshot ⇒ a prompt to capture one, never a made-up score.
+  if (maturity === null) {
+    tiles.push({ key: 'maturity', to: '/council', label: 'Program maturity', number: '—', muted: true, hint: 'Loading…', placeholder: true });
+  } else if (maturity.length > 0) {
+    const now = maturity[maturity.length - 1].overall;
+    const delta = now - maturity[0].overall;
+    tiles.push({
+      key: 'maturity', to: '/council', label: 'Program maturity',
+      number: <>{now.toFixed(1)}<span style={{ fontSize: 14, color: 'var(--color-text-muted)', fontWeight: 500 }}> / 5</span></>,
+      tag: maturity.length < 2 || Math.abs(delta) < 0.05 ? undefined
+        : delta > 0 ? { text: `▲ ${delta.toFixed(1)}`, color: 'var(--color-success)' }
+          : { text: `▼ ${Math.abs(delta).toFixed(1)}`, color: 'var(--color-error)' },
+      hint: maturity.length < 2 ? 'First snapshot' : 'Since first snapshot',
+    });
+  } else {
+    tiles.push({ key: 'maturity', to: '/council', label: 'Program maturity', number: '—', muted: true, hint: 'Capture your first assessment →' });
+  }
+
+  return (
+    <section aria-label="Program health" style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Program health</div>
+        <Link to="/council" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>Open council scorecard &rarr;</Link>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+        {tiles.map((t) => (
+          <Link
+            key={t.key}
+            to={t.to}
+            aria-disabled={t.placeholder || undefined}
+            style={{
+              textDecoration: 'none', color: 'var(--color-text)',
+              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)',
+              padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 82,
+              pointerEvents: t.placeholder ? 'none' : undefined,
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+              <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: t.muted ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{t.number}</span>
+              {t.tag && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 20, padding: '0 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, color: t.tag.color, background: 'var(--color-bg)' }}>{t.tag.text}</span>}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{t.label}</span>
+            {/* Reserve the meter row on every tile (spacer when a tile has no
+                meter) so all four tiles are exactly the same height. */}
+            {t.meter ? <Meter value={t.meter.pct} height={5} color={t.meter.color} /> : <span aria-hidden="true" style={{ height: 5 }} />}
+            <span className="na-card-hint" title={t.hint}>{t.hint}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function DashboardPage() {
-  const { activeOrgId } = useOrgContext();
+  const { activeOrgId, activeOrgName } = useOrgContext();
+  const { user } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Governed lens: narrows the you-scoped portfolio sections to the entities
@@ -928,11 +1099,25 @@ export default function DashboardPage() {
   // AI features are off.
   const aiEnabled = useAiEnabled();
 
+  // Greeting header — "Good morning, Susan" + a "role · org · date" line,
+  // computed once so the header is identical across the loading / error /
+  // loaded states (no title flip on load). Falls back gracefully when the
+  // account carries no name.
+  const firstName = (user?.name || '').trim().split(/\s+/)[0];
+  const greetingTitle = firstName ? `${timeGreeting()}, ${firstName}` : timeGreeting();
+  const headerMetaBits = [
+    user?.role ? (ROLE_LABELS[user.role] || user.role) : null,
+    activeOrgName || null,
+    todayLabel(),
+  ].filter(Boolean) as string[];
+  const headerMeta = (
+    <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{headerMetaBits.join(' · ')}</span>
+  );
+
   if (error) {
     return (
       <div>
-        <PageHeader title="Dashboard">
-        </PageHeader>
+        <PageHeader title={greetingTitle} meta={headerMeta} />
         <div style={{ color: 'var(--color-error)' }}>Error: {error}</div>
       </div>
     );
@@ -943,8 +1128,7 @@ export default function DashboardPage() {
   if (!stats) {
     return (
       <div>
-        <PageHeader title="Dashboard">
-        </PageHeader>
+        <PageHeader title={greetingTitle} meta={headerMeta} />
         <SkeletonRows rows={6} columnWidths={[200, null, null, 90]} />
       </div>
     );
@@ -962,7 +1146,8 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Dashboard"
+        title={greetingTitle}
+        meta={headerMeta}
         actions={!isEmptyOrg ? (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
             {/* Run Wizard — the one "do" action from the old quick-action bar,
@@ -1024,6 +1209,10 @@ export default function DashboardPage() {
       ) : (
         <>
           <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
+          {/* Program health — the org-wide pulse strip (redesign board A3):
+              open gaps, classification & ownership coverage, program maturity.
+              Organization-wide; the lens below narrows only the portfolio. */}
+          <ProgramHealthPulse stats={stats} orgId={activeOrgId} />
           {/* Concept B — Focus + Portfolio. Left: the ranked action queue
               (everything that needs you). Right: the portfolio glance (next
               meeting, portfolio health, coverage, the domains you own). Focus
