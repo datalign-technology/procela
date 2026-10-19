@@ -651,30 +651,33 @@ export default function GovernanceIssuesPage({
 
       {/* Needs attention — one tap filters to the issues that can't wait. */}
       {issues.length > 0 && (triageCount > 0 || highSeverityCount > 0 || unassignedCount > 0) && (
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10, marginBottom: 16 }}>
           {[
-            { key: 'highSeverity', count: highSeverityCount, label: 'High severity', fg: '#9a1c1c', tint: '#fbe4e4' },
-            { key: 'triage', count: triageCount, label: 'Awaiting triage', fg: '#9a4a0e', tint: 'var(--color-warning-light)' },
-            { key: 'unassigned', count: unassignedCount, label: 'Unassigned', fg: 'var(--color-primary)', tint: 'var(--color-primary-light)' },
+            { key: 'highSeverity', count: highSeverityCount, label: 'High severity', tag: 'Fix first' },
+            { key: 'triage', count: triageCount, label: 'Awaiting triage', tag: '' },
+            { key: 'unassigned', count: unassignedCount, label: 'Unassigned', tag: '' },
           ].filter((c) => c.count > 0).map((c) => {
             const active = attention === c.key;
+            const hint = active ? 'Filtering · tap to clear' : 'Tap to filter';
             return (
               <button
                 key={c.key} type="button"
                 onClick={() => setAttention(active ? null : c.key)}
                 aria-pressed={active}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', font: 'inherit',
-                  padding: '10px 14px', borderRadius: 'var(--radius-md)', textAlign: 'left',
-                  background: active ? c.tint : 'var(--color-surface)',
-                  border: `1px solid ${active ? c.fg : 'var(--color-border)'}`,
+                  textAlign: 'left', cursor: 'pointer', font: 'inherit', borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                  display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82, boxSizing: 'border-box',
+                  background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                  border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
                 }}
               >
-                <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: c.fg, fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
-                <span style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{active ? 'Filtering · tap to clear' : 'Tap to filter'}</span>
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
+                  {c.tag && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{c.tag}</span>}
                 </span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                <span className="na-card-hint" title={hint}>{hint}</span>
               </button>
             );
           })}

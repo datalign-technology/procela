@@ -1280,18 +1280,19 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Document types</h2>
           <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>From broadest to most specific. Click one to filter.</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
           {DOCUMENT_TYPES.map((t) => {
             const n = policies.filter((p) => (p.documentType || 'POLICY') === t).length;
             const active = typeFilter === t;
             return (
               <button key={t} type="button" onClick={() => setTypeFilter(active ? 'ALL' : t)} aria-pressed={active}
-                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--radius-md)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 92, boxSizing: 'border-box', border: `1px ${n > 0 ? 'solid' : 'dashed'} ${active ? 'var(--color-primary)' : 'var(--color-border)'}`, background: active ? 'var(--color-primary-light)' : 'var(--color-surface)', boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)' }}>
+                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--radius-md)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82, boxSizing: 'border-box', border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`, background: active ? 'var(--color-primary-light)' : 'var(--color-surface)', boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)' }}>
                 <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>{DOCUMENT_TYPE_LABEL[t]}</span>
-                  <span style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: n > 0 ? 'var(--color-text)' : 'var(--color-warning)' }}>{n > 0 ? n : 'None yet'}</span>
+                  <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: n > 0 ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{n}</span>
+                  {n === 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>None yet</span>}
                 </span>
-                <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{DOCUMENT_TYPE_HINT[t]}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{DOCUMENT_TYPE_LABEL[t]}</span>
+                <span className="na-card-hint" title={DOCUMENT_TYPE_HINT[t]}>{DOCUMENT_TYPE_HINT[t]}</span>
               </button>
             );
           })}
@@ -1347,7 +1348,7 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
       </BulkActionBar>
 
       {/* Documents table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
         {loadError ? (
           <ErrorState message={loadError} onRetry={() => { setLoadError(null); setLoading(true); fetchData(); }} />
         ) : loading ? (

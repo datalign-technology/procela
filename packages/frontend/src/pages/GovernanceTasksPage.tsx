@@ -685,30 +685,33 @@ export default function GovernanceTasksPage({
 
       {/* Needs attention — one tap filters the list to the work that can't wait. */}
       {tasks.length > 0 && (overdueCount > 0 || dueThisWeekCount > 0 || highPriorityCount > 0) && (
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10, marginBottom: 16 }}>
           {[
-            { key: 'overdue', count: overdueCount, label: 'Overdue', colors: { bg: 'var(--color-error)', tint: '#fbe4e4', fg: '#9a1c1c' } },
-            { key: 'dueThisWeek', count: dueThisWeekCount, label: 'Due this week', colors: { bg: 'var(--color-warning)', tint: 'var(--color-warning-light)', fg: '#9a4a0e' } },
-            { key: 'highPriority', count: highPriorityCount, label: 'High priority', colors: { bg: 'var(--color-primary)', tint: 'var(--color-primary-light)', fg: 'var(--color-primary)' } },
+            { key: 'overdue', count: overdueCount, label: 'Overdue', tag: 'Fix first' },
+            { key: 'dueThisWeek', count: dueThisWeekCount, label: 'Due this week', tag: '' },
+            { key: 'highPriority', count: highPriorityCount, label: 'High priority', tag: '' },
           ].filter((c) => c.count > 0).map((c) => {
             const active = attention === c.key;
+            const hint = active ? 'Filtering · tap to clear' : 'Tap to filter';
             return (
               <button
                 key={c.key} type="button"
                 onClick={() => setAttention(active ? null : c.key)}
                 aria-pressed={active}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', font: 'inherit',
-                  padding: '10px 14px', borderRadius: 'var(--radius-md)', textAlign: 'left',
-                  background: active ? c.colors.tint : 'var(--color-surface)',
-                  border: `1px solid ${active ? c.colors.fg : 'var(--color-border)'}`,
+                  textAlign: 'left', cursor: 'pointer', font: 'inherit', borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                  display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82, boxSizing: 'border-box',
+                  background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                  border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
                 }}
               >
-                <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: c.colors.fg, fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
-                <span style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{active ? 'Filtering · tap to clear' : 'Tap to filter'}</span>
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
+                  {c.tag && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{c.tag}</span>}
                 </span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                <span className="na-card-hint" title={hint}>{hint}</span>
               </button>
             );
           })}
