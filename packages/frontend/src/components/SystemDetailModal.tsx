@@ -459,6 +459,7 @@ export default function SystemDetailModal({ systemId, onClose, people = [], syst
             </span>
           ) : undefined}
           actions={<>
+            <button type="button" onClick={() => navigate('/systems')} style={backLinkStyle}>{'←'} Back to Systems</button>
             {!m.isEditing && canWrite && conn === 'INTEGRATED' && noConn && (
               <button type="button" onClick={() => navigate('/systems?tab=connections')} style={backLinkStyle}>Connect</button>
             )}

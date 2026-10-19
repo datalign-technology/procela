@@ -608,6 +608,7 @@ export default function DamaRolesPage({
             }
             actions={
               <>
+                <button type="button" onClick={() => navigate('/dama-roles')} style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none', cursor: 'pointer' }}>{'←'} Back to Roles</button>
                 <span style={{ position: 'relative', display: 'inline-flex' }}>
                   <button type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded={focusMenuOpen}
                     onClick={(e) => { e.stopPropagation(); setFocusMenuOpen((v) => !v); }}
