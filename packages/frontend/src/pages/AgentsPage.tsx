@@ -109,9 +109,13 @@ interface AgentExecution {
   id: string;
   agentId: string;
   status: string;
+  // PENDING until a human signs off on the output (APPROVED / REJECTED).
+  reviewStatus?: string;
   completedAt: string | null;
   createdAt: string;
 }
+
+type AgentAttention = '' | 'review' | 'failed' | 'noRole' | 'noSkills';
 
 const STATUS_BADGES: Record<string, { bg: string; color: string }> = {
   ACTIVE:  { bg: '#d1f0eb', color: '#0f4f46' },
@@ -162,6 +166,9 @@ export default function AgentsPage() {
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const [importOrgId, setImportOrgId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  // "Needs attention" quick filter — a governance worklist over the agent
+  // fleet. Clicking a card narrows the table to the matching agents.
+  const [attentionFilter, setAttentionFilter] = useState<AgentAttention>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [agentRoles, setAgentRoles] = useState<DamaRoleAssignment[]>([]);
   const [agentExecutions, setAgentExecutions] = useState<AgentExecution[]>([]);
@@ -239,6 +246,24 @@ export default function AgentsPage() {
         return true;
       })
     : agents;
+
+  // ── "Needs attention" predicates + counts (over the org/search-scoped set,
+  // so the cards reflect what's visible). Every datum is already loaded:
+  // executions carry status + reviewStatus, roles map by agentId, skills live
+  // on the agent. ──
+  const agentPred: Record<Exclude<AgentAttention, ''>, (a: Agent) => boolean> = {
+    review: (a) => agentExecutions.some((e) => e.agentId === a.id && e.status === 'SUCCESS' && e.reviewStatus === 'PENDING'),
+    failed: (a) => agentExecutions.some((e) => e.agentId === a.id && e.status === 'FAILED'),
+    noRole: (a) => !govRolesByAgent.has(a.id),
+    noSkills: (a) => (a.skillIds?.length ?? 0) === 0,
+  };
+  const attnCounts = {
+    review: filtered.filter(agentPred.review).length,
+    failed: filtered.filter(agentPred.failed).length,
+    noRole: filtered.filter(agentPred.noRole).length,
+    noSkills: filtered.filter(agentPred.noSkills).length,
+  };
+  const attentionFiltered = attentionFilter ? filtered.filter(agentPred[attentionFilter]) : filtered;
 
   const openAdd = () => {
     // Pre-select an org if the page's filter has one, otherwise leave empty
@@ -346,7 +371,7 @@ export default function AgentsPage() {
   };
   // Sort — URL-persisted via ?sort=&dir=.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
-    filtered,
+    attentionFiltered,
     {
       name: (a, b) => a.name.localeCompare(b.name),
       type: (a, b) => a.agentType.localeCompare(b.agentType),
@@ -600,6 +625,53 @@ export default function AgentsPage() {
 
         {/* Toolbar + agent list */}
         <div>
+      {/* Needs attention — a governance worklist over the agent fleet.
+          Clicking a card narrows the table to the matching agents. */}
+      {agents.length > 0 && (
+        <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the list</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {([
+              { key: 'review', count: attnCounts.review, label: 'Output awaiting review', hint: 'Agent output pending sign-off', tag: 'Review' },
+              { key: 'failed', count: attnCounts.failed, label: 'Failed runs', hint: 'Agent has a run that failed', tag: 'Fix first' },
+              { key: 'noRole', count: attnCounts.noRole, label: 'No governance role', hint: "Agent isn't assigned a DAMA role", tag: '' },
+              { key: 'noSkills', count: attnCounts.noSkills, label: 'No skills', hint: 'No skills set on this agent', tag: '' },
+            ] as Array<{ key: Exclude<AgentAttention, ''>; count: number; label: string; hint: string; tag: string }>).map((c) => {
+              const active = attentionFilter === c.key;
+              const zero = c.count === 0;
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  aria-pressed={active}
+                  disabled={zero && !active}
+                  onClick={() => setAttentionFilter(active ? '' : c.key)}
+                  style={{
+                    textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
+                    borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                    display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
+                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
+                    opacity: zero && !active ? 0.6 : 1,
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
+                    {c.tag && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{c.tag}</span>}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Filters (left-aligned, mirrors Data Assets) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
@@ -620,17 +692,17 @@ export default function AgentsPage() {
             <option key={key} value={key}>{label}</option>
           ))}
         </select>
-        {(selectedOrgId || searchQuery || govRoleFilter) && (
+        {(selectedOrgId || searchQuery || govRoleFilter || attentionFilter) && (
           <>
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => { applyOrgFilter(''); setSearchQuery(''); setGovRoleFilter(''); }}
+              onClick={() => { applyOrgFilter(''); setSearchQuery(''); setGovRoleFilter(''); setAttentionFilter(''); }}
             >
               Clear Filters
             </Button>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-              Showing {filtered.length} of {agents.length}
+              Showing {attentionFiltered.length} of {agents.length}
             </span>
           </>
         )}
