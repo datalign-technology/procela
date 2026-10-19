@@ -1101,11 +1101,11 @@ export default function SystemsPage({
                     onClick={() => setAttentionFilter(active ? '' : c.key)}
                     style={{
                       textAlign: 'left', cursor: disabled ? 'default' : 'pointer', borderRadius: 'var(--radius-md)',
-                      padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 84,
+                      padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
                       border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
                       background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'none',
-                      opacity: disabled ? 0.55 : 1,
+                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
+                      opacity: disabled ? 0.6 : 1,
                     }}
                   >
                     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
