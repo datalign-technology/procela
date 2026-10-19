@@ -1156,10 +1156,10 @@ export default function ConnectionsPage({
             if (connections.length === 0 || (noSystemCount === 0 && failingCount === 0 && systemsNoConn === 0)) return null;
             const card = (active: boolean, disabled: boolean): React.CSSProperties => ({
               textAlign: 'left', cursor: disabled ? 'default' : 'pointer', borderRadius: 'var(--radius-md)',
-              padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 84,
+              padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
               border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
               background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-              boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'none', opacity: disabled ? 0.55 : 1,
+              boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)', opacity: disabled ? 0.6 : 1,
             });
             return (
               <section aria-label="Needs attention" style={{ marginBottom: 16 }}>

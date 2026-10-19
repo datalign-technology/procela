@@ -1887,7 +1887,7 @@ export default function DataAssetsPage({
                     style={{
                       textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
                       borderRadius: 'var(--radius-md)', padding: '12px 14px',
-                      display: 'flex', flexDirection: 'column', gap: 3, minHeight: 84,
+                      display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
                       background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
                       border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
                       boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
