@@ -796,7 +796,7 @@ export default function BusinessGlossaryPage() {
                         {('priority' in c && c.priority) && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Review</span>}
                       </span>
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                      <span className="na-card-hint" title={c.hint}>{c.hint}</span>
                     </button>
                   );
                 })}
