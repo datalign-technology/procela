@@ -239,6 +239,9 @@ export default function PeoplePage() {
   // detail page's SkillPicker, where the data goes IN.
   const [filterSkillId, setFilterSkillId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  // "Needs attention" quick filter — directory-hygiene gaps. Clicking a card
+  // narrows the list to the matching people.
+  const [attentionFilter, setAttentionFilter] = useState<'' | 'gap' | 'dup' | 'legacy'>('');
 
   // Quick-add row state
   const [quickName, setQuickName] = useState('');
@@ -366,9 +369,31 @@ export default function PeoplePage() {
     return true;
   });
 
+  // ── "Needs attention" predicates + counts (over the currently-scoped set).
+  // - gap: a title that says steward/owner but no governance role assigned.
+  // - dup: two records share one email address.
+  // - legacy: assigned only to organizations not in the current structure. ──
+  const orgIdSet = new Set(flatOrgs.map((o) => o.id));
+  const emailCounts: Record<string, number> = {};
+  for (const p of filteredPeople) {
+    const e = (p.email || '').trim().toLowerCase();
+    if (e) emailCounts[e] = (emailCounts[e] || 0) + 1;
+  }
+  const peoplePred = {
+    gap: (p: Person) => /steward|owner/i.test(p.title || '') && !allDamaRoles.some((r) => r.personId === p.id),
+    dup: (p: Person) => { const e = (p.email || '').trim().toLowerCase(); return !!e && emailCounts[e] > 1; },
+    legacy: (p: Person) => p.orgIds.length > 0 && !p.orgIds.some((oid) => orgIdSet.has(oid)),
+  };
+  const attnCounts = {
+    gap: filteredPeople.filter(peoplePred.gap).length,
+    dup: filteredPeople.filter(peoplePred.dup).length,
+    legacy: filteredPeople.filter(peoplePred.legacy).length,
+  };
+  const attentionFilteredPeople = attentionFilter ? filteredPeople.filter(peoplePred[attentionFilter]) : filteredPeople;
+
   // Sort: comparators keyed by column name; URL persists ?sort=&dir=
   const { sorted: sortedPeople, sortKey, sortDir, toggleSort } = useSortedList(
-    filteredPeople,
+    attentionFilteredPeople,
     {
       name: (a, b) => a.name.localeCompare(b.name),
       email: (a, b) => (a.email || '').localeCompare(b.email || ''),
@@ -659,7 +684,7 @@ export default function PeoplePage() {
           onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />
       ) : undefined}
       export={
-        filteredPeople.length > 0 ? (
+        attentionFilteredPeople.length > 0 ? (
           <ExportMenu build={() => ({
             filenameBase: 'people',
             sheetName: 'People',
@@ -669,7 +694,7 @@ export default function PeoplePage() {
             // The import endpoint resolves it per row and falls back to the
             // dialog's org if the column is missing or the path doesn't match.
             headers: ['Name', 'Email', 'Role', 'Title', 'Org'],
-            rows: filteredPeople.map((p) => [
+            rows: attentionFilteredPeople.map((p) => [
               p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
               buildOrgPath(p.orgIds[0] || '', flatOrgs),
             ]),
@@ -747,6 +772,51 @@ export default function PeoplePage() {
                 </div>
               )}
 
+              {/* Needs attention — directory-hygiene gaps as one-click filters. */}
+              {people.length > 0 && (
+                <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the list</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+                    {([
+                      { key: 'gap', count: attnCounts.gap, label: 'Steward or owner without a role', hint: 'Title says steward/owner, but no governance role', tag: 'Fix first' },
+                      { key: 'dup', count: attnCounts.dup, label: 'Possible duplicates', hint: 'Two records share one email address', tag: 'Fix first' },
+                      { key: 'legacy', count: attnCounts.legacy, label: 'Outside current tree', hint: 'Only in an organization not in the structure', tag: '' },
+                    ] as Array<{ key: 'gap' | 'dup' | 'legacy'; count: number; label: string; hint: string; tag: string }>).map((c) => {
+                      const active = attentionFilter === c.key;
+                      const zero = c.count === 0;
+                      return (
+                        <button
+                          key={c.key}
+                          type="button"
+                          aria-pressed={active}
+                          disabled={zero && !active}
+                          onClick={() => setAttentionFilter(active ? '' : c.key)}
+                          style={{
+                            textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
+                            borderRadius: 'var(--radius-md)', padding: '12px 14px',
+                            display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
+                            background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                            border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                            boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
+                            opacity: zero && !active ? 0.6 : 1,
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                            <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
+                            {c.tag && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{c.tag}</span>}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
+                          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
               {/* Filters (left-aligned, mirrors Data Assets) */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
@@ -794,17 +864,17 @@ export default function PeoplePage() {
                     ))}
                   </select>
                 )}
-                {(filterAppRole || filterGovRole || filterSkillId || searchQuery || selectedOrgId) && (
+                {(filterAppRole || filterGovRole || filterSkillId || searchQuery || selectedOrgId || attentionFilter) && (
                   <>
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => { setFilterAppRole(''); setFilterGovRole(''); setFilterSkillId(''); setSearchQuery(''); applyOrgFilter(''); }}
+                      onClick={() => { setFilterAppRole(''); setFilterGovRole(''); setFilterSkillId(''); setSearchQuery(''); applyOrgFilter(''); setAttentionFilter(''); }}
                     >
                       Clear Filters
                     </Button>
                     <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                      Showing {filteredPeople.length} of {people.length}
+                      Showing {attentionFilteredPeople.length} of {people.length}
                     </span>
                   </>
                 )}
@@ -994,13 +1064,13 @@ export default function PeoplePage() {
                   fixed height with a single page scrollbar; the Pager footer
                   jumps between pages. */}
               <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
-                {filteredPeople.length === 0 && !selectedOrgId ? (
+                {attentionFilteredPeople.length === 0 && !selectedOrgId && !attentionFilter ? (
                   <EmptyState
                     icon={renderNavIcon('/organizations')}
                     title="Pick an organization"
                     description="Select an organization on the left to see who's in it and add new people."
                   />
-                ) : filteredPeople.length === 0 ? (
+                ) : attentionFilteredPeople.length === 0 ? (
                   <EmptyState
                     icon={renderNavIcon('/people')}
                     title="No people in this organization yet"
