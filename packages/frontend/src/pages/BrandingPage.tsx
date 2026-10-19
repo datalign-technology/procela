@@ -1,10 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
+import StatusBadge from '../components/StatusBadge';
+import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import { useBrandingStore, DEFAULT_BRANDING, type BrandingConfig } from '@/stores/brandingStore';
 import { errorToast, successToast } from '@/lib/errorToast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import SaveIndicator, { type SaveState } from '@/components/SaveIndicator';
+
+// White-on-color contrast (WCAG) for the brand colors that carry white text
+// (the accent on primary buttons, the sidebar behind white nav labels). The
+// readout tells an admin, as they type a hex, whether white text will still be
+// legible on it — an un-fakeable accessibility aid, not a guess. Ratio =
+// (L_white + 0.05) / (L_color + 0.05), with L_white = 1.
+function relLuminance(hex: string): number | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+function whiteContrast(hex: string): { text: string; ok: boolean } | null {
+  const l = relLuminance(hex);
+  if (l === null) return null;
+  const r = Math.round((1.05 / (l + 0.05)) * 10) / 10;
+  return r >= 4.5
+    ? { text: `White text readable (${r.toFixed(1)}:1)`, ok: true }
+    : { text: `White text too faint (${r.toFixed(1)}:1, needs 4.5)`, ok: false };
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // BrandingPage — admin-facing theming controls. Customers set company
@@ -45,6 +71,9 @@ const textInputStyle: React.CSSProperties = {
 export default function BrandingPage() {
   const navigate = useNavigate();
   const { branding, save, reset, preview } = useBrandingStore();
+  // Register the breadcrumb leaf so the global trail reads
+  // "Dashboard › Settings › Branding" above the header.
+  useBreadcrumbLeaf('Branding');
 
   // Capture the last-saved values so Cancel can restore them.
   const committedRef = useRef<BrandingConfig>(branding);
@@ -152,6 +181,7 @@ export default function BrandingPage() {
       <PageHeader
         title="Branding"
         subtitle="Customize the company name, logo, and color palette. Changes apply live across the app and persist for all users."
+        meta={isDirty ? <StatusBadge variant="warning">Unsaved changes</StatusBadge> : undefined}
         actions={
           <>
             <SaveIndicator state={saveState} />
@@ -256,21 +286,33 @@ export default function BrandingPage() {
       <div style={cardStyle}>
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Colors</h2>
         <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 14 }}>
-          Edits preview live across the whole app — try clicking the sidebar and buttons as you tweak.
+          Two choices drive everything — the accent and the sidebar. Their hover and
+          light shades are derived for you; adjust them under Fine-tune. Edits preview
+          live across the whole app as you type.
         </p>
 
+        {/* The two primary choices, each with a white-text contrast check since
+            both carry white text (accent on buttons, sidebar behind nav labels). */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-          <ColorField label="Primary" hint="Main accent: primary buttons, active links, focus rings."
+          <ColorField label="Primary (accent)" hint="Primary buttons, active links, focus rings." showContrast
             value={draft.primaryColor} onChange={(v) => patch({ primaryColor: v })} />
-          <ColorField label="Primary — hover" hint="Hover state for primary buttons."
-            value={draft.primaryHoverColor} onChange={(v) => patch({ primaryHoverColor: v })} />
-          <ColorField label="Primary — light" hint="Muted primary: selected chips, active context, background tints."
-            value={draft.primaryLightColor} onChange={(v) => patch({ primaryLightColor: v })} />
-          <ColorField label="Sidebar" hint="Background of the left navigation rail."
+          <ColorField label="Sidebar" hint="Background of the left navigation rail." showContrast
             value={draft.sidebarColor} onChange={(v) => patch({ sidebarColor: v })} />
-          <ColorField label="Sidebar — hover" hint="Nav item hover / active state."
-            value={draft.sidebarHoverColor} onChange={(v) => patch({ sidebarHoverColor: v })} />
         </div>
+
+        {/* The three derived shades, hidden by default so the common case stays
+            to two decisions. */}
+        <details style={{ marginTop: 18, borderTop: '1px solid var(--color-border)', paddingTop: 14 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--color-primary)', fontSize: 13 }}>Fine-tune shades (3)</summary>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginTop: 12 }}>
+            <ColorField label="Primary — hover" hint="Hover state for primary buttons."
+              value={draft.primaryHoverColor} onChange={(v) => patch({ primaryHoverColor: v })} />
+            <ColorField label="Primary — light" hint="Muted primary: selected chips, active context, background tints."
+              value={draft.primaryLightColor} onChange={(v) => patch({ primaryLightColor: v })} />
+            <ColorField label="Sidebar — hover" hint="Nav item hover / active state."
+              value={draft.sidebarHoverColor} onChange={(v) => patch({ sidebarHoverColor: v })} />
+          </div>
+        </details>
       </div>
 
       {/* Swatch preview */}
@@ -335,11 +377,16 @@ interface ColorFieldProps {
   hint?: string;
   value: string;
   onChange: (hex: string) => void;
+  /** Show a WCAG white-text contrast readout under the field (for colors
+   *  that carry white text — the accent and the sidebar). */
+  showContrast?: boolean;
 }
 
-function ColorField({ label, hint, value, onChange }: ColorFieldProps) {
+function ColorField({ label, hint, value, onChange, showContrast }: ColorFieldProps) {
   const [text, setText] = useState(value);
   useEffect(() => { setText(value); }, [value]);
+
+  const contrast = showContrast ? whiteContrast(value) : null;
 
   function commitText() {
     const v = text.trim();
@@ -370,6 +417,11 @@ function ColorField({ label, hint, value, onChange }: ColorFieldProps) {
         />
       </div>
       {hint && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>{hint}</p>}
+      {contrast && (
+        <p style={{ fontSize: 11, fontWeight: 600, marginTop: 4, color: contrast.ok ? 'var(--color-success)' : 'var(--color-error)' }}>
+          {contrast.text}
+        </p>
+      )}
     </div>
   );
 }

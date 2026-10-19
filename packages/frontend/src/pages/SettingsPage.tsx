@@ -444,6 +444,11 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
+        meta={
+          <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            Applies to <strong style={{ color: 'var(--color-text)' }}>{activeOrgName || 'this organization'}</strong> and the divisions below it. Admins only.
+          </span>
+        }
         actions={
           <button
             onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
