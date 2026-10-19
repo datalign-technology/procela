@@ -1113,7 +1113,7 @@ export default function SystemsPage({
                       {c.tag && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>{c.tag}</span>}
                     </span>
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                    <span className="na-card-hint" title={c.hint}>{c.hint}</span>
                   </button>
                 );
               })}

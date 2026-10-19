@@ -1179,20 +1179,20 @@ export default function ConnectionsPage({
                       {noSystemCount > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>Fix first</span>}
                     </span>
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>No system assigned</span>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Data flows in, but nobody knows which system it belongs to</span>
+                    <span className="na-card-hint" title="Data flows in, but nobody knows which system it belongs to">Data flows in, but nobody knows which system it belongs to</span>
                   </button>
                   <button type="button" onClick={() => navigate('/systems')}
                     style={card(false, false)}>
                     <span style={{ fontSize: 26, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{systemsNoConn}</span>
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>Systems with no connection</span>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Opens the Systems tab</span>
+                    <span className="na-card-hint" title="Opens the Systems tab">Opens the Systems tab</span>
                   </button>
                   <button type="button" disabled={failingCount === 0} aria-pressed={attentionFilter === 'failing'}
                     onClick={() => setAttentionFilter(attentionFilter === 'failing' ? '' : 'failing')}
                     style={card(attentionFilter === 'failing', failingCount === 0)}>
                     <span style={{ fontSize: 26, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: failingCount === 0 ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{failingCount}</span>
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>Failing tests</span>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{failingCount === 0 ? 'All connections passed their last test' : 'Last test did not pass'}</span>
+                    <span className="na-card-hint" title={failingCount === 0 ? 'All connections passed their last test' : 'Last test did not pass'}>{failingCount === 0 ? 'All connections passed their last test' : 'Last test did not pass'}</span>
                   </button>
                 </div>
               </section>

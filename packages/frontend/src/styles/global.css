@@ -27,6 +27,22 @@ table td {
   white-space: nowrap;
 }
 
+/* Needs-attention / summary card descriptions. The hint text is clamped to a
+ * fixed two lines AND reserves that height, so a one-line and a two-line
+ * description occupy the same space — the card's height no longer depends on
+ * how long the text is, which keeps every card in a row (and across pages) the
+ * same size. The full text is still available via the element's title tooltip. */
+.na-card-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.7em; /* 2 lines at line-height 1.35 */
+}
+
 
 *,
 *::before,

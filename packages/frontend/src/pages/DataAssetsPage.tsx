@@ -1901,7 +1901,7 @@ export default function DataAssetsPage({
                       )}
                     </span>
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.hint}</span>
+                    <span className="na-card-hint" title={c.hint}>{c.hint}</span>
                   </button>
                 );
               })}
