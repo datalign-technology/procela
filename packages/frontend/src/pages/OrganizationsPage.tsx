@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
@@ -28,7 +28,6 @@ import { useToastStore } from '../stores/toastStore';
 // Lazy: only renders when the user opens the connection picker.
 const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 import { SkeletonRows } from '../components/Skeleton';
-import { activateOnKeyStop, clickable } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 // ── Types ──
@@ -117,10 +116,12 @@ function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>, all
 // Root org is system-protected — never selectable for bulk delete.
 
 
-function OrgTreeNode({ node, depth, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect, onSelect, activeDetailId, isAdmin }: {
+const ROW_INTERACTIVE = 'button, a, input, select, textarea, label, [role="button"]';
+function OrgTreeNode({ node, depth, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, rollupCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect, onSelect, activeDetailId, isAdmin }: {
   node: OrgNode; depth: number;
   onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
   expanded: Set<string>; toggleExpand: (id: string) => void; peopleCounts: Record<string, number>;
+  rollupCounts: Record<string, number>;
   accessibleOrgIds: Set<string>;
   allOrgs: OrgFlat[];
   selectedIds: Set<string>;
@@ -134,96 +135,92 @@ function OrgTreeNode({ node, depth, onDelete, onAddChild, expanded, toggleExpand
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
   const count = peopleCounts[node.id] || 0;
+  const rollup = rollupCounts[node.id] || 0;
   const canEdit = isAdmin && (accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds, allOrgs));
   const isSelected = selectedIds.has(node.id);
   const isRoot = false;
   const isActive = activeDetailId === node.id;
+  const tdStyle: React.CSSProperties = { padding: '8px 12px', verticalAlign: 'middle' };
 
   return (
-    <div>
-      <div
-        {...clickable(() => onSelect(node.id), { label: `View ${node.name}` })}
+    <>
+      <tr
+        aria-level={depth + 1}
         aria-current={isActive ? 'true' : undefined}
+        onClick={(e) => { if (!(e.target as HTMLElement).closest(ROW_INTERACTIVE)) onSelect(node.id); }}
         style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '8px 12px', paddingLeft: 12 + depth * 22,
-          borderBottom: '1px solid var(--color-border)',
+          borderBottom: '1px solid var(--color-border)', cursor: 'pointer',
           background: isActive ? 'var(--color-primary-light)' : isSelected ? 'var(--color-bg)' : undefined,
           boxShadow: isActive ? 'inset 2px 0 0 var(--color-primary)' : undefined,
-          transition: 'background 0.1s', cursor: 'pointer',
-          minWidth: 0,
         }}
         onMouseEnter={(e) => { if (!isSelected && !isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!isSelected && !isActive) e.currentTarget.style.background = ''; }}
       >
-        {/* Selection checkbox — hidden for protected root org */}
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onClick={(e) => e.stopPropagation()}
-          onChange={() => toggleSelect(node.id)}
-          disabled={isRoot || !canEdit}
-          title={isRoot ? 'Cannot select the root organization' : !canEdit ? 'Read-only' : 'Select for bulk delete'}
-          style={{ flexShrink: 0, width: 14, height: 14, cursor: isRoot || !canEdit ? 'not-allowed' : 'pointer', opacity: isRoot ? 0 : 1 }}
-        />
-        <span
-          onClick={(e) => { e.stopPropagation(); if (hasChildren) toggleExpand(node.id); }}
-          {...(hasChildren ? { role: 'button', tabIndex: 0, 'aria-label': isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`, 'aria-expanded': isExpanded, onKeyDown: activateOnKeyStop(() => toggleExpand(node.id)) } : {})}
-          style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none', flexShrink: 0 }}>
-          {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
-        </span>
-        {/* Identity on the left — name + type (+ a sync flag when relevant).
-            Industry dropped from the row: it repeats down the whole tree and
-            lives on the org's detail page. The people / children counts move
-            to a right-aligned cluster so they don't crowd the name. */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            <span
-              style={{ fontWeight: 500, fontSize: 13, color: isActive ? 'var(--color-primary)' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
-            <span style={{ ...typeBadge(node.type), flexShrink: 0 }}>{node.type}</span>
-            <NotInSourceBadge syncStatus={node.syncStatus} />
-          </div>
-          {node.description && (
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {node.description}
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {count > 0 && (
-            <span title={`${count} ${count === 1 ? 'person' : 'people'}`} style={{ fontSize: 10, color: '#5b21b6', background: '#ede9fe', padding: '1px 7px', borderRadius: 8, fontWeight: 500 }}>
-              {count} {count === 1 ? 'person' : 'people'}
-            </span>
-          )}
-          {hasChildren && (
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
-              {node.children.length} child{node.children.length === 1 ? '' : 'ren'}
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-          {canEdit && (
-            <>
-              <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => onAddChild(node.id)} />
-              {!isRoot && (
-                <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />
+        <td style={{ ...tdStyle, width: 44, paddingLeft: 16, paddingRight: 0 }}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => toggleSelect(node.id)}
+            disabled={isRoot || !canEdit}
+            title={isRoot ? 'Cannot select the root organization' : !canEdit ? 'Read-only' : 'Select for bulk delete'}
+            style={{ width: 16, height: 16, cursor: isRoot || !canEdit ? 'not-allowed' : 'pointer', opacity: isRoot ? 0 : 1, accentColor: 'var(--color-primary)' }}
+          />
+        </td>
+        <td style={tdStyle}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: depth * 22, minWidth: 0 }}>
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={() => toggleExpand(node.id)}
+                aria-label={isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
+                aria-expanded={isExpanded}
+                style={{ width: 24, height: 24, flex: 'none', border: 'none', background: 'transparent', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}
+              >{isExpanded ? '▼' : '▶'}</button>
+            ) : (
+              <span aria-hidden="true" style={{ width: 24, flex: 'none', display: 'inline-flex', justifyContent: 'center', color: 'var(--color-border)' }}>{'•'}</span>
+            )}
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(node.id)}
+                  style={{ border: 'none', background: 'transparent', padding: 0, textAlign: 'left', cursor: 'pointer', fontWeight: 600, fontSize: 13, color: isActive ? 'var(--color-primary)' : 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >{node.name}</button>
+                <NotInSourceBadge syncStatus={node.syncStatus} />
+              </span>
+              {node.description && (
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.description}</span>
               )}
-            </>
+            </span>
+          </span>
+        </td>
+        <td style={tdStyle}>
+          <span style={{ ...typeBadge(node.type) }}>{node.type}</span>
+        </td>
+        <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ display: 'block', fontWeight: 600, color: count === 0 ? 'var(--color-warning)' : 'var(--color-text)' }}>{count === 0 ? 'None' : count}</span>
+          {hasChildren && <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-muted)' }}>{rollup} incl. sub-orgs</span>}
+        </td>
+        <td style={{ ...tdStyle, paddingRight: 14, textAlign: 'right', whiteSpace: 'nowrap' }}>
+          {canEdit ? (
+            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              <IconButton size="sm" icon="plus" label={node.type === 'company' ? 'Add division' : 'Add department'} variant="primary" onClick={() => onAddChild(node.id)} />
+              {!isRoot && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />}
+            </span>
+          ) : (
+            <span style={{ fontSize: 9, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>read-only</span>
           )}
-        </div>
-        {!canEdit && (
-          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>read-only</span>
-        )}
-      </div>
+        </td>
+      </tr>
       {isExpanded && node.children.map((child) => (
         <OrgTreeNode key={child.id} node={child} depth={depth + 1}
           onDelete={onDelete} onAddChild={onAddChild}
-          expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
+          expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts} rollupCounts={rollupCounts}
           accessibleOrgIds={accessibleOrgIds} allOrgs={allOrgs}
           selectedIds={selectedIds} toggleSelect={toggleSelect}
           onSelect={onSelect} activeDetailId={activeDetailId} isAdmin={isAdmin} />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -269,6 +266,10 @@ export default function OrganizationsPage() {
   // still reads). Orgs have no owner field in the model, so the board's "No
   // owner" card is substituted with the computable "Missing description".
   const [attentionFilter, setAttentionFilter] = useState<'' | 'noMembers' | 'noDescription'>('');
+  // Tree search + type filter (board B1 toolbar). Matching keeps ancestors for
+  // context via the same pruneTree used by the needs-attention filter.
+  const [orgSearch, setOrgSearch] = useState('');
+  const [orgTypeFilter, setOrgTypeFilter] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -405,14 +406,38 @@ export default function OrganizationsPage() {
       if (match(node) || kids.length > 0) acc.push({ ...node, children: kids });
       return acc;
     }, []);
-  const visibleTree = attentionFilter ? pruneTree(tree, attentionTest[attentionFilter]) : tree;
+  // People including every descendant (the People column's "N incl. sub-orgs"
+  // roll-up line), computed once over the tree.
+  const rollupCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    const visit = (n: OrgNode): number => {
+      let total = peopleCounts[n.id] || 0;
+      for (const c of n.children) total += visit(c);
+      out[n.id] = total;
+      return total;
+    };
+    tree.forEach(visit);
+    return out;
+  }, [tree, peopleCounts]);
+
+  // Combined filter: needs-attention card + the toolbar's type filter + search.
+  // A node survives if it (or a descendant) matches all active predicates;
+  // ancestors are kept for context.
+  const searchTerm = orgSearch.trim().toLowerCase();
+  const anyFilter = !!attentionFilter || !!orgTypeFilter || !!searchTerm;
+  const combinedMatch = (o: OrgFlat) =>
+    (!attentionFilter || attentionTest[attentionFilter](o)) &&
+    (!orgTypeFilter || o.type === orgTypeFilter) &&
+    (!searchTerm || o.name.toLowerCase().includes(searchTerm) || (o.description || '').toLowerCase().includes(searchTerm));
+  const visibleTree = anyFilter ? pruneTree(tree, combinedMatch) : tree;
   // Collect every id in a (possibly pruned) tree — used to force the filtered
   // view fully expanded so matches are visible without manual drilling.
   const collectTreeIds = (nodes: OrgNode[], into: Set<string> = new Set()): Set<string> => {
     for (const n of nodes) { into.add(n.id); collectTreeIds(n.children, into); }
     return into;
   };
-  const effectiveExpanded = attentionFilter ? collectTreeIds(visibleTree) : expanded;
+  const effectiveExpanded = anyFilter ? collectTreeIds(visibleTree) : expanded;
+  const visibleCount = collectTreeIds(visibleTree).size;
 
   // Selectable orgs = everything in the user's edit scope, minus the root.
   const selectableOrgIds = flatOrgs
@@ -646,6 +671,13 @@ export default function OrganizationsPage() {
         </Card>
       )}
 
+      {/* One-line description of what the hierarchy is for (board B1). */}
+      {flatOrgs.length > 0 && (
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 12px' }}>
+          The company hierarchy that scopes people, agents, systems and processes.
+        </p>
+      )}
+
       {/* Summary stats — counts by org type + total people, mirrors the
           legend pattern from the Process Catalog page. Helps the user
           see the shape of their org at a glance instead of having to
@@ -786,8 +818,8 @@ export default function OrganizationsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: (tree.length > 0 && showOrgForm) ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
         {/* Left: Org Tree */}
         <Card padding={0} shadow="none">
-        {/* Tree toolbar — select-all, expand/collapse */}
-        <div style={{ display: 'flex', gap: 12, padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
+        {/* Tree toolbar — select-all, search, type filter, expand/collapse */}
+        <div style={{ display: 'flex', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--color-text-secondary)' }}>
             <input
               type="checkbox"
@@ -797,13 +829,32 @@ export default function OrganizationsPage() {
             />
             Select all
           </label>
-          <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={() => setExpanded(new Set())} />
-          {attentionFilter && (
-            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-              Showing {attentionFilter === 'noMembers' ? 'units with no direct members' : 'units with no description'}
-              <button type="button" onClick={() => setAttentionFilter('')} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Clear</button>
-            </span>
-          )}
+          <input
+            type="search"
+            aria-label="Search organizations"
+            value={orgSearch}
+            onChange={(e) => setOrgSearch(e.target.value)}
+            placeholder="Search organizations"
+            style={{ flex: '1 1 200px', minWidth: 160, maxWidth: 360, height: 30, padding: '0 10px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, background: 'var(--color-surface)' }}
+          />
+          <select
+            aria-label="Filter by type"
+            value={orgTypeFilter}
+            onChange={(e) => setOrgTypeFilter(e.target.value)}
+            style={{ height: 30, padding: '0 8px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, background: 'var(--color-surface)', appearance: 'auto' as any }}
+          >
+            <option value="">All types</option>
+            {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+          </select>
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            {attentionFilter && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                {attentionFilter === 'noMembers' ? 'No direct members' : 'Missing description'}
+                <button type="button" onClick={() => setAttentionFilter('')} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Clear</button>
+              </span>
+            )}
+            <ExpandCollapseControls size={11} onExpandAll={expandAll} onCollapseAll={() => setExpanded(new Set())} />
+          </span>
         </div>
 
         {/* Tree — uses full page width. No inner scroll container:
@@ -823,17 +874,39 @@ export default function OrganizationsPage() {
           ) : visibleTree.length === 0 ? (
             <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
               No organizations match this filter.{' '}
-              <button type="button" onClick={() => setAttentionFilter('')} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Show all</button>
+              <button type="button" onClick={() => { setAttentionFilter(''); setOrgSearch(''); setOrgTypeFilter(''); }} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Show all</button>
             </div>
           ) : (
-            visibleTree.map((node) => (
-              <OrgTreeNode key={node.id} node={node} depth={0}
-                onDelete={promptDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
-                expanded={effectiveExpanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
-                accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
-                selectedIds={selectedIds} toggleSelect={toggleOrgSelect}
-                onSelect={(oid) => navigate(`/organizations/${oid}`)} activeDetailId={null} isAdmin={isAdmin} />
-            ))
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table role="treegrid" aria-label="Organizations" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <th style={{ width: 44, padding: '8px 0 8px 16px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }} />
+                      <th style={{ padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Organization</th>
+                      <th style={{ padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Type</th>
+                      <th style={{ padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', textAlign: 'right' }}>People</th>
+                      <th style={{ padding: '8px 14px 8px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', textAlign: 'right' }}><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleTree.map((node) => (
+                      <OrgTreeNode key={node.id} node={node} depth={0}
+                        onDelete={promptDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
+                        expanded={effectiveExpanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts} rollupCounts={rollupCounts}
+                        accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
+                        selectedIds={selectedIds} toggleSelect={toggleOrgSelect}
+                        onSelect={(oid) => navigate(`/organizations/${oid}`)} activeDetailId={null} isAdmin={isAdmin} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Footer — visible-vs-total count + the direct/roll-up note. */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 16px', fontSize: 12, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderTop: '1px solid var(--color-border)' }}>
+                <span>Showing {visibleCount} of {flatOrgs.length} organizations</span>
+                <span>People counts are direct members; the second line adds everyone in sub-organizations.</span>
+              </div>
+            </>
           )}
         </div>
         </Card>
