@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Tabs from '../components/Tabs';
@@ -103,6 +103,8 @@ export default function PersonDetailPage() {
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const { isAdmin } = usePermissions();
   const { activeOrgId } = useOrgContext();
+  const [, setSearchParams] = useSearchParams();
+  const goToTab = (tab: string) => setSearchParams((prev) => { const n = new URLSearchParams(prev); n.set('tab', tab); return n; });
   const [data, setData] = useState<Person360Data | null>(null);
   const [allOrgs, setAllOrgs] = useState<FlatOrg[]>([]);
   const [allSkills, setAllSkills] = useState<Array<{ id: string; name: string }>>([]);
@@ -297,6 +299,17 @@ export default function PersonDetailPage() {
   const skillNameMap: Record<string, string> = {};
   allSkills.forEach((s) => { skillNameMap[s.id] = s.name; });
 
+  // Header pills + "At a glance" accountability counts (from the 360 data).
+  const statusActive = p.active !== false;
+  const primaryRole = data.damaRoles[0];
+  const domainsOwned = data.allDomains.filter((d) => d.ownerId === p.id).length;
+  const atAGlance = [
+    { label: 'Governance roles', count: data.damaRoles.length },
+    { label: 'Groups', count: data.governanceGroups.length },
+    { label: 'Domains owned', count: domainsOwned },
+    { label: 'Data assets', count: data.dataAssets.length },
+  ];
+
   return (
     <div>
       {/* Header leads; the 360 sections become tabs so the page reads as one
@@ -313,6 +326,18 @@ export default function PersonDetailPage() {
             {p.email && <span>{p.email}</span>}
             {p.title && <span>{p.email ? ' \u2022 ' : ''}{p.title}</span>}
           </>
+        }
+        meta={
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 22, padding: '0 10px', borderRadius: 11, fontSize: 12, fontWeight: 600, background: statusActive ? '#dcefe5' : '#eef0f2', color: statusActive ? '#17604b' : '#6b7280' }}>
+              <span style={{ width: 7, height: 7, borderRadius: 4, background: statusActive ? '#17604b' : '#6b7280' }} />{statusActive ? 'Active' : 'Inactive'}
+            </span>
+            {primaryRole && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 22, padding: '0 10px', borderRadius: 11, fontSize: 12, fontWeight: 600, background: '#e6eef9', color: '#24508f' }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: '#24508f' }} />{DAMA_ROLE_LABELS[primaryRole.roleType] || primaryRole.roleType} role
+              </span>
+            )}
+          </div>
         }
         actions={
           <DetailEditActions
@@ -337,6 +362,22 @@ export default function PersonDetailPage() {
         }
         tabs={[
           { id: 'overview', label: 'Overview', render: () => (<>
+      {/* At a glance — what this person is accountable for across the program. */}
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+          <SectionLabel marginBottom={0}>At a glance</SectionLabel>
+          <button type="button" onClick={() => goToTab('accountabilities')} style={{ border: 'none', background: 'transparent', color: 'var(--color-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>See all accountabilities</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+          {atAGlance.map((c) => (
+            <div key={c.label} style={{ padding: '12px 14px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+              <span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-muted)' }}>{c.label}</span>
+              <span style={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Identity summary */}
       <div style={cardStyle}>
         <SectionLabel marginBottom={10}>Identity</SectionLabel>
