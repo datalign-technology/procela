@@ -28,6 +28,9 @@ interface ResetAllDataPanelProps {
    *  same handler the surrounding card uses so the operator doesn't
    *  have to scroll. Optional; omit if exporting isn't reachable. */
   onExportFirst?: () => void;
+  /** Render without the panel's own card chrome + title, for when it sits
+   *  inside a Settings collapsible row that already provides those. */
+  flush?: boolean;
 }
 
 const sectionTitleStyle: React.CSSProperties = {
@@ -41,7 +44,7 @@ const sectionTitleStyle: React.CSSProperties = {
 // via `padding`. All other styling comes from the standard card
 // tokens (surface bg, radius-md, shadow-sm).
 
-export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelProps) {
+export default function ResetAllDataPanel({ onExportFirst, flush = false }: ResetAllDataPanelProps) {
   const { isSuperAdmin } = usePermissions();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [phrase, setPhrase] = useState('');
@@ -80,8 +83,8 @@ export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelPr
   };
 
   return (
-    <Card padding="1.5rem" borderColor="#fecaca" data-testid="reset-all-data-panel">
-      <h2 style={{ ...sectionTitleStyle, color: '#991b1b' }}>Reset everything</h2>
+    <Card padding={flush ? 0 : '1.5rem'} shadow={flush ? 'none' : undefined} borderColor={flush ? 'transparent' : '#fecaca'} data-testid="reset-all-data-panel">
+      {!flush && <h2 style={{ ...sectionTitleStyle, color: '#991b1b' }}>Reset everything</h2>}
       <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem', lineHeight: 1.5 }}>
         Permanently delete every organization, person, process, data asset,
         system, mapping, governance record, comment, and audit-log entry. The

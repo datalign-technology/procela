@@ -24,6 +24,49 @@ import LoadDemoDataPanel from '../components/LoadDemoDataPanel';
 import { useAuthStore } from '@/stores/authStore';
 import { Link } from 'react-router-dom';
 import { useOrgContext } from '../stores/orgContext';
+import { ChevronRight } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
+import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
+
+// ── SettingsSection — a collapsible "index row" (redesign board A4). Each
+// setting on a non-General tab is a card whose header summarises it (name +
+// one-line description + an optional status pill) and expands on click to its
+// full controls. Collapsed by default so a tab reads as a scannable index.
+function SettingsSection({
+  name, desc, status, defaultOpen, children,
+}: {
+  name: string;
+  desc?: React.ReactNode;
+  status?: { label: string; variant: StatusBadgeVariant };
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', marginBottom: 12, overflow: 'hidden' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+      >
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{name}</span>
+          {desc && <span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>{desc}</span>}
+        </span>
+        {status && <StatusBadge variant={status.variant} size="md">{status.label}</StatusBadge>}
+        <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', display: 'inline-flex', transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'none' }}>
+          <ChevronRight size={18} />
+        </span>
+      </button>
+      {open && (
+        <div style={{ padding: '6px 18px 18px', borderTop: '1px solid var(--color-border)' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface AuthConfigData {
   provider: string;
@@ -74,6 +117,7 @@ export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
   const aiEnabled = useAiEnabled();
   const isAdmin = !!user?.role && ADMIN_ROLES.has(user.role);
+  const { isSuperAdmin } = usePermissions();
   if (!isAdmin) {
     return (
       <Page width="narrow" padding="64px 0">
@@ -625,8 +669,7 @@ export default function SettingsPage() {
           company-level org — divisions inherit the parent's brand at
           the sign-in card. Kept text-only in v1 (emoji glyph +
           display name + button label + primary hex). */}
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Sign-in page appearance</h2>
+      <SettingsSection name="Sign-in page appearance" desc="Name, glyph, color and SSO button label on your tenant sign-in page.">
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
           Customises the sign-in card for users landing at your tenant URL — <code>/login?tenant=&lt;slug&gt;</code> or your subdomain — so the login page reads as <strong>{branding.brandDisplayName || activeOrgName || 'your company'}</strong> rather than generic Procela. Fields below stay optional; empty ones fall back to platform defaults.
         </p>
@@ -738,15 +781,10 @@ export default function SettingsPage() {
             <div style={{ fontSize: 9, color: 'var(--color-text-muted)', textAlign: 'center', marginTop: 8 }}>Powered by Procela</div>
           </div>
         </div>
-      </Card>
+      </SettingsSection>
 
-      {/* Authentication + two-step verification in a two-column layout:
-          the tall Authentication card fills the left column, and the
-          short Two-step verification card sits in the right column.
-          Active sessions renders full-width below the row. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Authentication</h2>
+      <SettingsSection name="Authentication" desc="How people sign in — single sign-on (Okta, Microsoft, any OIDC provider).">
+
 
         {authLoading ? (
           <Spinner label="Loading…" />
@@ -907,65 +945,50 @@ export default function SettingsPage() {
             </div>
           </>
         )}
-      </Card>
+      </SettingsSection>
 
-      {/* Two-step verification (MFA / TOTP) — the sole occupant of the
-          right column beside the taller Authentication card. */}
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Two-step verification</h2>
+      <SettingsSection name="Two-step verification" desc="Authenticator-app codes and security keys for your account.">
         <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
           Use an authenticator app (Google Authenticator, 1Password, Authy)
           to generate a one-time code at sign-in. When enabled, your
           password alone won't be enough to sign in.
         </p>
         <MfaPanel />
-      </Card>
-      </div>{/* /auth + security two-column */}
+      </SettingsSection>
 
-      <div style={{ height: '1.5rem' }} />
-
-      {/* Active sessions — full-width below the two-column row so the
-          session list has room to breathe across the whole page. */}
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Active sessions</h2>
+      <SettingsSection name="Active sessions" desc="Devices signed in to your account — revoke any you don't recognise.">
         <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
           Every device or browser you're signed in from has its own refresh
           token. Revoke one if you've finished with a public computer, lost a
           device, or want to force a fresh login from somewhere.
         </p>
         <ActiveSessionsPanel />
-      </Card>
+      </SettingsSection>
 
       </div>{/* ══ /Sign-in & Security ══ */}
 
       {/* ══ Integrations ══ */}
       <div style={{ display: settingsTab === 'integrations' ? 'block' : 'none' }}>
 
-      {/* AI (Claude) — model + Anthropic-key config. Subsumes the old
-          standalone "API Configuration" card, which only restated the same
-          key status this panel already surfaces. Hidden when AI integration
-          features are turned off for the deployment. */}
-      {aiEnabled && <AiSettingsPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />}
+      {/* Each integration is a collapsible row; the panels render their own
+          body (we blank their card + title so the row owns that chrome). */}
+      {aiEnabled && (
+        <SettingsSection name="AI provider" desc="Model and key used by Ask Procela and AI generation.">
+          <AiSettingsPanel sectionStyle={{}} sectionTitleStyle={{ display: 'none' }} />
+        </SettingsSection>
+      )}
 
-      {/* Spacer */}
-      <div style={{ height: '1.5rem' }} />
+      <SettingsSection name="On-prem connectors" desc="Agents inside your network that scan firewalled databases.">
+        <ConnectorsSection sectionStyle={{}} sectionTitleStyle={{ display: 'none' }} />
+      </SettingsSection>
 
-      <ConnectorsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
+      <SettingsSection name="Directory & data sync" desc="Scheduled imports of people, systems and assets.">
+        <SyncConnectionsSection sectionStyle={{}} sectionTitleStyle={{ display: 'none' }} />
+      </SettingsSection>
 
-      {/* Spacer */}
-      <div style={{ height: '1.5rem' }} />
-
-      {/* Directory & data sync — status + manual run for the scheduled imports
-          created in the Sync wizard on the entity pages. */}
-      <SyncConnectionsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
-
-      {/* Spacer */}
-      <div style={{ height: '1.5rem' }} />
-
-      {/* Agent access (MCP) — per-tenant opt-in for the Model Context Protocol
-          surface. Gated on top of the deployment kill switches; the panel says
-          when the deployment hasn't enabled it. */}
-      <McpAccessPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
+      <SettingsSection name="Agent access (MCP)" desc="Let outside AI tools read your catalog over the Model Context Protocol.">
+        <McpAccessPanel sectionStyle={{}} sectionTitleStyle={{ display: 'none' }} />
+      </SettingsSection>
 
       </div>{/* ══ /Integrations ══ */}
 
@@ -977,8 +1000,7 @@ export default function SettingsPage() {
           data-sensitivity tags (PII/PHI/PCI/…) are always available and not
           listed here. Sits at the top of the Data tab — data-governance policy
           ahead of the operational backup / demo / reset actions below. */}
-      <Card padding="1.5rem" marginBottom="1.5rem">
-        <h2 style={sectionTitleStyle}>Data classification regimes</h2>
+      <SettingsSection name="Data classification regimes" desc="Regulatory / export-control regimes active for this tenant.">
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>
           Choose which regulatory / export-control regimes apply to <strong>{activeOrgName || 'this tenant'}</strong>. Only active regimes can be applied to data assets and are suggested by the classifier. Universal data-sensitivity tags (PII, PHI, PCI, Financial, Credential, Confidential, Public) are always available.
         </p>
@@ -1005,15 +1027,10 @@ export default function SettingsPage() {
             No regulatory regimes are active — assets in this tenant can carry only the universal data-sensitivity tags.
           </p>
         )}
-      </Card>
+      </SettingsSection>
 
-      {/* Compliance frameworks — an org admin curates which frameworks are
-          selectable as activity compliance tags. Unlike the fixed sensitivity
-          regimes above, this list is free-form: toggle the built-in set and add
-          your own (e.g. an internal control catalog). Unset on the org = the
-          built-in defaults. Drives the activity Compliance picker. */}
-      <Card padding="1.5rem" marginBottom="1.5rem">
-        <h2 style={sectionTitleStyle}>Compliance frameworks</h2>
+      <SettingsSection name="Compliance frameworks" desc="Frameworks people can tag on activities, alongside the built-in set.">
+
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>
           Choose which compliance frameworks are selectable as compliance tags on activities in <strong>{activeOrgName || 'this tenant'}</strong>. Add your own frameworks alongside the built-in set. Tags already applied to an activity keep showing even if the framework is later removed here.
         </p>
@@ -1087,39 +1104,28 @@ export default function SettingsPage() {
         >
           Reset to built-in defaults
         </button>
-      </Card>
+      </SettingsSection>
 
-      {/* Load demo data and Reset — two data-lifecycle actions paired
-          side-by-side to shorten the Data tab. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+      {/* Load demo data + Reset — super-admin only; each a collapsible row that
+          renders the panel flush (no inner card/title of its own). */}
+      {isSuperAdmin && (
+        <SettingsSection name="Load demo data" desc="Fill this organization with sample data to explore the app.">
+          <LoadDemoDataPanel flush />
+        </SettingsSection>
+      )}
 
-      {/* Load demo data — one-click seed of the Tidewater Utilities
-          fixture. Idempotent; a second call wipes the prior seed and
-          reseeds so the button always converges on a known state.
-          Positioned above Reset so the demo-mode workflow reads top-
-          to-bottom: seed → demo → reset. */}
-      <LoadDemoDataPanel />
-
-      {/* Reset everything — super-admin only "factory reset" that
-          wipes every store on disk + in memory. Its Export-first
-          affordance runs the same backup export as the Backup &
-          Restore tab, so the recommended Export-then-reset workflow
-          stays one click away here. */}
-      <ResetAllDataPanel onExportFirst={handleExportBackup} />
-
-      </div>{/* end demo + reset grid */}
+      {isSuperAdmin && (
+        <SettingsSection name="Reset everything" desc="Delete all data for every organization. Cannot be undone." status={{ label: 'Danger', variant: 'danger' }}>
+          <ResetAllDataPanel onExportFirst={handleExportBackup} flush />
+        </SettingsSection>
+      )}
 
       </div>{/* ══ /Data ══ */}
 
       {/* ══ Backup & Restore ══ */}
       <div style={{ display: settingsTab === 'backup' ? 'block' : 'none' }}>
-      {/* Backup & Restore */}
-      <Card padding="1.5rem">
-        <h2 style={sectionTitleStyle}>Backup & Restore</h2>
-
-        {/* Export */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Export Backup</h3>
+      <SettingsSection name="Export backup" desc="Download a full copy of this organization as one file.">
+        <div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
             Download a full backup of <strong>{activeOrgName || 'this tenant'}</strong> and everything beneath it as a JSON file — records, attachment links, and the contents of uploaded files, so it restores completely on another host.
           </p>
@@ -1141,12 +1147,10 @@ export default function SettingsPage() {
           </button>
         </div>
 
-        {/* Divider */}
-        <div style={{ height: '1px', background: 'var(--color-border)', marginBottom: '1.5rem' }} />
+      </SettingsSection>
 
-        {/* Import */}
+      <SettingsSection name="Import backup" desc="Restore from a backup file. Replaces current data after you confirm." status={{ label: 'Replaces data', variant: 'warning' }}>
         <div>
-          <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Import Backup</h3>
           <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
             Restore data from a previously exported Procela backup file.
           </p>
@@ -1214,7 +1218,7 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
-      </Card>
+      </SettingsSection>
 
       <ConfirmDialog
         open={importConfirmOpen}
@@ -1231,13 +1235,6 @@ export default function SettingsPage() {
     </div>
   );
 }
-
-const sectionStyle: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--color-border)',
-  padding: '1.5rem',
-};
 
 const sectionTitleStyle: React.CSSProperties = {
   fontSize: '1.125rem',
