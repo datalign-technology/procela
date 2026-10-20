@@ -83,7 +83,7 @@ test.describe('Procela smoke', () => {
   });
 
   test('every top-level page renders without errors', async ({ page }) => {
-    // Walking 23 routes serially can exceed the default 30s timeout
+    // Walking 25 routes serially can exceed the default 30s timeout
     // on a dev backend with accumulated state — each page's data
     // fetch takes longer when the persistence layer has more rows.
     // Give this test the room it needs; the per-page work is still

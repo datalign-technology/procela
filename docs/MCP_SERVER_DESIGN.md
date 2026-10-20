@@ -1,6 +1,6 @@
 # Procela MCP Server — Design & Threat Model
 
-**Status:** Draft / Proposed (not yet scheduled)
+**Status:** Shipped (v1 read tools + v2 write tools) — see the per-section "Status (shipped)" notes below and `docs/MCP_SERVER.md`
 **Audience:** Engineering, Security, Product/GTM
 **Scope of this doc:** the design and security model for exposing Procela's
 governed context to external AI agents over the Model Context Protocol (MCP).

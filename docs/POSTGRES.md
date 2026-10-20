@@ -135,7 +135,7 @@ arrays remain solely as the backing store for the JSON default.
 ```
 packages/backend/
 ├── prisma/
-│   ├── schema.prisma            # 63 models, 7 enums — the source of truth
+│   ├── schema.prisma            # 71 models, 7 enums — the source of truth
 │   └── migrations/              # generated SQL migration files
 └── src/
     └── db/

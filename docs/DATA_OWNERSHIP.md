@@ -27,7 +27,7 @@ overwrites** the governance/ownership fields a human curates in the UI. A
 report that omits `columns[]` (an older agent) skips the column block
 entirely, so it can never wipe a hand-curated schema.
 
-Of the ~60 models in the Prisma schema, the agent path touches exactly
+Of the ~70 models in the Prisma schema, the agent path touches exactly
 **four tables**. Everything else is 100% UI / API.
 
 ---

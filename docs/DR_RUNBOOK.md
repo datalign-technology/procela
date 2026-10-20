@@ -62,10 +62,12 @@ aws rds restore-db-instance-from-db-snapshot \
   --db-snapshot-identifier 〈snapshot-id〉 --region 〈region〉
 ```
 
-> ⚠️ `deploy/terraform/rds.tf` currently sets `skip_final_snapshot = true`
-> and `deletion_protection = false` (reference config). **Flip both for
-> prod** (§7) or a deleted instance leaves no final snapshot to restore
-> from.
+> `deploy/terraform/rds.tf` drives `deletion_protection`,
+> `skip_final_snapshot`, and `multi_az` from variables that **default to
+> the hardened posture** (`rds_deletion_protection = true`,
+> `rds_multi_az = true`; see `deploy/terraform/variables.tf`). They're on
+> for prod unless you explicitly disable them — e.g. in a throwaway dev
+> workspace.
 
 ### 1c. Repoint the app at the restored instance
 
@@ -178,9 +180,10 @@ their authenticator. Only rotate on actual key compromise, and when you
 do: schedule a re-enrollment window, notify users, then
 `put-secret-value` and redeploy. Users hit "re-enroll MFA" on next login.
 
-> Note: `MFA_ENCRYPTION_KEY` / `KMS_PROVIDER` are **not yet provisioned
-> in `deploy/terraform/secrets.tf`** — add them (§7) so this key is
-> managed like the others rather than set ad hoc.
+> Note: `MFA_ENCRYPTION_KEY` is **Terraform-generated and injected** —
+> `deploy/terraform/secrets.tf` provisions it (`random_password` +
+> Secrets Manager secret + version), so it's managed like the other
+> secrets rather than set ad hoc.
 
 ### 3e. After any rotation
 
@@ -256,11 +259,13 @@ DATABASE_URL=… npm run db:migrate-json -- --dry-run
 These make the procedures above actually work in a real incident. Track
 alongside `STATUS.md` (§ Go-live checklist):
 
-- [ ] `rds.tf`: `backup_retention_period > 0` (PITR), `deletion_protection = true`,
+- [x] `rds.tf`: `backup_retention_period > 0` (PITR), `deletion_protection = true`,
       `skip_final_snapshot = false`, `multi_az = true`, storage on a KMS CMK.
+      *(Default via `variables.tf` — `rds_deletion_protection` / `rds_multi_az`
+      default to `true`; disable only in a throwaway workspace.)*
 - [ ] Take a **manual snapshot before every prod `migrate deploy`**.
-- [ ] Add `MFA_ENCRYPTION_KEY` / `KMS_PROVIDER` to `secrets.tf` and wire
-      it into the ECS task `secrets` list.
+- [x] `MFA_ENCRYPTION_KEY` provisioned in `secrets.tf` (Terraform-generated)
+      and injected into the ECS task — no manual step.
 - [ ] Provision `REDIS_URL`, `SMTP_*` and the RS256 JWT keypair (checklist
       #7, #8, #9) — the app falls back / warns without them.
 - [ ] Rehearse this runbook against a staging restore at least once, and
