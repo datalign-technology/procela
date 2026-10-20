@@ -1,8 +1,9 @@
 # Backend test coverage map
 
-A snapshot of where the 325 backend tests reach today, where they
-don't, and which gaps to fill first when someone has time. Generated
-with Node 22's built-in `--experimental-test-coverage`.
+A snapshot of where the backend tests (~1,500 across ~200 `*.test.ts`
+files) reach today, where they don't, and which gaps to fill first when
+someone has time. Generated with Node 22's built-in
+`--experimental-test-coverage`.
 
 ## Run it
 

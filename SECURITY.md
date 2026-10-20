@@ -106,9 +106,10 @@ Three layered controls sit in front of the credential verifier:
 
 ## Authorisation
 
-  - Role-based access control with six roles: `SUPER_ADMIN`,
-    `ORG_ADMIN`, `PROCESS_OWNER`, `DATA_STEWARD`, `CONTRIBUTOR`,
-    `VIEWER`.
+  - Role-based access control with five roles: `SUPER_ADMIN`,
+    `ORG_ADMIN`, `EDITOR`, `CONTRIBUTOR`, `VIEWER`. (`EDITOR` is the
+    merged former `PROCESS_OWNER` + `DATA_STEWARD`: write over the
+    process catalog and the data/system registry.)
   - **Per-org role overrides** — a Person can hold different roles
     in different orgs. Resolution at token-mint time prefers an
     org-specific entry over the person's default role.
@@ -217,6 +218,9 @@ backlog.
   - **Key derivation**: scrypt (N=16384, r=8, p=1) for the local
     AES master key.
   - **Audit chain**: SHA-256.
-  - **JWT signing**: HS256 with `JWT_SECRET`.
+  - **JWT signing**: RS256 (the default when the `JWT_PRIVATE_KEY` /
+    `JWT_PUBLIC_KEY` PEM keypair is set; the public key is published at
+    `/api/v1/auth/jwks.json`), falling back to HS256 with `JWT_SECRET`.
+    Production installs should use RS256.
   - **PKCE**: S256.
   - **TOTP**: SHA-1 HMAC, 30-second period, 6 digits (RFC 6238).

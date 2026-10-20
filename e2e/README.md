@@ -2,7 +2,7 @@
 
 One short Playwright suite that catches full-stack regressions before
 they ship. It boots the whole dev stack (backend + frontend), drives
-Chromium through five top-level user flows, and exits non-zero on the
+Chromium through seven top-level user flows, and exits non-zero on the
 first JS error or failed assertion. Total runtime ~40 seconds.
 
 ## Run it
@@ -47,7 +47,7 @@ prefix means updating one place (`SMOKE_NAME_PREFIXES` in
 | Test | Validates |
 |---|---|
 | `Eleanor can sign in and lands on the dashboard` | Auth flow + Layout shell |
-| `every top-level page renders without errors` | 23 routes mount with zero JS errors |
+| `every top-level page renders without errors` | 25 routes mount with zero JS errors |
 | `creating a person through the API surfaces on the People page` | List page + active-org filter |
 | `assigning a CDO surfaces on the Governance Roles page` | DAMA assignment + table render |
 | `the assign-role form opens and lists the org's people` | PersonPicker integration |

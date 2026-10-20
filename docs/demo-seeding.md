@@ -90,9 +90,9 @@ content differs — so a demo of any tenant lights up every page:
 - **9 data assets** — mixed Bronze/Silver/Gold, including **2 planted
   orphans** (`healthScore: 0`, unmapped) so Ask-AI orphan detection and
   gap views have something to find.
-- **15 process nodes** across **2 value streams**
-  (Value Stream → Process → Sub-Process → Activity) with flow
-  relationships, and **7 process↔data mappings**.
+- **16 process nodes** (the Utilities default — other industries seed
+  15) across **2 value streams** (Value Stream → Process → Sub-Process →
+  Activity) with flow relationships, and **7 process↔data mappings**.
 - **3 governance tasks, 1 ownership issue, 2 DQ rules** (one passing, one
   failing — the failing rule and the issue target the **same Bronze,
   business-critical asset** so the story stays coherent).

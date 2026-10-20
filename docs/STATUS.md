@@ -436,8 +436,9 @@ not read yet); warehouse/object-store/API/spreadsheet DQ is simulated.
 
 ## GA tightening audit
 
-The field-level census for the first commercial release (63 models / ~653
-columns) is **closed — sections §A–§G are all done**: dead columns removed,
+The field-level census for the first commercial release (then 63 models /
+~653 columns; the schema has since grown to 71 models) is **closed —
+sections §A–§G are all done**: dead columns removed,
 redundant fields consolidated, mocked surfaces either finished or honestly
 labelled, and the Postgres persistence + secrets-at-rest work landed. A handful
 of fields were **deliberately kept/deferred** rather than removed (listed under

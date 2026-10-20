@@ -109,9 +109,11 @@ drift with edits.
 
 - **☐ E1 [MED] `ProcessDataMapPage`** fetches with no loading affordance —
   the SVG pops in. Add a skeleton/spinner branch.
-- **☐ E2 [MED] Loading-text vs `SkeletonRows`** — non-list surfaces
-  hand-roll a "Loading…" line with drifting copy (`...` vs `…`); no shared
-  `<Spinner>`. → introduce `<Spinner label>` and standardise wording.
+- **☑ E2 [MED] Loading-text vs `SkeletonRows`** — non-list surfaces
+  hand-rolled a "Loading…" line with drifting copy (`...` vs `…`) and no
+  shared spinner. The **`<Spinner label>` primitive has shipped**
+  (`components/Spinner.tsx`); adoption across the remaining hand-rolled
+  "Loading…" lines is the follow-on.
 - **☐ E3 [MED] `TruncatedText` gaps** — long free-text cells rendered raw
   (`MappingsPage` Notes, `DecisionRightsPage` description); `DataAssetsPage`
   reinvents the ellipsis+title inline. → `<TruncatedText>`.
@@ -156,6 +158,7 @@ drift with edits.
    the DataTable series).
 5. **`<Spinner>` primitive** + loading/`TruncatedText` cleanup.
 
-Two genuine *new-primitive* gaps the earlier series didn't cover: a
-**`Button`** and a **`Spinner`**. Everything else is *adoption* of
-primitives that already exist, or colour tokenisation.
+Two genuine *new-primitive* gaps the earlier series didn't cover — a
+**`Button`** and a **`Spinner`** — have since **both shipped**
+(`components/Button.tsx`, `components/Spinner.tsx`). Everything else is
+*adoption* of primitives that already exist, or colour tokenisation.
