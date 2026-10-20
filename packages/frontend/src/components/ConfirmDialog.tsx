@@ -161,7 +161,7 @@ export default function ConfirmDialog({
                 width: '100%',
                 padding: '8px 10px',
                 fontSize: 13,
-                border: `1px solid ${canConfirm ? '#16a34a' : '#d1d5db'}`,
+                border: `1px solid ${canConfirm ? 'var(--color-success)' : '#d1d5db'}`,
                 borderRadius: 6,
                 fontFamily: 'var(--font-mono, ui-monospace, monospace)',
               }}

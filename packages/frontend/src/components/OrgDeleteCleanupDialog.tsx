@@ -519,7 +519,7 @@ export default function OrgDeleteCleanupDialog({
               spellCheck={false}
               style={{
                 width: '100%', padding: '8px 10px', fontSize: 13,
-                border: `1px solid ${typed === 'DELETE' ? '#16a34a' : 'var(--color-border)'}`,
+                border: `1px solid ${typed === 'DELETE' ? 'var(--color-success)' : 'var(--color-border)'}`,
                 borderRadius: 6,
                 fontFamily: 'var(--font-mono, ui-monospace, monospace)',
               }}
@@ -567,7 +567,7 @@ export default function OrgDeleteCleanupDialog({
               disabled={!canConfirm}
               style={{
                 padding: '8px 16px', fontSize: 13,
-                background: canConfirm ? '#dc2626' : '#e5e7eb',
+                background: canConfirm ? 'var(--color-error)' : '#e5e7eb',
                 border: 'none', borderRadius: 6,
                 color: canConfirm ? '#fff' : '#9ca3af', fontWeight: 500,
                 cursor: canConfirm ? 'pointer' : 'not-allowed',

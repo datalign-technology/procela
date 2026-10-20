@@ -30,7 +30,7 @@ export default function DependencyBanner({ phase, checks }: DependencyBannerProp
       <div style={{ color: '#78350f', lineHeight: 1.6 }}>
         {unmet.map((c, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <AlertTriangle size={12} strokeWidth={2.2} color="#d97706" aria-hidden="true" />
+            <AlertTriangle size={12} strokeWidth={2.2} color="var(--color-warning)" aria-hidden="true" />
             <span>{c.label}</span>
             <Link to={c.link} style={{ color: '#92400e', fontWeight: 500, textDecoration: 'underline', marginLeft: 4 }}>Set up</Link>
           </div>

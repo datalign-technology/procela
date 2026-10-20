@@ -799,8 +799,8 @@ export default function SettingsPage() {
                   fontWeight: 600,
                   padding: '2px 10px',
                   borderRadius: 'var(--radius-sm)',
-                  backgroundColor: currentProvider === 'dev' ? '#fffbeb' : '#f0fdf4',
-                  color: currentProvider === 'dev' ? '#d97706' : 'var(--color-success)',
+                  backgroundColor: currentProvider === 'dev' ? 'var(--color-warning-light)' : '#f0fdf4',
+                  color: currentProvider === 'dev' ? 'var(--color-warning)' : 'var(--color-success)',
                   border: `1px solid ${currentProvider === 'dev' ? '#fde68a' : '#bbf7d0'}`,
                 }}>
                   {providerDisplayName(currentProvider)}
@@ -1191,7 +1191,7 @@ export default function SettingsPage() {
                 style={{
                   marginTop: '0.75rem',
                   padding: '0.5rem 1.5rem',
-                  background: importLoading ? '#6b7280' : '#dc2626',
+                  background: importLoading ? '#6b7280' : 'var(--color-error)',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: 'var(--radius-md)',
