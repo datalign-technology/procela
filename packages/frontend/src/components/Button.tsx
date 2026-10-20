@@ -87,6 +87,7 @@ export default function Button({
         justifyContent: 'center',
         gap: (leadingIcon || loading) ? 6 : 0,
         fontWeight: 500,
+        whiteSpace: 'nowrap',
         borderRadius: 'var(--radius-md)',
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         opacity: isDisabled ? 0.6 : 1,
