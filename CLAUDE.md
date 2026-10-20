@@ -540,6 +540,18 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   entry), and non-entity-list tables
   (reports, the RACI matrix, the audit log, static reference tables,
   nested detail sub-tables).
+  **Hierarchical (tree) entity lists also stay hand-rolled** — DataTable
+  renders a flat `rows` array and does not model a parent/child
+  hierarchy (depth indentation + per-node expand/collapse of child
+  *rows*, as distinct from the `expansion` prop's single detail region).
+  These keep their bespoke treegrid shell: the **Process Catalog**
+  (value-stream tree), **Organizations** (`role="treegrid"`), **Data
+  Domains** (domain → sub-domain), and **Governance Groups** (council →
+  sub-group). **Governance Exceptions** likewise stays hand-rolled: it is
+  a flat list, but its row detail is an *inline-expand edit form* for the
+  record itself, and row-click expansion is reserved for drill-down (see
+  below), not entity-record detail — so forcing it onto `expansion` would
+  adopt the wrong pattern. Don't re-flag these in a consistency sweep.
   **Whole-row click opens the row's detail.** The richer entity lists
   now **navigate to a dedicated `/x/:id` detail page** (the People
   pattern — breadcrumb + Back + a `<PageHeader>` with kicker / title /
