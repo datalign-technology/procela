@@ -560,9 +560,9 @@ export default function GovernanceFoundationPage() {
                         </div>
                       ))}
                     </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input aria-label="New principle" style={inputStyle} value={newPrinciple} onChange={(e) => setNewPrinciple(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPrinciple(); } }} placeholder="e.g. Data is a shared asset; treat it like one" />
-                      <Button variant="secondary" onClick={addPrinciple}>Add principle</Button>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                      <input aria-label="New principle" style={{ ...inputStyle, flex: 1, minWidth: 0 }} value={newPrinciple} onChange={(e) => setNewPrinciple(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPrinciple(); } }} placeholder="e.g. Data is a shared asset; treat it like one" />
+                      <Button variant="secondary" onClick={addPrinciple} style={{ flexShrink: 0 }}>Add principle</Button>
                     </div>
                   </div>
                 </Card>
