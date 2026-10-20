@@ -304,21 +304,27 @@ function drawTableOfContents(doc: PDFKit.PDFDocument, entries: TocEntry[], title
   }
   doc.font(FONT_REGULAR).fontSize(SIZE_BODY).fillColor(BRAND_INK);
   for (const entry of tocLevels) {
-    if (doc.y > doc.page.height - MARGIN_BOTTOM - 24) {
-      doc.addPage();
-    }
-    const left = MARGIN_LEFT + (entry.level - 1) * 18;
     const isTop = entry.level === 1;
+    // Set the font/size BEFORE measuring so currentLineHeight() is right.
     doc.font(isTop ? FONT_BOLD : FONT_REGULAR);
     doc.fontSize(isTop ? SIZE_BODY + 1 : SIZE_BODY);
     doc.fillColor(isTop ? BRAND_INK : '#334155');
+    // One text line + an inter-row gap (a touch more before a top-level
+    // section). The two `lineBreak: false` draws below do NOT advance the
+    // text cursor, so we advance doc.y by this row height ourselves —
+    // without it the rows overlapped (the "compressed" TOC).
+    const rowHeight = doc.currentLineHeight() + (isTop ? 9 : 5);
+    if (doc.y + rowHeight > doc.page.height - MARGIN_BOTTOM) {
+      doc.addPage();
+    }
+    const left = MARGIN_LEFT + (entry.level - 1) * 18;
     const y = doc.y;
     const pageText = String(entry.page);
     const pageWidth = doc.widthOfString(pageText);
     const right = doc.page.width - MARGIN_RIGHT - pageWidth;
     doc.text(entry.text, left, y, { width: right - left - 8, lineBreak: false });
     doc.text(pageText, right, y, { lineBreak: false });
-    doc.moveDown(0.6);
+    doc.y = y + rowHeight;
   }
 }
 
