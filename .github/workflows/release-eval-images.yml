@@ -1,0 +1,133 @@
+name: Release eval images
+
+# Builds and publishes the backend + frontend container images to GitHub
+# Container Registry (ghcr.io) so a prospect can run the evaluation stack
+# (deploy/eval/docker-compose.eval.yml) by PULLING images — no source
+# checkout, no local build.
+#
+# Why a separate workflow from deploy.yml: deploy.yml pushes the backend to a
+# PRIVATE AWS ECR and ships the frontend to S3 for the hosted product. Neither
+# is pullable by an outside evaluator. This workflow publishes both as public
+# OCI images on GHCR instead.
+#
+# Trigger — deliberate, release-driven (NOT every trunk push):
+#   - Tag push `eval-v*` (e.g. `eval-v0.1.0`) publishes the versioned images
+#     with semver tags (:0.1.0, :0.1, :0) plus :latest.
+#   - workflow_dispatch lets a maintainer cut a build manually against any ref
+#     (e.g. a :rc1 tag) without moving :latest.
+# So merging this workflow publishes nothing — images go out only when you tag.
+#
+# Images published (one per matrix entry):
+#   ghcr.io/<owner>/procela-backend:<tag>
+#   ghcr.io/<owner>/procela-frontend:<tag>
+#
+# Multi-arch (linux/amd64 + linux/arm64) so evaluators on Apple Silicon /
+# Graviton get a native image instead of QEMU emulation at runtime.
+#
+# First-publish note: GHCR packages are PRIVATE until an owner flips each
+# package's visibility to "Public" once (repo/org Settings → Packages). Until
+# then an evaluator needs a read:packages token to pull. The workflow itself
+# only needs `packages: write` from GITHUB_TOKEN — no PAT.
+
+on:
+  push:
+    tags: ['eval-v*']
+  workflow_dispatch:
+    inputs:
+      tag_suffix:
+        description: 'Extra tag to apply (e.g. rc1). Images are also tagged with the commit SHA.'
+        required: false
+        default: ''
+
+concurrency:
+  group: release-eval-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: Build & push (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            basename: procela-backend
+            context: packages/backend
+            title: Procela backend
+            description: Procela API server (REST + AI + MCP). Evaluation image.
+          - name: frontend
+            basename: procela-frontend
+            context: packages/frontend
+            title: Procela frontend
+            description: Procela web UI (nginx static + /api reverse proxy). Evaluation image.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image name (lowercase owner)
+        id: img
+        run: |
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          echo "name=${{ env.REGISTRY }}/$OWNER_LC/${{ matrix.basename }}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute tags + labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.img.outputs.name }}
+          # Strip the `eval-` prefix so the published tag is just the version
+          # (0.1.0, not eval-v0.1.0).
+          tags: |
+            type=match,pattern=eval-v(.*),group=1
+            type=match,pattern=eval-v(\d+\.\d+)\.\d+,group=1
+            type=match,pattern=eval-v(\d+)\.\d+\.\d+,group=1
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/eval-v') }}
+            type=raw,value=${{ github.event.inputs.tag_suffix }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag_suffix != '' }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.vendor=Procela
+            org.opencontainers.image.licenses=PROPRIETARY
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=eval-${{ matrix.name }}
+          cache-to: type=gha,scope=eval-${{ matrix.name }},mode=max
+          provenance: true
+          sbom: true
+
+      - name: Summary
+        run: |
+          echo "### Published \`${{ matrix.basename }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
