@@ -171,7 +171,7 @@ export default function GovernanceSetupWizard() {
         <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>
           {messages.map((m, i) => (
             <div key={i} style={{ padding: '3px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Check size={12} strokeWidth={2.5} color="#16a34a" /> {m}
+              <Check size={12} strokeWidth={2.5} color="var(--color-success)" /> {m}
             </div>
           ))}
         </div>

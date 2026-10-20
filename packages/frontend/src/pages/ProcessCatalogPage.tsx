@@ -1483,7 +1483,7 @@ export default function ProcessCatalogPage() {
                 : 'Value streams & processes with no owner assigned — click to show only these'}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
-                background: showOwnerlessOnly ? '#dc2626' : '#fef2f2',
+                background: showOwnerlessOnly ? 'var(--color-error)' : '#fef2f2',
                 color: showOwnerlessOnly ? '#fff' : '#991b1b',
                 border: '1px solid #fca5a5',
                 borderRadius: 4, padding: '3px 8px', fontSize: 11, fontWeight: 600,

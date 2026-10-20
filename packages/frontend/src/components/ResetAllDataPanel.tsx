@@ -118,7 +118,7 @@ export default function ResetAllDataPanel({ onExportFirst, flush = false }: Rese
           style={{
             padding: '0.5rem 1.25rem', fontSize: 13, fontWeight: 500,
             background: 'var(--color-surface)', color: 'var(--color-error)',
-            border: '1px solid #dc2626', borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-error)', borderRadius: 'var(--radius-md)',
             cursor: busy ? 'default' : 'pointer',
           }}
         >
@@ -149,7 +149,7 @@ export default function ResetAllDataPanel({ onExportFirst, flush = false }: Rese
             aria-label="Confirmation phrase"
             style={{
               width: '100%', padding: '0.5rem 0.75rem',
-              border: `1px solid ${phrase === 'RESET' ? '#16a34a' : 'var(--color-border)'}`,
+              border: `1px solid ${phrase === 'RESET' ? 'var(--color-success)' : 'var(--color-border)'}`,
               borderRadius: 'var(--radius-md)', fontSize: 13, marginBottom: 12,
               fontFamily: 'var(--font-mono, monospace)', fontWeight: 600,
               boxSizing: 'border-box',
@@ -175,7 +175,7 @@ export default function ResetAllDataPanel({ onExportFirst, flush = false }: Rese
               disabled={busy || phrase !== 'RESET'}
               style={{
                 padding: '0.5rem 1rem', fontSize: 13, fontWeight: 500,
-                background: '#dc2626', color: '#fff',
+                background: 'var(--color-error)', color: '#fff',
                 border: 'none', borderRadius: 'var(--radius-md)',
                 cursor: (busy || phrase !== 'RESET') ? 'not-allowed' : 'pointer',
                 opacity: (busy || phrase !== 'RESET') ? 0.5 : 1,

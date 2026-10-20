@@ -4,6 +4,7 @@ import { errorMessage } from '../lib/errorToast';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useOrgContext } from '../stores/orgContext';
 import ConfirmDialog from './ConfirmDialog';
+import SecondaryButton from './SecondaryButton';
 
 // Settings → Connectors panel. Lists every paired on-prem connector
 // for the active org with its live freshness status, and lets an
@@ -383,7 +384,7 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
               You'll receive a one-time pairing code valid for 10 minutes. Paste it into your connector's config and start the container.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setAddOpen(false)} style={{ padding: '8px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+              <SecondaryButton size="md" onClick={() => setAddOpen(false)}>Cancel</SecondaryButton>
               <button
                 onClick={handleAdd}
                 disabled={!newName.trim() || adding}
@@ -543,7 +544,7 @@ function ConnectorDetailDrawer({ row, systems, onClose, onSaved }: {
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12, marginBottom: 20 }}>
-          <button onClick={onClose} style={{ padding: '6px 12px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+          <SecondaryButton size="md" onClick={onClose}>Cancel</SecondaryButton>
           <button
             onClick={handleSave}
             disabled={!dirty || saving}
