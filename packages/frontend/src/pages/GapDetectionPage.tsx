@@ -125,6 +125,10 @@ interface GapSection {
   key: keyof GapData;
   title: string;
   description: string;
+  // One plain-language line on the business consequence of leaving this gap
+  // open — shown under the description in the detail panel so a reader sees
+  // *why* to act, not just *what* is missing.
+  why: string;
   severity: Severity;
   // Icon is the sidebar SVG for the route this gap targets — so
   // an Ownership Gaps row shows the People rail icon, a Low-Health
@@ -144,6 +148,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'unmappedSteps',
     title: 'Unmapped Activities',
     description: 'Process activities with no data asset linked. These represent potential data gaps where business processes lack data coverage.',
+    why: 'You cannot tell which data this activity depends on, so a data problem here would surface in the business process with no warning.',
     severity: 'critical',
     icon: gapIcon('/processes'),
   },
@@ -151,6 +156,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'ownerlessProcesses',
     title: 'Ownership Gaps',
     description: 'Value streams and processes with no assigned owner. Every process should have clear accountability.',
+    why: 'With no owner, nobody is accountable when this process needs a decision, a review, or a fix.',
     severity: 'critical',
     icon: gapIcon('/people'),
   },
@@ -158,6 +164,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'ungovernedAssets',
     title: 'Ungoverned Assets',
     description: 'Uncertified data assets linked to process activities. Critical processes depend on minimally governed data.',
+    why: 'Live processes are running on data nobody has certified for trust.',
     severity: 'warning',
     icon: gapIcon('/data-assets'),
   },
@@ -165,6 +172,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'lowHealthAssets',
     title: 'Low-Health Assets',
     description: 'Data assets linked to processes with health score below 50%. Quality issues may affect dependent processes.',
+    why: 'Processes depend on this data while its measured quality is poor — errors flow straight downstream.',
     severity: 'warning',
     icon: gapIcon('/data-quality'),
   },
@@ -172,6 +180,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'ungovernedColumns',
     title: 'Ungoverned Columns',
     description: 'Columns an asset is bound to (they carry a physical source) but with no data-quality rule. Binding a column declares it matters — one with no rule is coverage you claimed but never measure.',
+    why: 'Binding a column declares it matters; with no quality rule its values are never checked, so drift goes unmeasured.',
     severity: 'warning',
     icon: gapIcon('/data-quality'),
   },
@@ -179,6 +188,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'unownedDomains',
     title: 'Unowned Domains',
     description: 'Data domains with no assigned owner. Domain ownership drives stewardship accountability.',
+    why: 'A domain with no owner has no one to steward the assets filed under it.',
     severity: 'warning',
     icon: gapIcon('/data-domains'),
   },
@@ -186,6 +196,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'orphanedAssets',
     title: 'Orphaned Assets',
     description: 'Data assets not assigned to any data domain. These lack governance oversight.',
+    why: 'Assets outside every domain fall through stewardship — domain owners only oversee what is filed under them.',
     severity: 'info',
     icon: gapIcon('/data-assets'),
   },
@@ -193,6 +204,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'unlinkedAssets',
     title: 'Unlinked Assets',
     description: 'Data assets with no mapping to any process activity. It is unclear which processes these support.',
+    why: 'Nobody can say which work relies on these — candidates to map to a process, merge, or retire.',
     severity: 'info',
     icon: gapIcon('/data-assets/orphans'),
   },
@@ -200,6 +212,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'unassignedPeople',
     title: 'Unassigned People',
     description: 'People in the organization with no ownership or stewardship assignments.',
+    why: 'Spare stewardship capacity: these people could take on the open owner gaps above.',
     severity: 'info',
     icon: gapIcon('/people'),
   },
@@ -207,6 +220,7 @@ const GAP_SECTIONS: GapSection[] = [
     key: 'duplicateAssetNames',
     title: 'Duplicate Asset Names',
     description: 'Multiple data assets share the same name (case-insensitive). Sometimes legitimate \u2014 e.g., two divisions both have "Customer Accounts" \u2014 but worth a look to decide whether to merge or rename for clarity.',
+    why: 'Shared names make it easy to map or report against the wrong asset \u2014 worth confirming they are genuinely distinct.',
     severity: 'info',
     icon: gapIcon('/data-assets'),
   },
@@ -233,6 +247,10 @@ export default function GapDetectionPage() {
   const [loading, setLoading] = useState(true);
   const [selectedKey, setSelectedKey] = useState<keyof GapData | null>(null);
   const [severityFilter, setSeverityFilter] = useState<Severity | null>(null);
+  // Clear checks are collapsed by default so the grid leads with actual gaps;
+  // the disclosure below lets you confirm what's passing without the greyed
+  // tiles diluting the ones that need attention.
+  const [showClear, setShowClear] = useState(false);
   // Program-scope filter: 'all' = the whole catalog (default), 'program' =
   // only the entities the governance program governs (its value streams /
   // domains / systems, cascaded). `scopeInfo` echoes what the backend actually
@@ -303,6 +321,11 @@ export default function GapDetectionPage() {
   const visibleSections = severityFilter
     ? GAP_SECTIONS.filter((sec) => sec.severity === severityFilter)
     : GAP_SECTIONS;
+  // Split the visible checks: tiles with open gaps lead the grid; clear checks
+  // (count 0) drop into a collapsed "N checks are clear" disclosure so they
+  // confirm what's passing without crowding out what needs attention.
+  const gapTiles = visibleSections.filter((sec) => sectionCount(sec) > 0);
+  const clearTiles = visibleSections.filter((sec) => sectionCount(sec) === 0);
   const showDetail = !!selectedSection && (!severityFilter || selectedSection.severity === severityFilter);
 
   return (
@@ -362,25 +385,35 @@ export default function GapDetectionPage() {
         </div>
       ) : (
         <>
-          {/* Every gap type as a tile — the whole picture at a glance. Click a
-              non-empty tile to see its affected items in the panel below. */}
+          {/* Open gaps as tiles — the checks that need attention, leading the
+              page. Clear checks drop into the disclosure below. Click a tile to
+              see its affected items in the panel. */}
+          {gapTiles.length === 0 ? (
+            <div style={{
+              background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)',
+              padding: '1.25rem', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
+            }}>
+              <span style={{ display: 'inline-flex', color: '#166534' }}><Check size={20} strokeWidth={2.4} /></span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#166534' }}>
+                No {severityFilter ? `${SEVERITY_CONFIG[severityFilter].label.toLowerCase()} ` : ''}gaps in this view — every check here is clear.
+              </span>
+            </div>
+          ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10, marginBottom: 16 }}>
-            {visibleSections.map((section) => {
+            {gapTiles.map((section) => {
               const items = data[section.key] as any[];
               const count = items.length;
               const sev = SEVERITY_CONFIG[section.severity];
               const isSelected = selectedKey === section.key;
-              const canOpen = count > 0;
               return (
                 <button
                   key={section.key}
                   type="button"
-                  onClick={canOpen ? () => setSelectedKey(section.key) : undefined}
-                  disabled={!canOpen}
+                  onClick={() => setSelectedKey(section.key)}
                   aria-pressed={isSelected}
-                  title={canOpen ? `Show ${count} ${section.title.toLowerCase()}` : `${section.title}: clear`}
+                  title={`Show ${count} ${section.title.toLowerCase()}`}
                   style={{
-                    font: 'inherit', textAlign: 'left', cursor: canOpen ? 'pointer' : 'default',
+                    font: 'inherit', textAlign: 'left', cursor: 'pointer',
                     background: 'var(--color-surface)',
                     // A plain neutral card, like every entity-list row — no coloured
                     // rail. Severity reads through the soft count pill, the icon and
@@ -393,23 +426,20 @@ export default function GapDetectionPage() {
                     transition: 'border-color 0.15s, box-shadow 0.15s',
                   }}
                 >
-                  <span style={{ display: 'inline-flex', color: count > 0 ? sev.color : 'var(--color-text-muted)', flexShrink: 0 }}>{section.icon}</span>
+                  <span style={{ display: 'inline-flex', color: sev.color, flexShrink: 0 }}>{section.icon}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.title}</span>
-                    <span style={{ display: 'block', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: count > 0 ? sev.color : 'var(--color-text-muted)', marginTop: 1 }}>{count > 0 ? sev.label : 'Clear'}</span>
+                    <span style={{ display: 'block', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: sev.color, marginTop: 1 }}>{sev.label}</span>
                   </span>
-                  {count > 0 ? (
-                    <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, flexShrink: 0 }}>{count}</span>
-                  ) : (
-                    <span style={{ display: 'inline-flex', color: 'var(--color-success)', flexShrink: 0 }}><Check size={16} strokeWidth={2.6} /></span>
-                  )}
+                  <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, flexShrink: 0 }}>{count}</span>
                 </button>
               );
             })}
           </div>
+          )}
 
           {/* Prompt to drill in — shown until the user picks a gap tile. */}
-          {!showDetail && (
+          {!showDetail && gapTiles.length > 0 && (
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '2px' }}>
               Select a gap above to see the affected items.
             </div>
@@ -426,6 +456,9 @@ export default function GapDetectionPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 15, fontWeight: 700 }}>{selectedSection.title}</div>
                     <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 2, lineHeight: 1.4 }}>{selectedSection.description}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--color-text-secondary)', marginTop: 4, lineHeight: 1.4 }}>
+                      <strong style={{ fontWeight: 600, color: 'var(--color-text)' }}>Why it matters:</strong> {selectedSection.why}
+                    </div>
                   </div>
                   <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, flexShrink: 0 }}>{items.length}</span>
                 </div>
@@ -435,6 +468,37 @@ export default function GapDetectionPage() {
               </Card>
             );
           })()}
+
+          {/* Clear checks — collapsed by default. Confirms what's passing
+              without the greyed tiles diluting the gaps above. */}
+          {clearTiles.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => setShowClear((v) => !v)}
+                aria-expanded={showClear}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, font: 'inherit',
+                  fontSize: 13, fontWeight: 600, color: 'var(--color-primary)',
+                  background: 'none', border: 'none', padding: '2px', cursor: 'pointer',
+                }}
+              >
+                <Check size={14} strokeWidth={2.6} />
+                {showClear ? 'Hide clear checks' : `${clearTiles.length} ${clearTiles.length === 1 ? 'check is' : 'checks are'} clear`}
+              </button>
+              {showClear && (
+                <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {clearTiles.map((section) => (
+                    <li key={section.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                      <span style={{ display: 'inline-flex', color: 'var(--color-success)', flexShrink: 0 }}><Check size={14} strokeWidth={2.6} /></span>
+                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{section.title}</span>
+                      <span style={{ color: 'var(--color-text-muted)' }}>— no gaps found</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
