@@ -471,7 +471,7 @@ export default function GapDetectionPage() {
               style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}
             >
               {groups.length === 0 ? (
-                <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#166534' }}>
+                <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-success)' }}>
                   <Check size={18} strokeWidth={2.4} />
                   No {severityFilter ? `${SEVERITY_CONFIG[severityFilter].label.toLowerCase()} ` : ''}gaps in this view.
                 </div>
