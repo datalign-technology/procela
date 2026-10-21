@@ -17,8 +17,9 @@
 // matches the dashboard's "unmapped activities" metric).
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
+import AttentionCards from '../components/AttentionCards';
 import MappingsPage from './MappingsPage';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
@@ -159,6 +160,7 @@ const PADDING_Y = 60;
 export default function ProcessDataMapPage() {
   const { activeOrgId, refreshKey } = useOrgContext();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   // Visual (the bridge) vs Table (the editable Data Mapping list). Default
   // to visual; persisted in ?view= so it's shareable and the retired
   // /mappings route can deep-link straight to the table.
@@ -320,6 +322,18 @@ export default function ProcessDataMapPage() {
     return s;
   }, [edges]);
 
+  // "Needs attention" counts the board leads with (matching the mock-ups): the
+  // two gaps the map exists to surface — activities carrying no data, and data
+  // assets no activity uses. Each card jumps to where you fix it.
+  const noDataActivityCount = useMemo(
+    () => activities.filter((a) => !mappedActivityIds.has(a.id)).length,
+    [activities, mappedActivityIds],
+  );
+  const unusedAssetCount = useMemo(() => {
+    const used = new Set(edges.map((e) => e.assetId));
+    return assets.filter((a) => !used.has(a.id)).length;
+  }, [assets, edges]);
+
   return (
     <div>
       <PageHeader
@@ -358,6 +372,18 @@ export default function ProcessDataMapPage() {
 
       {viewMode === 'visual' && (
       <>
+      {(activities.length > 0 || assets.length > 0) && (
+        <AttentionCards
+          caption="The two gaps this map exists to surface"
+          minCardWidth={220}
+          cards={[
+            { key: 'noData', count: noDataActivityCount, label: 'Activities with no data', hint: 'Opens Gap Detection', priority: true,
+              onClick: () => navigate('/gap-detection') },
+            { key: 'unused', count: unusedAssetCount, label: 'Unused data assets', hint: 'Opens Data Assets → Unmapped',
+              onClick: () => navigate('/data-assets?attention=unmapped') },
+          ]}
+        />
+      )}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '12px 0', flexWrap: 'wrap' }}>
         <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
           System filter:&nbsp;

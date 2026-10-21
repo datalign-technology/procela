@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import PageHeader from '../components/PageHeader';
 import CreateScopeNotice from '../components/CreateScopeNotice';
 import SectionLabel from '../components/SectionLabel';
+import AttentionCards from '../components/AttentionCards';
 import FacetChips from '../components/FacetChips';
 import OwnerCell from '../components/OwnerCell';
 import { relativeTime, absoluteTime } from '../lib/relativeTime';
@@ -1858,57 +1859,24 @@ export default function DataAssetsPage({
           equals what clicking it shows. The two gaps that make an asset
           untrustworthy outright (no mapping, no owner) lead with a "Fix first"
           tag. Clicking a card toggles the attention filter. */}
-      {assets.length > 0 && (() => {
-        const cards: Array<{ key: AttentionKey; label: string; hint: string; priority?: boolean }> = [
-          { key: 'unmapped',     label: 'Unmapped',          hint: 'Not linked to a process step', priority: true },
-          { key: 'noOwner',      label: 'No owner',          hint: 'Nobody accountable yet',        priority: true },
-          { key: 'uncertified',  label: tierLabel('BRONZE'), hint: 'Not reviewed for trust' },
-          { key: 'noDomain',     label: 'No domain',         hint: 'Missing from the domain tree' },
-          { key: 'unclassified', label: 'Sensitivity not set', hint: 'Classification never recorded' },
-        ];
-        return (
-          <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-              <SectionLabel marginBottom={0}>Needs attention</SectionLabel>
-              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the list</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-              {cards.map((c) => {
-                const count = attentionCounts[c.key];
-                const active = attention === c.key;
-                const zero = count === 0;
-                return (
-                  <button
-                    key={c.key}
-                    type="button"
-                    aria-pressed={active}
-                    disabled={zero && !active}
-                    onClick={() => setAttention(active ? '' : c.key)}
-                    style={{
-                      textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
-                      borderRadius: 'var(--radius-md)', padding: '12px 14px',
-                      display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
-                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
-                      opacity: zero && !active ? 0.6 : 1,
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                      <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{count}</span>
-                      {c.priority && count > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Fix first</span>
-                      )}
-                    </span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                    <span className="na-card-hint" title={c.hint}>{c.hint}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })()}
+      {assets.length > 0 && (
+        <AttentionCards
+          caption="Click a card to filter the list"
+          minCardWidth={150}
+          cards={([
+            { key: 'unmapped',     label: 'Unmapped',          hint: 'Not linked to a process step', priority: true },
+            { key: 'noOwner',      label: 'No owner',          hint: 'Nobody accountable yet',        priority: true },
+            { key: 'uncertified',  label: tierLabel('BRONZE'), hint: 'Not reviewed for trust' },
+            { key: 'noDomain',     label: 'No domain',         hint: 'Missing from the domain tree' },
+            { key: 'unclassified', label: 'Sensitivity not set', hint: 'Classification never recorded' },
+          ] as Array<{ key: AttentionKey; label: string; hint: string; priority?: boolean }>).map((c) => ({
+            ...c,
+            count: attentionCounts[c.key],
+            active: attention === c.key,
+            onClick: () => setAttention(attention === c.key ? '' : c.key),
+          }))}
+        />
+      )}
       {/* Data Classification & Origin are fixed taxonomies, so show every
           value including the ones you have none of (dimmed) — the whole set
           of possible types reads at a glance. Hidden only on a fully-empty

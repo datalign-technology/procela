@@ -605,6 +605,16 @@ export default function ProcessCatalogPage() {
   // and the chip labels.
   const [controlsList, setControlsList] = useState<Array<{ id: string; code: string; name: string; policyId: string }>>([]);
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
+  // Activity (step) ids that carry at least one data-asset mapping. The nav
+  // panel counts activities NOT in this set as "no data linked" over its own
+  // visible tree, so that count respects the same scope/lens as its siblings.
+  const activitiesWithDataIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const [stepId, maps] of Object.entries(mappingsByStep)) {
+      if (maps.some((m) => m.dataAssetId)) s.add(stepId);
+    }
+    return s;
+  }, [mappingsByStep]);
   // Per-node attachment counts, fetched in one bulk call so every node's
   // "Attach (n)" badge is populated up front (no fetch-per-node).
   const [attachmentCountByNode, setAttachmentCountByNode] = useState<Record<string, number>>({});
@@ -1750,6 +1760,7 @@ export default function ProcessCatalogPage() {
                 currentUserId={currentUser?.id}
                 onMove={moveNode}
                 validChildrenMap={validChildrenMap}
+                activitiesWithData={activitiesWithDataIds}
               />
           </Card>
           <Card padding={16} style={{ minWidth: 0 }}>

@@ -25,6 +25,7 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import ScopeBadge from '../components/ScopeBadge';
+import AttentionCards from '../components/AttentionCards';
 import { useScopeMembership } from '../hooks/useScopeMembership';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
@@ -1402,56 +1403,18 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
           sub-domains and criticality-not-set filter the table; assets-in-no-
           domain jumps to the registry's Unassigned view. */}
       {domains.length > 0 && !loading && (
-        <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Every domain should have an owner, stewards, and assets</span>
-          </div>
-          {/* auto-fill (not auto-fit) so a short card set stays tile-sized and
-              left-aligned instead of ballooning to full width — matches the
-              Data Assets needs-attention tiles. */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-            {(() => {
-              const cards = [
-                { key: 'emptySub', count: emptySubCount, label: 'Sub-domains with no assets', hint: 'Assets sit on the parent instead', priority: true, kind: 'filter' as const },
-                { key: 'noDomain', count: assetsNoDomainCount, label: 'Assets in no domain', hint: 'Opens Data Assets → Unassigned', kind: 'link' as const },
-                { key: 'noCriticality', count: noCriticalityCount, label: 'Criticality not set', hint: 'How much the business depends on it', kind: 'filter' as const },
-              ];
-              return cards.map((c) => {
-                const active = c.kind === 'filter' && attentionFilter === c.key;
-                const zero = c.count === 0;
-                const onClick = c.kind === 'link'
-                  ? () => navigate('/data-assets?attention=noDomain')
-                  : () => setAttentionFilter(active ? '' : (c.key as 'emptySub' | 'noCriticality'));
-                return (
-                  <button
-                    key={c.key}
-                    type="button"
-                    aria-pressed={c.kind === 'filter' ? active : undefined}
-                    disabled={zero && c.kind === 'filter' && !active}
-                    onClick={onClick}
-                    style={{
-                      textAlign: 'left', cursor: zero && c.kind === 'filter' && !active ? 'default' : 'pointer',
-                      borderRadius: 'var(--radius-md)', padding: '12px 14px',
-                      display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
-                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
-                      opacity: zero && c.kind === 'filter' && !active ? 0.6 : 1,
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                      <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
-                      {c.priority && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Fix first</span>}
-                    </span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                    <span className="na-card-hint" title={c.hint}>{c.hint}</span>
-                  </button>
-                );
-              });
-            })()}
-          </div>
-        </section>
+        <AttentionCards
+          caption="Every domain should have an owner, stewards, and assets"
+          minCardWidth={220}
+          cards={[
+            { key: 'emptySub', count: emptySubCount, label: 'Sub-domains with no assets', hint: 'Assets sit on the parent instead', priority: true,
+              active: attentionFilter === 'emptySub', onClick: () => setAttentionFilter(attentionFilter === 'emptySub' ? '' : 'emptySub') },
+            { key: 'noDomain', count: assetsNoDomainCount, label: 'Assets in no domain', hint: 'Opens Data Assets → Unassigned',
+              onClick: () => navigate('/data-assets?attention=noDomain') },
+            { key: 'noCriticality', count: noCriticalityCount, label: 'Criticality not set', hint: 'How much the business depends on it',
+              active: attentionFilter === 'noCriticality', onClick: () => setAttentionFilter(attentionFilter === 'noCriticality' ? '' : 'noCriticality') },
+          ]}
+        />
       )}
 
       {/* Main content: dictionary layout */}
