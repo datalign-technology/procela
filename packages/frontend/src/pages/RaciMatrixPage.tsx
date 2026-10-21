@@ -95,6 +95,34 @@ function firstLast(name: string): { first: string; last: string } {
   return { first: parts[0] || '', last: parts.slice(1).join(' ') };
 }
 
+// The RACI endpoint returns nodes in store order, which interleaves value
+// streams and their processes — so a process can render above the value
+// stream it belongs to and the tree reads scrambled. Re-emit the rows
+// depth-first: each value stream immediately followed by its descendants
+// (process → sub-process → activity), regardless of store order. Intra-level
+// order is preserved. Any node whose parent isn't present (filtered out /
+// orphaned) is still appended so nothing silently disappears.
+function orderTreeRows(rows: RaciRow[]): RaciRow[] {
+  const byParent = new Map<string | null, RaciRow[]>();
+  for (const r of rows) {
+    const list = byParent.get(r.parentId);
+    if (list) list.push(r); else byParent.set(r.parentId, [r]);
+  }
+  const out: RaciRow[] = [];
+  const seen = new Set<string>();
+  const walk = (parentId: string | null) => {
+    for (const r of byParent.get(parentId) || []) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push(r);
+      walk(r.id);
+    }
+  };
+  walk(null);
+  for (const r of rows) if (!seen.has(r.id)) out.push(r);
+  return out;
+}
+
 export default function RaciMatrixPage({
   embedded = false,
   actionsPortal,
@@ -137,8 +165,11 @@ export default function RaciMatrixPage({
       setLoading(true);
       setError('');
       try {
-        const d = await reload();
-        setExpanded(new Set((d?.rows || []).filter((r) => r.level === 'VALUE_STREAM').map((r) => r.id)));
+        await reload();
+        // Start collapsed at the value-stream level — the top level is the
+        // value stream and the user expands it to reveal its processes,
+        // matching the process catalog's top-down model.
+        setExpanded(new Set());
       } catch (err) {
         setError(errorMessage(err, 'Failed to load RACI matrix'));
       } finally {
@@ -209,11 +240,13 @@ export default function RaciMatrixPage({
   };
 
   const hasData = !!data && data.rows.length > 0 && data.columns.length > 0;
-  const sectionFilteredRows = data ? data.rows.filter((r) => {
+  // Depth-first tree order so value streams head their own processes.
+  const orderedRows = data ? orderTreeRows(data.rows) : [];
+  const sectionFilteredRows = orderedRows.filter((r) => {
     if (sectionFilter === 'all') return true;
     const isGov = isGovernanceRow(r);
     return sectionFilter === 'governance' ? isGov : !isGov;
-  }) : [];
+  });
   const treeFilteredRows = sectionFilteredRows.filter(isRowVisible);
 
   const activeColumns = sortedColumns.filter((col) => {
