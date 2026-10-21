@@ -822,6 +822,73 @@ function EmptyDashboardWelcome() {
   );
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// NotLinkedHero — board A3's empty-state variant. Shown when the signed-in
+// account isn't linked to a person record (common for admins and freshly
+// provisioned SSO users), so there is no personal queue, domains or
+// portfolio to show. One hero that names the state and offers the fix,
+// replacing the "link your profile" prompt that each personal section used
+// to repeat on its own, plus a compact "Meanwhile, organization-wide"
+// snapshot so the page still carries real org-level signal.
+// ──────────────────────────────────────────────────────────────────────────
+function NotLinkedHero({ stats, myData, orgId, orgName }: { stats: DashboardStats; myData: MyDashboardData | null; orgId: string | null; orgName: string | null }) {
+  const g = stats.gaps;
+  const totalGaps = (g.unmappedActivities || 0) + (g.ungovernedAssets || 0)
+    + (g.ownerlessItems || 0) + (g.ungovernedDomains || 0) + (g.orphanAssets || 0);
+  const ev = (myData?.upcomingEvents || [])[0];
+  const meetingWhen = ev ? (ev.daysAway <= 0 ? 'Today' : ev.daysAway === 1 ? 'Tomorrow' : `In ${ev.daysAway} days`) : 'None scheduled';
+  const [classified, setClassified] = useState<number | null>(null);
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: PulseDerived }>(`/council-scorecard/derive?orgId=${orgId}`);
+        const c = res.data?.enterprise?.classification;
+        if (!cancelled && typeof c === 'number') setClassified(Math.round(c));
+      } catch { /* leave as — */ }
+    })();
+    return () => { cancelled = true; };
+  }, [orgId]);
+
+  const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, fontSize: 13, color: 'var(--color-text)', textDecoration: 'none' };
+  const primaryBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--color-primary)', color: '#fff', borderRadius: 'var(--radius-md)', textDecoration: 'none' };
+  const ghostBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', textDecoration: 'none' };
+  return (
+    <Card padding={24}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+        <div style={{ flex: '1 1 360px', minWidth: 0 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Your home page fills in once Procela knows who you are</h2>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '8px 0 16px', lineHeight: 1.5, maxWidth: 560 }}>
+            This page leads with the tasks, issues and data domains you’re responsible for. Your sign-in isn’t linked to a person record{orgName ? ` in ${orgName}` : ''} yet, so there’s nothing personal to show.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link to="/people" style={primaryBtn}>Link my profile</Link>
+            <Link to="/data-domains" style={ghostBtn}>Browse data domains</Link>
+          </div>
+        </div>
+        <div style={{ flex: '1 1 280px', minWidth: 0, background: 'var(--color-bg)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+          <SectionLabel>Meanwhile, organization-wide</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+            <Link to="/gap-detection" style={rowStyle}>
+              <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>Open gaps</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{totalGaps}</span>
+            </Link>
+            <Link to="/council" style={rowStyle}>
+              <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>Council scorecard</span>
+              <span>{classified != null ? `Classified ${classified}%` : '—'}</span>
+            </Link>
+            <Link to="/governance-calendar" style={rowStyle}>
+              <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>Next meeting</span>
+              <span>{meetingWhen}</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 // The dashboard's governed-lens note. Reuses /governance-program/scope-coverage
 // (the same source of truth the Foundation Scope tab reads) so the note's
 // "applied" + version match the program exactly, with no extra plumbing.
@@ -1100,6 +1167,30 @@ export default function DashboardPage() {
 
   usePolling(fetchData, 30000);
 
+  // Person linkage — the personal sections (queue, domains, portfolio) only
+  // mean anything once the signed-in account is linked to a person record. We
+  // resolve this once at the page level so a not-linked user gets ONE unified
+  // hero (board A3's empty-state variant) instead of the same "link your
+  // profile" prompt repeated in every section. `myData` also feeds the hero's
+  // "Meanwhile" snapshot (next meeting). Fail open to the linked view on error.
+  const [myData, setMyData] = useState<MyDashboardData | null>(null);
+  const [personLinked, setPersonLinked] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!user?.email) { setPersonLinked(true); return; }
+    if (!activeOrgId) { setPersonLinked(null); return; }
+    let cancelled = false;
+    setPersonLinked(null);
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>(myDashboardUrl('all', activeOrgId));
+        if (!cancelled) { setMyData(res.data); setPersonLinked(!!res.data?.person); }
+      } catch {
+        if (!cancelled) { setMyData(null); setPersonLinked(true); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.email, activeOrgId]);
+
   // Focus mode collapses the portfolio rail so the dashboard is just the
   // action queue (the compact, single-column Concept A view). Per browser.
   const [focus, setFocus] = useState<boolean>(() => {
@@ -1223,6 +1314,10 @@ export default function DashboardPage() {
 
       {isEmptyOrg ? (
         <EmptyDashboardWelcome />
+      ) : personLinked === false ? (
+        // Not linked to a person — one unified hero (board A3 empty state)
+        // instead of the per-section "link your profile" prompts.
+        <NotLinkedHero stats={stats} myData={myData} orgId={activeOrgId} orgName={activeOrgName} />
       ) : (
         <>
           <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
