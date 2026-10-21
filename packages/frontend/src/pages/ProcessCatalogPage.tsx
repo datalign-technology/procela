@@ -1593,7 +1593,7 @@ export default function ProcessCatalogPage() {
                 borderRadius: 'var(--radius-md)', cursor: 'pointer',
               }}>
                 <input type="radio" name="bulkProcStatus" checked={bulkStatusValue === s} onChange={() => setBulkStatusValue(s)} />
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: s === 'ACTIVE' ? '#22c55e' : s === 'DEPRECATED' ? '#ef4444' : '#9ca3af' }} />
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: s === 'ACTIVE' ? 'var(--color-success)' : s === 'DEPRECATED' ? 'var(--color-error)' : '#9ca3af' }} />
                 <span style={{ fontSize: 13, fontWeight: 500 }}>{s.charAt(0) + s.slice(1).toLowerCase()}</span>
               </label>
             ))}
