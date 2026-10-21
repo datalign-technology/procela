@@ -837,22 +837,29 @@ function DashboardScopeNote({ orgId }: { orgId: string | null }) {
     })();
   }, [orgId]);
   const applied = !!info?.applied;
+  // Board A3: the governed-lens note is a blue info banner, not a grey text
+  // line. The #e6eef9 / #24508f pair is the app's documented fixed
+  // info-banner palette (a light-blue ground + dark-blue text), kept as hex
+  // on purpose rather than tokenized.
   return (
-    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+    <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', borderRadius: 'var(--radius-lg)', background: '#e6eef9', color: '#24508f', fontSize: 13, lineHeight: 1.4 }}>
       {applied ? (
         <>
-          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 7px', borderRadius: 999 }}>Governed scope</span>
-          <span>Showing only the domains &amp; assets your governance program governs.</span>
+          <span style={{ fontWeight: 600 }}>Governed only:</span>
+          <span>showing only the domains &amp; assets your governance program governs — connected but ungoverned items are hidden.</span>
           {info?.version && (
             <span
               title={info.version.changedAt ? `Scope last changed ${new Date(info.version.changedAt).toLocaleString()}` : 'Scope has not changed since the program was created'}
-              style={{ fontVariantNumeric: 'tabular-nums' }}
+              style={{ fontVariantNumeric: 'tabular-nums', opacity: 0.8 }}
             >v{info.version.number}{info.version.changedAt ? ` · changed ${new Date(info.version.changedAt).toLocaleDateString()}` : ''}</span>
           )}
-          <Link to="/governance/foundation" style={{ color: 'var(--color-primary)' }}>Manage scope →</Link>
+          <Link to="/governance/foundation" style={{ color: '#24508f', fontWeight: 600, marginLeft: 'auto' }}>Edit scope →</Link>
         </>
       ) : (
-        <>Your governance program has no scope defined yet, so this shows everything you own. <Link to="/governance/foundation" style={{ color: 'var(--color-primary)' }}>Define scope →</Link></>
+        <>
+          <span><span style={{ fontWeight: 600 }}>Governed only:</span> your governance program has no scope defined yet, so this shows everything you own.</span>
+          <Link to="/governance/foundation" style={{ color: '#24508f', fontWeight: 600, marginLeft: 'auto' }}>Define scope →</Link>
+        </>
       )}
     </div>
   );
