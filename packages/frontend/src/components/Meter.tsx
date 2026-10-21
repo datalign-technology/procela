@@ -24,6 +24,9 @@ interface MeterProps {
   /** Bar height in px. Default 6. */
   height?: number;
   radius?: number;
+  /** Optional 0–100 goal marker — draws a vertical tick at this position so
+   *  the bar reads against a target (e.g. a classification goal). Clamped. */
+  target?: number;
   ariaLabel?: string;
   style?: CSSProperties;
 }
@@ -34,6 +37,7 @@ export default function Meter({
   trackColor = 'var(--color-border)',
   height = 6,
   radius,
+  target,
   ariaLabel,
   style,
 }: MeterProps) {
@@ -46,9 +50,15 @@ export default function Meter({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-label={ariaLabel}
-      style={{ height, background: trackColor, borderRadius: r, overflow: 'hidden', ...style }}
+      style={{ height, background: trackColor, borderRadius: r, overflow: 'hidden', position: 'relative', ...style }}
     >
       <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: r, transition: 'width 0.3s' }} />
+      {typeof target === 'number' && (
+        <span
+          aria-hidden="true"
+          style={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.max(0, Math.min(100, target))}%`, width: 2, marginLeft: -1, background: 'var(--color-text)' }}
+        />
+      )}
     </div>
   );
 }
