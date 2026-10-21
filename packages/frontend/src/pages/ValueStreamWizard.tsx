@@ -14,6 +14,7 @@ import WizardProgress from '../components/WizardProgress';
 import { useAuthStore } from '../stores/authStore';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import { Check } from 'lucide-react';
 
 // Empirical guess for a full 5×5×6 hierarchy's serialised JSON
 // length. Used to convert the running char count that the backend
@@ -489,9 +490,10 @@ export default function ValueStreamWizard() {
         </Card>
       )}
 
-      {/* Step 1: Industry + Generate */}
+      {/* Step 1: Industry + Generate, with the "What you'll get" right rail. */}
       {!isGovernance && !template && !loading && (
-        <Card radius="lg" padding={24}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+        <Card radius="lg" padding={24} style={{ flex: '999 1 420px', minWidth: 0 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
             {orgIndustry ? 'Generate Process Hierarchy' : 'Select Industry'}
           </h2>
@@ -544,6 +546,43 @@ export default function ValueStreamWizard() {
             </Button>
           )}
         </Card>
+
+        {/* Right rail \u2014 sets expectations before the user clicks Generate,
+            and points governance set-up at the company level. */}
+        <aside aria-label="What you'll get" style={{ flex: '1 1 280px', minWidth: 240, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card radius="lg" padding={18}>
+            <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600 }}>What you&rsquo;ll get</h3>
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+              {[
+                'A draft hierarchy: value streams \u2192 processes \u2192 activities',
+                `Checkboxes to keep only what fits${activeOrgName ? ` ${activeOrgName}` : ' your organization'}`,
+                'Everything lands as Draft, so owners can review before it goes Active',
+              ].map((t) => (
+                <li key={t} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ display: 'inline-flex', color: 'var(--color-primary)', flexShrink: 0, marginTop: 1 }}><Check size={16} strokeWidth={2.4} /></span>
+                  <span style={{ lineHeight: 1.5 }}>{t}</span>
+                </li>
+              ))}
+            </ul>
+            <p style={{ margin: '12px 0 0', fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+              Results are cached per industry. In Review you can &ldquo;Regenerate&rdquo; (same result) or &ldquo;Regenerate from AI&rdquo; (fresh draft).
+            </p>
+          </Card>
+          <Card radius="lg" padding={18}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600 }}>Governance processes</h3>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+              The standard data-governance program is created once, at the company level{parentName ? <> (<strong>{parentName}</strong>)</> : ''}, not per division.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/processes/wizard?mode=governance')}
+              style={{ marginTop: 8, padding: 0, background: 'none', border: 'none', color: 'var(--color-primary)', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+            >
+              Set up at company level
+            </button>
+          </Card>
+        </aside>
+        </div>
       )}
 
       {/* Loading \u2014 real progress bar driven by chars streamed from
