@@ -59,6 +59,37 @@ interface LoginResponse {
   };
 }
 
+// Demo / dev-mode sample users for the Tidewater Utilities seed. Rendered
+// in the dashed "Demo accounts" card (never shown when a real auth
+// provider — local / OIDC / SAML — is configured). The role field drives
+// the DevAuthProvider's session on a fresh install (before any People CSV
+// import), so the labelled role is the role you actually get.
+const DEMO_ACCOUNTS: {
+  email: string;
+  name: string;
+  initials: string;
+  subtitle: string;
+  role: string;
+  avatar: { bg: string; color: string };
+}[] = [
+  {
+    email: 'eleanor.briggs@tidewater-utilities.com',
+    name: 'Eleanor Briggs',
+    initials: 'EB',
+    subtitle: 'Super admin · full access',
+    role: 'SUPER_ADMIN',
+    avatar: { bg: '#e2f0ea', color: '#17604b' },
+  },
+  {
+    email: 'susan.chen@tidewater-utilities.com',
+    name: 'Susan Chen',
+    initials: 'SC',
+    subtitle: 'Editor · Chief Data Officer',
+    role: 'EDITOR',
+    avatar: { bg: '#e5ecf3', color: '#364a5e' },
+  },
+];
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -343,248 +374,285 @@ export default function LoginPage() {
     }
   };
 
+  // Shared "Use a security key" affordance — rendered under the email
+  // method for both dev and local providers (SSO flows handle their own
+  // second factor at the IdP). The discoverable-credential ceremony needs
+  // no email first, so it stands on its own.
+  const securityKeyButton = (
+    <button
+      type="button"
+      onClick={signInWithSecurityKey}
+      disabled={loading}
+      style={styles.methodGhostButton}
+      title="Use a registered security key. No email or password needed."
+    >
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="8" cy="15" r="4" />
+        <path d="M10.9 12.1 19 4" />
+        <path d="m17 6 2 2" />
+        <path d="M14.5 8.5l2 2" />
+      </svg>
+      Use a security key
+    </button>
+  );
+
   return (
     <div style={styles.page}>
-      <div style={styles.card}>
-        {/* Brand mark — icon image + wordmark text as separate
-            elements, so the composition centers cleanly regardless of
-            whatever padding lives inside the icon PNG. On a tenant-
-            branded page (?tenant=<slug> or matching subdomain) the
-            wordmark switches to the customer's display name and the
-            emoji glyph replaces the icon. */}
-        <div style={styles.brandMark}>
-          {tenantBrand?.isTenantBrand && tenantBrand.glyph ? (
-            <span aria-hidden="true" style={{ ...styles.brandIcon, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 30 }}>
-              {tenantBrand.glyph}
+      <div style={styles.column}>
+        <main style={styles.card}>
+          {/* Brand mark — the real app logo (same asset the sidebar uses)
+              beside the wordmark, left-aligned. On a tenant-branded page
+              (?tenant=<slug> or matching subdomain) the wordmark switches
+              to the customer's display name and the emoji glyph replaces
+              the icon. */}
+          <div style={styles.brandMark}>
+            {tenantBrand?.isTenantBrand && tenantBrand.glyph ? (
+              <span aria-hidden="true" style={{ ...styles.brandGlyph, fontSize: 24 }}>
+                {tenantBrand.glyph}
+              </span>
+            ) : (
+              <img
+                src="/procela-icon.png"
+                alt=""
+                aria-hidden="true"
+                style={styles.brandIcon}
+              />
+            )}
+            <span style={styles.brandWordmark}>
+              {tenantBrand?.displayName || 'Procela'}
             </span>
-          ) : (
-            <img
-              src="/procela-icon.png"
-              alt=""
-              aria-hidden="true"
-              style={styles.brandIcon}
+          </div>
+          {/* Attribution line — reads "Powered by Procela" when we're
+              on a tenant-branded card so the platform stays credited
+              without dominating the sign-in surface. */}
+          {tenantBrand?.isTenantBrand && (
+            <div style={styles.poweredBy}>
+              Powered by Procela
+            </div>
+          )}
+
+          {/* Heading — wordmark above already carries the brand, so
+              this just states the action. */}
+          <h1 style={styles.heading}>Sign in</h1>
+          <p style={styles.subheading}>
+            Choose your authentication method to continue
+          </p>
+
+          {/* Error banner */}
+          {error && (
+            <div style={styles.errorBanner}>
+              {error}
+            </div>
+          )}
+
+          {/* CAPTCHA prompt — visible after enough failures from this IP.
+              When HCAPTCHA_SITE_KEY is configured server-side, render
+              the hCaptcha widget; otherwise fall back to a single
+              "confirm you're human" button (dev / no-hCaptcha path). */}
+          {captchaRequired && (
+            <CaptchaPrompt
+              siteKey={captchaSiteKey}
+              token={captchaToken}
+              onToken={setCaptchaToken}
             />
           )}
-          <span style={styles.brandWordmark}>
-            {tenantBrand?.displayName || 'Procela'}
-          </span>
-        </div>
-        {/* Attribution line — reads "Powered by Procela" when we're
-            on a tenant-branded card so the platform stays credited
-            without dominating the sign-in surface. */}
-        {tenantBrand?.isTenantBrand && (
-          <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--color-text-muted)', marginTop: -4, marginBottom: 12 }}>
-            Powered by Procela
-          </div>
-        )}
 
-        {/* Heading — wordmark above already carries the brand, so
-            this just states the action. */}
-        <h1 style={styles.heading}>Sign in</h1>
-        <p style={styles.subheading}>
-          Choose your authentication method to continue
-        </p>
-
-        {/* Error banner */}
-        {error && (
-          <div style={styles.errorBanner}>
-            {error}
-          </div>
-        )}
-
-        {/* CAPTCHA prompt — visible after enough failures from this IP.
-            When HCAPTCHA_SITE_KEY is configured server-side, render
-            the hCaptcha widget; otherwise fall back to a single
-            "confirm you're human" button (dev / no-hCaptcha path). */}
-        {captchaRequired && (
-          <CaptchaPrompt
-            siteKey={captchaSiteKey}
-            token={captchaToken}
-            onToken={setCaptchaToken}
-          />
-        )}
-
-        {providersLoading ? (
-          <Spinner label="Loading…" />
-        ) : (
-          <>
-            {/* SSO Providers — rendered only when the configured
-                auth method is OIDC or SAML. Each configured IdP gets
-                its own button; well-known issuers (Microsoft, Okta)
-                get their branded icon, everything else gets a
-                neutral key glyph. */}
-            {ssoProviders.length > 0 && (
-              <div style={styles.ssoSection}>
-                {ssoProviders.map((p, ssoIdx) => {
-                  const isMs = p.id === 'microsoft' || /microsoft|entra|azure/i.test(p.name);
-                  const isOkta = p.id === 'okta' || /okta/i.test(p.name);
-                  const brandStyle = isMs ? styles.microsoftButton : isOkta ? styles.oktaButton : {};
-                  // On a tenant-branded page, the FIRST SSO button gets
-                  // the customer's own label ("Sign in with Corp SSO")
-                  // and their primary color. Additional providers keep
-                  // their built-in branding so users can still tell
-                  // Microsoft vs Okta apart at a glance.
-                  const useTenantLabel = ssoIdx === 0 && tenantBrand?.isTenantBrand;
-                  const buttonLabel = useTenantLabel ? tenantBrand.ssoButtonLabel : `Sign in with ${p.name}`;
-                  const tenantAccent = useTenantLabel && tenantBrand?.primaryColor
-                    ? { background: tenantBrand.primaryColor, color: '#fff', border: 'none' as const }
-                    : {};
-                  return (
-                    <button
-                      key={p.id}
-                      style={{ ...styles.ssoButton, ...brandStyle, ...tenantAccent }}
-                      onClick={() => handleSsoClick(p)}
-                      title={buttonLabel}
-                    >
-                      <span style={styles.ssoIcon}>
-                        {isMs ? (
-                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <rect x="1" y="1" width="8.5" height="8.5" fill="#F25022" />
-                            <rect x="10.5" y="1" width="8.5" height="8.5" fill="#7FBA00" />
-                            <rect x="1" y="10.5" width="8.5" height="8.5" fill="#00A4EF" />
-                            <rect x="10.5" y="10.5" width="8.5" height="8.5" fill="#FFB900" />
-                          </svg>
-                        ) : isOkta ? (
-                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <circle cx="10" cy="10" r="9" stroke="#007DC1" strokeWidth="2" fill="none" />
-                            <circle cx="10" cy="10" r="4" fill="#007DC1" />
-                          </svg>
-                        ) : (
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="8" cy="15" r="4" />
-                            <path d="M10.85 12.15 19 4" />
-                            <path d="m18 5 2 2" />
-                            <path d="m15 8 2 2" />
-                          </svg>
-                        )}
-                      </span>
-                      <span>{buttonLabel}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Local credentials (email + password). Only shown when
-                the backend reports the Local provider as the active
-                one. Otherwise the email/password fields would invite
-                users to type credentials into the dev-mode flow that
-                ignores them. */}
-            {localProvider && (
-              <>
-                <form onSubmit={handleLocalLogin} style={styles.devForm} autoComplete="on">
-                  <input
-                    type="email"
-                    name="login-email"
-                    placeholder="Email address"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                    style={styles.input}
-                  />
-                  <input
-                    type="password"
-                    name="login-password"
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                    style={styles.input}
-                  />
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    style={{
-                      ...styles.devSubmitButton,
-                      ...(loading ? styles.devSubmitButtonDisabled : {}),
-                    }}
-                  >
-                    {loading ? 'Signing in...' : 'Sign in'}
-                  </button>
-                </form>
-                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={signInWithSecurityKey}
-                    disabled={loading}
-                    style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: loading ? 'default' : 'pointer', padding: 0, textDecoration: 'underline' }}
-                    title="Sign in with a registered security key — no email or password needed."
-                  >
-                    Sign in with a security key
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setForgotEmail(email); setForgotOpen(true); setForgotSubmitted(false); }}
-                    style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-                  >
-                    Forgot password?
-                  </button>
+          {providersLoading ? (
+            <Spinner label="Loading…" />
+          ) : (
+            <>
+              {/* SSO Providers — rendered only when the configured
+                  auth method is OIDC or SAML. The first/primary IdP
+                  gets the brand-green button; additional ones fall to
+                  a neutral ghost so users can still tell Microsoft vs
+                  Okta apart. Well-known issuers get their branded icon,
+                  everything else a neutral key glyph. */}
+              {ssoProviders.length > 0 && (
+                <div style={styles.ssoSection}>
+                  {ssoProviders.map((p, ssoIdx) => {
+                    const isMs = p.id === 'microsoft' || /microsoft|entra|azure/i.test(p.name);
+                    const isOkta = p.id === 'okta' || /okta/i.test(p.name);
+                    const isPrimary = ssoIdx === 0;
+                    // On a tenant-branded page, the FIRST SSO button gets
+                    // the customer's own label ("Sign in with Corp SSO")
+                    // and their primary color.
+                    const useTenantLabel = isPrimary && tenantBrand?.isTenantBrand;
+                    const buttonLabel = useTenantLabel ? tenantBrand.ssoButtonLabel : `Continue with ${p.name}`;
+                    const base = isPrimary ? styles.ssoButtonPrimary : styles.ssoButtonGhost;
+                    const tenantAccent = useTenantLabel && tenantBrand?.primaryColor
+                      ? { background: tenantBrand.primaryColor, color: '#fff', border: 'none' as const }
+                      : {};
+                    return (
+                      <button
+                        key={p.id}
+                        style={{ ...base, ...tenantAccent }}
+                        onClick={() => handleSsoClick(p)}
+                        title={buttonLabel}
+                      >
+                        <span style={styles.ssoIcon}>
+                          {isMs ? (
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                              <rect x="1" y="1" width="8.5" height="8.5" fill="#F25022" />
+                              <rect x="10.5" y="1" width="8.5" height="8.5" fill="#7FBA00" />
+                              <rect x="1" y="10.5" width="8.5" height="8.5" fill="#00A4EF" />
+                              <rect x="10.5" y="10.5" width="8.5" height="8.5" fill="#FFB900" />
+                            </svg>
+                          ) : isOkta ? (
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                              <circle cx="10" cy="10" r="9" stroke="#007DC1" strokeWidth="2" fill="none" />
+                              <circle cx="10" cy="10" r="4" fill="#007DC1" />
+                            </svg>
+                          ) : (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="8" cy="15" r="4" />
+                              <path d="M10.85 12.15 19 4" />
+                              <path d="m18 5 2 2" />
+                              <path d="m15 8 2 2" />
+                            </svg>
+                          )}
+                        </span>
+                        <span>{buttonLabel}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              </>
-            )}
+              )}
 
-            {devProvider && (
-              <>
-                {/* Dev Mode */}
-                <div style={styles.devSection}>
-                  <div style={styles.devBadge}>
-                    <span style={styles.devBadgeIcon}>&#9881;</span>
-                    Dev Mode
-                  </div>
-                  <form onSubmit={handleDevLogin} style={styles.devForm} autoComplete="off">
+              {/* Local credentials (email + password). Only shown when
+                  the backend reports the Local provider as the active
+                  one. Otherwise the email/password fields would invite
+                  users to type credentials into the dev-mode flow that
+                  ignores them. */}
+              {localProvider && (
+                <form onSubmit={handleLocalLogin} style={styles.form} autoComplete="on">
+                  <label style={styles.fieldLabel}>
+                    Work email
                     <input
                       type="email"
                       name="login-email"
-                      placeholder="Email address"
+                      placeholder="you@company.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
                       autoComplete="email"
                       style={styles.input}
                     />
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      style={{
-                        ...styles.devSubmitButton,
-                        ...(loading ? styles.devSubmitButtonDisabled : {}),
-                      }}
-                    >
-                      {loading ? 'Signing in...' : 'Sign in'}
-                    </button>
-                  </form>
+                  </label>
+                  <label style={styles.fieldLabel}>
+                    <span style={styles.fieldLabelRow}>
+                      Password
+                      <button
+                        type="button"
+                        onClick={() => { setForgotEmail(email); setForgotOpen(true); setForgotSubmitted(false); }}
+                        style={styles.linkButton}
+                      >
+                        Forgot password?
+                      </button>
+                    </span>
+                    <input
+                      type="password"
+                      name="login-password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoComplete="current-password"
+                      style={styles.input}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      ...styles.primaryButton,
+                      ...(loading ? styles.primaryButtonDisabled : {}),
+                    }}
+                  >
+                    {loading ? 'Signing in…' : 'Sign in'}
+                  </button>
+                </form>
+              )}
 
-                  {/* Quick test logins */}
-                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Test Accounts</div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {[
-                        { email: 'eleanor.briggs@tidewater-utilities.com', name: 'Eleanor Briggs', label: 'Super Admin', role: 'SUPER_ADMIN' },
-                        { email: 'susan.chen@tidewater-utilities.com',     name: 'Susan Chen',     label: 'Editor',      role: 'EDITOR' },
-                      ].map((acct) => (
-                        <button
-                          key={acct.email}
-                          type="button"
-                          disabled={loading}
-                          onClick={() => loginWithEmail(acct.email, acct.name, undefined, acct.role)}
-                          style={{
-                            flex: 1, minWidth: 140, padding: '8px 12px', borderRadius: 6,
-                            border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer',
-                            textAlign: 'left', fontSize: 12,
-                          }}
-                        >
-                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{acct.name}</div>
-                          <div style={{ color: '#94a3b8', fontSize: 10 }}>{acct.label}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </>
+              {/* Dev Mode — email-only sign-in. No password is checked;
+                  the DevAuthProvider issues a session for whatever email
+                  is entered. The dashed "Demo accounts" card below makes
+                  the environment's nature explicit. */}
+              {devProvider && (
+                <form onSubmit={handleDevLogin} style={styles.form} autoComplete="off">
+                  <label style={styles.fieldLabel}>
+                    Work email
+                    <input
+                      type="email"
+                      name="login-email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      style={styles.input}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      ...styles.primaryButton,
+                      ...(loading ? styles.primaryButtonDisabled : {}),
+                    }}
+                  >
+                    {loading ? 'Signing in…' : 'Sign in'}
+                  </button>
+                </form>
+              )}
+
+              {/* Passwordless security-key sign-in, offered for the email
+                  methods (dev / local). */}
+              {(localProvider || devProvider) && securityKeyButton}
+
+              <p style={styles.helpLine}>
+                Trouble signing in?{' '}
+                <span style={styles.helpStrong}>Contact your administrator</span>
+              </p>
+            </>
+          )}
+        </main>
+
+        {/* Demo accounts — a clearly separate, dashed card so the
+            sample Tidewater users read as a demo affordance, never as
+            part of the real sign-in surface. Shown only in dev mode. */}
+        {!providersLoading && devProvider && (
+          <section aria-labelledby="demo-h" style={styles.demoCard}>
+            <div style={styles.demoHead}>
+              <h2 id="demo-h" style={styles.demoTitle}>Demo accounts</h2>
+              <span style={styles.demoPill}>
+                <span style={styles.demoPillDot} aria-hidden="true" />
+                Demo environment only
+              </span>
+            </div>
+            <p style={styles.demoText}>
+              Sample users for the Tidewater Utilities demo. No password needed.
+              This box never appears in production.
+            </p>
+            <div style={styles.demoGrid}>
+              {DEMO_ACCOUNTS.map((acct) => (
+                <button
+                  key={acct.email}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => loginWithEmail(acct.email, acct.name, undefined, acct.role)}
+                  style={styles.demoButton}
+                >
+                  <span aria-hidden="true" style={{ ...styles.demoAvatar, background: acct.avatar.bg, color: acct.avatar.color }}>
+                    {acct.initials}
+                  </span>
+                  <span>
+                    <span style={styles.demoName}>{acct.name}</span>
+                    <span style={styles.demoRole}>{acct.subtitle}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Footer */}
@@ -754,193 +822,300 @@ function ForcedChangeModal({ currentPassword, onDone }: {
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     minHeight: '100vh',
-    background: 'linear-gradient(135deg, #f0f9f7 0%, #f8fafc 50%, #f0f4f8 100%)',
-    padding: '1rem',
+    background: 'var(--color-bg)',
+    fontFamily: 'var(--font-family)',
+    color: 'var(--color-text)',
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    padding: '56px 16px 48px',
+    boxSizing: 'border-box' as const,
+  },
+  column: {
+    width: '100%',
+    maxWidth: 440,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'stretch',
+    gap: 20,
   },
   card: {
-    textAlign: 'center',
-    padding: '2.5rem 2.5rem 2rem',
-    background: '#fff',
-    borderRadius: '16px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 10px 15px -3px rgba(0, 0, 0, 0.05)',
-    maxWidth: '440px',
     width: '100%',
-    border: '1px solid #e2e8f0',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 12,
+    padding: '36px 36px 28px',
+    boxSizing: 'border-box' as const,
+    textAlign: 'left' as const,
   },
   brandMark: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    marginBottom: '1.5rem',
+    gap: 10,
   },
   brandIcon: {
-    height: '40px',
-    width: '40px',
+    height: 34,
+    width: 34,
     objectFit: 'contain' as const,
     flexShrink: 0,
+    borderRadius: 8,
+  },
+  brandGlyph: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'var(--color-primary-light)',
   },
   brandWordmark: {
-    fontSize: '32px',
-    fontWeight: 700,
-    color: '#0f172a',
-    letterSpacing: '-0.02em',
+    fontSize: 20,
+    fontWeight: 600,
+    color: 'var(--color-text)',
+    letterSpacing: '-0.01em',
     lineHeight: 1,
   },
+  poweredBy: {
+    fontSize: 11,
+    color: 'var(--color-text-muted)',
+    marginTop: 6,
+  },
   heading: {
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    color: '#1e293b',
-    marginBottom: '0.5rem',
-    letterSpacing: '-0.025em',
+    margin: '28px 0 6px',
+    fontSize: 26,
+    fontWeight: 600,
+    color: 'var(--color-text)',
+    letterSpacing: '-0.01em',
   },
   subheading: {
-    fontSize: '0.875rem',
-    color: '#64748b',
-    marginBottom: '2rem',
+    margin: '0 0 24px',
+    fontSize: 14,
+    color: 'var(--color-text-secondary)',
   },
   errorBanner: {
     color: 'var(--color-error)',
     background: '#fef2f2',
     border: '1px solid #fecaca',
-    borderRadius: '8px',
+    borderRadius: 8,
     padding: '0.625rem 1rem',
     marginBottom: '1rem',
     fontSize: '0.875rem',
     textAlign: 'left' as const,
   },
-  loadingText: {
-    fontSize: '0.875rem',
-    color: '#94a3b8',
-    padding: '2rem 0',
-  },
   ssoSection: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.75rem',
+    gap: 10,
   },
-  ssoButton: {
+  ssoButtonPrimary: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '0.75rem',
+    gap: 10,
     width: '100%',
-    padding: '0.75rem 1.25rem',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '0.9375rem',
+    height: 48,
+    border: 0,
+    borderRadius: 8,
+    background: 'var(--color-primary)',
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
+  },
+  ssoButtonGhost: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    width: '100%',
+    height: 48,
+    border: '1px solid var(--color-border)',
+    borderRadius: 8,
+    background: 'var(--color-surface)',
+    color: 'var(--color-text)',
+    fontSize: 15,
     fontWeight: 500,
     cursor: 'pointer',
     transition: 'all 0.15s ease',
-    position: 'relative' as const,
-  },
-  microsoftButton: {
-    background: '#0078d4',
-    color: '#ffffff',
-  },
-  oktaButton: {
-    background: '#ffffff',
-    color: '#1e293b',
-    border: '2px solid #007DC1',
-  },
-  ssoButtonDisabled: {
-    opacity: 0.5,
-    cursor: 'not-allowed',
   },
   ssoIcon: {
     display: 'flex',
     alignItems: 'center',
     flexShrink: 0,
   },
-  comingSoonBadge: {
-    fontSize: '0.6875rem',
-    fontWeight: 600,
-    padding: '2px 6px',
-    borderRadius: '4px',
-    background: 'rgba(0,0,0,0.1)',
-    marginLeft: 'auto',
-    whiteSpace: 'nowrap' as const,
-  },
-  divider: {
+  methodGhostButton: {
+    width: '100%',
+    height: 44,
+    marginTop: 10,
+    border: '1px solid var(--color-border)',
+    borderRadius: 8,
+    background: 'var(--color-surface)',
+    color: 'var(--color-text)',
+    fontSize: 14,
+    fontWeight: 500,
     display: 'flex',
     alignItems: 'center',
-    gap: '1rem',
-    margin: '1.5rem 0',
+    justifyContent: 'center',
+    gap: 8,
+    cursor: 'pointer',
   },
-  dividerLine: {
-    flex: 1,
-    height: '1px',
-    background: '#e2e8f0',
-  },
-  dividerText: {
-    fontSize: '0.8125rem',
-    color: '#94a3b8',
-    fontWeight: 500,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-  },
-  devSection: {
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: '12px',
-    padding: '1.25rem',
-  },
-  devBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.375rem',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: 'var(--color-warning)',
-    background: '#fffbeb',
-    border: '1px solid #fde68a',
-    borderRadius: '6px',
-    padding: '0.25rem 0.625rem',
-    marginBottom: '1rem',
-  },
-  devBadgeIcon: {
-    fontSize: '0.8125rem',
-  },
-  devForm: {
+  form: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.625rem',
+    gap: 14,
+  },
+  fieldLabel: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 6,
+    fontSize: 13,
+    fontWeight: 600,
+    color: 'var(--color-text-secondary)',
+  },
+  fieldLabelRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   input: {
     width: '100%',
-    padding: '0.625rem 0.875rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '8px',
-    fontSize: '0.9375rem',
+    height: 44,
+    padding: '0 12px',
+    border: '1px solid var(--color-border)',
+    borderRadius: 8,
+    fontSize: 15,
+    color: 'var(--color-text)',
     outline: 'none',
     boxSizing: 'border-box' as const,
-    background: '#ffffff',
+    background: 'var(--color-surface)',
     transition: 'border-color 0.15s ease',
   },
-  devSubmitButton: {
+  primaryButton: {
     width: '100%',
-    padding: '0.625rem 1.25rem',
-    background: '#1a7a6d',
+    height: 44,
+    marginTop: 4,
+    background: 'var(--color-primary)',
     color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '0.9375rem',
-    fontWeight: 500,
+    border: 0,
+    borderRadius: 8,
+    fontSize: 15,
+    fontWeight: 600,
     cursor: 'pointer',
-    marginTop: '0.25rem',
+    transition: 'background 0.15s ease',
   },
-  devSubmitButtonDisabled: {
-    background: '#6b7280',
+  primaryButtonDisabled: {
+    background: 'var(--color-text-muted)',
     cursor: 'not-allowed',
   },
+  linkButton: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--color-primary)',
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: 'pointer',
+    padding: 0,
+  },
+  helpLine: {
+    margin: '20px 0 0',
+    fontSize: 13,
+    color: 'var(--color-text-muted)',
+    textAlign: 'center' as const,
+  },
+  helpStrong: {
+    fontWeight: 600,
+    color: 'var(--color-text-secondary)',
+  },
+  demoCard: {
+    width: '100%',
+    background: 'var(--color-attention-bg)',
+    border: '1px dashed var(--color-attention-border)',
+    borderRadius: 12,
+    padding: '18px 20px 20px',
+    boxSizing: 'border-box' as const,
+    textAlign: 'left' as const,
+  },
+  demoHead: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap' as const,
+  },
+  demoTitle: {
+    margin: 0,
+    fontSize: 15,
+    fontWeight: 600,
+    color: 'var(--color-text)',
+  },
+  demoPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    height: 24,
+    padding: '0 10px',
+    borderRadius: 12,
+    background: 'var(--color-attention-bg)',
+    border: '1px solid var(--color-attention-border)',
+    color: 'var(--color-attention)',
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  demoPillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    background: 'var(--color-attention)',
+  },
+  demoText: {
+    margin: '6px 0 14px',
+    fontSize: 13,
+    color: 'var(--color-text-secondary)',
+  },
+  demoGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+    gap: 10,
+  },
+  demoButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    border: '1px solid var(--color-border)',
+    borderRadius: 10,
+    background: 'var(--color-surface)',
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+  },
+  demoAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    fontSize: 12,
+    fontWeight: 700,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 'none',
+  },
+  demoName: {
+    display: 'block',
+    fontWeight: 600,
+    color: 'var(--color-text)',
+  },
+  demoRole: {
+    fontSize: 12,
+    color: 'var(--color-text-muted)',
+  },
   footer: {
-    fontSize: '0.75rem',
-    color: '#94a3b8',
-    marginTop: '2rem',
+    margin: 0,
+    fontSize: 12,
+    color: 'var(--color-text-muted)',
+    textAlign: 'center' as const,
   },
   modalScrim: {
     position: 'fixed',
@@ -953,8 +1128,8 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex: 1000,
   },
   modalCard: {
-    background: '#fff',
-    borderRadius: '12px',
+    background: 'var(--color-surface)',
+    borderRadius: 12,
     padding: '1.5rem',
     width: 'min(420px, 100%)',
     boxShadow: 'var(--shadow-xl)',
@@ -962,31 +1137,31 @@ const styles: Record<string, React.CSSProperties> = {
   modalTitle: {
     fontSize: '1.125rem',
     fontWeight: 700,
-    color: '#1e293b',
+    color: 'var(--color-text)',
     marginBottom: '0.5rem',
   },
   modalText: {
     fontSize: '0.85rem',
-    color: '#475569',
+    color: 'var(--color-text-secondary)',
     lineHeight: 1.5,
     marginBottom: '1rem',
   },
   modalPrimary: {
     padding: '0.5rem 1rem',
-    background: '#0f4f46',
+    background: 'var(--color-primary)',
     color: '#fff',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: 8,
     fontSize: '0.85rem',
     fontWeight: 600,
     cursor: 'pointer',
   },
   modalSecondary: {
     padding: '0.5rem 1rem',
-    background: '#fff',
-    color: '#475569',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
+    background: 'var(--color-surface)',
+    color: 'var(--color-text-secondary)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 8,
     fontSize: '0.85rem',
     fontWeight: 500,
     cursor: 'pointer',
@@ -1113,7 +1288,7 @@ function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
                 <button
                   type="button"
                   onClick={() => { setFactor('totp'); setErr(''); }}
-                  style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                  style={styles.linkButton}
                 >
                   Use authenticator code instead
                 </button>
@@ -1142,7 +1317,7 @@ function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
                 <button
                   type="button"
                   onClick={() => { setUseBackup(!useBackup); setCode(''); setErr(''); }}
-                  style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline', textAlign: 'left' }}
+                  style={{ ...styles.linkButton, textAlign: 'left' }}
                 >
                   {useBackup ? 'Use authenticator instead' : 'Lost your authenticator? Use a backup code'}
                 </button>
@@ -1150,7 +1325,7 @@ function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
                   <button
                     type="button"
                     onClick={() => { setFactor('webauthn'); setCode(''); setUseBackup(false); setErr(''); }}
-                    style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline', textAlign: 'left' }}
+                    style={{ ...styles.linkButton, textAlign: 'left' }}
                   >
                     Use a security key instead
                   </button>
