@@ -168,6 +168,7 @@ export default function ReportBuilderPage() {
   const { id: reportId } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
   const cloneFrom = searchParams.get('cloneFrom');
+  const startEntity = searchParams.get('entity');
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
 
@@ -249,6 +250,16 @@ export default function ReportBuilderPage() {
       })
       .catch(() => addToast('error', 'Failed to load the report.'));
   }, [reportId, cloneFrom, entitiesLoaded, addToast]);
+
+  // New report started from a Reports empty-state starter card: ?entity=<id>
+  // pre-selects the primary entity once the data model has loaded. Never
+  // clobbers an existing choice, nor an edit/clone source.
+  useEffect(() => {
+    if (reportId || cloneFrom || !entitiesLoaded || !startEntity) return;
+    if (entities.some((e) => e.id === startEntity)) {
+      setDef((d) => (d.entity ? d : { ...d, entity: startEntity }));
+    }
+  }, [startEntity, entitiesLoaded, entities, reportId, cloneFrom]);
 
   const entity = useMemo(() => entities.find((e) => e.id === def.entity) || null, [entities, def.entity]);
 

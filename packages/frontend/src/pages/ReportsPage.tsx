@@ -296,6 +296,9 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
   // Builder uses), so the list shows "Data assets", not the code "dataAssets".
   const [entityLabels, setEntityLabels] = useState<Record<string, string>>({});
   const entityLabel = (id: string) => entityLabels[id] || prettifyEntity(id);
+  // Full entity list (id · label · description) for the empty-state starter
+  // cards ("start from what you want to list").
+  const [starterEntities, setStarterEntities] = useState<{ id: string; label: string; description: string }[]>([]);
 
   // Above-the-table filters + search.
   const [search, setSearch] = useState('');
@@ -313,8 +316,12 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
   }, [rowMenuId]);
 
   useEffect(() => {
-    apiClient.get<{ success: boolean; data: { entities: Array<{ id: string; label: string }> } }>('/data-model')
-      .then((r) => setEntityLabels(Object.fromEntries((r.data?.entities || []).map((e) => [e.id, e.label]))))
+    apiClient.get<{ success: boolean; data: { entities: Array<{ id: string; label: string; description?: string }> } }>('/data-model')
+      .then((r) => {
+        const es = r.data?.entities || [];
+        setEntityLabels(Object.fromEntries(es.map((e) => [e.id, e.label])));
+        setStarterEntities(es.map((e) => ({ id: e.id, label: e.label, description: e.description || '' })));
+      })
       .catch(() => {});
   }, []);
 
@@ -750,12 +757,45 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
               <SkeletonRows rows={4} columnWidths={[220, null, 120]} />
             </div>
           ) : reports.length === 0 ? (
-            <EmptyState
-              icon={renderNavIcon('/reports')}
-              title="No reports yet"
-              description="Reports pull live rows from your governed catalog — data assets, systems, processes, issues — into a table you can filter, run, export, and schedule by email. Start from any entity and pick the columns you want."
-              action={{ label: '+ New report', onClick: () => navigate('/reports/builder') }}
-            />
+            <Card padding={0}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 40, alignItems: 'center', padding: '40px 32px' }}>
+                {/* Hero */}
+                <div style={{ flex: '1 1 360px', minWidth: 0 }}>
+                  <span aria-hidden="true" style={{ width: 52, height: 52, borderRadius: 12, background: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {renderNavIcon('/reports', { size: 26 })}
+                  </span>
+                  <h2 style={{ margin: '16px 0 6px', fontSize: 20, fontWeight: 600 }}>Build your first report</h2>
+                  <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.55, maxWidth: 520 }}>
+                    A report is a saved list you can re-run any time — for example every uncertified data asset and its owner. Pick what to list, choose the columns, add filters, then share it with your organization or email it on a schedule.
+                  </p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 20 }}>
+                    <Button onClick={() => navigate('/reports/builder')}>+ New report</Button>
+                  </div>
+                </div>
+                {/* Start from an entity */}
+                {starterEntities.length > 0 && (
+                  <div style={{ flex: '1 1 420px', minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 10 }}>Or start from what you want to list</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+                      {starterEntities.slice(0, 4).map((e) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => navigate(`/reports/builder?entity=${encodeURIComponent(e.id)}`)}
+                          style={{ display: 'block', textAlign: 'left', cursor: 'pointer', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '14px 16px' }}
+                        >
+                          <span style={{ display: 'block', fontWeight: 600, color: 'var(--color-text)' }}>{e.label}</span>
+                          {e.description && <span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description}</span>}
+                        </button>
+                      ))}
+                    </div>
+                    <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
+                      Opens the builder with that starting point picked.{starterEntities.length > 4 ? ` ${starterEntities.length - 4} more in the builder.` : ''}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
           ) : (
             <>
               {/* Search + Source / Sharing / Schedule filters above the table. */}
