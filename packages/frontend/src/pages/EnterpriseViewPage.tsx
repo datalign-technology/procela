@@ -174,9 +174,11 @@ export default function EnterpriseViewPage() {
   // The preset selector was removed; the view always shows everything, and
   // scope is dialed in with the Show-layer toggles + Include-governance.
   const [activeView] = useState<string>('all');
-  // Default to the readable Cards view (pick-an-item-and-trace) rather than
-  // the all-edges Diagram, which is an unreadable tangle at scale.
-  const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('cards');
+  // Default to the Diagram (swim-lane) view — the layout the enterprise-view
+  // board leads with. It draws every relationship, dimming the rest to
+  // emphasise the selected item's links; Hide-unconnected and the type
+  // filters trim it down. The Cards list stays a click away via the toggle.
+  const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('diagram');
   // Hide nodes with no relationships in the current view — lets users focus
   // on the connected core and drop dangling entities.
   const [hideUnconnected, setHideUnconnected] = useState(false);
