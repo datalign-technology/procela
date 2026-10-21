@@ -26,6 +26,7 @@ import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SensitivityPanel from '../components/SensitivityPanel';
 import ImpactAnalysisPanel from '../components/ImpactAnalysisPanel';
+import ImpactSummaryStrip from '../components/ImpactSummaryStrip';
 import CommentsPanel from '../components/CommentsPanel';
 import { renderNavIcon } from '../components/navIcons';
 import ActivityFeed from '../components/ActivityFeed';
@@ -2753,6 +2754,12 @@ export default function DataAssetsPage({
                   onNavigateToPerson={(personId) => { navigate(`/people/${encodeURIComponent(personId)}`); }}
                   onNavigateToAsset={(id) => navigate(`/data-assets/${id}`)}
                 />
+                )}
+
+                {/* ===== OVERVIEW: impact mini-strip — the blast radius at a
+                    glance, with "See full impact" into the Impact tab. ===== */}
+                {detailTab === 'overview' && (
+                  <ImpactSummaryStrip assetId={viewing360.asset.id} onSeeFull={() => setDetailTab('impact')} />
                 )}
 
                 {/* ===== OVERVIEW: used by process activities =====
