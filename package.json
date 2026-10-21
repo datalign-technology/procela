@@ -2,6 +2,7 @@
   "name": "procela",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "description": "Procela - SaaS platform connecting business processes to data and systems",
   "workspaces": [
     "packages/*"
