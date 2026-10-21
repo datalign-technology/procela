@@ -5,6 +5,7 @@ import { processTypeIcon } from '../components/processTypeIcons';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import Page from '../components/Page';
+import PageHeader from '../components/PageHeader';
 import Spinner from '../components/Spinner';
 import { Icon } from '../components/IconButton';
 import { installPrintFit } from '../lib/printFit';
@@ -565,35 +566,43 @@ export default function ProcessVisualizationPage() {
         </div>
       </div>
 
+      <PageHeader
+        kicker={activeOrgName ? `Process catalog \u00b7 ${activeOrgName}` : 'Process catalog'}
+        title="Process map"
+        subtitle="A visual map of your value streams, processes, sub-processes, and activities \u2014 and how they fit together."
+        actions={
+          <>
+            <button
+              onClick={() => navigate('/processes')}
+              style={{
+                padding: '8px 16px', background: 'var(--color-surface)',
+                color: 'var(--color-text)', border: '1px solid var(--color-border)',
+                borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {'\u2190'} Back to Process Catalog
+            </button>
+            <button
+              onClick={handlePrint}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 16px', background: 'var(--color-primary)',
+                color: '#fff', border: 'none',
+                borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+              }}
+            >
+              <Icon name="printer" size={14} /> Export PDF
+            </button>
+          </>
+        }
+      />
+
       {/* Controls toolbar */}
       <div className="viz-controls" style={{
         display: 'flex', alignItems: 'center', gap: 12,
         marginBottom: 16, flexWrap: 'wrap',
       }}>
-        <button
-          onClick={() => navigate('/processes')}
-          style={{
-            padding: '8px 16px', background: 'var(--color-surface)',
-            color: 'var(--color-text)', border: '1px solid var(--color-border)',
-            borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}
-        >
-          {'\u2190'} Back to Process Catalog
-        </button>
-
-        <button
-          onClick={handlePrint}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '8px 16px', background: 'var(--color-primary)',
-            color: '#fff', border: 'none',
-            borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-          }}
-        >
-          <Icon name="printer" size={14} /> Export PDF
-        </button>
-
         {/* Zoom controls */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 4,
