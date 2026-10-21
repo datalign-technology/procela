@@ -1,0 +1,24 @@
+# gitleaks config for the Procela secrets-scan CI gate.
+#
+# Starts from gitleaks' full default rule set, then allowlists a small number
+# of REVIEWED synthetic fixtures that are not real credentials. Each allowlist
+# below is scoped to a specific line pattern (regexTarget = "line"), so it
+# cannot hide an unrelated real secret.
+#
+# Reviewed 2026-10-21 (gitleaks 8.21). See the matching entries:
+#   - packages/backend/src/services/demo-seed.service.ts — `tokenHash: '<sha256>'`
+#     values are sha256 hashes of PUBLIC demo strings (e.g. "demo-connector-token"),
+#     stored so the demo shows the field shape without a plaintext token. Not secrets.
+#   - packages/backend/src/__tests__/oidc-flow.test.ts — a hand-crafted, invalid
+#     `fakeToken` used by a negative test that checks forged JWTs are rejected.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed synthetic fixtures — demo-seed token hashes + a fake test JWT. Not real credentials."
+regexTarget = "line"
+regexes = [
+  '''tokenHash: .[a-f0-9]{64}''',
+  '''const fakeToken = ''',
+]

@@ -1,0 +1,11 @@
+{
+  "// Build-only config": "Extends the base tsconfig but EXCLUDES tests from the emitted output, so the production image (which ships dist/) doesn't carry compiled test files. `npm run lint` still uses tsconfig.json, so tests are still type-checked in CI.",
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/__tests__/**"
+  ]
+}
