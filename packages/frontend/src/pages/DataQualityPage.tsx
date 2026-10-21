@@ -1128,6 +1128,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onRefreshAll, actions
   const { addToast } = useToastStore();
   const assetCols = useColumnPicker<AssetColId>('procela.dataQuality.assetsCols.v1', ASSET_COLUMN_DEFS);
   const [runningAll, setRunningAll] = useState<string | null>(null);
+  const [runningAllAssets, setRunningAllAssets] = useState(false);
   const [filterSystem, setFilterSystem] = useState('');
   const [filterOwner, setFilterOwner] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
@@ -1221,6 +1222,34 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onRefreshAll, actions
       setRunningAll(null);
     }
   };
+
+  // Run every rule across every asset that has one — the Quality tab's primary
+  // action. Runs the assets sequentially (one run-all call each) so a big
+  // catalog doesn't fire dozens of requests at once, then refreshes once.
+  const runAllAssets = async () => {
+    const targets = assets.filter((a) => (rulesByAsset.get(a.id) || []).length > 0);
+    if (targets.length === 0) { addToast('info', 'No rules to run yet — add quality rules on the Rules tab first.'); return; }
+    setRunningAllAssets(true);
+    let ranTotal = 0; let failed = 0;
+    try {
+      for (const a of targets) {
+        try {
+          const res = await apiClient.post<{ success: boolean; data: { ran: number } }>(`/data-quality/run-all/${a.id}`);
+          ranTotal += res.data?.ran || 0;
+        } catch { failed += 1; }
+      }
+      await onRefreshAll();
+      if (failed > 0) addToast('error', `Ran ${ranTotal} rule${ranTotal === 1 ? '' : 's'}; ${failed} asset${failed === 1 ? '' : 's'} failed.`);
+      else addToast('success', `Ran ${ranTotal} rule${ranTotal === 1 ? '' : 's'} across ${targets.length} asset${targets.length === 1 ? '' : 's'}.`);
+    } finally {
+      setRunningAllAssets(false);
+    }
+  };
+
+  // Whether any asset has a real (non-simulated) measurement, and whether any
+  // asset has a rule to run — drive the explainer banner + the Run-all button.
+  const anyMeasured = assets.some((a) => (rulesByAsset.get(a.id) || []).some((r) => r.lastRun && r.lastRun.simulated === false));
+  const anyRules = assets.some((a) => (rulesByAsset.get(a.id) || []).length > 0);
 
   if (assets.length === 0) {
     return (
@@ -1340,12 +1369,30 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onRefreshAll, actions
         })} />
       )}
       <ColumnPicker state={assetCols} />
+      {anyRules && (
+        <Button variant="primary" onClick={runAllAssets} disabled={runningAllAssets}>
+          {runningAllAssets ? 'Running…' : 'Run all rules'}
+        </Button>
+      )}
     </>
   );
 
   return (
     <div>
       {actionsPortal && createPortal(qualityActions, actionsPortal)}
+      {/* Explainer — shown while nothing is measured, so a reader knows how a
+          health score is produced and why everything reads "Estimate". */}
+      {!anyMeasured && (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', borderRadius: 'var(--radius-md)', background: '#e6eef9', marginBottom: 16 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#24508f" strokeWidth={2} strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }}>
+            <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.01" />
+          </svg>
+          <div style={{ fontSize: 14, color: '#1c1f1e', lineHeight: 1.5 }}>
+            <strong style={{ fontWeight: 600 }}>No asset has a measured health score yet.</strong>{' '}
+            <span style={{ color: '#3f4542' }}>Health is the weighted average of an asset&rsquo;s quality rules, run against real data. Connect a source and run rules to get a score. Simulated results are marked &ldquo;Estimate&rdquo;.</span>
+          </div>
+        </div>
+      )}
       {/* Needs attention — the asset-health backlog as one-click filters. An
           asset is untrustworthy outright when a rule is failing or nobody owns
           it, so those lead with "Fix first". */}
