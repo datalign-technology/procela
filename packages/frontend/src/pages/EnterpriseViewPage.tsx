@@ -556,32 +556,31 @@ export default function EnterpriseViewPage() {
         </HelpPopover>
       </PageHeader>
 
-      {/* Filter bar — one dropdown per entity type. Pick exactly which
-          processes / systems / assets / domains / people to show (search +
-          multi-select); Clear hides a whole type. Applies to both cards and
-          diagram. */}
-      {presetTypes.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginRight: 2 }}>Filter:</span>
-          {presetTypes.map((type) => {
-            const cfg = TYPE_CONFIG[type];
-            const opts = optionsByType[type] || [];
-            if (!cfg || opts.length === 0) return null;
-            return (
-              <EntityTypeFilter
-                key={type}
-                cfg={cfg}
-                options={opts}
-                selected={selectedByType[type] ?? null}
-                onChange={(sel) => setTypeSelection(type, sel)}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {/* Controls: depth · governance toggle · counts · export · display mode */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', fontSize: 13, flexWrap: 'wrap' }}>
+      {/* Filter bar — one white card (board E5): a "Show" label + a dropdown
+          per entity type (search + multi-select; Clear hides a whole type),
+          then the process-depth / governance / connection controls and the
+          live counts. Applies to both Cards and Diagram. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '12px 16px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', fontSize: 13, flexWrap: 'wrap' }}>
+        {presetTypes.length > 0 && (
+          <>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-muted)', marginRight: 2 }}>Show</span>
+            {presetTypes.map((type) => {
+              const cfg = TYPE_CONFIG[type];
+              const opts = optionsByType[type] || [];
+              if (!cfg || opts.length === 0) return null;
+              return (
+                <EntityTypeFilter
+                  key={type}
+                  cfg={cfg}
+                  options={opts}
+                  selected={selectedByType[type] ?? null}
+                  onChange={(sel) => setTypeSelection(type, sel)}
+                />
+              );
+            })}
+            <span aria-hidden="true" style={{ width: 1, height: 24, background: 'var(--color-border-subtle)', margin: '0 4px' }} />
+          </>
+        )}
         {/* Process depth (drill up / drill down). Renders down to the chosen
             level; deeper nodes collapse into their ancestor with their data /
             system edges rolled up. Only offered when the catalog actually has
