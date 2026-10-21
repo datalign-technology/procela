@@ -499,6 +499,15 @@ router.get('/raci', async (req: Request, res: Response) => {
     ADVISOR: 'C',
   };
 
+  // Governance-body seniority, most senior first. A governance value stream
+  // matches every chartered body (below), so without a tie-breaker its Council
+  // chair AND its Stewardship chair would each land an 'A' — two Accountables
+  // on one row. We keep the most senior body's chair Accountable and demote the
+  // rest to Responsible, enforcing the RACI rule of exactly one A per row.
+  const GROUP_SENIORITY: Record<string, number> = {
+    COUNCIL: 5, OFFICE: 4, COMMITTEE: 3, STEWARDSHIP_TEAM: 2, WORKING_GROUP: 1,
+  };
+
   // Check if a row is under the governance value stream
   const govVsIds = new Set(filteredNodes.filter((n) =>
     n.level === 'VALUE_STREAM' && isGovernanceProcess(n),
@@ -528,6 +537,9 @@ router.get('/raci', async (req: Request, res: Response) => {
     // For governance rows, derive RACI from governance group membership
     if (isGovernanceNode(row.id)) {
       const processName = row.level === 'VALUE_STREAM' ? null : (getGovProcessName(row.id) || row.name);
+      // Seniority of the body behind each person's 'A', so the single-A rule
+      // below can keep the most senior one.
+      const aSeniority: Record<string, number> = {};
 
       for (const group of filteredGroups) {
         // Check if this group type maps to this governance process.
@@ -563,8 +575,23 @@ router.get('/raci', async (req: Request, res: Response) => {
               cellMap[member.personId] = raciLetter;
               reasonMap[member.personId] = `${raciLetter === 'A' ? 'Chair' : raciLetter === 'R' ? 'Member' : raciLetter === 'C' ? 'Advisor' : 'Secretary'} of ${group.name}`;
             }
+            if (raciLetter === 'A') {
+              aSeniority[member.personId] = Math.max(aSeniority[member.personId] ?? -1, GROUP_SENIORITY[group.type] ?? 0);
+            }
             allRelevantIds.add(member.personId);
           }
+        }
+      }
+
+      // Exactly one Accountable per row: a governance value stream rolls up
+      // several bodies, so more than one chair can land an 'A'. Keep the most
+      // senior body's chair Accountable and demote the rest to Responsible.
+      const aHolders = Object.keys(cellMap).filter((pid) => cellMap[pid] === 'A');
+      if (aHolders.length > 1) {
+        aHolders.sort((a, b) => (aSeniority[b] ?? 0) - (aSeniority[a] ?? 0));
+        for (const pid of aHolders.slice(1)) {
+          cellMap[pid] = 'R';
+          reasonMap[pid] = 'Responsible — a more senior governance body is Accountable for this row.';
         }
       }
 

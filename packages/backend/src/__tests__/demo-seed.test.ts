@@ -149,6 +149,9 @@ describe('demo-seed endpoint', () => {
       next();
     });
     app.use('/admin', adminRouter);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const dashboardRouter = require('../routes/dashboard').default;
+    app.use('/dashboard', dashboardRouter);
     server = http.createServer(app);
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     port = (server.address() as AddressInfo).port;
@@ -289,6 +292,22 @@ describe('demo-seed endpoint', () => {
     // "configure your assumptions" prompt.
     assert.ok(root.roiModel && typeof root.roiModel === 'object', 'demo tenant carries an ROI value model');
     assert.ok(root.roiModel.ownershipValuePerEntity > 0, 'value model has non-zero assumptions');
+  });
+
+  it('governance value stream has exactly one Accountable in the RACI matrix', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const orgId = demoId('org-tidewater');
+    const res = await request(port, 'GET', `/dashboard/raci?orgId=${orgId}`, undefined, 'SUPER_ADMIN');
+    assert.strictEqual(res.status, 200);
+    const { rows, matrix } = res.body.data;
+    const govVs = rows.find((r: any) => r.level === 'VALUE_STREAM' && r.name === 'Data Governance Management');
+    assert.ok(govVs, 'governance value stream present in the RACI matrix');
+    // The VS rolls up both the Council and the Stewardship Team, each with a
+    // chair — the single-A rule must keep just one Accountable (the Council's,
+    // being the more senior body) and demote the other chair to Responsible.
+    const letters = Object.values(matrix[govVs.id] || {});
+    assert.strictEqual(letters.filter((v) => v === 'A').length, 1, 'exactly one Accountable on the governance value stream');
+    assert.ok(letters.filter((v) => v === 'R').length >= 1, 'at least one Responsible');
   });
 
   it('is idempotent — second call replaces the first, no row compounding', async () => {
