@@ -51,8 +51,8 @@ interface UserReportSummary {
 // folds in the folder, so neither is a separate toggle any more.
 type ReportColId = 'sharing' | 'source' | 'columns' | 'lastRun';
 const REPORT_COLUMN_DEFS: Array<{ id: ReportColId; label: string; defaultVisible: boolean }> = [
-  { id: 'sharing', label: 'Sharing', defaultVisible: true },
   { id: 'source',  label: 'Source',  defaultVisible: true },
+  { id: 'sharing', label: 'Sharing', defaultVisible: true },
   { id: 'columns', label: 'Columns', defaultVisible: true },
   { id: 'lastRun', label: 'Last run', defaultVisible: true },
 ];
@@ -597,25 +597,29 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
         </div>
       ),
     },
+    reportCols.isVisible('source') && {
+      key: 'source', header: 'Source', sortable: true, width: 150,
+      render: (r: UserReportSummary) => <span style={{ color: 'var(--color-text-secondary)' }}>{entityLabel(r.primaryEntity)}</span>,
+    },
     reportCols.isVisible('sharing') && {
       key: 'sharing', header: 'Sharing', width: 150,
       render: (r: UserReportSummary) => {
         const fname = folderName(r.folderId);
+        const shared = r.visibility === 'org';
+        // Board H1: a dot-pill reads sharing at a glance — teal for shared,
+        // muted for private — with the folder as a sub-line beneath.
         return (
           <div style={{ minWidth: 0 }}>
-            {r.visibility === 'org'
-              ? <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>Shared</span>
-              : <span style={badgeStyle('var(--color-bg)', 'var(--color-text-muted)')}>Private</span>}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 11, whiteSpace: 'nowrap', background: shared ? 'var(--color-primary-light)' : 'var(--color-bg)', color: shared ? 'var(--color-primary)' : 'var(--color-text-muted)', border: shared ? 'none' : '1px solid var(--color-border)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: 3, background: 'currentColor', flexShrink: 0 }} />
+              {shared ? 'Shared' : 'Private'}
+            </span>
             <span style={{ display: 'block', fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {fname ? fname : 'No folder'}
             </span>
           </div>
         );
       },
-    },
-    reportCols.isVisible('source') && {
-      key: 'source', header: 'Source', sortable: true, width: 150,
-      render: (r: UserReportSummary) => <span style={{ color: 'var(--color-text-secondary)' }}>{entityLabel(r.primaryEntity)}</span>,
     },
     reportCols.isVisible('columns') && {
       key: 'columns', header: 'Columns', align: 'center', width: 90,
@@ -624,12 +628,21 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
     reportCols.isVisible('lastRun') && {
       key: 'lastRun', header: 'Last run', sortable: true, width: 200,
       render: (r: UserReportSummary) => (
-        <span style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
-          {r.lastRunAt
-            ? <>{timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
-            : <span style={{ color: 'var(--color-text-muted)' }}>Never run</span>}
-          {r.scheduleFrequency !== 'off' && <span style={badgeStyle('var(--color-primary-light)', 'var(--color-primary)')}>{r.scheduleFrequency.toUpperCase()}</span>}
-        </span>
+        <div style={{ color: 'var(--color-text-secondary)' }}>
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {r.lastRunAt
+              ? <>{timeAgo(r.lastRunAt)}{r.lastRunRowCount != null ? ` · ${r.lastRunRowCount.toLocaleString()} ${r.lastRunRowCount === 1 ? 'row' : 'rows'}` : ''}</>
+              : <span style={{ color: 'var(--color-text-muted)' }}>Never run</span>}
+          </span>
+          {/* Board H1: a scheduled report wears an "Emailed {freq}" sub-line with
+              a calendar glyph, not an UPPERCASE frequency tag. */}
+          {r.scheduleFrequency !== 'off' && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, fontSize: 12, color: 'var(--color-info)' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="14" rx="2" /><path d="M3.5 9.5h17M8 3.5v4M16 3.5v4" /></svg>
+              Emailed {r.scheduleFrequency}
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -649,10 +662,12 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
           {rowMenuId === r.id && (
             <div role="menu" onClick={(e) => e.stopPropagation()} style={rowMenuStyle}>
               <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); navigate(`/reports/${r.id}`); }}>Open</button>
-              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); navigate(`/reports/builder/${r.id}`); }}>Edit</button>
-              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); setMoveReport(r); setMoveTarget(r.folderId || ''); }}>Move to folder</button>
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); navigate(`/reports/builder/${r.id}`); }}>Edit in builder</button>
               <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); duplicate(r); }}>Duplicate</button>
-              <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); remove(r.id, r.name); }}>Delete</button>
+              <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); setMoveReport(r); setMoveTarget(r.folderId || ''); }}>Move to folder</button>
+              {/* Board H1: a divider sets the destructive action apart. */}
+              <div role="separator" style={{ height: 1, background: 'var(--color-border-subtle)', margin: '4px 0' }} />
+              <button type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }} onClick={() => { setRowMenuId(null); remove(r.id, r.name); }}>Delete report</button>
             </div>
           )}
         </div>
@@ -892,6 +907,15 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
                     emptyMessage={hasFilters ? 'No reports match these filters.' : 'No reports in this folder.'}
                     onRowClick={(r) => navigate(`/reports/${r.id}`)}
                   />
+                </div>
+                {/* Board H1: a persistent footer strip — the report count on the
+                    left, a reminder of where row actions live on the right. */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 16px', borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)', fontSize: 13, color: 'var(--color-text-muted)' }}>
+                  <span>
+                    {sorted.length} {sorted.length === 1 ? 'report' : 'reports'}
+                    {hasFilters && reports.length !== sorted.length ? ` of ${reports.length}` : ''}
+                  </span>
+                  <span>Run from each row; edit, duplicate, move and delete live in its ⋯ menu.</span>
                 </div>
               </div>
             </>
