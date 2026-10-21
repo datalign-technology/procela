@@ -17,6 +17,8 @@ import Button from '../components/Button';
 import TruncatedText from '../components/TruncatedText';
 import { renderNavIcon } from '../components/navIcons';
 import { useSortedList } from '../hooks/useSortedList';
+import { useRowSelection } from '../hooks/useRowSelection';
+import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import type { Cell, ExportPayload } from '../lib/export';
 import { exportData } from '../lib/export';
 import { fetchReportFolders, NO_FOLDER, type ReportFolder } from '../lib/reportFolders';
@@ -668,6 +670,35 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
     'name',
   );
 
+  // Row selection (over the visible/sorted rows, so select-all matches what's
+  // on screen) + bulk move / delete. Cleared whenever the visible set changes
+  // so a bulk action never touches rows you can no longer see.
+  const sel = useRowSelection(sorted, (r) => r.id);
+  useEffect(() => { sel.clear(); }, [selectedFolder, filterSource, filterSharing, filterSchedule, search, sel.clear]);
+  const selectedReports = () => (reports || []).filter((r) => sel.selectedIds.has(r.id));
+
+  const bulkDelete = async () => {
+    const chosen = selectedReports();
+    if (chosen.length === 0) return;
+    if (!confirm(`Delete ${chosen.length} report${chosen.length === 1 ? '' : 's'}? This can't be undone.`)) return;
+    try {
+      await Promise.all(chosen.map((r) => apiClient.delete(`/reports/${r.id}`)));
+      addToast('success', `Deleted ${chosen.length} report${chosen.length === 1 ? '' : 's'}.`);
+    } catch { addToast('error', 'Some reports could not be deleted.'); }
+    sel.clear(); load();
+  };
+
+  const bulkMove = async (folderId: string) => {
+    const chosen = selectedReports();
+    if (chosen.length === 0) return;
+    try {
+      await Promise.all(chosen.map((r) => apiClient.put(`/reports/${r.id}`, { folderId: folderId || null })));
+      const dest = folderId ? (folders.find((f) => f.id === folderId)?.name ?? 'folder') : 'No folder';
+      addToast('success', `Moved ${chosen.length} report${chosen.length === 1 ? '' : 's'} to ${dest}.`);
+    } catch { addToast('error', 'Some reports could not be moved.'); }
+    sel.clear(); load();
+  };
+
   // ── Folder rail row ────────────────────────────────────────────────────────
   const railRow = (key: string, label: string, opts?: { folder?: ReportFolder }) => {
     const active = selectedFolder === key;
@@ -828,6 +859,20 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
                   </>
                 )}
               </div>
+              {/* Bulk actions for the selected rows — move to a folder or delete. */}
+              <BulkActionBar count={sel.count} onClear={sel.clear}>
+                <select
+                  aria-label="Move selected reports to folder"
+                  defaultValue=""
+                  onChange={(e) => { const v = e.target.value; e.currentTarget.value = ''; if (v) bulkMove(v === '__none__' ? '' : v); }}
+                  style={{ height: 30, padding: '0 8px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                >
+                  <option value="" disabled>Move to…</option>
+                  <option value="__none__">No folder (private)</option>
+                  {folders.map((f) => <option key={f.id} value={f.id}>{f.name}{f.shared ? ' · shared' : ''}</option>)}
+                </select>
+                <BulkActionButton variant="danger" onClick={bulkDelete}>Delete</BulkActionButton>
+              </BulkActionBar>
               {/* Surface wrapper so the table reads as a white card against the
                   greyish page ground — matches Data Assets / Systems lists. */}
               <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
@@ -835,6 +880,7 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
                   rows={sorted}
                   columns={columns}
                   rowKey={(r) => r.id}
+                  selection={sel}
                   sort={{ sortKey, sortDir, onSort: toggleSort }}
                   emptyMessage={hasFilters ? 'No reports match these filters.' : 'No reports in this folder.'}
                   onRowClick={(r) => navigate(`/reports/${r.id}`)}
