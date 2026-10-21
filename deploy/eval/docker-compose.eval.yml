@@ -1,0 +1,126 @@
+# Procela — evaluation stack (pull-and-run).
+#
+# Runs the whole app from PRE-BUILT images pulled from GitHub Container
+# Registry — no source checkout, no local build. Everything needed is in
+# this folder: this file, .env.example, and seed.mjs.
+#
+# Quick start (see README.md for detail):
+#   cp .env.example .env
+#   docker compose -f docker-compose.eval.yml up
+#   open http://localhost:3000
+#
+# Images are selected via two .env vars so you can pin a version:
+#   PROCELA_REGISTRY   default ghcr.io/datalign-technology
+#   PROCELA_TAG        default latest   (e.g. 0.1.0 to pin)
+#
+# This is an EVALUATION build: dev auth (any email signs in), demo data
+# seeded on first boot, mail captured locally, AI off unless you add a key.
+# Not a production deployment — see the Helm chart / Terraform under deploy/
+# for that.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: procela
+      POSTGRES_PASSWORD: procela
+      POSTGRES_DB: procela
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U procela"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Local SMTP catcher — password-reset and "Report a problem" email land in a
+  # web inbox at http://localhost:8025. Nothing leaves your machine.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"   # web inbox
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+
+  # Applies the Prisma schema to Postgres before the backend starts. Reuses the
+  # backend image (which bundles prisma/ + the migration engine) and exits.
+  migrate:
+    image: ${PROCELA_REGISTRY:-ghcr.io/datalign-technology}/procela-backend:${PROCELA_TAG:-latest}
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://procela:procela@postgres:5432/procela
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    image: ${PROCELA_REGISTRY:-ghcr.io/datalign-technology}/procela-backend:${PROCELA_TAG:-latest}
+    env_file:
+      - .env
+    environment:
+      # Infra wiring — overrides anything in .env so the eval stack is
+      # self-contained regardless of what the evaluator put there.
+      NODE_ENV: production
+      PORT: "3001"
+      DATABASE_URL: postgresql://procela:procela@postgres:5432/procela
+      REDIS_URL: redis://redis:6379
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USER: eval
+      SMTP_PASS: eval
+      SMTP_SECURE: "false"
+      MAIL_FROM: "Procela (eval) <noreply@procela.local>"
+      APP_URL: http://localhost:3000
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+
+  # Web UI (nginx). Serves the static build and reverse-proxies /api to the
+  # backend container — so the browser only ever talks to localhost:3000 and
+  # the image needs no build-time API URL. (The service MUST be named
+  # `backend` — the image's nginx.conf proxies /api → http://backend:3001.)
+  frontend:
+    image: ${PROCELA_REGISTRY:-ghcr.io/datalign-technology}/procela-frontend:${PROCELA_TAG:-latest}
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  # One-shot: loads a demo tenant on FIRST boot so the app isn't empty. Skips
+  # itself if an organization already exists, so restarting the stack never
+  # wipes data you added. Pick the industry with DEMO_INDUSTRY (default
+  # utilities). Re-seed on demand: docker compose run --rm eval-seed
+  eval-seed:
+    image: node:20-slim
+    working_dir: /seed
+    volumes:
+      - ./seed.mjs:/seed/seed.mjs:ro
+    environment:
+      PROCELA_URL: http://backend:3001/api/v1
+      DEMO_INDUSTRY: ${DEMO_INDUSTRY:-utilities}
+    depends_on:
+      backend:
+        condition: service_started
+    command: ["node", "seed.mjs"]
+    restart: "no"
+
+volumes:
+  postgres_data:
