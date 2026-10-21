@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo, type ReactNode } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, createContext, useContext, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { processTypeIcon } from '../components/processTypeIcons';
@@ -25,6 +25,10 @@ interface ProcessNode {
   orderIndex: number;
   orgIds: string[];
   ownerId: string | null;
+  // Present on the full catalog response; used by the details rail.
+  responsibleRole?: string | null;
+  accountableRole?: string | null;
+  systemIds?: string[];
   children?: ProcessNode[];
 }
 
@@ -34,6 +38,22 @@ interface FlowRelationship {
   toNodeId: string;
   type: string;
 }
+
+// Minimal shapes for the lookups the details rail resolves against.
+interface MappingInfo {
+  processStepId: string;
+  dataAssetId?: string;
+  assetInfo?: { assetName: string } | null;
+}
+
+// Selection wiring for the (recursive) node tree — a context avoids drilling
+// selectedId / onSelect / the no-data set through every VisualNode level.
+interface VizSelection {
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  noDataActivityIds: Set<string>;
+}
+const VizContext = createContext<VizSelection>({ selectedId: null, onSelect: () => {}, noDataActivityIds: new Set() });
 
 // ── Level Visual Config ──
 
@@ -208,17 +228,30 @@ function ActivityRow({ activities, flowMap }: { activities: ProcessNode[]; flowM
 function VisualCard({ node }: { node: ProcessNode }) {
   const config = LEVEL_VISUAL[node.level];
   const statusStyle = STATUS_COLORS[node.status] || STATUS_COLORS.DRAFT;
+  const { selectedId, onSelect, noDataActivityIds } = useContext(VizContext);
+  const selected = selectedId === node.id;
+  const noData = node.level === 'ACTIVITY' && noDataActivityIds.has(node.id);
 
   return (
-    <div
+    <button
+      type="button"
       className="viz-card"
+      onClick={() => onSelect(node.id)}
+      aria-pressed={selected}
       style={{
         width: config.width,
         background: config.bg,
         borderLeft: `3px solid ${config.border}`,
+        border: selected ? '1px solid var(--color-primary)' : '1px solid transparent',
+        borderLeftWidth: 3,
+        borderLeftColor: selected ? 'var(--color-primary)' : config.border,
         borderRadius: 6,
         padding: 12,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        textAlign: 'left',
+        cursor: 'pointer',
+        font: 'inherit',
+        color: 'inherit',
+        boxShadow: selected ? '0 0 0 2px var(--color-primary)' : '0 1px 3px rgba(0,0,0,0.1)',
         flexShrink: 0,
       }}
     >
@@ -276,7 +309,20 @@ function VisualCard({ node }: { node: ProcessNode }) {
           {node.description}
         </div>
       )}
-    </div>
+
+      {/* No-data flag — an activity with no linked data asset reads straight
+          off the map, matching the reference board. */}
+      {noData && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8,
+          padding: '2px 8px', borderRadius: 11, fontSize: 10, fontWeight: 600,
+          background: '#fbe9d9', color: '#9a4a0e',
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: '#9a4a0e' }} />
+          No data linked
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -472,6 +518,99 @@ function ensurePrintStyles() {
   document.head.appendChild(style);
 }
 
+// ── Details rail (selected node) ──
+
+function RailField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <dt style={{ color: 'var(--color-text-muted)' }}>{label}</dt>
+      <dd style={{ margin: 0, color: 'var(--color-text)' }}>{children}</dd>
+    </>
+  );
+}
+
+function DetailsRail({ node, peopleById, systemsById, dataByNode, onOpen, onMapData }: {
+  node: ProcessNode | null;
+  peopleById: Map<string, string>;
+  systemsById: Map<string, string>;
+  dataByNode: Map<string, string[]>;
+  onOpen: (id: string) => void;
+  onMapData: () => void;
+}) {
+  const cardStyle: React.CSSProperties = {
+    background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md, 10px)', padding: 18,
+  };
+  const muted = (t: string) => <span style={{ color: 'var(--color-text-muted)' }}>{t}</span>;
+
+  let body: ReactNode;
+  if (!node) {
+    body = (
+      <section style={cardStyle}>
+        <div style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+          Select a step in the map to see who owns it, the systems it runs on, and the data it uses.
+        </div>
+      </section>
+    );
+  } else {
+    const isActivity = node.level === 'ACTIVITY';
+    const owner = (node.ownerId && peopleById.get(node.ownerId)) || null;
+    const role = node.responsibleRole || node.accountableRole || null;
+    const systemNames = (node.systemIds || []).map((id) => systemsById.get(id) || id).filter(Boolean);
+    const dataNames = dataByNode.get(node.id) || [];
+    const noData = isActivity && dataNames.length === 0;
+
+    body = (
+      <section style={cardStyle}>
+        <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+          {LEVEL_VISUAL[node.level].label}
+        </div>
+        <h2 style={{ margin: '4px 0 0', fontSize: 18, fontWeight: 600, lineHeight: 1.3, color: 'var(--color-text)' }}>{node.name}</h2>
+        {node.description && (
+          <p style={{ margin: '8px 0 0', color: 'var(--color-text-secondary)', fontSize: 13, lineHeight: 1.5 }}>{node.description}</p>
+        )}
+        <dl style={{ margin: '14px 0 0', display: 'grid', gridTemplateColumns: '96px 1fr', gap: '10px 12px', fontSize: 13 }}>
+          <RailField label="ID"><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{node.activityId || node.id}</span></RailField>
+          <RailField label="Owner">{owner || muted('Unassigned')}</RailField>
+          <RailField label="Role">{role || (isActivity ? muted('—') : muted('Set on activities'))}</RailField>
+          <RailField label="Systems">{systemNames.length ? systemNames.join(', ') : (isActivity ? muted('—') : muted('See activities'))}</RailField>
+          <RailField label="Data used">{dataNames.length ? dataNames.join(', ') : (isActivity ? muted('None linked yet') : muted('See activities'))}</RailField>
+        </dl>
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => onOpen(node.id)}
+            style={{ height: 36, padding: '0 14px', border: 0, background: 'var(--color-primary)', color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Open in catalog
+          </button>
+          {noData && (
+            <button
+              type="button"
+              onClick={onMapData}
+              style={{ height: 36, padding: '0 14px', border: '1px solid var(--color-primary)', background: 'var(--color-surface)', color: 'var(--color-primary)', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Map data
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <aside aria-label="Selected step" style={{ flex: '1 1 300px', minWidth: 260, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {body}
+      <section style={{ ...cardStyle, padding: '16px 18px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+        <h2 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 600, color: 'var(--color-text)' }}>Reading the map</h2>
+        <p style={{ margin: 0, lineHeight: 1.5 }}>
+          Each box is a node in the hierarchy; arrows follow the recorded hand-offs between activities. Click any node to see its details here. An amber <strong>No data linked</strong> flag marks an activity with no data asset mapped yet.
+        </p>
+      </section>
+    </aside>
+  );
+}
+
 // ── Main Page ──
 
 export default function ProcessVisualizationPage() {
@@ -479,10 +618,14 @@ export default function ProcessVisualizationPage() {
   const { activeOrgId, activeOrgName } = useOrgContext();
   const [tree, setTree] = useState<ProcessNode[]>([]);
   const [flows, setFlows] = useState<FlowRelationship[]>([]);
+  const [peopleById, setPeopleById] = useState<Map<string, string>>(new Map());
+  const [systemsById, setSystemsById] = useState<Map<string, string>>(new Map());
+  const [dataByNode, setDataByNode] = useState<Map<string, string[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [hiddenLevels, setHiddenLevels] = useState<Set<NodeLevel>>(new Set());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const printFitRef = useRef<HTMLDivElement>(null);
 
@@ -498,12 +641,27 @@ export default function ProcessVisualizationPage() {
     setError(null);
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes] = await Promise.all([
+      // People / systems / mappings power the details rail's Owner / Systems /
+      // Data-used fields. They're best-effort — the map still renders without
+      // them (the rail just shows placeholders).
+      const [catalogRes, flowsRes, peopleRes, systemsRes, mappingsRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>('/people').catch(() => ({ data: [] as Array<{ id: string; name: string }> })),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>('/systems').catch(() => ({ data: [] as Array<{ id: string; name: string }> })),
+        apiClient.get<{ success: boolean; data: MappingInfo[] }>(`/mappings${qp}`).catch(() => ({ data: [] as MappingInfo[] })),
       ]);
       setTree(catalogRes.tree || []);
       setFlows(flowsRes.data || []);
+      setPeopleById(new Map((peopleRes.data || []).map((p) => [p.id, p.name])));
+      setSystemsById(new Map((systemsRes.data || []).map((s) => [s.id, s.name])));
+      const byNode = new Map<string, string[]>();
+      for (const m of (mappingsRes.data || [])) {
+        if (!m.dataAssetId) continue;
+        const name = m.assetInfo?.assetName || 'Linked asset';
+        byNode.set(m.processStepId, [...(byNode.get(m.processStepId) || []), name]);
+      }
+      setDataByNode(byNode);
     } catch (err) {
       setError(errorMessage(err, 'Failed to load process data'));
     } finally {
@@ -519,6 +677,31 @@ export default function ProcessVisualizationPage() {
     if (hiddenLevels.size === 0) return tree;
     return filterTree(tree, hiddenLevels);
   }, [tree, hiddenLevels]);
+
+  // Flatten the full (unfiltered) tree for selection lookups + the no-data set.
+  const nodeById = useMemo(() => {
+    const map = new Map<string, ProcessNode>();
+    const walk = (nodes: ProcessNode[]) => { for (const n of nodes) { map.set(n.id, n); if (n.children?.length) walk(n.children); } };
+    walk(tree);
+    return map;
+  }, [tree]);
+
+  const noDataActivityIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const n of nodeById.values()) {
+      if (n.level === 'ACTIVITY' && !(dataByNode.get(n.id)?.length)) s.add(n.id);
+    }
+    return s;
+  }, [nodeById, dataByNode]);
+
+  // Default the rail to the first root once data loads, so it isn't empty; and
+  // drop a selection that filtering has hidden from the map.
+  useEffect(() => {
+    if (tree.length === 0) { setSelectedId(null); return; }
+    setSelectedId((cur) => (cur && nodeById.has(cur) ? cur : tree[0].id));
+  }, [tree, nodeById]);
+
+  const selectedNode = selectedId ? nodeById.get(selectedId) || null : null;
 
   const toggleLevel = (level: NodeLevel) => {
     setHiddenLevels(prev => {
@@ -569,7 +752,7 @@ export default function ProcessVisualizationPage() {
       <PageHeader
         kicker={activeOrgName ? `Process catalog \u00b7 ${activeOrgName}` : 'Process catalog'}
         title="Process map"
-        subtitle="A visual map of your value streams, processes, sub-processes, and activities \u2014 and how they fit together."
+        subtitle="A visual map of your value streams, processes, sub-processes, and activities — and how they fit together."
         actions={
           <>
             <button
@@ -714,11 +897,16 @@ export default function ProcessVisualizationPage() {
         ))}
       </div>
 
+      {/* Map + details rail */}
+      <VizContext.Provider value={{ selectedId, onSelect: setSelectedId, noDataActivityIds }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
       {/* Visualization container */}
       <div
         className="viz-container"
         ref={containerRef}
         style={{
+          flex: '999 1 560px',
+          minWidth: 0,
           background: 'var(--color-surface)',
           borderRadius: 'var(--radius-md, 8px)',
           border: '1px solid var(--color-border, #e2e8f0)',
@@ -791,6 +979,19 @@ export default function ProcessVisualizationPage() {
           </div>
         )}
       </div>
+
+      {/* Details rail — the picked node's record + a "reading the map" aid.
+          It's an <aside>, so the print stylesheet hides it automatically. */}
+      <DetailsRail
+        node={selectedNode}
+        peopleById={peopleById}
+        systemsById={systemsById}
+        dataByNode={dataByNode}
+        onOpen={(id) => navigate(`/processes?node=${id}`)}
+        onMapData={() => navigate('/process-data-map')}
+      />
+      </div>
+      </VizContext.Provider>
 
       {/* Print footer - hidden on screen, shown on print */}
       <div className="print-footer" style={{
