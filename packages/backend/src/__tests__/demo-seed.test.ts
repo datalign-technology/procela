@@ -264,7 +264,12 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(agents), 5, 'agents');
     assert.strictEqual(demoCount(dataDomains), 6, 'domains');
     assert.strictEqual(demoCount(dataAssets), 9, 'assets');
-    assert.strictEqual(demoCount(processNodes), 16, 'process nodes');
+    // 16 operational (Electric + Water hierarchies) + 37 governance nodes
+    // (the standard DAMA program: 1 value stream + 6 processes + 30 activities).
+    assert.strictEqual(demoCount(processNodes), 53, 'process nodes');
+    const govVs = processNodes.filter((n: any) => n?.id?.startsWith(DEMO_ID_SENTINEL) && n.level === 'VALUE_STREAM' && n.domain === 'GOVERNANCE');
+    assert.strictEqual(govVs.length, 1, 'one governance value stream seeded at the company level');
+    assert.strictEqual(govVs[0].name, 'Data Governance Management');
     assert.strictEqual(demoCount(mappings), 8, 'mappings');
     assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
     assert.strictEqual(demoCount(governanceIssues), 1, 'issues');

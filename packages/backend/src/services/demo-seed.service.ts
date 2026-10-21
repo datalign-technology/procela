@@ -19,7 +19,7 @@ import { systems } from '../routes/systems';
 import { agents } from '../routes/agents';
 import { dataDomains } from '../routes/data-domains';
 import { dataAssets } from '../routes/data-assets';
-import { processNodes, flowRelationships } from '../routes/process-catalog';
+import { processNodes, flowRelationships, GOVERNANCE_TEMPLATE, combinePurpose } from '../routes/process-catalog';
 import { mappings } from '../routes/mappings';
 import { governanceTasks } from '../routes/governance-tasks';
 import { governanceIssues } from '../routes/governance-issues';
@@ -959,6 +959,62 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   await createAll(repos.flowRelationships, [
     { id: demoId('flow-w1'), fromNodeId: actDetectBreak.id, toNodeId: actDispatchWater.id, type: 'SEQUENCE' as const, label: 'break confirmed', createdAt: ts },
   ]);
+
+  // ── Governance program (company level) ──
+  // The standard DAMA data-governance hierarchy — the very same
+  // GOVERNANCE_TEMPLATE the Process Wizard's "apply governance template"
+  // step plants. Seeded here so a fresh demo shows the full picture: a
+  // Data Governance Management value stream (domain GOVERNANCE) alongside
+  // the operational ones, visible in the Process Catalog, the RACI matrix,
+  // and the enterprise view. Planted at the company root (orgTidewater),
+  // since governance is an enterprise function, and owned by the CDO /
+  // Governance Lead so the RACI derives real letters (the Council and
+  // Stewardship groups above supply the rest).
+  const govNodes: any[] = [];
+  const govFlows: any[] = [];
+  GOVERNANCE_TEMPLATE.forEach((tvs) => {
+    const vsId = demoId('node-gov-vs');
+    govNodes.push({
+      id: vsId, parentId: null, level: 'VALUE_STREAM' as const,
+      name: tvs.name, description: tvs.description,
+      activityId: 'VS-GOV-1', status: 'ACTIVE' as const, orderIndex: 2,
+      orgId: orgTidewater.id, orgIds: [orgTidewater.id], ownerId: susan.id,
+      version: 1, domain: 'GOVERNANCE' as const,
+      purpose: combinePurpose(tvs.purpose, tvs.businessOutcome),
+      createdAt: ts, updatedAt: ts,
+    });
+    tvs.processes.forEach((proc, pIdx) => {
+      const procId = demoId(`node-gov-proc-${pIdx}`);
+      govNodes.push({
+        id: procId, parentId: vsId, level: 'PROCESS' as const,
+        name: proc.name, description: proc.description,
+        activityId: `PRO-GOV-${pIdx + 1}`, status: 'ACTIVE' as const, orderIndex: pIdx,
+        orgId: orgTidewater.id, orgIds: [orgTidewater.id], ownerId: marisol.id,
+        version: 1, domain: 'GOVERNANCE' as const, purpose: proc.purpose,
+        createdAt: ts, updatedAt: ts,
+      });
+      let prevActId: string | null = null;
+      proc.activities.forEach((act, aIdx) => {
+        const actId = demoId(`node-gov-act-${pIdx}-${aIdx}`);
+        govNodes.push({
+          id: actId, parentId: procId, level: 'ACTIVITY' as const,
+          name: act.name, description: act.description,
+          activityId: `ACT-GOV-${pIdx + 1}-${aIdx + 1}`, status: 'ACTIVE' as const, orderIndex: aIdx,
+          orgId: orgTidewater.id, orgIds: [orgTidewater.id], ownerId: null,
+          version: 1, domain: 'GOVERNANCE' as const,
+          ...((act as any).responsibleRole ? { responsibleRole: (act as any).responsibleRole } : {}),
+          ...((act as any).inputsOutputs ? { inputsOutputs: (act as any).inputsOutputs } : {}),
+          createdAt: ts, updatedAt: ts,
+        });
+        if (prevActId) {
+          govFlows.push({ id: demoId(`flow-gov-${pIdx}-${aIdx}`), fromNodeId: prevActId, toNodeId: actId, type: 'SEQUENCE' as const, label: null, createdAt: ts });
+        }
+        prevActId = actId;
+      });
+    });
+  });
+  await createAll(repos.processNodes, govNodes);
+  await createAll(repos.flowRelationships, govFlows);
 
   // ── Mappings ──
   await createAll(repos.mappings, [

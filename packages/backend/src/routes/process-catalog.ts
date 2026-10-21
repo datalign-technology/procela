@@ -2172,7 +2172,7 @@ router.post('/apply-template', async (req: Request, res: Response) => {
 // for both the preview (GET /governance-template, which feeds the wizard's
 // Review screen) and the apply (POST /apply-governance-template) — so the
 // hierarchy a user reviews is exactly the hierarchy that gets created.
-const GOVERNANCE_TEMPLATE = [
+export const GOVERNANCE_TEMPLATE = [
     {
       name: 'Data Governance Management',
       description: 'Enterprise-wide data governance strategy, policies, standards, and oversight',
