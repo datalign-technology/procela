@@ -773,6 +773,10 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
       ))}
       {/* Only surface the uncategorized bucket when something's actually in it. */}
       {countFor(NO_FOLDER) > 0 && railRow(NO_FOLDER, 'No folder')}
+      {/* Board H1: explain how a folder's sharing maps to who sees its reports. */}
+      <div style={{ margin: '10px 4px 0', paddingTop: 10, borderTop: '1px solid var(--color-border-subtle)', fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+        A folder's sharing decides who sees its reports. Reports with no folder stay private to you.
+      </div>
     </Card>
   );
 
@@ -829,36 +833,6 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
             </Card>
           ) : (
             <>
-              {/* Search + Source / Sharing / Schedule filters above the table. */}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-                <input
-                  type="text" aria-label="Search reports" placeholder="Search reports..."
-                  value={search} onChange={(e) => setSearch(e.target.value)}
-                  style={{ ...filterSelectStyle, width: 200 }}
-                />
-                <select aria-label="Filter by source" style={filterSelectStyle} value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
-                  <option value="">All sources</option>
-                  {sourceOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-                <select aria-label="Filter by sharing" style={filterSelectStyle} value={filterSharing} onChange={(e) => setFilterSharing(e.target.value)}>
-                  <option value="">All sharing</option>
-                  <option value="private">Private</option>
-                  <option value="org">Shared</option>
-                </select>
-                <select aria-label="Filter by schedule" style={filterSelectStyle} value={filterSchedule} onChange={(e) => setFilterSchedule(e.target.value)}>
-                  <option value="">Any schedule</option>
-                  <option value="off">Not scheduled</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-                {hasFilters && (
-                  <>
-                    <SecondaryButton onClick={() => { setSearch(''); setFilterSource(''); setFilterSharing(''); setFilterSchedule(''); }}>Clear filters</SecondaryButton>
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Showing {visibleReports.length} of {reports.length}</span>
-                  </>
-                )}
-              </div>
               {/* Bulk actions for the selected rows — move to a folder or delete. */}
               <BulkActionBar count={sel.count} onClear={sel.clear}>
                 <select
@@ -873,18 +847,52 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
                 </select>
                 <BulkActionButton variant="danger" onClick={bulkDelete}>Delete</BulkActionButton>
               </BulkActionBar>
-              {/* Surface wrapper so the table reads as a white card against the
-                  greyish page ground — matches Data Assets / Systems lists. */}
-              <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-                <DataTable
-                  rows={sorted}
-                  columns={columns}
-                  rowKey={(r) => r.id}
-                  selection={sel}
-                  sort={{ sortKey, sortDir, onSort: toggleSort }}
-                  emptyMessage={hasFilters ? 'No reports match these filters.' : 'No reports in this folder.'}
-                  onRowClick={(r) => navigate(`/reports/${r.id}`)}
-                />
+              {/* List card (board H1): the search + Source / Sharing / Schedule
+                  toolbar is the card's top row, with the table below it. */}
+              <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
+                  <label style={{ flex: '1 1 200px', minWidth: 180, maxWidth: 320, height: 36, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-muted)' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></svg>
+                    <input
+                      type="search" aria-label="Search reports" placeholder="Search reports..."
+                      value={search} onChange={(e) => setSearch(e.target.value)}
+                      style={{ border: 0, outline: 'none', flex: 1, font: 'inherit', fontSize: 13, color: 'var(--color-text)', background: 'transparent', minWidth: 0 }}
+                    />
+                  </label>
+                  <select aria-label="Filter by source" style={filterSelectStyle} value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
+                    <option value="">All sources</option>
+                    {sourceOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                  <select aria-label="Filter by sharing" style={filterSelectStyle} value={filterSharing} onChange={(e) => setFilterSharing(e.target.value)}>
+                    <option value="">All sharing</option>
+                    <option value="private">Private</option>
+                    <option value="org">Shared</option>
+                  </select>
+                  <select aria-label="Filter by schedule" style={filterSelectStyle} value={filterSchedule} onChange={(e) => setFilterSchedule(e.target.value)}>
+                    <option value="">Any schedule</option>
+                    <option value="off">Not scheduled</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                  {hasFilters && (
+                    <>
+                      <SecondaryButton onClick={() => { setSearch(''); setFilterSource(''); setFilterSharing(''); setFilterSchedule(''); }}>Clear filters</SecondaryButton>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Showing {visibleReports.length} of {reports.length}</span>
+                    </>
+                  )}
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <DataTable
+                    rows={sorted}
+                    columns={columns}
+                    rowKey={(r) => r.id}
+                    selection={sel}
+                    sort={{ sortKey, sortDir, onSort: toggleSort }}
+                    emptyMessage={hasFilters ? 'No reports match these filters.' : 'No reports in this folder.'}
+                    onRowClick={(r) => navigate(`/reports/${r.id}`)}
+                  />
+                </div>
               </div>
             </>
           )}
