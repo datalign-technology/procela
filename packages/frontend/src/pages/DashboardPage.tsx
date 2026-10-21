@@ -380,6 +380,13 @@ function TodayQueue({ lens = 'all', orgId = null }: LensProps) {
             +{filtered.length - top.length} more in Governance Work &rarr;
           </Link>
         )}
+        {/* Persistent footer (board A3): the in-place actions above mutate real
+            task/issue state, and this bar both says so and links to the full
+            list — shown even when the queue is empty. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 14px', borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)', fontSize: 11, color: 'var(--color-text-muted)' }}>
+          <span>Tasks and issues update when you start, complete or resolve them here.</span>
+          <Link to="/governance-work" style={{ fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none', whiteSpace: 'nowrap' }}>All tasks &amp; issues &rarr;</Link>
+        </div>
       </Card>
     </div>
   );
@@ -766,7 +773,7 @@ function MyDomains({ lens = 'all', orgId = null }: LensProps) {
             <Link key={d.id} to="/data-domains" style={{ ...cardStyle, padding: '10px 14px', textDecoration: 'none', color: 'var(--color-text)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)' }}>{d.name}</span>
-                <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
+                <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? 'var(--color-primary)' : 'var(--color-text-secondary)', background: d.relation === 'owner' ? 'var(--color-primary-light)' : 'var(--color-calc-fill)', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
               </div>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>
                 {d.totalAssets} asset{d.totalAssets === 1 ? '' : 's'}
@@ -854,7 +861,7 @@ function DashboardScopeNote({ orgId }: { orgId: string | null }) {
 // "Ask Procela" — a teal-accented card of suggested questions (mock-up parity).
 // Each pill opens the AI assistant with the question pre-filled (via the
 // procela:ask-question event ChatPanel listens for), so the user reviews and
-// sends it. AI-gated by the caller, like Run Wizard.
+// sends it. AI-gated by the caller, like Generate processes.
 const ASK_SUGGESTIONS = [
   'Where are our data gaps?',
   'Which assets are below 80% health and linked to critical processes?',
@@ -928,7 +935,7 @@ interface PulseTile {
   key: string; to: string; label: string; hint: string;
   number: React.ReactNode; muted?: boolean;
   tag?: { text: string; color: string };
-  meter?: { pct: number; color: string };
+  meter?: { pct: number; color: string; target?: number };
   placeholder?: boolean;
 }
 
@@ -990,7 +997,7 @@ function ProgramHealthPulse({ stats, orgId }: { stats: DashboardStats; orgId: st
         key: 'classified', to: '/council', label: 'Classified', number: `${pct}%`,
         tag: meets ? undefined : { text: 'Behind', color: 'var(--color-warning)' },
         hint: `Target ${clsTarget}%`,
-        meter: { pct, color: meets ? 'var(--color-success)' : 'var(--color-warning)' },
+        meter: { pct, color: meets ? 'var(--color-success)' : 'var(--color-warning)', target: clsTarget },
       });
     }
     const own = derived.valueDrivers?.ownership;
@@ -1052,7 +1059,7 @@ function ProgramHealthPulse({ stats, orgId }: { stats: DashboardStats; orgId: st
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{t.label}</span>
             {/* Reserve the meter row on every tile (spacer when a tile has no
                 meter) so all four tiles are exactly the same height. */}
-            {t.meter ? <Meter value={t.meter.pct} height={5} color={t.meter.color} /> : <span aria-hidden="true" style={{ height: 5 }} />}
+            {t.meter ? <Meter value={t.meter.pct} height={5} color={t.meter.color} target={t.meter.target} /> : <span aria-hidden="true" style={{ height: 5 }} />}
             <span className="na-card-hint" title={t.hint}>{t.hint}</span>
           </Link>
         ))}
@@ -1096,9 +1103,9 @@ export default function DashboardPage() {
     try { localStorage.setItem('procela:dashboard-focus', next ? '1' : '0'); } catch { /* */ }
     return next;
   });
-  // Run Wizard now rides in the header actions (the separate quick-action bar
-  // was dropped to keep the dashboard on one screen). AI-gated — hidden when
-  // AI features are off.
+  // Generate processes now rides in the header actions (the separate
+  // quick-action bar was dropped to keep the dashboard on one screen).
+  // AI-gated — hidden when AI features are off.
   const aiEnabled = useAiEnabled();
 
   // Greeting header — "Good morning, Susan" + a "role · org · date" line,
@@ -1152,9 +1159,10 @@ export default function DashboardPage() {
         meta={headerMeta}
         actions={!isEmptyOrg ? (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {/* Run Wizard — the one "do" action from the old quick-action bar,
-                kept here as a primary pill (AI-gated). The bar's other entries
-                were navigation duplicated by the sidebar, so they were dropped. */}
+            {/* Generate processes — the one "do" action from the old
+                quick-action bar, kept here as a primary pill (AI-gated). The
+                bar's other entries were navigation duplicated by the sidebar,
+                so they were dropped. */}
             {aiEnabled && (
               <Link
                 to="/processes/wizard"
@@ -1166,8 +1174,8 @@ export default function DashboardPage() {
                   fontSize: 12, fontWeight: 600, color: '#fff', textDecoration: 'none', whiteSpace: 'nowrap',
                 }}
               >
-                <span style={{ display: 'inline-flex', color: '#fff' }}>{renderNavIcon('/processes', { size: 15, strokeWidth: 1.8 })}</span>
-                Run Wizard
+                <Sparkles size={15} strokeWidth={1.8} aria-hidden="true" />
+                Generate processes
               </Link>
             )}
             {/* Governed lens — narrows the you-scoped portfolio sections to the
@@ -1178,7 +1186,7 @@ export default function DashboardPage() {
               onChange={setLens}
               options={[
                 { value: 'all', label: 'All', title: 'Everything you own or steward, governed or not' },
-                { value: 'governed', label: 'Governed', title: 'Only the domains and assets your governance program governs' },
+                { value: 'governed', label: 'Governed only', title: 'Only the domains and assets your governance program governs' },
               ]}
             />
             {/* Focus mode — collapse the portfolio rail to just the action
@@ -1230,7 +1238,7 @@ export default function DashboardPage() {
                   hides in Focus mode alongside the rail. */}
               {!focus && <MyDomains lens={lens} orgId={activeOrgId} />}
               {/* Ask Procela — suggested questions into the AI assistant
-                  (mock-up parity). AI-gated, like Run Wizard. */}
+                  (mock-up parity). AI-gated, like Generate processes. */}
               {aiEnabled && <AskProcela />}
             </div>
             {!focus && (
