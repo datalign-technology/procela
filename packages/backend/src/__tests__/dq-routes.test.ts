@@ -10,6 +10,10 @@ const dataQualityRouter = require('../routes/data-quality').default;
 const { dataAssets } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataQualityRules } = require('../routes/data-quality');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { people } = require('../routes/people');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { systems } = require('../routes/systems');
 
 // ── Minimal HTTP helper ──
 
@@ -114,6 +118,44 @@ describe('/data-quality routing', () => {
     } finally {
       const ai = dataAssets.indexOf(seedAsset);
       if (ai !== -1) dataAssets.splice(ai, 1);
+      pruneRulesForAsset(seedAsset.id);
+    }
+  });
+
+  it('GET /:id enriches with the owning asset owner / system / tier / health', async () => {
+    // The rule detail page renders a Facts rail (asset owner, system, tier,
+    // health) from this single fetch, so GET /:id must resolve them the way
+    // the data-assets list does.
+    const now = new Date().toISOString();
+    const seedPerson = { id: 'test-dq-owner', orgId: 'test-org', name: 'Dana Steward', email: 'dana@example.com' };
+    const seedSystem = { id: 'test-dq-system', orgId: 'test-org', name: 'Billing Platform' };
+    const seedAsset = {
+      id: 'test-dq-facts-asset', orgId: 'test-org',
+      name: 'Facts-target asset', description: '', systemId: seedSystem.id,
+      owner: '', ownerPersonId: seedPerson.id, steward: '',
+      governanceTier: 'SILVER', healthScore: 73,
+      createdAt: now, updatedAt: now,
+    };
+    pruneRulesForAsset(seedAsset.id);
+    for (const [arr, id] of [[dataAssets, seedAsset.id], [people, seedPerson.id], [systems, seedSystem.id]] as const) {
+      for (let i = (arr as any[]).length - 1; i >= 0; i--) if ((arr as any[])[i].id === id) (arr as any[]).splice(i, 1);
+    }
+    people.push(seedPerson); systems.push(seedSystem); dataAssets.push(seedAsset);
+    try {
+      const created = await request(port, 'POST', '/data-quality', {
+        dataAssetId: seedAsset.id, name: 'Facts test', ruleType: 'NOT_NULL', threshold: 95, weight: 4,
+      });
+      assert.strictEqual(created.status, 201);
+      const got = await request(port, 'GET', `/data-quality/${created.body.data.id}`);
+      assert.strictEqual(got.status, 200);
+      assert.strictEqual(got.body.data.assetOwnerName, 'Dana Steward');
+      assert.strictEqual(got.body.data.assetSystemName, 'Billing Platform');
+      assert.strictEqual(got.body.data.assetGovernanceTier, 'SILVER');
+      assert.strictEqual(got.body.data.assetHealthScore, 73);
+    } finally {
+      for (const [arr, id] of [[dataAssets, seedAsset.id], [people, seedPerson.id], [systems, seedSystem.id]] as const) {
+        for (let i = (arr as any[]).length - 1; i >= 0; i--) if ((arr as any[])[i].id === id) (arr as any[]).splice(i, 1);
+      }
       pruneRulesForAsset(seedAsset.id);
     }
   });

@@ -11,7 +11,11 @@ import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getConnectionsRepository } from '../db/connections.repo';
 import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
 import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getPeopleRepository } from '../db/people.repo';
 import { dataAssets, dataAssetBindings, dataAssetColumns, StoredDataAsset, StoredDataAssetBinding } from './data-assets';
+import { systems } from './systems';
+import { people } from './people';
 import { connections, ConnectionProfile } from './connections';
 import { syncDataQualityIssueForRule } from './governance-issues';
 import { measureRuleOverDb } from '../services/dq-db';
@@ -142,6 +146,8 @@ const dataAssetsRepo = getDataAssetsRepository(dataAssets);
 const connectionsRepo = getConnectionsRepository(connections);
 const dataAssetBindingsRepo = getDataAssetBindingsRepository(dataAssetBindings);
 const dataAssetColumnsRepo = getDataAssetColumnsRepository(dataAssetColumns);
+const systemsRepo = getSystemsRepository(systems);
+const peopleRepo = getPeopleRepository(people);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const QUALITY_DIMENSIONS = ['COMPLETENESS', 'ACCURACY', 'TIMELINESS', 'CONSISTENCY', 'UNIQUENESS', 'VALIDITY'];
@@ -402,14 +408,35 @@ router.get('/:id', async (req: Request, res: Response) => {
   // Enrich with the owning asset's name and a human-readable definition, the
   // same shape the list endpoint returns, so the rule detail page can render
   // its target + description from a single fetch.
-  const [allAssets, allConns, allBindings] = await Promise.all([
+  const [allAssets, allConns, allBindings, allSystems, allPeople] = await Promise.all([
     dataAssetsRepo.list(), connectionsRepo.list(), dataAssetBindingsRepo.list(),
+    systemsRepo.list(), peopleRepo.list(),
   ]);
   const asset = allAssets.find((a) => a.id === rule.dataAssetId);
   const definition = rule.ruleType
     ? describeRule(rule.ruleType, rule.parameters || {}, contextForRule(rule, allAssets, allConns, allBindings))
     : null;
-  res.json({ success: true, data: { ...rule, dataAssetName: asset?.name || '', definition } });
+  // Enrich with the owning asset's owner / system / tier / health so the rule
+  // detail page can render its Facts rail from a single fetch (same name
+  // resolution the data-assets list uses: ownerPersonId → person, else the
+  // legacy free-text owner).
+  const assetOwnerName = asset
+    ? ((asset.ownerPersonId ? allPeople.find((p) => p.id === asset.ownerPersonId)?.name : null) || asset.owner || null)
+    : null;
+  const assetSystemName = asset?.systemId ? allSystems.find((s) => s.id === asset.systemId)?.name || null : null;
+  res.json({
+    success: true,
+    data: {
+      ...rule,
+      dataAssetName: asset?.name || '',
+      definition,
+      assetOwnerName,
+      assetSystemId: asset?.systemId || null,
+      assetSystemName,
+      assetGovernanceTier: asset?.governanceTier || null,
+      assetHealthScore: asset?.healthScore ?? null,
+    },
+  });
 });
 
 /** POST /api/v1/data-quality — create rule */
