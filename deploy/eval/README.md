@@ -18,6 +18,9 @@ source checkout, no build step — just Docker.
 
 ## 2. Quick start
 
+By installing or running the evaluation build you agree to the Evaluation
+License Agreement in [`EULA.txt`](./EULA.txt).
+
 From this `deploy/eval/` folder:
 
 ```bash
@@ -112,15 +115,13 @@ e.g. an `rc1` tag.)
 This folder is the technical bundle. Three things are **required and out of
 scope for the code** before handing it to anyone:
 
-1. **A license / EULA.** The repository currently has **no license**, which
-   legally means "all rights reserved" — a recipient has no right to run it.
-   Add the evaluation terms you want recipients to agree to (the copyright
-   holder's / legal's decision). This bundle intentionally ships no license
-   file so none is implied.
-2. **A secrets check.** Confirm no real credentials ride along — the images
-   build from source and take all config from `.env` at runtime, but verify
-   nothing is committed (e.g. `git secrets` / `trufflehog`, and review the
-   published image layers).
+1. **Finalize the license / EULA.** A proprietary evaluation license ships as
+   `EULA.txt` (here) plus the top-level `LICENSE`. Both are **drafts**: complete
+   the bracketed fields (legal entity, governing law, evaluation period,
+   contact) and have counsel review and finalize them before distributing.
+2. **A secrets check.** Done and now gated in CI — `gitleaks` scans every
+   push/PR (`.github/workflows/secrets-scan.yml`). All config is supplied via
+   `.env` at runtime; no credentials are committed.
 3. **Third-party license notices.** Distributing an artifact distributes its
    dependencies' licenses too. `THIRD-PARTY-NOTICES.txt` (in this folder) lists
    every production dependency that ships in the images, with its license and

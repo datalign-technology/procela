@@ -1,0 +1,114 @@
+PROCELA EVALUATION LICENSE AGREEMENT
+====================================
+
+DRAFT — complete the bracketed fields ([ ... ]) and have legal counsel review
+and finalize this agreement before distributing the Software to anyone. This
+text is a starting point, not legal advice.
+
+IMPORTANT — READ CAREFULLY. This Evaluation License Agreement ("Agreement") is
+a legal agreement between you, or the entity you represent ("You"), and
+[LICENSOR LEGAL NAME] ("Licensor") for the Procela software and related
+materials made available for evaluation (the "Software"). BY INSTALLING,
+COPYING, RUNNING, OR OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND BY
+THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT INSTALL OR USE THE SOFTWARE.
+
+1. DEFINITIONS
+   "Evaluation Period" means the period of [30] days beginning on the date You
+   first install or run the Software, unless extended in writing by Licensor.
+   "Documentation" means any user guides or materials Licensor provides with
+   the Software.
+
+2. LICENSE GRANT
+   Subject to this Agreement, Licensor grants You a limited, non-exclusive,
+   non-transferable, non-sublicensable, revocable license, during the
+   Evaluation Period, to install and run one (1) instance of the Software on
+   infrastructure You control, solely to internally evaluate the Software's
+   suitability for Your potential use. The Software is licensed, not sold.
+
+3. EVALUATION USE ONLY; RESTRICTIONS
+   The Software is a pre-release, evaluation build intended for testing and
+   demonstration, not production. It uses non-production authentication and
+   loads sample data. You shall NOT:
+     (a) use the Software for any production, commercial, or revenue-generating
+         purpose, or to process real, regulated, or sensitive data;
+     (b) distribute, sell, rent, lease, lend, host for third parties, or
+         otherwise make the Software available to any third party;
+     (c) modify, translate, or create derivative works of the Software, except
+         configuration expressly contemplated by the Documentation;
+     (d) reverse engineer, decompile, or disassemble the Software, except to
+         the extent this restriction is prohibited by applicable law;
+     (e) remove, alter, or obscure any proprietary notices;
+     (f) publish or disclose to any third party any benchmark, performance, or
+         comparative analysis of the Software, or use the Software to build or
+         assist a competing product; or
+     (g) use the Software beyond the scope of this Agreement or after the
+         Evaluation Period.
+
+4. OWNERSHIP
+   The Software is proprietary to Licensor and its licensors and is protected by
+   intellectual-property laws. Licensor retains all right, title, and interest
+   in and to the Software and all intellectual-property rights therein. No
+   rights are granted except as expressly stated in this Agreement.
+
+5. THIRD-PARTY COMPONENTS
+   The Software includes third-party open-source components licensed under their
+   own terms; see THIRD-PARTY-NOTICES.txt in this folder. Those terms govern
+   those components, and nothing in this Agreement limits Your rights, or adds
+   to Your obligations, under them.
+
+6. CONFIDENTIALITY
+   The Software, its features and performance, and any non-public information
+   Licensor designates as confidential are Licensor's confidential information.
+   You shall protect it with at least reasonable care and shall not disclose it
+   to third parties except to Your personnel who need it to evaluate the
+   Software and who are bound by confidentiality obligations no less protective.
+
+7. YOUR DATA
+   You are solely responsible for any data You load into the Software and for
+   complying with all laws applicable to that data. Licensor is not responsible
+   for any loss of data in the evaluation environment.
+
+8. NO SUPPORT; NO SLA
+   Licensor has no obligation to provide maintenance, support, updates, or any
+   service level for the Software during the evaluation unless separately agreed
+   in writing.
+
+9. DISCLAIMER OF WARRANTIES
+   THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITH ALL FAULTS AND
+   WITHOUT WARRANTY OF ANY KIND. TO THE MAXIMUM EXTENT PERMITTED BY LAW,
+   LICENSOR DISCLAIMS ALL WARRANTIES, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-
+   INFRINGEMENT. LICENSOR DOES NOT WARRANT THAT THE SOFTWARE WILL BE
+   UNINTERRUPTED, ERROR-FREE, OR SECURE.
+
+10. LIMITATION OF LIABILITY
+    TO THE MAXIMUM EXTENT PERMITTED BY LAW, LICENSOR WILL NOT BE LIABLE FOR ANY
+    INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR EXEMPLARY DAMAGES, OR FOR
+    LOST PROFITS, REVENUE, OR DATA, ARISING OUT OF OR RELATED TO THIS AGREEMENT
+    OR THE SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY. LICENSOR'S TOTAL
+    AGGREGATE LIABILITY UNDER THIS AGREEMENT WILL NOT EXCEED [USD $100]. BECAUSE
+    THE SOFTWARE IS PROVIDED AT NO CHARGE FOR EVALUATION, THESE LIMITATIONS ARE
+    A FUNDAMENTAL BASIS OF THE BARGAIN.
+
+11. TERM AND TERMINATION
+    This Agreement begins when You first use the Software and ends at the end of
+    the Evaluation Period. Licensor may terminate it at any time. It terminates
+    automatically if You breach it. On expiry or termination, You shall stop all
+    use of the Software and delete all copies. Sections 4–6 and 9–13 survive.
+
+12. EXPORT COMPLIANCE
+    You shall comply with all applicable export-control and sanctions laws and
+    shall not export, re-export, or use the Software in violation of them.
+
+13. GOVERNING LAW; VENUE
+    This Agreement is governed by the laws of [GOVERNING-LAW JURISDICTION],
+    without regard to conflict-of-laws rules. The exclusive venue for disputes
+    is [VENUE], and You consent to its jurisdiction.
+
+14. ENTIRE AGREEMENT
+    This Agreement is the entire agreement between the parties regarding the
+    evaluation of the Software and supersedes all prior or contemporaneous
+    understandings on that subject. Any amendment must be in a writing signed by
+    Licensor.
+
+Contact: [LICENSOR LEGAL NAME], [LICENSOR CONTACT EMAIL]
