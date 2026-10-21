@@ -61,7 +61,7 @@ function Pill({ label, active, onClick }: { label: string; active: boolean; onCl
   );
 }
 
-export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle, onSelect, currentUserId, onMove, validChildrenMap }: {
+export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle, onSelect, currentUserId, onMove, validChildrenMap, activitiesWithData }: {
   nodes: ProcessNode[];
   selectedId: string | null;
   expanded: Set<string>;
@@ -70,6 +70,9 @@ export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle,
   currentUserId?: string;
   onMove?: (draggedId: string, targetId: string, mode: 'before' | 'after' | 'inside') => void;
   validChildrenMap?: Record<string, string[]>;
+  /** Activity ids that carry at least one data-asset mapping. When provided,
+   *  the "Needs attention" block surfaces how many activities have none. */
+  activitiesWithData?: Set<string>;
 }) {
   const [filter, setFilter] = useState<NavFilter>('all');
 
@@ -82,14 +85,15 @@ export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle,
   const counts = useMemo(() => {
     const now = Date.now();
     const in30 = now + 30 * 86400000;
-    let activeIncomplete = 0, drafts = 0, reviewsDue = 0;
+    let activeIncomplete = 0, drafts = 0, reviewsDue = 0, noDataLinked = 0;
     walk(nodes, (n) => {
       if (completeness(n).activeIncomplete) activeIncomplete += 1;
       if (n.status === 'DRAFT') drafts += 1;
       if (n.nextReviewDate) { const t = Date.parse(n.nextReviewDate); if (!Number.isNaN(t) && t <= in30) reviewsDue += 1; }
+      if (activitiesWithData && n.level === 'ACTIVITY' && !activitiesWithData.has(n.id)) noDataLinked += 1;
     });
-    return { activeIncomplete, drafts, reviewsDue };
-  }, [nodes]);
+    return { activeIncomplete, drafts, reviewsDue, noDataLinked };
+  }, [nodes, activitiesWithData]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -124,6 +128,7 @@ export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle,
         </div>
         <AttentionRow label="Active but incomplete" count={counts.activeIncomplete} color="var(--color-attention)" onClick={() => setFilter('incomplete')} />
         <AttentionRow label="Drafts in progress" count={counts.drafts} onClick={() => setFilter('draft')} />
+        {activitiesWithData && <AttentionRow label="Activities with no data linked" count={counts.noDataLinked} color="var(--color-attention)" title="Activities not linked to any data asset — map data on the activity or the Process ↔ Data map" />}
         <AttentionRow label="Reviews due in 30 days" count={counts.reviewsDue} />
       </div>
 
@@ -144,10 +149,11 @@ export default function CatalogNavPanel({ nodes, selectedId, expanded, onToggle,
   );
 }
 
-function AttentionRow({ label, count, color, onClick }: { label: string; count: number; color?: string; onClick?: () => void }) {
+function AttentionRow({ label, count, color, onClick, title }: { label: string; count: number; color?: string; onClick?: () => void; title?: string }) {
   const interactive = !!onClick;
   return (
     <div
+      title={title}
       {...(interactive ? clickable(onClick!, { label: `Filter to ${label}` }) : {})}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',

@@ -6,6 +6,7 @@ import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import StatTile from '../components/StatTile';
+import AttentionCards from '../components/AttentionCards';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -130,6 +131,11 @@ const RULE_TYPE_OPTIONS: Array<{ value: string; label: string; measured: boolean
   { value: 'REGEX_MATCH',   label: 'Regex match (simulated)',     measured: false },
   { value: 'CUSTOM',        label: 'Custom (simulated)',          measured: false },
 ];
+
+// Rule types that a connector/CSV can measure for real. A rule outside this
+// set only ever simulates, so it never counts toward measured health.
+const MEASURED_RULE_TYPES = new Set(RULE_TYPE_OPTIONS.filter((t) => t.measured).map((t) => t.value));
+const isSimulatedRule = (r: QualityRule) => !MEASURED_RULE_TYPES.has(r.ruleType || '');
 
 const DIMENSION_BADGES: Record<string, { bg: string; color: string }> = {
   COMPLETENESS: { bg: '#dbeafe', color: '#1e40af' },
@@ -421,6 +427,9 @@ export default function DataQualityPage({
   const [filterOwner, setFilterOwner] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
   const [search, setSearch] = useState('');
+  // "Needs attention" one-click filter for the Rules view (layered on top of
+  // the dropdown filters). '' = off.
+  const [ruleAttention, setRuleAttention] = useState<'failing' | 'simulated' | ''>('');
   // New: per-asset view with Manage Rules modal lives under the Assets tab.
   // When embedded in the Data Assets hub the parent owns the active tab
   // (Quality / Rules) and passes it in; standalone we keep it internal.
@@ -460,6 +469,8 @@ export default function DataQualityPage({
 
   // Apply local filters
   let filteredRules = rules;
+  if (ruleAttention === 'failing') filteredRules = filteredRules.filter((r) => r.status === 'FAILING');
+  if (ruleAttention === 'simulated') filteredRules = filteredRules.filter(isSimulatedRule);
   if (filterAssetId) filteredRules = filteredRules.filter((r) => r.dataAssetId === filterAssetId);
   if (filterDimension) filteredRules = filteredRules.filter((r) => r.dimension === filterDimension);
   if (filterOwner) {
@@ -510,6 +521,15 @@ export default function DataQualityPage({
   const warningCount = rules.filter((r) => r.status === 'WARNING').length;
   const failingCount = rules.filter((r) => r.status === 'FAILING').length;
   const avgScore = totalRules > 0 ? Math.round(rules.reduce((sum, r) => sum + r.currentScore, 0) / totalRules) : 0;
+
+  // "Needs attention" counts for the Rules view. Failing / simulated-only are
+  // one-click filters; assets-with-no-rules jumps to the Quality (assets) tab,
+  // where those assets carry only an estimated health score.
+  const simulatedCount = rules.filter(isSimulatedRule).length;
+  const assetsWithNoRulesCount = (() => {
+    const withRules = new Set(rules.map((r) => r.dataAssetId));
+    return fullAssets.filter((a) => !withRules.has(a.id)).length;
+  })();
 
   // Load the selected asset's columns for the form's column picker.
   const loadFormColumns = useCallback(async (assetId: string) => {
@@ -890,6 +910,23 @@ export default function DataQualityPage({
         );
       })()}
 
+      {/* Needs attention — the rule backlog as one-click filters; assets with
+          no rules jumps to the Quality (assets) tab. */}
+      {rules.length > 0 && (
+        <AttentionCards
+          caption="Click a card to filter the list"
+          minCardWidth={170}
+          cards={[
+            { key: 'failing', count: failingCount, label: 'Failing', hint: 'Below their threshold on the last run', priority: true,
+              active: ruleAttention === 'failing', onClick: () => setRuleAttention(ruleAttention === 'failing' ? '' : 'failing') },
+            { key: 'simulated', count: simulatedCount, label: 'Simulated only', hint: 'Not measured against a real source',
+              active: ruleAttention === 'simulated', onClick: () => setRuleAttention(ruleAttention === 'simulated' ? '' : 'simulated') },
+            { key: 'noRules', count: assetsWithNoRulesCount, label: 'Assets with no rules', hint: 'Opens Quality — health is estimated',
+              onClick: () => setTab('assets') },
+          ]}
+        />
+      )}
+
       {/* Stats — shared StatTile (dense) so the KPI row matches the
           Dashboard's height and styling instead of the old taller
           hand-rolled cards (whose number div had no line-height). */}
@@ -940,8 +977,9 @@ export default function DataQualityPage({
               filterOwner && { label: 'Owner', value: filterOwner === '__none__' ? 'No owner' : filterOwner, onClear: () => setFilterOwner('') },
               filterDomain && { label: 'Domain', value: filterDomain === '__none__' ? 'No domain' : filterDomain, onClear: () => setFilterDomain('') },
               filterDimension && { label: 'Dimension', value: filterDimension.replace(/_/g, ' '), onClear: () => setFilterDimension('') },
+              ruleAttention && { label: 'Attention', value: ruleAttention === 'failing' ? 'Failing' : 'Simulated only', onClear: () => setRuleAttention('') },
             ].filter(Boolean) as any}
-            onClearAll={() => { setFilterAssetId(''); setFilterOwner(''); setFilterDomain(''); setFilterDimension(''); setSearch(''); }}
+            onClearAll={() => { setFilterAssetId(''); setFilterOwner(''); setFilterDomain(''); setFilterDimension(''); setSearch(''); setRuleAttention(''); }}
           />
         </>
       )}
@@ -1094,6 +1132,8 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onRefreshAll, actions
   const [filterOwner, setFilterOwner] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
   const [filterText, setFilterText] = useState('');
+  // "Needs attention" one-click filter, layered on top of the dropdowns. '' = off.
+  const [attention, setAttention] = useState<'failing' | 'noRules' | 'estimated' | 'noOwner' | ''>('');
 
   const systemOptions = [...new Set(assets.map((a) => a.systemId).filter(Boolean))].map((id) => ({
     id, name: systemNameById[id] || id,
@@ -1101,8 +1141,17 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onRefreshAll, actions
   const ownerOptions = ([...new Set(assets.map((a) => a.ownerName).filter(Boolean))] as string[]).sort();
   const domainOptions = ([...new Set(assets.map((a) => a.domainName).filter(Boolean))] as string[]).sort();
 
+  // Per-asset attention tests — each the predicate behind one card. "estimated"
+  // mirrors assetStats(): rules exist but none has a real (non-simulated) run.
+  const attnTest: Record<'failing' | 'noRules' | 'estimated' | 'noOwner', (a: DataAssetFull) => boolean> = {
+    failing: (a) => (rulesByAsset.get(a.id) || []).some((r) => r.status === 'FAILING'),
+    noRules: (a) => (rulesByAsset.get(a.id) || []).length === 0,
+    estimated: (a) => { const rs = rulesByAsset.get(a.id) || []; return rs.length > 0 && rs.filter((r) => r.lastRun && r.lastRun.simulated === false).length === 0; },
+    noOwner: (a) => !a.ownerName,
+  };
+
   const searchQ = filterText.trim().toLowerCase();
-  const filteredAssets = assets.filter((a) => {
+  const baseFiltered = assets.filter((a) => {
     if (filterSystem && a.systemId !== filterSystem) return false;
     if (filterOwner) {
       if (filterOwner === '__none__') { if (a.ownerName) return false; }
@@ -1118,6 +1167,15 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onRefreshAll, actions
     )) return false;
     return true;
   });
+  // Counts sit over the dropdown-filtered set so each number equals what
+  // clicking it shows; the attention filter then narrows that set.
+  const attnCounts = {
+    failing: baseFiltered.filter(attnTest.failing).length,
+    noRules: baseFiltered.filter(attnTest.noRules).length,
+    estimated: baseFiltered.filter(attnTest.estimated).length,
+    noOwner: baseFiltered.filter(attnTest.noOwner).length,
+  };
+  const filteredAssets = attention ? baseFiltered.filter(attnTest[attention]) : baseFiltered;
 
   // Sort — comparators keyed by column key; URL persists ?sort=&dir=. The
   // health and rules comparators sort by the same derived values the cells
@@ -1288,6 +1346,23 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onRefreshAll, actions
   return (
     <div>
       {actionsPortal && createPortal(qualityActions, actionsPortal)}
+      {/* Needs attention — the asset-health backlog as one-click filters. An
+          asset is untrustworthy outright when a rule is failing or nobody owns
+          it, so those lead with "Fix first". */}
+      <AttentionCards
+        caption="Click a card to filter the list"
+        minCardWidth={160}
+        cards={[
+          { key: 'failing', count: attnCounts.failing, label: 'Failing a rule', hint: 'At least one rule below threshold', priority: true,
+            active: attention === 'failing', onClick: () => setAttention(attention === 'failing' ? '' : 'failing') },
+          { key: 'noRules', count: attnCounts.noRules, label: 'No quality rules', hint: 'Health is estimated, not measured',
+            active: attention === 'noRules', onClick: () => setAttention(attention === 'noRules' ? '' : 'noRules') },
+          { key: 'estimated', count: attnCounts.estimated, label: 'Estimate only', hint: 'Rules exist but none measured yet',
+            active: attention === 'estimated', onClick: () => setAttention(attention === 'estimated' ? '' : 'estimated') },
+          { key: 'noOwner', count: attnCounts.noOwner, label: 'No owner', hint: 'Nobody accountable for this asset', priority: true,
+            active: attention === 'noOwner', onClick: () => setAttention(attention === 'noOwner' ? '' : 'noOwner') },
+        ]}
+      />
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <SearchInput
