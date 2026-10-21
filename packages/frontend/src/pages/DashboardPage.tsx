@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Check, Sparkles } from 'lucide-react';
+import { X, Check, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
@@ -1142,6 +1142,86 @@ function ProgramHealthPulse({ stats, orgId }: { stats: DashboardStats; orgId: st
   );
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Customize (board A3) — the header control for hiding sections you don't
+// want on your home page. A per-browser preference (localStorage), so each
+// person tailors their own dashboard. Scoped to show/hide; section order and
+// size stay fixed (a larger drag-to-reorder/resize surface is deferred).
+// ──────────────────────────────────────────────────────────────────────────
+const DASHBOARD_SECTIONS: { key: string; label: string }[] = [
+  { key: 'pulse', label: 'Program health' },
+  { key: 'queue', label: 'Needs you' },
+  { key: 'domains', label: 'Domains you own or steward' },
+  { key: 'ask', label: 'Ask Procela' },
+  { key: 'meeting', label: 'Next meeting' },
+  { key: 'portfolio', label: 'Portfolio health' },
+  { key: 'coverage', label: 'Coverage' },
+];
+const DASHBOARD_HIDDEN_KEY = 'procela:dashboard-hidden';
+
+function DashboardCustomize({ hidden, onToggle, onShowAll }: {
+  hidden: Set<string>;
+  onToggle: (key: string) => void;
+  onShowAll: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        aria-label="Customize dashboard"
+        aria-expanded={open}
+        title="Customize dashboard — show or hide sections"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          background: open ? 'var(--color-primary-light)' : 'var(--color-surface)',
+          color: open ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+          border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+        }}
+      >
+        <SlidersHorizontal size={16} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50, width: 248,
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 8,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px 8px' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Show sections</span>
+            {hidden.size > 0 && (
+              <button type="button" onClick={onShowAll} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Show all</button>
+            )}
+          </div>
+          {DASHBOARD_SECTIONS.map((s) => {
+            const isVisible = !hidden.has(s.key);
+            return (
+              <label key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
+                <input type="checkbox" checked={isVisible} onChange={() => onToggle(s.key)} style={{ cursor: 'pointer' }} />
+                <span style={{ color: isVisible ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{s.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId, activeOrgName } = useOrgContext();
   const { user } = useAuthStore();
@@ -1201,6 +1281,26 @@ export default function DashboardPage() {
     try { localStorage.setItem('procela:dashboard-focus', next ? '1' : '0'); } catch { /* */ }
     return next;
   });
+
+  // Customize — the per-browser set of sections the user has hidden. Empty by
+  // default (everything shown). Persisted so the choice sticks across visits.
+  const [hiddenSections, setHiddenSections] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(DASHBOARD_HIDDEN_KEY);
+      return new Set<string>(raw ? JSON.parse(raw) : []);
+    } catch { return new Set<string>(); }
+  });
+  const persistHidden = (next: Set<string>) => {
+    try { localStorage.setItem(DASHBOARD_HIDDEN_KEY, JSON.stringify([...next])); } catch { /* */ }
+    setHiddenSections(next);
+  };
+  const toggleSection = (key: string) => {
+    const next = new Set(hiddenSections);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    persistHidden(next);
+  };
+  const showAllSections = () => persistHidden(new Set());
+  const shown = (key: string) => !hiddenSections.has(key);
   // Generate processes now rides in the header actions (the separate
   // quick-action bar was dropped to keep the dashboard on one screen).
   // AI-gated — hidden when AI features are off.
@@ -1303,6 +1403,11 @@ export default function DashboardPage() {
             >
               {focus ? 'Show portfolio' : 'Focus'}
             </button>
+            {/* Customize — show/hide dashboard sections (board A3). Only in the
+                linked view, where there are sections to tailor. */}
+            {personLinked !== false && (
+              <DashboardCustomize hidden={hiddenSections} onToggle={toggleSection} onShowAll={showAllSections} />
+            )}
           </div>
         ) : undefined}
       >
@@ -1324,30 +1429,31 @@ export default function DashboardPage() {
           {/* Program health — the org-wide pulse strip (redesign board A3):
               open gaps, classification & ownership coverage, program maturity.
               Organization-wide; the lens below narrows only the portfolio. */}
-          <ProgramHealthPulse stats={stats} orgId={activeOrgId} />
+          {shown('pulse') && <ProgramHealthPulse stats={stats} orgId={activeOrgId} />}
           {/* Concept B — Focus + Portfolio. Main column (board A3): the ranked
               action queue (what needs you), then the domains you own/steward,
               then Ask Procela. Right rail: the portfolio glance (next meeting,
               portfolio health, coverage). Focus mode drops the rail AND the
               domains grid so the queue is the whole page; the two-column split
               only applies on a wide viewport and when the rail is shown (see
-              .dashboard-two-pane in global.css). */}
+              .dashboard-two-pane in global.css). Each section can also be
+              hidden from Customize. */}
           <div className={`dashboard-two-pane${focus ? '' : ' two-col'}`}>
             <div className="dtp-main">
-              <TodayQueue lens={lens} orgId={activeOrgId} />
+              {shown('queue') && <TodayQueue lens={lens} orgId={activeOrgId} />}
               {/* Domains you own or steward — a main-column card grid in the
                   redesign (promoted out of the rail). Portfolio content, so it
                   hides in Focus mode alongside the rail. */}
-              {!focus && <MyDomains lens={lens} orgId={activeOrgId} />}
+              {!focus && shown('domains') && <MyDomains lens={lens} orgId={activeOrgId} />}
               {/* Ask Procela — suggested questions into the AI assistant
                   (mock-up parity). AI-gated, like Generate processes. */}
-              {aiEnabled && <AskProcela />}
+              {aiEnabled && shown('ask') && <AskProcela />}
             </div>
-            {!focus && (
+            {!focus && (shown('meeting') || shown('portfolio') || shown('coverage')) && (
               <div className="dtp-side">
-                <NextMeeting lens={lens} orgId={activeOrgId} />
-                <MyPortfolioHealth lens={lens} orgId={activeOrgId} />
-                <MyCoverage lens={lens} orgId={activeOrgId} />
+                {shown('meeting') && <NextMeeting lens={lens} orgId={activeOrgId} />}
+                {shown('portfolio') && <MyPortfolioHealth lens={lens} orgId={activeOrgId} />}
+                {shown('coverage') && <MyCoverage lens={lens} orgId={activeOrgId} />}
               </div>
             )}
           </div>
