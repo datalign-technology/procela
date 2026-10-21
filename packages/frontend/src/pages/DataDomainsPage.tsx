@@ -120,6 +120,32 @@ const menuItemStyle: React.CSSProperties = {
   background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer',
 };
 
+// Words that carry no signal for the sub-domain-suggestion match.
+const SUGGEST_STOP = new Set(['data', 'the', 'and', 'for', 'of', 'records', 'record', 'logs', 'log', 'results', 'result', 'reads', 'read', 'dump', 'extract', 'master', 'output']);
+function suggestTokens(text: string): string[] {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !SUGGEST_STOP.has(t));
+}
+// Heuristic: suggest which sub-domain a parent-held asset should move to, by
+// token overlap between the asset (name + system) and each sub-domain's name.
+// Returns the best-matching sub-domain name, or null for "none fits". It's a
+// hint for the steward, not an authority — the "Sort assets" flow is where the
+// move actually happens.
+function suggestSubDomainName(assetText: string, subDomains: { name: string }[]): string | null {
+  const at = suggestTokens(assetText);
+  if (at.length === 0) return null;
+  let best: string | null = null; let bestScore = 0;
+  for (const s of subDomains) {
+    const st = suggestTokens(s.name);
+    let score = 0;
+    for (const a of at) for (const b of st) {
+      if (a === b) score += 2;
+      else if ((a.length >= 4 && b.includes(a)) || (b.length >= 4 && a.includes(b))) score += 1;
+    }
+    if (score > bestScore) { bestScore = score; best = s.name; }
+  }
+  return bestScore > 0 ? best : null;
+}
+
 export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: string } = {}) {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
@@ -1119,7 +1145,8 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
                             <th style={{ padding: '10px 12px 10px 18px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Asset</th>
                             <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>System</th>
                             <th style={{ padding: '10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Tier</th>
-                            <th style={{ padding: '10px 18px 10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Owner</th>
+                            <th style={{ padding: showGap ? '10px 12px' : '10px 18px 10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Owner</th>
+                            {showGap && <th style={{ padding: '10px 18px 10px 12px', fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Suggested sub-domain</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -1134,7 +1161,15 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
                                 <td style={{ padding: '10px 12px' }}>
                                   <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: tc.bg, color: tc.color }}>{tierLabel(a.governanceTier)}</span>
                                 </td>
-                                <td style={{ padding: '10px 18px 10px 12px' }}><OwnerCell name={a.ownerName} /></td>
+                                <td style={{ padding: showGap ? '10px 12px' : '10px 18px 10px 12px' }}><OwnerCell name={a.ownerName} /></td>
+                                {showGap && (() => {
+                                  const sug = suggestSubDomainName(`${a.name} ${a.systemId ? (systemNameById[a.systemId] || '') : ''}`, subDomains);
+                                  return (
+                                    <td style={{ padding: '10px 18px 10px 12px', color: 'var(--color-text-secondary)' }}>
+                                      {sug || <span style={{ color: 'var(--color-text-muted)' }}>None fits &mdash; keep here</span>}
+                                    </td>
+                                  );
+                                })()}
                               </tr>
                             );
                           })}
