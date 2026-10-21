@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import SegmentedControl from '../components/SegmentedControl';
+import ExportMenu from '../components/ExportMenu';
 import Card from '../components/Card';
 import { Check } from 'lucide-react';
 import { renderNavIcon } from '../components/navIcons';
@@ -121,14 +122,24 @@ interface GapScopeInfo {
 
 type Severity = 'critical' | 'warning' | 'info';
 
+// The three buckets the checks list groups under (matches the redesign board).
+type GroupName = 'Process coverage' | 'Data governance' | 'Ownership';
+const GROUP_ORDER: GroupName[] = ['Process coverage', 'Data governance', 'Ownership'];
+
 interface GapSection {
   key: keyof GapData;
   title: string;
+  // Which group the check sits under in the left pane.
+  group: GroupName;
+  // A terse one-liner shown under the title in the check row.
+  short: string;
   description: string;
   // One plain-language line on the business consequence of leaving this gap
   // open — shown under the description in the detail panel so a reader sees
   // *why* to act, not just *what* is missing.
   why: string;
+  // The action verb for the per-row Fix affordance (e.g. "Map data").
+  fix: string;
   severity: Severity;
   // Icon is the sidebar SVG for the route this gap targets — so
   // an Ownership Gaps row shows the People rail icon, a Low-Health
@@ -147,80 +158,110 @@ const GAP_SECTIONS: GapSection[] = [
   {
     key: 'unmappedSteps',
     title: 'Unmapped Activities',
+    group: 'Process coverage',
+    short: 'Activities with no data linked',
     description: 'Process activities with no data asset linked. These represent potential data gaps where business processes lack data coverage.',
     why: 'You cannot tell which data this activity depends on, so a data problem here would surface in the business process with no warning.',
+    fix: 'Map data',
     severity: 'critical',
     icon: gapIcon('/processes'),
   },
   {
     key: 'ownerlessProcesses',
     title: 'Ownership Gaps',
+    group: 'Ownership',
+    short: 'Value streams & processes with no owner',
     description: 'Value streams and processes with no assigned owner. Every process should have clear accountability.',
     why: 'With no owner, nobody is accountable when this process needs a decision, a review, or a fix.',
+    fix: 'Assign owner',
     severity: 'critical',
     icon: gapIcon('/people'),
   },
   {
     key: 'ungovernedAssets',
     title: 'Ungoverned Assets',
+    group: 'Data governance',
+    short: 'Uncertified data used by processes',
     description: 'Uncertified data assets linked to process activities. Critical processes depend on minimally governed data.',
     why: 'Live processes are running on data nobody has certified for trust.',
+    fix: 'Start certification',
     severity: 'warning',
     icon: gapIcon('/data-assets'),
   },
   {
     key: 'lowHealthAssets',
     title: 'Low-Health Assets',
+    group: 'Data governance',
+    short: 'Linked assets under 50% health',
     description: 'Data assets linked to processes with health score below 50%. Quality issues may affect dependent processes.',
     why: 'Processes depend on this data while its measured quality is poor — errors flow straight downstream.',
+    fix: 'Review quality',
     severity: 'warning',
     icon: gapIcon('/data-quality'),
   },
   {
     key: 'ungovernedColumns',
     title: 'Ungoverned Columns',
+    group: 'Data governance',
+    short: 'Bound columns with no quality rule',
     description: 'Columns an asset is bound to (they carry a physical source) but with no data-quality rule. Binding a column declares it matters — one with no rule is coverage you claimed but never measure.',
     why: 'Binding a column declares it matters; with no quality rule its values are never checked, so drift goes unmeasured.',
+    fix: 'Add quality rule',
     severity: 'warning',
     icon: gapIcon('/data-quality'),
   },
   {
     key: 'unownedDomains',
     title: 'Unowned Domains',
+    group: 'Data governance',
+    short: 'Data domains with no owner',
     description: 'Data domains with no assigned owner. Domain ownership drives stewardship accountability.',
     why: 'A domain with no owner has no one to steward the assets filed under it.',
+    fix: 'Assign owner',
     severity: 'warning',
     icon: gapIcon('/data-domains'),
   },
   {
     key: 'orphanedAssets',
     title: 'Orphaned Assets',
+    group: 'Data governance',
+    short: 'Not placed in a data domain',
     description: 'Data assets not assigned to any data domain. These lack governance oversight.',
     why: 'Assets outside every domain fall through stewardship — domain owners only oversee what is filed under them.',
+    fix: 'Set domain',
     severity: 'info',
     icon: gapIcon('/data-assets'),
   },
   {
     key: 'unlinkedAssets',
     title: 'Unlinked Assets',
+    group: 'Process coverage',
+    short: 'Data not used by any process',
     description: 'Data assets with no mapping to any process activity. It is unclear which processes these support.',
     why: 'Nobody can say which work relies on these — candidates to map to a process, merge, or retire.',
+    fix: 'Map to activity',
     severity: 'info',
     icon: gapIcon('/data-assets/orphans'),
   },
   {
     key: 'unassignedPeople',
     title: 'Unassigned People',
+    group: 'Ownership',
+    short: 'No ownership or stewardship role',
     description: 'People in the organization with no ownership or stewardship assignments.',
     why: 'Spare stewardship capacity: these people could take on the open owner gaps above.',
+    fix: 'Assign role',
     severity: 'info',
     icon: gapIcon('/people'),
   },
   {
     key: 'duplicateAssetNames',
     title: 'Duplicate Asset Names',
+    group: 'Data governance',
+    short: 'Multiple assets share a name',
     description: 'Multiple data assets share the same name (case-insensitive). Sometimes legitimate \u2014 e.g., two divisions both have "Customer Accounts" \u2014 but worth a look to decide whether to merge or rename for clarity.',
     why: 'Shared names make it easy to map or report against the wrong asset \u2014 worth confirming they are genuinely distinct.',
+    fix: 'Compare & merge',
     severity: 'info',
     icon: gapIcon('/data-assets'),
   },
@@ -241,7 +282,7 @@ const SEVERITY_CONFIG = {
 // ── Component ──
 
 export default function GapDetectionPage() {
-  const { activeOrgId } = useOrgContext();
+  const { activeOrgId, activeOrgName } = useOrgContext();
   const [data, setData] = useState<GapData | null>(null);
   const [summary, setSummary] = useState<GapSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -277,6 +318,17 @@ export default function GapDetectionPage() {
   }, [activeOrgId, scopeMode]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Keep a gap selected so the detail pane is never empty: default to the first
+  // visible gap, and re-point when the severity filter hides the current one.
+  // (Deliberately not keyed on selectedKey — a manual pick then sticks.)
+  useEffect(() => {
+    if (!data) return;
+    const visible = (severityFilter ? GAP_SECTIONS.filter((s) => s.severity === severityFilter) : GAP_SECTIONS)
+      .filter((s) => (data[s.key] as any[]).length > 0);
+    if (visible.length === 0) { setSelectedKey(null); return; }
+    setSelectedKey((cur) => (cur && visible.some((s) => s.key === cur) ? cur : visible[0].key));
+  }, [data, severityFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -314,19 +366,23 @@ export default function GapDetectionPage() {
 
   const selectedSection = GAP_SECTIONS.find((sec) => sec.key === selectedKey);
 
-  // The severity legend doubles as a filter over the tile grid. When a
-  // severity is active, only its tiles show, and a selected tile's detail
-  // panel is hidden if it falls outside the filter (kept in state so
-  // clearing the filter restores it).
+  // The severity legend doubles as a filter over the checks list. When a
+  // severity is active, only its checks show.
   const visibleSections = severityFilter
     ? GAP_SECTIONS.filter((sec) => sec.severity === severityFilter)
     : GAP_SECTIONS;
-  // Split the visible checks: tiles with open gaps lead the grid; clear checks
-  // (count 0) drop into a collapsed "N checks are clear" disclosure so they
-  // confirm what's passing without crowding out what needs attention.
-  const gapTiles = visibleSections.filter((sec) => sectionCount(sec) > 0);
-  const clearTiles = visibleSections.filter((sec) => sectionCount(sec) === 0);
+  // Checks with open gaps fill the grouped left pane; clear checks (count 0)
+  // drop into a collapsed disclosure so they confirm what's passing.
+  const gapChecks = visibleSections.filter((sec) => sectionCount(sec) > 0);
+  const clearChecks = visibleSections.filter((sec) => sectionCount(sec) === 0);
+  // Grouped for the left pane — only groups that have a visible gap show.
+  const groups = GROUP_ORDER
+    .map((name) => ({ name, items: gapChecks.filter((s) => s.group === name) }))
+    .filter((g) => g.items.length > 0);
   const showDetail = !!selectedSection && (!severityFilter || selectedSection.severity === severityFilter);
+  // Headline figures (over the whole org, independent of the severity filter).
+  const totalSections = GAP_SECTIONS.length;
+  const checksWithGaps = GAP_SECTIONS.filter((s) => sectionCount(s) > 0).length;
 
   return (
     <div>
@@ -334,15 +390,25 @@ export default function GapDetectionPage() {
         title="Gap Detection"
         subtitle="Identifies gaps in process coverage, data governance, ownership, and data quality across the organization."
         actions={
-          <SegmentedControl
-            ariaLabel="Scope"
-            value={scopeMode}
-            onChange={setScopeMode}
-            options={[
-              { value: 'all', label: 'All', title: 'Every catalogued entity, governed or not' },
-              { value: 'program', label: 'In scope', title: 'Only the systems, domains and value streams your governance program governs' },
-            ]}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <SegmentedControl
+              ariaLabel="Scope"
+              value={scopeMode}
+              onChange={setScopeMode}
+              options={[
+                { value: 'all', label: 'All', title: 'Every catalogued entity, governed or not' },
+                { value: 'program', label: 'In scope', title: 'Only the systems, domains and value streams your governance program governs' },
+              ]}
+            />
+            <ExportMenu
+              build={() => {
+                const rows = GAP_SECTIONS.filter((s) => sectionCount(s) > 0)
+                  .map((s) => [s.group, s.title, SEVERITY_CONFIG[s.severity].label, sectionCount(s)]);
+                if (rows.length === 0) return null;
+                return { filenameBase: 'gap-detection', sheetName: 'Gaps', headers: ['Group', 'Check', 'Severity', 'Open gaps'], rows };
+              }}
+            />
+          </div>
         }
       />
 
@@ -358,20 +424,6 @@ export default function GapDetectionPage() {
         </div>
       )}
 
-      {/* Severity summary — a slim proportion bar + legend that doubles as a
-          severity filter over the gap tiles below. Replaces the old KPI card
-          row, whose counts just restated the tiles. */}
-      {totalCount > 0 && (
-        <SeverityBar
-          total={totalCount}
-          critical={criticalCount}
-          warning={warningCount}
-          info={infoCount}
-          active={severityFilter}
-          onSelect={setSeverityFilter}
-        />
-      )}
-
       {totalCount === 0 ? (
         <div style={{
           background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)',
@@ -385,123 +437,161 @@ export default function GapDetectionPage() {
         </div>
       ) : (
         <>
-          {/* Open gaps as tiles — the checks that need attention, leading the
-              page. Clear checks drop into the disclosure below. Click a tile to
-              see its affected items in the panel. */}
-          {gapTiles.length === 0 ? (
-            <div style={{
-              background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)',
-              padding: '1.25rem', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
-            }}>
-              <span style={{ display: 'inline-flex', color: '#166534' }}><Check size={20} strokeWidth={2.4} /></span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#166534' }}>
-                No {severityFilter ? `${SEVERITY_CONFIG[severityFilter].label.toLowerCase()} ` : ''}gaps in this view — every check here is clear.
-              </span>
-            </div>
-          ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10, marginBottom: 16 }}>
-            {gapTiles.map((section) => {
-              const items = data[section.key] as any[];
-              const count = items.length;
-              const sev = SEVERITY_CONFIG[section.severity];
-              const isSelected = selectedKey === section.key;
-              return (
-                <button
-                  key={section.key}
-                  type="button"
-                  onClick={() => setSelectedKey(section.key)}
-                  aria-pressed={isSelected}
-                  title={`Show ${count} ${section.title.toLowerCase()}`}
-                  style={{
-                    font: 'inherit', textAlign: 'left', cursor: 'pointer',
-                    background: 'var(--color-surface)',
-                    // A plain neutral card, like every entity-list row — no coloured
-                    // rail. Severity reads through the soft count pill, the icon and
-                    // the uppercase label. Selection swaps the whole outline to the
-                    // primary accent.
-                    border: `1px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    borderRadius: 'var(--radius-md)', padding: '11px 14px',
-                    boxShadow: isSelected ? 'var(--shadow-md)' : 'var(--shadow-sm)',
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    transition: 'border-color 0.15s, box-shadow 0.15s',
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', color: sev.color, flexShrink: 0 }}>{section.icon}</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.title}</span>
-                    <span style={{ display: 'block', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: sev.color, marginTop: 1 }}>{sev.label}</span>
-                  </span>
-                  <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, flexShrink: 0 }}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
-          )}
-
-          {/* Prompt to drill in — shown until the user picks a gap tile. */}
-          {!showDetail && gapTiles.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '2px' }}>
-              Select a gap above to see the affected items.
-            </div>
-          )}
-
-          {/* Detail — the affected items for the selected gap. */}
-          {showDetail && selectedSection && (() => {
-            const sev = SEVERITY_CONFIG[selectedSection.severity];
-            const items = data[selectedSection.key] as any[];
-            return (
-              <Card padding={0} style={{ overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
-                  <span style={{ display: 'inline-flex', color: sev.color, marginTop: 1 }}>{selectedSection.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700 }}>{selectedSection.title}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 2, lineHeight: 1.4 }}>{selectedSection.description}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--color-text-secondary)', marginTop: 4, lineHeight: 1.4 }}>
-                      <strong style={{ fontWeight: 600, color: 'var(--color-text)' }}>Why it matters:</strong> {selectedSection.why}
-                    </div>
-                  </div>
-                  <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, flexShrink: 0 }}>{items.length}</span>
+          {/* Summary — the "Open gaps" headline alongside the proportion bar +
+              severity pills (the pills filter the checks list below). */}
+          <Card marginBottom={16}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center' }}>
+              <div style={{ flex: '0 0 auto' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+                  Open gaps{activeOrgName ? ` · ${activeOrgName}` : ''}
                 </div>
-                <div style={{ padding: '8px 16px 12px' }}>
-                  {renderItems(selectedSection.key, items)}
+                <div style={{ fontSize: 32, fontWeight: 600, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{totalCount}</div>
+                <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+                  in {checksWithGaps} of {totalSections} checks · {totalSections - checksWithGaps} clear
                 </div>
-              </Card>
-            );
-          })()}
+              </div>
+              <div style={{ flex: '1 1 380px', minWidth: 0 }}>
+                <SeverityBar
+                  total={totalCount}
+                  critical={criticalCount}
+                  warning={warningCount}
+                  info={infoCount}
+                  active={severityFilter}
+                  onSelect={setSeverityFilter}
+                />
+              </div>
+            </div>
+          </Card>
 
-          {/* Clear checks — collapsed by default. Confirms what's passing
-              without the greyed tiles diluting the gaps above. */}
-          {clearTiles.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <button
-                type="button"
-                onClick={() => setShowClear((v) => !v)}
-                aria-expanded={showClear}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6, font: 'inherit',
-                  fontSize: 13, fontWeight: 600, color: 'var(--color-primary)',
-                  background: 'none', border: 'none', padding: '2px', cursor: 'pointer',
-                }}
-              >
-                <Check size={14} strokeWidth={2.6} />
-                {showClear ? 'Hide clear checks' : `${clearTiles.length} ${clearTiles.length === 1 ? 'check is' : 'checks are'} clear`}
-              </button>
-              {showClear && (
-                <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {clearTiles.map((section) => (
-                    <li key={section.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                      <span style={{ display: 'inline-flex', color: 'var(--color-success)', flexShrink: 0 }}><Check size={14} strokeWidth={2.6} /></span>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{section.title}</span>
-                      <span style={{ color: 'var(--color-text-muted)' }}>— no gaps found</span>
-                    </li>
+          {/* Two-pane: grouped checks list (left) + the selected check's
+              affected items (right). */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+            <aside
+              aria-label="Checks"
+              style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}
+            >
+              {groups.length === 0 ? (
+                <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#166534' }}>
+                  <Check size={18} strokeWidth={2.4} />
+                  No {severityFilter ? `${SEVERITY_CONFIG[severityFilter].label.toLowerCase()} ` : ''}gaps in this view.
+                </div>
+              ) : groups.map((group) => (
+                <div key={group.name}>
+                  <div style={{ padding: '12px 16px 6px', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)' }}>{group.name}</div>
+                  {group.items.map((section) => (
+                    <CheckRow
+                      key={section.key}
+                      section={section}
+                      count={sectionCount(section)}
+                      active={selectedKey === section.key}
+                      onSelect={() => setSelectedKey(section.key)}
+                    />
                   ))}
-                </ul>
+                </div>
+              ))}
+
+              {/* Clear checks — collapsed disclosure at the foot of the pane. */}
+              {clearChecks.length > 0 && (
+                <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowClear((v) => !v)}
+                    aria-expanded={showClear}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, font: 'inherit', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                  >
+                    <Check size={14} strokeWidth={2.6} />
+                    {showClear ? 'Hide clear checks' : `${clearChecks.length} ${clearChecks.length === 1 ? 'check is' : 'checks are'} clear`}
+                  </button>
+                  {showClear && (
+                    <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {clearChecks.map((section) => (
+                        <li key={section.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                          <span style={{ display: 'inline-flex', color: 'var(--color-success)', flexShrink: 0 }}><Check size={14} strokeWidth={2.6} /></span>
+                          <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{section.title}</span>
+                          <span style={{ color: 'var(--color-text-muted)' }}>— no gaps found</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
-            </div>
-          )}
+            </aside>
+
+            <main
+              aria-label="Affected items"
+              style={{ flex: '999 1 440px', minWidth: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}
+            >
+              {showDetail && selectedSection ? (() => {
+                const sev = SEVERITY_CONFIG[selectedSection.severity];
+                const items = data[selectedSection.key] as any[];
+                return (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '14px 18px', borderBottom: '1px solid var(--color-border)' }}>
+                      <span style={{ display: 'inline-flex', color: sev.color, marginTop: 1, flexShrink: 0 }}>{selectedSection.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{selectedSection.title}</h2>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 22, padding: '0 8px', borderRadius: 11, fontSize: 11, fontWeight: 600, background: sev.bg, color: sev.color }}>
+                            <span style={{ width: 6, height: 6, borderRadius: 3, background: sev.color }} />{sev.label}
+                          </span>
+                          <span style={{ fontSize: 13, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>Affected {items.length}</span>
+                        </div>
+                        <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{selectedSection.description}</p>
+                        <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                          <strong style={{ fontWeight: 600, color: 'var(--color-text)' }}>Why it matters:</strong> {selectedSection.why}
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{ padding: '6px 10px 10px' }}>
+                      {renderItems(selectedSection.key, items, selectedSection.fix)}
+                    </div>
+                    <div style={{ padding: '10px 18px', fontSize: 13, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderTop: '1px solid var(--color-border)' }}>
+                      {items.length === 1 ? '1 item' : `${items.length} items`}
+                    </div>
+                  </>
+                );
+              })() : (
+                <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
+                  Select a check on the left to see its affected items.
+                </div>
+              )}
+            </main>
+          </div>
         </>
       )}
     </div>
+  );
+}
+
+// ── Checks-list row (left pane) ──
+
+function CheckRow({ section, count, active, onSelect }: {
+  section: GapSection; count: number; active: boolean; onSelect: () => void;
+}) {
+  const sev = SEVERITY_CONFIG[section.severity];
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={active}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-surface)'; }}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+        border: 0, borderLeft: `3px solid ${active ? 'var(--color-primary)' : 'transparent'}`,
+        background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
+        cursor: 'pointer', textAlign: 'left', font: 'inherit', color: 'inherit',
+      }}
+    >
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontWeight: 600, fontSize: 14, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.title}</span>
+        <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.short}</span>
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 22, padding: '0 8px', borderRadius: 11, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: sev.bg, color: sev.color, flexShrink: 0 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 3, background: sev.color }} />{sev.label}
+      </span>
+      <span style={{ minWidth: 20, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--color-text)', flexShrink: 0 }}>{count}</span>
+    </button>
   );
 }
 
@@ -527,7 +617,7 @@ function SeverityBar({ total, critical, warning, info, active, onSelect }: {
   ];
   const toggle = (s: Severity) => onSelect(active === s ? null : s);
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div>
       {/* Stacked proportion bar — each segment sized by its share of the
           total, dimmed when another severity is filtered. */}
       <div style={{ display: 'flex', height: 8, borderRadius: 999, overflow: 'hidden', background: 'var(--color-border)', marginBottom: 8 }}>
@@ -585,10 +675,10 @@ function SeverityChip({ label, count, dotColor, active, onClick }: {
 
 // ── Render items for each gap type ──
 
-function renderItems(key: string, items: any[]) {
+function renderItems(key: string, items: any[], fix: string) {
   const rowStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '6px 8px', borderBottom: '1px solid var(--color-border)', fontSize: 13, gap: 8,
+    padding: '8px 10px', borderBottom: '1px solid var(--color-border)', fontSize: 13, gap: 10,
     textDecoration: 'none', color: 'var(--color-text)',
     transition: 'background 0.12s',
     borderRadius: 4,
@@ -599,7 +689,8 @@ function renderItems(key: string, items: any[]) {
   });
 
   // Wraps an item row in a Link with a hover affordance so the row reads
-  // as a navigable thing rather than a static list line.
+  // as a navigable thing. A trailing "fix" chip names the action the link
+  // takes you to (Map data, Assign owner, …) — the explicit per-row Fix.
   const Row = ({ to, title, children }: { to: string; title?: string; children: React.ReactNode }) => (
     <Link
       to={to}
@@ -609,6 +700,7 @@ function renderItems(key: string, items: any[]) {
       onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
     >
       {children}
+      <span style={{ display: 'inline-flex', alignItems: 'center', height: 26, padding: '0 10px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', borderRadius: 6, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>{fix}</span>
     </Link>
   );
 
