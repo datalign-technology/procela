@@ -52,8 +52,9 @@ interface VizSelection {
   selectedId: string | null;
   onSelect: (id: string) => void;
   noDataActivityIds: Set<string>;
+  systemsById: Map<string, string>;
 }
-const VizContext = createContext<VizSelection>({ selectedId: null, onSelect: () => {}, noDataActivityIds: new Set() });
+const VizContext = createContext<VizSelection>({ selectedId: null, onSelect: () => {}, noDataActivityIds: new Set(), systemsById: new Map() });
 
 // ── Level Visual Config ──
 
@@ -88,11 +89,6 @@ function buildFlowMap(flows: FlowRelationship[]): Map<string, FlowRelationship[]
   return map;
 }
 
-function isActivityContainer(node: ProcessNode): boolean {
-  return (node.level === 'PROCESS' || node.level === 'SUBPROCESS') &&
-    (node.children || []).some(c => c.level === 'ACTIVITY');
-}
-
 function filterTree(nodes: ProcessNode[], hiddenLevels: Set<NodeLevel>): ProcessNode[] {
   const result: ProcessNode[] = [];
   for (const node of nodes) {
@@ -108,118 +104,224 @@ function filterTree(nodes: ProcessNode[], hiddenLevels: Set<NodeLevel>): Process
   return result;
 }
 
-// ── Flow Arrow Component ──
+// ── Flow chevron (between activities in the left-to-right flow) ──
 
-function FlowArrow({ type }: { type: string }) {
-  const isSequence = type === 'SEQUENCE';
-  const color = isSequence ? '#065f46' : '#9d174d';
+function FlowChevron() {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', padding: '0 4px', minWidth: 36,
-      flexShrink: 0, position: 'relative',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 0,
-        position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{ width: 20, height: 2, background: color, position: 'relative', overflow: 'hidden' }}>
-          {/* Animated pulse traveling along the line */}
-          <div style={{
-            position: 'absolute', top: -1, left: 0, width: 8, height: 4,
-            background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
-            borderRadius: 2, opacity: 0.7,
-            animation: 'flowPulse 1.5s linear infinite',
-          }} />
-        </div>
-        <div style={{
-          width: 0, height: 0,
-          borderTop: '5px solid transparent',
-          borderBottom: '5px solid transparent',
-          borderLeft: `6px solid ${color}`,
-        }} />
-      </div>
-      {!isSequence && (
-        <span style={{
-          fontSize: 8, color: '#9d174d', fontWeight: 600,
-          marginTop: 2, whiteSpace: 'nowrap',
-        }}>
-          {type}
+    <span aria-hidden="true" style={{ flex: 'none', width: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+    </span>
+  );
+}
+
+// ── Swimlane layout ──
+//
+// The map reads left-to-right: a value stream is a row of process lanes, each
+// lane holds its sub-process boxes and activities, and activities flow with
+// numbered steps + chevrons that follow the recorded hand-offs. Replaces the
+// old top-down tree — matching the reference board.
+
+const CONTAINER_LEVELS = new Set<NodeLevel>(['VALUE_STREAM', 'DOMAIN', 'CAPABILITY']);
+
+/** Every descendant of `node` at a given level, in document order. */
+function collectByLevel(node: ProcessNode, level: NodeLevel): ProcessNode[] {
+  const out: ProcessNode[] = [];
+  const walk = (nodes: ProcessNode[]) => { for (const n of nodes) { if (n.level === level) out.push(n); if (n.children?.length) walk(n.children); } };
+  walk(node.children || []);
+  return out;
+}
+
+/** Order activities by their recorded hand-offs (flow relationships), falling
+ *  back to document order for anything the flows don't connect. */
+function orderByFlow(activities: ProcessNode[], flowMap: Map<string, FlowRelationship[]>): ProcessNode[] {
+  if (activities.length <= 1) return activities;
+  const ids = new Set(activities.map((a) => a.id));
+  const hasIncoming = new Set<string>();
+  for (const a of activities) for (const f of (flowMap.get(a.id) || [])) if (ids.has(f.toNodeId)) hasIncoming.add(f.toNodeId);
+  const starts = activities.filter((a) => !hasIncoming.has(a.id));
+  const queue = starts.length ? [...starts] : [...activities];
+  const result: ProcessNode[] = []; const seen = new Set<string>();
+  while (queue.length) {
+    const cur = queue.shift()!;
+    if (seen.has(cur.id)) continue;
+    seen.add(cur.id); result.push(cur);
+    for (const f of (flowMap.get(cur.id) || [])) { const t = activities.find((a) => a.id === f.toNodeId); if (t && !seen.has(t.id)) queue.push(t); }
+  }
+  for (const a of activities) if (!seen.has(a.id)) result.push(a);
+  return result;
+}
+
+/** A selectable header card that fills its lane (value stream / process /
+ *  sub-process). `compact` trims the padding for nested headers. */
+function LaneHeader({ node, compact }: { node: ProcessNode; compact?: boolean }) {
+  const config = LEVEL_VISUAL[node.level];
+  const statusStyle = STATUS_COLORS[node.status] || STATUS_COLORS.DRAFT;
+  const { selectedId, onSelect } = useContext(VizContext);
+  const selected = selectedId === node.id;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(node.id)}
+      aria-pressed={selected}
+      style={{
+        width: '100%', textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit',
+        background: selected ? 'var(--color-primary-light)' : 'var(--color-surface)',
+        border: `1px solid ${selected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+        borderLeft: `3px solid ${config.border}`,
+        borderRadius: 8, padding: compact ? '8px 10px' : '12px 14px',
+        boxShadow: selected ? '0 0 0 1px var(--color-primary)' : 'none',
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: `${config.border}18`, color: config.border }}>{config.icon} {config.label}</span>
+        {node.activityId && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>{node.activityId}</span>}
+        <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, marginLeft: 'auto', background: statusStyle.bg, color: statusStyle.color }}>{node.status}</span>
+      </span>
+      <span style={{ display: 'block', fontWeight: 600, fontSize: node.level === 'VALUE_STREAM' ? 15 : 14, marginTop: 5, color: 'var(--color-text)' }}>{node.name}</span>
+      {node.description && <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 3, lineHeight: 1.4 }}>{node.description}</span>}
+    </button>
+  );
+}
+
+/** A numbered activity card in the left-to-right flow. */
+function ActivityChip({ node, seq }: { node: ProcessNode; seq?: number }) {
+  const { selectedId, onSelect, noDataActivityIds, systemsById } = useContext(VizContext);
+  const selected = selectedId === node.id;
+  const noData = noDataActivityIds.has(node.id);
+  const systems = (node.systemIds || []).map((id) => systemsById.get(id) || id).filter(Boolean);
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(node.id)}
+      aria-pressed={selected}
+      className="viz-card"
+      style={{
+        width: '100%', textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit',
+        padding: '10px 12px', borderRadius: 8,
+        background: selected ? 'var(--color-primary-light)' : 'var(--color-surface)',
+        border: `1px solid ${selected ? 'var(--color-primary)' : (noData ? '#e7b48a' : 'var(--color-border)')}`,
+        boxShadow: selected ? '0 0 0 1px var(--color-primary)' : '0 1px 2px rgba(0,0,0,0.06)',
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 22, height: 22, borderRadius: 11, background: 'var(--color-text)', color: 'var(--color-surface)', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{seq ?? ''}</span>
+        {node.activityId && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.activityId}</span>}
+      </span>
+      <span style={{ display: 'block', fontWeight: 600, fontSize: 14, marginTop: 6, color: 'var(--color-text)' }}>{node.name}</span>
+      <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>Systems: {systems.length ? systems.join(', ') : '—'}</span>
+      {noData && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, padding: '2px 8px', borderRadius: 11, background: '#fbe9d9', color: '#9a4a0e', fontSize: 11, fontWeight: 600 }}>
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: '#9a4a0e' }} />No data linked
         </span>
       )}
+    </button>
+  );
+}
+
+/** A horizontal run of activities with numbered steps + chevrons between. */
+function ActivityFlow({ activities, seqMap, flowMap }: { activities: ProcessNode[]; seqMap: Map<string, number>; flowMap: Map<string, FlowRelationship[]> }) {
+  const ordered = useMemo(() => orderByFlow(activities, flowMap), [activities, flowMap]);
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 6 }}>
+      {ordered.map((a, i) => (
+        <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 140px', minWidth: 132 }}>
+          {i > 0 && <FlowChevron />}
+          <div style={{ flex: 1, minWidth: 0 }}><ActivityChip node={a} seq={seqMap.get(a.id)} /></div>
+        </div>
+      ))}
     </div>
   );
 }
 
-// ── Activity Row (horizontal flow) ──
+/** Render a node's children inside a lane: contiguous activities become one
+ *  flow, sub-processes become dashed boxes, anything else a plain card. */
+function LaneBody({ node, seqMap, flowMap }: { node: ProcessNode; seqMap: Map<string, number>; flowMap: Map<string, FlowRelationship[]> }) {
+  const segments: ReactNode[] = [];
+  let run: ProcessNode[] = [];
+  const flush = (key: string) => { if (run.length) { segments.push(<ActivityFlow key={key} activities={run} seqMap={seqMap} flowMap={flowMap} />); run = []; } };
+  (node.children || []).forEach((c, i) => {
+    if (c.level === 'ACTIVITY') { run.push(c); return; }
+    flush(`acts-${i}`);
+    if (c.level === 'SUBPROCESS') segments.push(<SubProcessBox key={c.id} node={c} seqMap={seqMap} flowMap={flowMap} />);
+    else segments.push(<div key={c.id} style={{ alignSelf: 'flex-start' }}><VisualCard node={c} /></div>);
+  });
+  flush('acts-end');
+  return <>{segments}</>;
+}
 
-function ActivityRow({ activities, flowMap }: { activities: ProcessNode[]; flowMap: Map<string, FlowRelationship[]> }) {
-  // Determine order based on flow relationships
-  const ordered = useMemo(() => {
-    if (activities.length <= 1) return activities;
-
-    const activityIds = new Set(activities.map(a => a.id));
-    const hasIncoming = new Set<string>();
-
-    for (const activity of activities) {
-      const outgoing = (flowMap.get(activity.id) || []).filter(f => activityIds.has(f.toNodeId));
-      for (const f of outgoing) hasIncoming.add(f.toNodeId);
-    }
-
-    // Find starting nodes (no incoming within this set)
-    const starts = activities.filter(a => !hasIncoming.has(a.id));
-    if (starts.length === 0) return activities;
-
-    const result: ProcessNode[] = [];
-    const visited = new Set<string>();
-    const queue = [...starts];
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      if (visited.has(current.id)) continue;
-      visited.add(current.id);
-      result.push(current);
-
-      const outgoing = (flowMap.get(current.id) || []).filter(f => activityIds.has(f.toNodeId));
-      for (const f of outgoing) {
-        const target = activities.find(a => a.id === f.toNodeId);
-        if (target && !visited.has(target.id)) queue.push(target);
-      }
-    }
-
-    // Add any remaining (not connected by flows)
-    for (const a of activities) {
-      if (!visited.has(a.id)) result.push(a);
-    }
-
-    return result;
-  }, [activities, flowMap]);
-
+/** A sub-process: a dashed box grouping its activities. */
+function SubProcessBox({ node, seqMap, flowMap }: { node: ProcessNode; seqMap: Map<string, number>; flowMap: Map<string, FlowRelationship[]> }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
-      gap: 0, flexWrap: 'wrap', padding: '4px 0',
-      maxWidth: 1200,
-    }}>
-      {ordered.map((activity, idx) => {
-        const activityFlows = (flowMap.get(activity.id) || []).filter(
-          f => ordered.some(a => a.id === f.toNodeId)
-        );
-        const nextExists = idx < ordered.length - 1;
-        const flowToNext = activityFlows.find(
-          f => f.toNodeId === ordered[idx + 1]?.id
-        );
-
-        return (
-          <div key={activity.id} style={{ display: 'flex', alignItems: 'flex-start' }}>
-            <VisualCard node={activity} />
-            {nextExists && (
-              <FlowArrow type={flowToNext?.type || 'SEQUENCE'} />
-            )}
-          </div>
-        );
-      })}
+    <div style={{ border: '1px dashed var(--color-border)', borderRadius: 10, padding: 10, background: 'var(--color-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <LaneHeader node={node} compact />
+      <LaneBody node={node} seqMap={seqMap} flowMap={flowMap} />
     </div>
+  );
+}
+
+/** A process: one lane column. */
+function ProcessLane({ node, seqMap, flowMap }: { node: ProcessNode; seqMap: Map<string, number>; flowMap: Map<string, FlowRelationship[]> }) {
+  return (
+    <section aria-label={node.name} style={{ flex: '1 1 320px', minWidth: 280, maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 12, border: '1px solid var(--color-border)', borderRadius: 10, background: 'var(--color-bg)', padding: 12 }}>
+      <LaneHeader node={node} />
+      <LaneBody node={node} seqMap={seqMap} flowMap={flowMap} />
+    </section>
+  );
+}
+
+/** A value-stream-level container (the VS itself, or a Domain / Capability
+ *  grouping between it and its processes): a labelled header over a wrapping
+ *  row of lanes. */
+function ContainerGroup({ node, seqMap, flowMap }: { node: ProcessNode; seqMap: Map<string, number>; flowMap: Map<string, FlowRelationship[]> }) {
+  return (
+    <div style={{ flexBasis: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <LaneHeader node={node} compact />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>{renderLanes(node.children || [], seqMap, flowMap)}</div>
+    </div>
+  );
+}
+
+/** Lay out a value stream's (or container's) children as lanes: processes
+ *  become columns, nested containers recurse, stray activities form a flow. */
+function renderLanes(nodes: ProcessNode[], seqMap: Map<string, number>, flowMap: Map<string, FlowRelationship[]>): ReactNode[] {
+  const out: ReactNode[] = [];
+  let run: ProcessNode[] = [];
+  const flush = (key: string) => { if (run.length) { out.push(<div key={key} style={{ flexBasis: '100%' }}><ActivityFlow activities={run} seqMap={seqMap} flowMap={flowMap} /></div>); run = []; } };
+  nodes.forEach((n, i) => {
+    if (n.level === 'ACTIVITY') { run.push(n); return; }
+    flush(`acts-${i}`);
+    if (n.level === 'PROCESS') out.push(<ProcessLane key={n.id} node={n} seqMap={seqMap} flowMap={flowMap} />);
+    else if (n.level === 'SUBPROCESS') out.push(<div key={n.id} style={{ flex: '1 1 320px', minWidth: 280, maxWidth: 560 }}><SubProcessBox node={n} seqMap={seqMap} flowMap={flowMap} /></div>);
+    else if (CONTAINER_LEVELS.has(n.level)) out.push(<ContainerGroup key={n.id} node={n} seqMap={seqMap} flowMap={flowMap} />);
+    else out.push(<div key={n.id} style={{ alignSelf: 'flex-start' }}><VisualCard node={n} /></div>);
+  });
+  flush('acts-end');
+  return out;
+}
+
+/** A whole value stream rendered as a swimlane. */
+function ValueStreamSwimlane({ vs, flowMap }: { vs: ProcessNode; flowMap: Map<string, FlowRelationship[]> }) {
+  const activities = useMemo(() => collectByLevel(vs, 'ACTIVITY'), [vs]);
+  const seqMap = useMemo(() => {
+    const m = new Map<string, number>();
+    orderByFlow(activities, flowMap).forEach((a, i) => m.set(a.id, i + 1));
+    return m;
+  }, [activities, flowMap]);
+  const nProc = useMemo(() => collectByLevel(vs, 'PROCESS').length, [vs]);
+  const nSub = useMemo(() => collectByLevel(vs, 'SUBPROCESS').length, [vs]);
+  return (
+    <section aria-label={vs.name} style={{ width: '100%', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+      <div style={{ padding: '14px 16px 12px' }}>
+        <LaneHeader node={vs} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '10px 16px', borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+        <span>Processes run left to right. Numbers show the activity sequence across the whole value stream.</span>
+        <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-muted)' }}>Processes {nProc} · Sub-processes {nSub} · Activities {activities.length}</span>
+      </div>
+      <div style={{ padding: 16, display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+        {renderLanes(vs.children || [], seqMap, flowMap)}
+      </div>
+    </section>
   );
 }
 
@@ -323,110 +425,6 @@ function VisualCard({ node }: { node: ProcessNode }) {
         </span>
       )}
     </button>
-  );
-}
-
-// ── Vertical Connector Line ──
-
-function VerticalConnector() {
-  return (
-    <div style={{
-      display: 'flex', justifyContent: 'center',
-      padding: '2px 0',
-    }}>
-      <div style={{
-        width: 2, height: 20,
-        background: '#cbd5e1',
-      }} />
-    </div>
-  );
-}
-
-// ── Visual Node (recursive tree) ──
-
-function VisualNode({ node, flowMap }: { node: ProcessNode; flowMap: Map<string, FlowRelationship[]> }) {
-  const children = node.children || [];
-  const activityChildren = children.filter(c => c.level === 'ACTIVITY');
-  const nonActivityChildren = children.filter(c => c.level !== 'ACTIVITY');
-  const hasActivityRow = activityChildren.length > 0 && isActivityContainer(node);
-
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-    }}>
-      <VisualCard node={node} />
-
-      {/* Activity children shown as horizontal flow */}
-      {hasActivityRow && (
-        <>
-          <VerticalConnector />
-          <ActivityRow activities={activityChildren} flowMap={flowMap} />
-          {/* Sub-items of activities (tasks, executions) */}
-          {activityChildren.some(a => (a.children || []).length > 0) && (
-            <div style={{
-              display: 'flex', justifyContent: 'flex-start', gap: 16,
-              flexWrap: 'wrap', marginTop: 4,
-            }}>
-              {activityChildren
-                .filter(a => (a.children || []).length > 0)
-                .map(activity => (
-                  <div key={activity.id} style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  }}>
-                    <div style={{
-                      fontSize: 9, color: '#64748b', marginBottom: 4,
-                      fontWeight: 500,
-                    }}>
-                      {activity.name}
-                    </div>
-                    <div style={{
-                      display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-start',
-                    }}>
-                      {(activity.children || []).map(child => (
-                        <VisualNode key={child.id} node={child} flowMap={flowMap} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Non-activity children shown as vertical tree */}
-      {nonActivityChildren.length > 0 && (
-        <>
-          <VerticalConnector />
-          {/* Horizontal branch line */}
-          {nonActivityChildren.length > 1 && (
-            <div style={{
-              display: 'flex', justifyContent: 'center',
-              width: '100%', position: 'relative',
-            }}>
-              <div style={{
-                position: 'absolute', top: 0,
-                height: 2, background: '#cbd5e1',
-                left: `calc(50% / ${nonActivityChildren.length})`,
-                right: `calc(50% / ${nonActivityChildren.length})`,
-              }} />
-            </div>
-          )}
-          <div style={{
-            display: 'flex', justifyContent: 'center',
-            gap: 20, flexWrap: 'wrap',
-          }}>
-            {nonActivityChildren.map(child => (
-              <div key={child.id} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-              }}>
-                {nonActivityChildren.length > 1 && <VerticalConnector />}
-                <VisualNode node={child} flowMap={flowMap} />
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
   );
 }
 
@@ -898,7 +896,7 @@ export default function ProcessVisualizationPage() {
       </div>
 
       {/* Map + details rail */}
-      <VizContext.Provider value={{ selectedId, onSelect: setSelectedId, noDataActivityIds }}>
+      <VizContext.Provider value={{ selectedId, onSelect: setSelectedId, noDataActivityIds, systemsById }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
       {/* Visualization container */}
       <div
@@ -966,14 +964,14 @@ export default function ProcessVisualizationPage() {
               transform: `scale(${zoom})`,
               transformOrigin: 'top left',
               transition: 'transform 0.15s ease',
-              display: 'inline-flex',
+              display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
+              alignItems: 'stretch',
               gap: 32,
-              minWidth: 'fit-content',
+              width: '100%',
             }}>
               {filteredTree.map(rootNode => (
-                <VisualNode key={rootNode.id} node={rootNode} flowMap={flowMap} />
+                <ValueStreamSwimlane key={rootNode.id} vs={rootNode} flowMap={flowMap} />
               ))}
             </div>
           </div>
