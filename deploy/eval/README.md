@@ -121,6 +121,12 @@ scope for the code** before handing it to anyone:
    build from source and take all config from `.env` at runtime, but verify
    nothing is committed (e.g. `git secrets` / `trufflehog`, and review the
    published image layers).
-3. **A dependency-license review.** Distributing an artifact distributes its
-   third-party licenses too. Run an audit (e.g. `license-checker`) and keep the
-   notices.
+3. **Third-party license notices.** Distributing an artifact distributes its
+   dependencies' licenses too. `THIRD-PARTY-NOTICES.txt` (in this folder) lists
+   every production dependency that ships in the images, with its license and
+   bundled license text — **regenerate it after any dependency change** with
+   `bash deploy/eval/generate-notices.sh`. The tree is almost entirely
+   permissive (MIT / Apache-2.0 / ISC / BSD) with **no strong copyleft** (no
+   GPL/AGPL); a small LGPL-3.0 group (the `@zenfs/*` family, pulled in by
+   `@dsnp/parquetjs` for Parquet support) ships as an unmodified library —
+   worth a quick legal confirmation, covered by the notices file.
