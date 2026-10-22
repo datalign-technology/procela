@@ -49,6 +49,7 @@ import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import { exportData } from '../lib/export';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
+import CertifiedBadge, { certStatusPill, certDate, type CertStatus } from '../components/CertifiedBadge';
 import ScopeBadge from '../components/ScopeBadge';
 import { useScopeMembership } from '../hooks/useScopeMembership';
 import HealthBar from '../components/HealthBar';
@@ -444,26 +445,6 @@ function LockIcon() {
 // edit. Rendered on the asset detail Overview tab.
 
 const CERT_HEALTH_BAR = 80; // mirrors backend HEALTH_SCORE_THRESHOLD
-
-/** Date-only (no time) formatting for recertification dates. */
-function certDate(iso?: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? d.toLocaleDateString(undefined, { dateStyle: 'medium' }) : '';
-}
-
-type CertStatus = 'NONE' | 'PENDING_REVIEW' | 'CERTIFIED';
-
-function certStatusPill(status: CertStatus, certifiedUntil?: string | null): { label: string; bg: string; color: string } | null {
-  if (status === 'PENDING_REVIEW') return { label: 'Certification pending', bg: '#fef3c7', color: '#92400e' };
-  if (status === 'CERTIFIED') {
-    const overdue = certifiedUntil ? new Date(certifiedUntil).getTime() < Date.now() : false;
-    return overdue
-      ? { label: 'Certified · recert due', bg: '#fef3c7', color: '#92400e' }
-      : { label: 'Certified', bg: '#dcfce7', color: '#166534' };
-  }
-  return null;
-}
 
 function ReadinessCheck({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -1739,6 +1720,11 @@ export default function DataAssetsPage({
             ) : (
               <TierBadge tier={asset.governanceTier} />
             )}
+            {(asset.certificationStatus === 'CERTIFIED' || asset.certificationStatus === 'PENDING_REVIEW') && (
+              <span style={{ alignSelf: 'flex-start' }}>
+                <CertifiedBadge compact status={asset.certificationStatus} certifiedUntil={asset.certifiedUntil} />
+              </span>
+            )}
             {canWrite && !inherited && asset.suggestedTier && compareTier(asset.suggestedTier, asset.governanceTier) > 0 && (
               <button
                 onClick={() => inlineSaveField(asset.id, 'governanceTier', asset.suggestedTier!)}
@@ -2884,12 +2870,7 @@ export default function DataAssetsPage({
                 {/* Status pills — tier, sensitivity, and mapping at a glance. */}
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                   <TierBadge tier={viewing360.asset.governanceTier} />
-                  {(() => {
-                    const cp = certStatusPill((viewing360.asset.certificationStatus || 'NONE') as CertStatus, viewing360.asset.certifiedUntil);
-                    return cp ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', borderRadius: 999, background: cp.bg, color: cp.color, fontSize: 12, fontWeight: 600 }}>{cp.label}</span>
-                    ) : null;
-                  })()}
+                  <CertifiedBadge size="md" status={viewing360.asset.certificationStatus} certifiedUntil={viewing360.asset.certifiedUntil} />
                   {viewing360.asset.sensitivityTags && viewing360.asset.sensitivityTags.length > 0 && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>
                       {viewing360.asset.sensitivityTags[0]}{viewing360.asset.sensitivityTags.length > 1 ? ` +${viewing360.asset.sensitivityTags.length - 1}` : ''}

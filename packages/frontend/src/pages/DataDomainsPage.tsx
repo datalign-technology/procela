@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import CertifiedBadge from '../components/CertifiedBadge';
 import { useBreadcrumbLeaf } from '../components/BreadcrumbContext';
 import ExpandCollapseControls from '../components/ExpandCollapseControls';
 import Card from '../components/Card';
@@ -57,7 +58,7 @@ interface DataDomain {
 interface Person { id: string; name: string; }
 // Enriched from the /data-assets list endpoint so the domain-detail assets
 // table can show system / tier / owner inline (not just the name).
-interface DataAssetOption { id: string; name: string; systemId?: string; governanceTier?: string; ownerName?: string; }
+interface DataAssetOption { id: string; name: string; systemId?: string; governanceTier?: string; ownerName?: string; certificationStatus?: string; certifiedUntil?: string | null; }
 
 // Nodes of the unified generate-and-review tree. Every row is an editable
 // name + description, so accepting an AI suggestion, editing it, and
@@ -1159,7 +1160,10 @@ export default function DataDomainsPage({ focusDomainId }: { focusDomainId?: str
                                 </td>
                                 <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{a.systemId ? (systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'—'}</span>}</td>
                                 <td style={{ padding: '10px 12px' }}>
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: tc.bg, color: tc.color }}>{tierLabel(a.governanceTier)}</span>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: tc.bg, color: tc.color }}>{tierLabel(a.governanceTier)}</span>
+                                    <CertifiedBadge compact status={a.certificationStatus} certifiedUntil={a.certifiedUntil} />
+                                  </span>
                                 </td>
                                 <td style={{ padding: showGap ? '10px 12px' : '10px 18px 10px 12px' }}><OwnerCell name={a.ownerName} /></td>
                                 {showGap && (() => {

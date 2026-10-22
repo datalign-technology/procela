@@ -15,6 +15,7 @@ import SectionLabel from './SectionLabel';
 import { useDetailEditMode } from '../hooks/useDetailEditMode';
 import { successToast, errorToast } from '../lib/errorToast';
 import { useTierLabel, TIER_COLORS, tierKey } from '../lib/governanceTier';
+import CertifiedBadge from './CertifiedBadge';
 import { useTerm } from '../lib/terminology';
 import Avatar from './Avatar';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
@@ -96,7 +97,7 @@ function prettyToken(v?: string): string {
 interface SystemThreeSixty {
   system: SystemSummary;
   linkedConnections: { id: string; name: string; connectionType?: string; status?: string }[];
-  assetsHere: { id: string; name: string; governanceTier?: string; healthScore?: number | null }[];
+  assetsHere: { id: string; name: string; governanceTier?: string; healthScore?: number | null; certificationStatus?: string; certifiedUntil?: string | null }[];
   dependentActivities: { id: string; name: string; path: string }[];
   ownership: {
     owner: { id: string; name: string | null } | null;
@@ -576,9 +577,12 @@ export default function SystemDetailModal({ systemId, onClose, people = [], syst
                                       <button type="button" onClick={() => navigate(`/data-assets/${a.id}`)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text)', fontWeight: 600, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>{a.name}</button>
                                     </td>
                                     <td style={{ padding: '12px' }}>
-                                      {a.governanceTier
-                                        ? <span style={pill(tc.bg, tc.color)}><span style={{ width: 7, height: 7, borderRadius: 4, background: tc.color }} />{tierLabel(a.governanceTier)}</span>
-                                        : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                        {a.governanceTier
+                                          ? <span style={pill(tc.bg, tc.color)}><span style={{ width: 7, height: 7, borderRadius: 4, background: tc.color }} />{tierLabel(a.governanceTier)}</span>
+                                          : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                                        <CertifiedBadge compact status={a.certificationStatus} certifiedUntil={a.certifiedUntil} />
+                                      </span>
                                     </td>
                                     <td style={{ padding: '12px 20px 12px 12px', color: 'var(--color-text-muted)', fontSize: 13 }}>{healthFor(a.healthScore)}</td>
                                   </tr>
