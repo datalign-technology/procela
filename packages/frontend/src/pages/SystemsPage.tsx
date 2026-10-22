@@ -34,6 +34,7 @@ import ScopeBadge from '../components/ScopeBadge';
 import { useScopeMembership } from '../hooks/useScopeMembership';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
+import { exportData } from '../lib/export';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
@@ -744,6 +745,51 @@ export default function SystemsPage({
           addToast('success', 'Restored.');
         },
       },
+    });
+  };
+
+  // Bulk setters (board E1): set criticality / assign owner across the
+  // selection, mirroring the per-row edits through the same PUT endpoint.
+  const bulkSetCriticality = async (level: 'HIGH' | 'MEDIUM' | 'LOW') => {
+    const ids = systems.filter((s) => sel.isSelected(s.id)).map((s) => s.id);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/systems/${id}`, { businessCriticality: level })));
+      addToast('success', `Set ${ids.length} system${ids.length === 1 ? '' : 's'} to ${level.charAt(0) + level.slice(1).toLowerCase()} criticality`);
+      sel.clear();
+      fetchData();
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to set criticality'));
+    }
+  };
+
+  const bulkAssignOwner = async (ownerPersonId: string) => {
+    const ids = systems.filter((s) => sel.isSelected(s.id)).map((s) => s.id);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/systems/${id}`, { ownerPersonId })));
+      const ownerName = peopleList.find((p) => p.id === ownerPersonId)?.name || 'selected owner';
+      addToast('success', `Assigned ${ownerName} to ${ids.length} system${ids.length === 1 ? '' : 's'}`);
+      sel.clear();
+      fetchData();
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to assign owner'));
+    }
+  };
+
+  // Export just the selected systems — same columns as the toolbar export.
+  const bulkExport = () => {
+    const chosen = systems.filter((s) => sel.isSelected(s.id));
+    if (chosen.length === 0) return;
+    exportData('csv', {
+      filenameBase: 'systems-selection',
+      sheetName: 'Systems',
+      headers: ['Name', 'Type', 'Vendor', 'Criticality', 'Connectivity', 'Connection Status', 'Owner', 'Deputy Owner', custodiansLabel, 'Description'],
+      rows: chosen.map((s) => [
+        s.name, s.systemType, s.vendor || '', s.businessCriticality || '',
+        s.connectivity ? CONNECTIVITY_LABEL[s.connectivity] : '', s.connectionStatus || '',
+        s.ownerName || '', s.deputyOwnerName || '', (s.custodianNames || []).join('; '), s.description,
+      ]),
     });
   };
 
@@ -1579,6 +1625,19 @@ export default function SystemsPage({
       )}
 
       <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Set criticality</span>
+        <BulkActionButton onClick={() => bulkSetCriticality('HIGH')}>High</BulkActionButton>
+        <BulkActionButton onClick={() => bulkSetCriticality('MEDIUM')}>Medium</BulkActionButton>
+        <BulkActionButton onClick={() => bulkSetCriticality('LOW')}>Low</BulkActionButton>
+        <select
+          aria-label="Assign owner"
+          onChange={(e) => { if (e.target.value) bulkAssignOwner(e.target.value); e.target.value = ''; }}
+          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        >
+          <option value="">Assign owner…</option>
+          {peopleList.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+        </select>
+        <BulkActionButton onClick={bulkExport}>Export</BulkActionButton>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 

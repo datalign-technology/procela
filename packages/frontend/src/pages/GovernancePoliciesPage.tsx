@@ -39,6 +39,7 @@ import { useSortedList } from '../hooks/useSortedList';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
+import { exportData } from '../lib/export';
 import { useFormValidation } from '../hooks/useFormValidation';
 
 // ── Types ──
@@ -639,6 +640,50 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
     addToast('success', `Deleted ${ids.length} polic${ids.length === 1 ? 'y' : 'ies'}`);
     sel.clear();
     fetchData();
+  };
+
+  // Bulk setters (board F8): set status / assign owner across the selection,
+  // through the same PUT the per-document editor uses.
+  const bulkSetStatus = async (status: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/governance-policies/${id}`, { status, ...(activeOrgId ? { orgId: activeOrgId } : {}) })));
+      addToast('success', `Set ${ids.length} document${ids.length === 1 ? '' : 's'} to ${status.replace(/_/g, ' ')}`);
+      sel.clear();
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Failed to set status');
+    }
+  };
+
+  const bulkAssignOwner = async (ownerAssignmentId: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/governance-policies/${id}`, { ownerAssignmentId, ...(activeOrgId ? { orgId: activeOrgId } : {}) })));
+      const ownerName = people.find((p) => p.id === ownerAssignmentId)?.name || 'selected owner';
+      addToast('success', `Assigned ${ownerName} to ${ids.length} document${ids.length === 1 ? '' : 's'}`);
+      sel.clear();
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Failed to assign owner');
+    }
+  };
+
+  // Export just the selected documents — same columns as the toolbar export.
+  const bulkExport = () => {
+    const chosen = policies.filter((p) => sel.isSelected(p.id));
+    if (chosen.length === 0) return;
+    exportData('csv', {
+      filenameBase: 'governance-documents-selection',
+      sheetName: 'Documents',
+      headers: ['Code', 'Name', 'Category', 'Status', 'Owner', 'Controls'],
+      rows: chosen.map((pol) => [
+        pol.code, pol.name, (pol.category || '').replace(/_/g, ' '),
+        (pol.status || '').replace(/_/g, ' '), pol.ownerName || '', controlsForPolicy(pol.id).length,
+      ]),
+    });
   };
 
   const controlsForPolicy = (policyId: string) => controls.filter((c) => c.policyId === policyId);
@@ -1344,6 +1389,23 @@ export default function GovernancePoliciesPage({ focusPolicyId }: { focusPolicyI
       />
 
       <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <select
+          aria-label="Set status"
+          onChange={(e) => { if (e.target.value) bulkSetStatus(e.target.value); e.target.value = ''; }}
+          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        >
+          <option value="">Set status…</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+        </select>
+        <select
+          aria-label="Assign owner"
+          onChange={(e) => { if (e.target.value) bulkAssignOwner(e.target.value); e.target.value = ''; }}
+          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        >
+          <option value="">Assign owner…</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+        </select>
+        <BulkActionButton onClick={bulkExport}>Export</BulkActionButton>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 
