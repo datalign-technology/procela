@@ -140,8 +140,6 @@ Both phases have shipped.
 
 ### Possible follow-ups (not built)
 
-- A seeded manual-Gold-but-uncertified demo asset so the Gap Detection check
-  shows a non-empty state out of the box.
 - A distinct "Certified" column in the report builder (register the fields on
   the `dataAssets` report entity).
 - The badge on the remaining relationship/graph surfaces (process↔data map,
