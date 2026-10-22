@@ -4,7 +4,7 @@ import { captureStatsSnapshot } from '../routes/dashboard';
 import { digestForOrg } from './digest.service';
 import { deliverScheduledReports } from './report-delivery.service';
 import { processNodes } from '../routes/process-catalog';
-import { dataAssets } from '../routes/data-assets';
+import { dataAssets, sweepExpiredCertifications } from '../routes/data-assets';
 import { mappings } from '../routes/mappings';
 import { organizations } from '../routes/organizations';
 import { settingsRepo } from '../stores/app-settings';
@@ -137,6 +137,18 @@ async function tick(): Promise<void> {
     }
   } catch (err) {
     logger.error({ err }, 'Scheduler: overdue sweep failed');
+  }
+
+  // Recertification sweep (runs every tick — the timer is already hourly):
+  // flag certifications past their 12-month term by opening a recert task +
+  // notifying the reviewer. Idempotent, so it's safe to run unconditionally.
+  try {
+    const recert = await sweepExpiredCertifications();
+    if (recert.flagged.length > 0) {
+      logger.info({ flagged: recert.flagged.length }, 'Scheduler: recertification sweep flagged lapsed certs');
+    }
+  } catch (err) {
+    logger.error({ err }, 'Scheduler: recertification sweep failed');
   }
 
   if (await shouldFireWeeklyDigest(Date.now())) {

@@ -1111,6 +1111,27 @@ const CERT_RECERT_MONTHS = 12;
  *  email), a stable identity for segregation of duties (person id when linked,
  *  else the auth subject), and the request/review grants — computed against the
  *  repos so RBAC is correct under both the JSON store and Prisma. */
+/** Choose who should review an asset's certification: the domain Data Owner,
+ *  then a domain-scoped DATA_OWNER role, then the org CDO / Governance Lead.
+ *  `exclude` (the requester's identity) is never returned — segregation. */
+function pickReviewerId(
+  domain: { id: string; ownerId?: string | null } | null,
+  allRoles: Array<{ roleType: string; scopeType?: string | null; scopeId?: string | null; personId: string | null }>,
+  exclude?: string | null,
+): string | null {
+  let reviewerId: string | null = domain?.ownerId || null;
+  if (!reviewerId && domain) {
+    reviewerId = allRoles.find((r) => r.roleType === 'DATA_OWNER' && r.scopeType === 'DOMAIN' && r.scopeId === domain.id)?.personId || null;
+  }
+  if (!reviewerId) {
+    reviewerId = allRoles.find((r) => r.roleType === 'CDO')?.personId
+      || allRoles.find((r) => r.roleType === 'DATA_GOVERNANCE_LEAD')?.personId
+      || null;
+  }
+  if (reviewerId && exclude && reviewerId === exclude) reviewerId = null;
+  return reviewerId;
+}
+
 async function certContext(req: Request, asset: StoredDataAsset) {
   const user = (req as AuthenticatedRequest).user;
   const email = (user?.email || '').toLowerCase();
@@ -1141,21 +1162,9 @@ async function certContext(req: Request, asset: StoredDataAsset) {
     }
   }
 
-  // Suggested reviewer to assign the certification review task to — the domain
-  // Data Owner first (closest accountable), then a domain-scoped DATA_OWNER
-  // role, then the org CDO / Governance Lead. Never the requester (segregation);
-  // null ⇒ the task/notification goes to the review queue unassigned.
-  let reviewerId: string | null = null;
-  if (domain?.ownerId) reviewerId = domain.ownerId;
-  if (!reviewerId && domain) {
-    reviewerId = allRoles.find((r) => r.roleType === 'DATA_OWNER' && r.scopeType === 'DOMAIN' && r.scopeId === domain.id)?.personId || null;
-  }
-  if (!reviewerId) {
-    reviewerId = allRoles.find((r) => r.roleType === 'CDO')?.personId
-      || allRoles.find((r) => r.roleType === 'DATA_GOVERNANCE_LEAD')?.personId
-      || null;
-  }
-  if (reviewerId && identity && reviewerId === identity) reviewerId = null; // never assign to the requester
+  // Suggested reviewer to assign the certification review task to — never the
+  // requester (segregation); null ⇒ the task/notification is unassigned.
+  const reviewerId = pickReviewerId(domain, allRoles, identity);
 
   return { user, person, isAdmin, identity, domain, canRequest, canReview, reviewerId };
 }
@@ -1219,6 +1228,76 @@ async function closeCertReviewTasks(assetId: string, outcome: 'COMPLETED' | 'CAN
     logger.error({ err, assetId }, 'Failed to resolve certification review task');
   }
 }
+
+/** Hourly sweep: a certification is a 12-month attestation. Past its
+ *  `certifiedUntil` the asset still reads "recert due" (we never silently
+ *  demote — that's an explicit revoke), but someone must act, so this opens a
+ *  recertification task + notifies the reviewer. Idempotent: it skips any
+ *  asset that already has an open recert task, so re-running each hour doesn't
+ *  pile up duplicates. Exported for the scheduler and the sweep route. */
+export async function sweepExpiredCertifications(): Promise<{ flagged: string[] }> {
+  const now = Date.now();
+  const assets = await dataAssetsRepo.list();
+  const expired = assets.filter((a) =>
+    (a.certificationStatus || 'NONE') === 'CERTIFIED'
+    && !!a.certifiedUntil && new Date(a.certifiedUntil).getTime() < now);
+  if (expired.length === 0) return { flagged: [] };
+
+  const repo = certTasksRepo();
+  const [allTasks, allDomains, allRoles] = await Promise.all([
+    repo.list() as Promise<Array<{ linkedObjectType?: string | null; linkedObjectId?: string | null; status?: string; title?: string }>>,
+    dataDomainsRepo().list(),
+    damaRolesRepo().list(),
+  ]);
+  const hasOpenRecert = (assetId: string) => allTasks.some((t) =>
+    t.linkedObjectType === 'DataAsset' && t.linkedObjectId === assetId
+    && typeof t.title === 'string' && t.title.startsWith('Recertify:')
+    && t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.status !== 'REJECTED');
+
+  const flagged: string[] = [];
+  for (const a of expired) {
+    if (hasOpenRecert(a.id)) continue;
+    const domain = allDomains.find((d) => (d.dataAssetIds || []).includes(a.id)) || null;
+    const reviewerId = pickReviewerId(domain, allRoles);
+    const lapsed = new Date(a.certifiedUntil as string).toLocaleDateString();
+    const nowIso = new Date().toISOString();
+    const due = new Date(); due.setDate(due.getDate() + 14);
+    try {
+      await repo.create({
+        id: uuid(), orgId: a.orgId,
+        title: `Recertify: ${a.name}`,
+        description: `Certification for "${a.name}" lapsed on ${lapsed}. Re-review and re-certify, or revoke.`,
+        taskType: 'REVIEW', status: 'OPEN', priority: 'MEDIUM',
+        assigneeId: reviewerId,
+        dueDate: due.toISOString(),
+        linkedObjectType: 'DataAsset', linkedObjectId: a.id,
+        automationMode: 'HUMAN', createdBy: null,
+        createdAt: nowIso, updatedAt: nowIso, completedAt: null,
+      } as never);
+      createNotification({
+        orgId: a.orgId, userId: reviewerId, type: 'WARNING',
+        title: `Recertification due: ${a.name}`,
+        message: `This asset's certification lapsed on ${lapsed}. Re-review and re-certify, or revoke.`,
+        link: `/data-assets/${a.id}`,
+      });
+      flagged.push(a.id);
+    } catch (err) {
+      logger.error({ err, assetId: a.id }, 'Failed to open recertification task');
+    }
+  }
+  return { flagged };
+}
+
+/** POST /api/v1/data-assets/certification/sweep-expired — drive the recert
+ *  sweep synchronously (admin / test / cron). Registered before /:id. */
+router.post('/certification/sweep-expired', async (req: Request, res: Response) => {
+  const user = (req as AuthenticatedRequest).user;
+  if (user?.role !== 'SUPER_ADMIN' && user?.role !== 'ORG_ADMIN') {
+    res.status(403).json({ success: false, error: 'Only an admin can run the certification sweep.' }); return;
+  }
+  const result = await sweepExpiredCertifications();
+  res.json({ success: true, data: result });
+});
 
 /** GET /api/v1/data-assets/certification-queue — assets awaiting review.
  *  Registered before /:id so the literal path isn't captured as an id. */
