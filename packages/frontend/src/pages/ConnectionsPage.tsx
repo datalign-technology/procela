@@ -1086,6 +1086,16 @@ export default function ConnectionsPage({
         onClose={() => navigate('/systems?tab=connections')}
         onEdit={(c) => navigate(`/systems?tab=connections&edit=${c.id}`)}
         onSaved={fetchData}
+        onDelete={async () => {
+          if (!confirm(`Delete connection "${conn.name}"? This can't be undone.`)) return;
+          try {
+            await apiClient.delete(`/connections/${conn.id}`);
+            addToast('success', `Deleted "${conn.name}".`);
+            navigate('/systems?tab=connections');
+          } catch (err) {
+            addToast('error', err instanceof Error ? err.message : 'Delete failed');
+          }
+        }}
       />
     );
   }
