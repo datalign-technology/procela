@@ -1,6 +1,10 @@
 # Data Asset Certification — Design
 
-Status: **MVP shipping.** Phase 2 items noted inline.
+Status: **Shipped — MVP + Phase 2.** The full workflow is live; the former
+Phase 2 items (the "Certified" badge across lists, auto review task +
+notifications on request, the hourly recertification sweep, and the Council
+scorecard + Gap Detection integration) are all in. Section 9 records what
+landed.
 
 ## 1. Problem
 
@@ -39,14 +43,14 @@ lifecycle; the tier flips to Gold only on approval, and the approval is an
 3. **Recertification: 12-month term; expiry flags, doesn't auto-demote.** Past
    `certifiedUntil` the asset reads "Recert due" (still Certified) rather than
    silently losing its badge. Demotion happens only on an explicit reject/revoke.
-   *(Phase 2: the hourly scheduler flips expired certs to a recert-due signal and
-   re-opens a task.)*
+   *(Shipped: the hourly scheduler flags expired certs with a recert-due signal
+   and re-opens a task.)*
 4. **Manual Gold stays, but only attested certs count.** Admins may still set
    `tier = GOLD` directly (migrations, imports, legacy). The scorecard, badges
    and "Certified" signals count **`certificationStatus = CERTIFIED`** (has a
    reviewer + date), so the manual path is pragmatic but doesn't inflate the
-   governance number. *(Gap Detection nudges "Gold but not certified" into the
-   flow — Phase 2.)*
+   governance number. *(Shipped: Gap Detection nudges "Gold but not certified"
+   into the flow.)*
 5. **Ship the MVP first.** Self-contained, mergeable, independently useful.
 
 ## 4. Data model (additive, nullable/defaulted — existing rows migrate clean)
@@ -105,16 +109,40 @@ stamps the fields, audits, and returns the updated asset.
   `CERTIFIED`. The readiness checklist renders inline.
 - **Reviewer queue:** a "Pending certification" attention card + filter on the
   Data Assets list (the CDO's inbox), backed by the queue endpoint.
-- **Signals (Phase 2):** a distinct "Certified" badge across lists; the attested
-  count feeds the Council scorecard and a Gap Detection "Gold but not certified"
-  check.
+- **Signals (shipped):** a distinct "Certified" / "recert due" badge across the
+  asset lists (registry, data domains, systems); the attested count feeds the
+  Council scorecard "Certified coverage" value driver and a Gap Detection "Gold
+  but not certified" check.
 
 ## 9. Phasing
 
-- **MVP (this change):** fields + request/approve/reject/revoke + RBAC +
-  segregation + audit + asset-detail actions + readiness checklist + the
-  Data-Assets pending-certification card/filter. Demo seed ships one certified
-  and one pending asset.
-- **Phase 2:** auto governance task on request + notifications; recert expiry via
-  the scheduler; Council + Gap Detection integration; "Certified" badge across
-  every list.
+Both phases have shipped.
+
+- **MVP (#979):** fields + request/approve/reject/revoke + RBAC + segregation +
+  audit + asset-detail actions + readiness checklist + the Data-Assets
+  pending-certification card/filter. Demo seed ships one certified and one
+  pending asset.
+- **Phase 2:**
+  - *Certified badge across lists (#980)* — a shared `CertifiedBadge` with a
+    green "Certified", amber "recert due", and "pending" variant, on the Data
+    Assets registry, Data Domains, and Systems detail lists (plus the asset
+    detail). Dense relationship/graph views deliberately omit it.
+  - *Review task + notifications on request (#981)* — a request opens an
+    `APPROVAL` governance task assigned to the reviewer (domain Data Owner → CDO
+    / Governance Lead) and fires a notification; approve/reject resolve the task
+    and notify the requester. Rides the existing governance-work queue + bell.
+  - *Recertification sweep (#982)* — an hourly, leader-gated scheduler job (plus
+    an admin `POST …/certification/sweep-expired`) opens a `Recertify:` task +
+    warning for certs past their term. Idempotent; never auto-demotes.
+  - *Scorecard + Gap Detection (#983)* — a "Certified coverage" value driver on
+    the Council scorecard (honours the All / Governed lens) and a "Gold but not
+    certified" Gap Detection check.
+
+### Possible follow-ups (not built)
+
+- A seeded manual-Gold-but-uncertified demo asset so the Gap Detection check
+  shows a non-empty state out of the box.
+- A distinct "Certified" column in the report builder (register the fields on
+  the `dataAssets` report entity).
+- The badge on the remaining relationship/graph surfaces (process↔data map,
+  lineage, enterprise view) if that density ever proves wanted.
