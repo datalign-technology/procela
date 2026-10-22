@@ -1,25 +1,16 @@
 # Procela Training Guide
 
-A hands-on walkthrough of Procela. The exercises below use the
-fictional **Tidewater Utilities** demo fixture that ships with the
-platform — a mid-size investor-owned utility with electric, water,
-and shared-services divisions. Every module works the same way
-against your own organization once it's loaded: same pages, same
-buttons, same expected behaviours. Swap the sample names for yours.
+A hands-on walkthrough of Procela. The exercises below use the fictional **Tidewater Utilities** demo fixture that ships with the platform — a mid-size investor-owned utility with electric, water, and shared-services divisions. Every module works the same way against your own organization once it's loaded: same pages, same buttons, same expected behaviours. Swap the sample names for yours.
 
 By the end you will have:
 
-- A populated environment with two utility divisions (electric + water)
-  and shared services
+- A populated environment with two utility divisions (electric + water) and shared services
 - Defined business processes for each division
 - Linked data assets, systems, ownership, and skills
 - Exercised every value-loop feature Procela ships with
-- Built a real cross-entity report and watched the gaps you'd care
-  about light up
+- Built a real cross-entity report and watched the gaps you'd care about light up
 
-Plan on **90 minutes** end-to-end the first time through. The setup
-phase (Module 1) is a one-time cost; modules 2–9 can be done in any
-order once setup is complete.
+Plan on **90 minutes** end-to-end the first time through. The setup phase (Module 1) is a one-time cost; modules 2–9 can be done in any order once setup is complete.
 
 ---
 
@@ -36,8 +27,7 @@ order once setup is complete.
 
 ## Module 1 — Load the data (10 min)
 
-This is the foundation. Every subsequent module assumes the org tree,
-systems, and people listed below have been imported.
+This is the foundation. Every subsequent module assumes the org tree, systems, and people listed below have been imported.
 
 ### 1.1 Organizations
 
@@ -73,18 +63,15 @@ Tidewater Utilities (company)
 
 ### 1.2 Systems
 
-1. Set the **Working in…** picker (top of every page) to **Tidewater
-   Utilities**.
+1. Set the **Working in…** picker (top of every page) to **Tidewater Utilities**.
 2. Go to **Systems** → **Import**.
 3. Paste `test-data/utility/systems.csv`. Import.
 
-You'll get ~25 systems: SCADA, GIS, CIS, AMI, hydraulic modelling,
-plus shared corporate systems (ERP, HRIS, data warehouse).
+You'll get ~25 systems: SCADA, GIS, CIS, AMI, hydraulic modelling, plus shared corporate systems (ERP, HRIS, data warehouse).
 
 ### 1.3 People
 
-People are imported **one file per department**. Set the *Working in…*
-picker for each, then import:
+People are imported **one file per department**. Set the *Working in…* picker for each, then import:
 
 | File | Scope to |
 |---|---|
@@ -114,18 +101,9 @@ picker for each, then import:
 1. Working in… **Tidewater Utilities**.
 2. **Agents** → **Import** → paste `agents.csv`.
 
-Five agents land — one of each type (AI, PIPELINE, BOT,
-SERVICE_ACCOUNT, OTHER) so you see the shape of the concept without
-being buried in owner-assignments. Extend the CSV once the model
-clicks.
+Five agents land — one of each type (AI, PIPELINE, BOT, SERVICE_ACCOUNT, OTHER) so you see the shape of the concept without being buried in owner-assignments. Extend the CSV once the model clicks.
 
-Every imported agent arrives as **Paused**. That's not a bug —
-Procela enforces a *responsible-person invariant*: an agent can only
-be Active when it has a real person assigned as accountable for its
-behaviour. Assign a Responsible Person to each row, then flip the
-Status from Paused to Active. Use these picks — they match the
-imported roster and the accountability shape you'd expect in a real
-utility:
+Every imported agent arrives as **Paused**. That's not a bug — Procela enforces a *responsible-person invariant*: an agent can only be Active when it has a real person assigned as accountable for its behaviour. Assign a Responsible Person to each row, then flip the Status from Paused to Active. Use these picks — they match the imported roster and the accountability shape you'd expect in a real utility:
 
 | Agent | Type | Responsible Person | Why this person |
 |---|---|---|---|
@@ -135,31 +113,22 @@ utility:
 | PI Historian Service Account | SERVICE_ACCOUNT | **Tobias Reinholt** (Manager OT Cybersecurity) | Non-human identity into OT/SCADA lands with OT security |
 | Compliance Report Generator | OTHER | **Isabella Rossi** (Manager Water Compliance) | NPDES/DMR filings are water-compliance owned |
 
-Try setting an agent to Active *without* picking a person first —
-the option is greyed out and the form warns you inline. That's the
-invariant in action.
+Try setting an agent to Active *without* picking a person first — the option is greyed out and the form warns you inline. That's the invariant in action.
 
-Later, if you delete or deactivate one of the people above on the
-**Organizations → People** page, every active agent they own
-auto-pauses and a governance issue opens. Look for the *"N active
-agents were auto-paused"* toast; the issues land in **Governance →
-Governance Work** with severity HIGH for a lead to pick up.
+Later, if you delete or deactivate one of the people above on the **Organizations → People** page, every active agent they own auto-pauses and a governance issue opens. Look for the *"N active agents were auto-paused"* toast; the issues land in **Governance → Governance Work** with severity HIGH for a lead to pick up.
 
 ### 1.5 Seed the skill catalog
 
 1. Navigate to **Organizations → Skills**.
 2. Click **Seed standard skills**.
 
-About 40 DAMA-aligned skills will land. The catalog feeds the qualified-
-person checks you'll exercise in Module 6.
+About 40 DAMA-aligned skills will land. The catalog feeds the qualified- person checks you'll exercise in Module 6.
 
 ### Checkpoint
 
-- Switch *Working in…* to **Tidewater Electric**. The People count in
-  the left nav should drop to electric-division staff.
+- Switch *Working in…* to **Tidewater Electric**. The People count in the left nav should drop to electric-division staff.
 - Switch to **Tidewater Water**. Same again, different roster.
-- This is **multi-tenant scoping** in action — every read filters by
-  the active org.
+- This is **multi-tenant scoping** in action — every read filters by the active org.
 
 ---
 
@@ -167,100 +136,52 @@ person checks you'll exercise in Module 6.
 
 ### 2.1 The Working in… picker
 
-Top of every page. This is the single most important control in
-Procela. It scopes *everything* — what you see, what you can edit,
-what AI runs against. Spend a minute switching between **Tidewater
-Utilities**, **Tidewater Electric**, and **Tidewater Water** and
-watching the Dashboard recompute.
+Top of every page. This is the single most important control in Procela. It scopes *everything* — what you see, what you can edit, what AI runs against. Spend a minute switching between **Tidewater Utilities**, **Tidewater Electric**, and **Tidewater Water** and watching the Dashboard recompute.
 
 ### 2.2 Dashboard
 
-The Dashboard is **you-scoped** — it shows your own work and the health
-of the domains and assets you own or steward, not an org-wide rollup.
-(You need a People record with your email for it to populate.)
+The Dashboard is **you-scoped** — it shows your own work and the health of the domains and assets you own or steward, not an org-wide rollup. (You need a People record with your email for it to populate.)
 
 The top **My Dashboard** row is your act-now view, split two ways:
 
-- **Needs Attention** — the triage queue: overdue tasks, critical
-  issues, overdue policy reviews, and low-health domains you own, each
-  linking to where it's handled.
-- **Schedule** — the next 14 days: calendar events plus upcoming task
-  and review due dates, bucketed *Today / This week / Later*.
+- **Needs Attention** — the triage queue: overdue tasks, critical issues, overdue policy reviews, and low-health domains you own, each linking to where it's handled.
+- **Schedule** — the next 14 days: calendar events plus upcoming task and review due dates, bucketed *Today / This week / Later*.
 
 Beneath it, each as its own section:
 
-- **Tasks** / **Issues** — the top items assigned to you. Each list
-  header carries the open count, an *overdue* chip when any are late,
-  and an inline **weekly-trend sparkline** (▲/▼ delta; down is green —
-  fewer open is better), then a *View all* link into Governance Work.
+- **Tasks** / **Issues** — the top items assigned to you. Each list header carries the open count, an *overdue* chip when any are late, and an inline **weekly-trend sparkline** (▲/▼ delta; down is green — fewer open is better), then a *View all* link into Governance Work.
 - **Domains** — the data domains you own or steward, as a card grid.
-- **Portfolio Health** — the tier mix (Certified / Managed /
-  Uncertified) and a health gauge for the assets in your domains.
-- **Coverage** — the mapping / governance / ownership share of your
-  assets.
+- **Portfolio Health** — the tier mix (Certified / Managed / Uncertified) and a health gauge for the assets in your domains.
+- **Coverage** — the mapping / governance / ownership share of your assets.
 
-**Make it yours.** Click **Customize** to reorder each section
-(arrows), set its width **Half** (two-up, tighter) or **Full** (own
-row), and show/hide it. The layout is saved automatically per browser;
-**Reset to Default** restores the shipped importance-ordered
-arrangement. The one "do" button — **Run Wizard** — sits in the page
-header (when AI features are on); the org-wide reads that used to live
-on the Dashboard (Overview KPIs, Governance Posture, Catalog Shape,
-Program Maturity, Skill Gaps) now live on their own pages — Insights →
-Enterprise View, Gap Detection, and the Council page.
+**Make it yours.** Click **Customize** to reorder each section (arrows), set its width **Half** (two-up, tighter) or **Full** (own row), and show/hide it. The layout is saved automatically per browser; **Reset to Default** restores the shipped importance-ordered arrangement. The one "do" button — **Run Wizard** — sits in the page header (when AI features are on); the org-wide reads that used to live on the Dashboard (Overview KPIs, Governance Posture, Catalog Shape, Program Maturity, Skill Gaps) now live on their own pages — Insights → Enterprise View, Gap Detection, and the Council page.
 
 ### 2.3 The org tree
 
-Open **Organizations → Structure**. The visualization shows the full
-hierarchy you imported. Click any node — counts on the right pane
-recompute, drill into a division or department to see its people.
+Open **Organizations → Structure**. The visualization shows the full hierarchy you imported. Click any node — counts on the right pane recompute, drill into a division or department to see its people.
 
 ### 2.4 People
 
-Open **Organizations → People** with *Working in…* set to **Tidewater
-Electric**. You should see the electric-division roster only. Try:
+Open **Organizations → People** with *Working in…* set to **Tidewater Electric**. You should see the electric-division roster only. Try:
 
-- The **Skill** filter (top toolbar) — narrow to everyone who holds a
-  given competency
-- The **Skill gaps** column (right side) — currently `—` for everyone
-  because activities don't have required-skill data yet. We'll come
-  back to this in Module 6.
+- The **Skill** filter (top toolbar) — narrow to everyone who holds a given competency
+- The **Skill gaps** column (right side) — currently `—` for everyone because activities don't have required-skill data yet. We'll come back to this in Module 6.
 
 ### 2.5 Where to start
 
-There's no separate setup wizard or "Get Started" page — you build
-Procela by working the left nav directly, in roughly this order:
+There's no separate setup wizard or "Get Started" page — you build Procela by working the left nav directly, in roughly this order:
 
-1. **Organizations** — set up your company / division / team tree and
-   add your people.
-2. **Processes** — map your value streams, processes, sub-processes and
-   activities in the Process Catalog. This is the spine everything else
-   hangs off, so it's the natural first move; a brand-new org's
-   Dashboard points you straight here.
-3. **Systems & Data** — register the systems that hold data and the
-   data assets themselves, and organize assets into data domains.
-4. **Connect & assign** — link data assets to the activities that use
-   them, and give everything an owner. Gap Detection surfaces what's
-   still unmapped or ownerless.
-5. **Governance → Foundation** — define the program's scope, guiding
-   principles, and operating model.
+1. **Organizations** — set up your company / division / team tree and add your people.
+2. **Processes** — map your value streams, processes, sub-processes and activities in the Process Catalog. This is the spine everything else hangs off, so it's the natural first move; a brand-new org's Dashboard points you straight here.
+3. **Systems & Data** — register the systems that hold data and the data assets themselves, and organize assets into data domains.
+4. **Connect & assign** — link data assets to the activities that use them, and give everything an owner. Gap Detection surfaces what's still unmapped or ownerless.
+5. **Governance → Foundation** — define the program's scope, guiding principles, and operating model.
 
-There is **no program lifecycle to manage** — a governance program is
-simply *live* once its Foundation is defined. There's no launch, pause,
-or complete step, and no separate Governance Program page (the old
-`/governance-program` URL redirects to Foundation). Nothing is gated by
-a setup checklist; each step just fills in more of the Dashboard,
-Scorecard, and Gap Detection.
+There is **no program lifecycle to manage** — a governance program is simply *live* once its Foundation is defined. There's no launch, pause, or complete step, and no separate Governance Program page (the old `/governance-program` URL redirects to Foundation). Nothing is gated by a setup checklist; each step just fills in more of the Dashboard, Scorecard, and Gap Detection.
 
 ### 2.6 Where's Help?
 
-The Help button lives in the **top bar next to Ask AI**, not in
-the sidebar. Clicking it opens the guide in a popup window so
-you keep whatever page you were on. The Training Guide follows
-the same pattern, and a **Status & roadmap ↗** button on the Help
-guide's header opens the live status & roadmap doc — rendered from
-`docs/STATUS.md`, the single source of truth. Direct-URL deep
-links (like `/help#connectors` and `/roadmap`) still resolve.
+The Help button lives in the **top bar next to Ask AI**, not in the sidebar. Clicking it opens the guide in a popup window so you keep whatever page you were on. The Training Guide follows the same pattern, and a **Status & roadmap ↗** button on the Help guide's header opens the live status & roadmap doc — rendered from `docs/STATUS.md`, the single source of truth. Direct-URL deep links (like `/help#connectors` and `/roadmap`) still resolve.
 
 ---
 
@@ -270,100 +191,62 @@ links (like `/help#connectors` and `/roadmap`) still resolve.
 
 1. *Working in…* → **Tidewater Electric**.
 2. Navigate to **Processes** → click the wand (**Generate processes**).
-3. Procela calls Claude with the active org context. After 10–30
-   seconds, a preview hierarchy appears.
-4. Review: you should see electric-utility value streams — Outage
-   Management, Generation, Transmission & Distribution, Customer
-   Operations, Regulatory Compliance.
+3. Procela calls Claude with the active org context. After 10–30 seconds, a preview hierarchy appears.
+4. Review: you should see electric-utility value streams — Outage Management, Generation, Transmission & Distribution, Customer Operations, Regulatory Compliance.
 5. Click **Apply**.
 
 ### 3.2 Same wand, different division
 
 1. Switch *Working in…* → **Tidewater Water**.
 2. **Processes** → wand again.
-3. Different output: Water Treatment, Distribution, Wastewater
-   Operations, Customer Operations.
+3. Different output: Water Treatment, Distribution, Wastewater Operations, Customer Operations.
 
-That's the active-org context driving Claude differently — same code
-path, different result. The first run for each (industry + org) pair
-hits Claude live; subsequent runs return the cached result instantly.
-The badge on the review screen says *Specialised: <Org>*.
+That's the active-org context driving Claude differently — same code path, different result. The first run for each (industry + org) pair hits Claude live; subsequent runs return the cached result instantly. The badge on the review screen says *Specialised: <Org>*.
 
 ### 3.3 Walk the catalog
 
 With *Working in…* on **Tidewater Electric**:
 
-- The catalog is a **two-pane** layout: a navigation tree on the left,
-  the selected record's detail on the right. Use the caret (or **Expand
-  All**) to open a value stream → process → sub-process → activity in
-  the nav.
-- **Click an Activity row** in the left nav. Its record opens in the
-  **detail pane on the right**, with level-specific fields: Owner,
-  Responsible Role, Responsible Person, Systems, Required Skills,
-  Inputs/Outputs, Status, Frequency, Risk Level. Each nav row carries a
-  status dot and a required-fields completeness read-out (`✓` / `N/M` /
-  an amber ⚠ when Active but incomplete); the **filter pills** above the
-  nav (All levels / Active / Draft / Incomplete / Mine) and the **Needs
-  Attention** summary below it help you find what to work on.
-- Concrete example — on an **Outage Management → Outage triage**
-  activity, set:
+- The catalog is a **two-pane** layout: a navigation tree on the left, the selected record's detail on the right. Use the caret (or **Expand All**) to open a value stream → process → sub-process → activity in the nav.
+- **Click an Activity row** in the left nav. Its record opens in the **detail pane on the right**, with level-specific fields: Owner, Responsible Role, Responsible Person, Systems, Required Skills, Inputs/Outputs, Status, Frequency, Risk Level. Each nav row carries a status dot and a required-fields completeness read-out (`✓` / `N/M` / an amber ⚠ when Active but incomplete); the **filter pills** above the nav (All levels / Active / Draft / Incomplete / Mine) and the **Needs Attention** summary below it help you find what to work on.
+- Concrete example — on an **Outage Management → Outage triage** activity, set:
   - **Responsible Role** = `System Operator Lead`
-  - **Responsible Person** = **Melissa Patel** (System Operator
-    Lead, T&D) — search "Melissa" in the picker
-  - **Owner** = **Harold Lindstrom** (Manager Distribution Control
-    Center)
+  - **Responsible Person** = **Melissa Patel** (System Operator Lead, T&D) — search "Melissa" in the picker
+  - **Owner** = **Harold Lindstrom** (Manager Distribution Control Center)
   - **Systems** = SCADA + OMS
   - Save.
-- The **Status lifecycle** is Draft → Active → Deprecated. Click the
-  status pill to advance it — leave this one on Active.
+- The **Status lifecycle** is Draft → Active → Deprecated. Click the status pill to advance it — leave this one on Active.
 
 ### 3.4 Inputs / Outputs panel
 
-On the same activity, click **+ Add Input** in the I/O panel. The
-segmented picker has three tabs:
+On the same activity, click **+ Add Input** in the I/O panel. The segmented picker has three tabs:
 
 - **Data Asset** — operational data this activity consumes
-- **Governance Document** — a charter / policy / standard the activity
-  references
+- **Governance Document** — a charter / policy / standard the activity references
 - **Attachment** — uploaded file or URL
 
 Try adding a Data Asset (we'll create some in Module 4).
 
 ### 3.5 Dependencies
 
-Expand any **Activity** in the catalog and scroll to the
-**Dependencies** panel — two columns, *Predecessors* and
-*Successors*. This is where you declare "what has to run before
-this activity" and "what this activity unblocks."
+Expand any **Activity** in the catalog and scroll to the **Dependencies** panel — two columns, *Predecessors* and *Successors*. This is where you declare "what has to run before this activity" and "what this activity unblocks."
 
-Try it on the **Outage Management → Outage triage** activity from
-Module 3.3:
+Try it on the **Outage Management → Outage triage** activity from Module 3.3:
 
-1. Add a Predecessor: *Field crew dispatched* (or the closest
-   preceding activity the wand generated).
+1. Add a Predecessor: *Field crew dispatched* (or the closest preceding activity the wand generated).
 2. Add a Successor: *Customer notification sent*.
 
 Watch what the platform enforces:
 
-- **Cycles are blocked.** Try adding *Customer notification sent*
-  as a Predecessor of *Outage triage* — Procela rejects it with
-  *"Adding this flow would create a cycle. Use a LOOP-type flow if
-  the cycle is intentional."*
-- **Cross-value-stream warnings.** Adding an activity from a
-  different value stream tags the row with a small amber
-  `CROSS-STREAM` chip — legal (some dependencies really do cross
-  streams), but usually a wrong pick.
-- **Delete cascades.** When you delete an activity, every
-  dependency edge touching it goes with it. No dangling references.
+- **Cycles are blocked.** Try adding *Customer notification sent* as a Predecessor of *Outage triage* — Procela rejects it with *"Adding this flow would create a cycle. Use a LOOP-type flow if the cycle is intentional."*
+- **Cross-value-stream warnings.** Adding an activity from a different value stream tags the row with a small amber `CROSS-STREAM` chip — legal (some dependencies really do cross streams), but usually a wrong pick.
+- **Delete cascades.** When you delete an activity, every dependency edge touching it goes with it. No dangling references.
 
-The compact `←N →M` chip on collapsed activity rows in the tree
-shows incoming/outgoing counts at a glance.
+The compact `←N →M` chip on collapsed activity rows in the tree shows incoming/outgoing counts at a glance.
 
 ### 3.6 BCM + measurable-target attributes
 
-Switch the tree view to **Advanced** (top of the Process Catalog).
-Several extra fields appear on each Activity, right below Automation
-and Estimated Duration:
+Switch the tree view to **Advanced** (top of the Process Catalog). Several extra fields appear on each Activity, right below Automation and Estimated Duration:
 
 | Field | What it's for | Try on *Outage triage* |
 |---|---|---|
@@ -374,128 +257,55 @@ and Estimated Duration:
 | **Volume** | Processing scale / throughput — Frequency is cadence, this is *how much* | *~200 outages/yr* |
 | **Target / SLA** | Measurable target / SLA (this one field absorbed the former separate *Success Measure* and *SLA Target*) | *Field crew on site within 30 min; P95 30 min from detection* |
 
-Then scroll one more field down to **Controls** — a multi-select
-tied to the controls you defined on **Governance → Documents**. If
-you haven't defined any controls yet, the picker reads *"Define
-controls on Governance Documents first"* — a small hint pointing
-you to the right page rather than leaving you guessing.
+Then scroll one more field down to **Controls** — a multi-select tied to the controls you defined on **Governance → Documents**. If you haven't defined any controls yet, the picker reads *"Define controls on Governance Documents first"* — a small hint pointing you to the right page rather than leaving you guessing.
 
-Add one control if you have any defined (e.g. NERC CIP-007 R2.1
-from your Governance seed). Delete that control later on Governance
-Documents and watch this picker — the chip disappears
-automatically. No dangling references.
+Add one control if you have any defined (e.g. NERC CIP-007 R2.1 from your Governance seed). Delete that control later on Governance Documents and watch this picker — the chip disappears automatically. No dangling references.
 
-Activities also carry free-form **Compliance tags** (SOX, HIPAA,
-GDPR, …). The *set you can pick from* is curated per tenant under
-**Settings → Data → Compliance frameworks**, so each org tags
-against the frameworks it actually answers to — add your own, or
-reset to the built-in list. (For the tighter policy↔execution loop,
-prefer Controls above; Compliance tags are the lightweight label.)
+Activities also carry free-form **Compliance tags** (SOX, HIPAA, GDPR, …). The *set you can pick from* is curated per tenant under **Settings → Data → Compliance frameworks**, so each org tags against the frameworks it actually answers to — add your own, or reset to the built-in list. (For the tighter policy↔execution loop, prefer Controls above; Compliance tags are the lightweight label.)
 
-Why this matters: a regulator asking *"what's the RTO and RPO for
-outage triage?"* now gets a real answer from the platform — recovery
-speed and tolerable data loss as a pair, the way a BCM/DR plan states
-them. Dashboards can group activities by criticalityTier. And the
-Controls link closes
-the loop between a policy definition and the concrete work that
-implements it — the reverse view (which activities implement this
-control?) is available from Governance Documents.
+Why this matters: a regulator asking *"what's the RTO and RPO for outage triage?"* now gets a real answer from the platform — recovery speed and tolerable data loss as a pair, the way a BCM/DR plan states them. Dashboards can group activities by criticalityTier. And the Controls link closes the loop between a policy definition and the concrete work that implements it — the reverse view (which activities implement this control?) is available from Governance Documents.
 
 ### 3.7 Change-management review workflow
 
-For enterprise buyers, "who approved this?" isn't optional. Switch
-your org into review mode and watch the workflow appear:
+For enterprise buyers, "who approved this?" isn't optional. Switch your org into review mode and watch the workflow appear:
 
-1. Go to **Settings → Process & Asset Lifecycle**. The picker is a
-   three-way segmented control: **Simple** (default), **Review**,
-   **Advanced**. Click **Review** and confirm the switch.
-2. Back on the Process Catalog, find an **Active** activity (e.g.
-   *Outage triage*) and change its status pill to **Draft** — you'll
-   need to make it draft to trigger a change cycle.
+1. Go to **Settings → Process & Asset Lifecycle**. The picker is a three-way segmented control: **Simple** (default), **Review**, **Advanced**. Click **Review** and confirm the switch.
+2. Back on the Process Catalog, find an **Active** activity (e.g. *Outage triage*) and change its status pill to **Draft** — you'll need to make it draft to trigger a change cycle.
 3. Edit any field (say, bump the RTO from 4 to 2 hours).
-4. Click the status pill again — the only option is **Pending
-   Review**. Pick it. A yellow banner drops with a text box asking
-   *"What are you changing?"* Type "Tightened RTO after Q3
-   incident review" and click **Submit for review**.
-5. Watch the status pill change to **Pending Review** and a yellow
-   banner appear on the row: *"Pending review — submitted by
-   Melissa Patel · 2 min ago"* with your comment underneath.
-6. Open the notifications bell — a new item lands:
-   *"Change submitted for review: Outage triage"*.
+4. Click the status pill again — the only option is **Pending Review**. Pick it. A yellow banner drops with a text box asking *"What are you changing?"* Type "Tightened RTO after Q3 incident review" and click **Submit for review**.
+5. Watch the status pill change to **Pending Review** and a yellow banner appear on the row: *"Pending review — submitted by Melissa Patel · 2 min ago"* with your comment underneath.
+6. Open the notifications bell — a new item lands: *"Change submitted for review: Outage triage"*.
 
-Now switch to a different user (e.g. Harold Lindstrom, Melissa's
-manager) and act as reviewer:
+Now switch to a different user (e.g. Harold Lindstrom, Melissa's manager) and act as reviewer:
 
-7. Open the same activity and click the status pill. Two options:
-   **Active** (approve) and **Draft** (request changes). Pick
-   **Active** → a comment box appears; type *"Approved — noted the
-   incident postmortem"* → click **Approve**. Status flips to
-   **Active**.
-8. Sign back in as Melissa — the bell shows *"Change approved:
-   Outage triage"*.
+7. Open the same activity and click the status pill. Two options: **Active** (approve) and **Draft** (request changes). Pick **Active** → a comment box appears; type *"Approved — noted the incident postmortem"* → click **Approve**. Status flips to **Active**.
+8. Sign back in as Melissa — the bell shows *"Change approved: Outage triage"*.
 
 Two things Procela enforces you'll want to demo:
 
-- **Segregation of duties.** Sign in as Melissa (the submitter) and
-  try to approve her own submission — the platform blocks it with
-  *"The submitter cannot approve their own change. A different
-  reviewer must sign off."* She can still **Request changes** on
-  her own submission (self-withdrawal).
-- **Fresh cycle after rejection.** If a reviewer requests changes,
-  Melissa's next Submit for review starts clean — the earlier
-  reviewer's decision doesn't carry over, so nothing looks
-  pre-approved that isn't.
+- **Segregation of duties.** Sign in as Melissa (the submitter) and try to approve her own submission — the platform blocks it with *"The submitter cannot approve their own change. A different reviewer must sign off."* She can still **Request changes** on her own submission (self-withdrawal).
+- **Fresh cycle after rejection.** If a reviewer requests changes, Melissa's next Submit for review starts clean — the earlier reviewer's decision doesn't carry over, so nothing looks pre-approved that isn't.
 
-Switch back to **Simple** mode when you're done to keep the rest
-of the training uncluttered — the migration confirmation dialog
-walks any Pending Review rows back to Draft.
+Switch back to **Simple** mode when you're done to keep the rest of the training uncluttered — the migration confirmation dialog walks any Pending Review rows back to Draft.
 
-**Require fields before activation (optional).** The same **Settings →
-Process & Asset Lifecycle** screen has an *Activation policy* toggle. Set
-it to **Enforced** and Procela won't let a node go **Active** (or
-**Approved**, under review mode) while any required field is blank —
-the status change is refused with the list of what's missing, so the
-required-field dots in the catalog become a real gate rather than a hint.
-Leave it **Advisory** (the default) to keep them informational. The
-policy resolves up the org tree, so setting it on the company applies to
-every division.
+**Require fields before activation (optional).** The same **Settings → Process & Asset Lifecycle** screen has an *Activation policy* toggle. Set it to **Enforced** and Procela won't let a node go **Active** (or **Approved**, under review mode) while any required field is blank — the status change is refused with the list of what's missing, so the required-field dots in the catalog become a real gate rather than a hint. Leave it **Advisory** (the default) to keep them informational. The policy resolves up the org tree, so setting it on the company applies to every division.
 
 ### 3.8 Phase 3 suggestion panels
 
-Scroll past the I/O panel on an expanded activity. You'll see three
-"Suggested…" cards: **Suggested data assets**, **Suggested systems**,
-and **Suggested people**. Procela ranks candidates against the
-activity's name, description, declared systems, and required skills.
-Each row carries a High / Medium / Low confidence chip and a one-line
-rationale ("Same system as the step (SAP)", "Has 2 of 2 required
-skills").
+Scroll past the I/O panel on an expanded activity. You'll see three "Suggested…" cards: **Suggested data assets**, **Suggested systems**, and **Suggested people**. Procela ranks candidates against the activity's name, description, declared systems, and required skills. Each row carries a High / Medium / Low confidence chip and a one-line rationale ("Same system as the step (SAP)", "Has 2 of 2 required skills").
 
-- **Accept** wires the candidate into the right slot in one click
-  (asset → adds a mapping; system → appended to the step's systems;
-  person → assigned as Responsible).
-- **Dismiss** tells Procela not to suggest this candidate again for
-  this step. The decision persists across sessions (learning loop).
-- Panels hide themselves when nothing scores above threshold — fully
-  mapped activities don't accumulate dead UI.
+- **Accept** wires the candidate into the right slot in one click (asset → adds a mapping; system → appended to the step's systems; person → assigned as Responsible).
+- **Dismiss** tells Procela not to suggest this candidate again for this step. The decision persists across sessions (learning loop).
+- Panels hide themselves when nothing scores above threshold — fully mapped activities don't accumulate dead UI.
 
 We'll come back to this in Module 5 once we have assets to map.
 
 ### 3.9 Visualize & compare value streams
 
-The Process Catalog toolbar has two read-only views worth knowing — the
-payoff of having generated both Electric and Water in 3.1–3.2:
+The Process Catalog toolbar has two read-only views worth knowing — the payoff of having generated both Electric and Water in 3.1–3.2:
 
-1. Click **Visualize**. The whole catalog renders as a full-page,
-   zoomable Value Stream → Process → Activity diagram, with the
-   dependency arrows you drew in 3.5 shown between activities. Use the
-   zoom controls to fit it, then **Print** — the app chrome drops away so
-   it exports as a clean PDF for a slide or a wall.
-2. Back on the catalog, click **Compare**. Pick two value streams — try
-   an **Electric** one against a **Water** one. Their hierarchies render
-   side by side, colour-coded: **green** for steps unique to the left
-   stream, **blue** for unique to the right, neutral for steps common to
-   both. It's the fastest way to see where two divisions' processes
-   genuinely diverge versus where they're just re-labelled copies.
+1. Click **Visualize**. The whole catalog renders as a full-page, zoomable Value Stream → Process → Activity diagram, with the dependency arrows you drew in 3.5 shown between activities. Use the zoom controls to fit it, then **Print** — the app chrome drops away so it exports as a clean PDF for a slide or a wall.
+2. Back on the catalog, click **Compare**. Pick two value streams — try an **Electric** one against a **Water** one. Their hierarchies render side by side, colour-coded: **green** for steps unique to the left stream, **blue** for unique to the right, neutral for steps common to both. It's the fastest way to see where two divisions' processes genuinely diverge versus where they're just re-labelled copies.
 
 ---
 
@@ -505,10 +315,7 @@ payoff of having generated both Electric and Water in 3.1–3.2:
 
 1. *Working in…* → **Tidewater Electric**.
 2. **Data Assets** page → **+ Add data asset**.
-3. Create these four — the *Domain* column is which Data Domain
-   you'll assign each to once you create the domains in step 4.3.
-   The *Owner Override* column tells you which assets need a
-   specific person (leave blank to inherit the domain owner):
+3. Create these four — the *Domain* column is which Data Domain you'll assign each to once you create the domains in step 4.3. The *Owner Override* column tells you which assets need a specific person (leave blank to inherit the domain owner):
 
 | Name | Description | Data Type | Trust Level | Domain | Owner Override |
 |---|---|---|---|---|---|
@@ -517,32 +324,15 @@ payoff of having generated both Electric and Water in 3.1–3.2:
 | Meter Reads | AMI 15-min interval consumption | Operational | Silver | Operational Data | **Andre Ferguson** (Manager Billing & Revenue) — revenue owns the billed reads even though the data lives in Operational |
 | Generation Output | Plant-level MWh by hour | Operational | Bronze | Operational Data | **Deborah Kwon** (Data Steward Generation) — as override Owner because Generation is a separate accountability line from T&D |
 
-4. Assign Owners and Stewards using the person picker — but only
-   when the asset needs someone different from the domain's default.
-   By default, an asset inherits its Owner and Stewards from its
-   Data Domain. Look under the Owner picker: if you leave it empty
-   and the domain has an owner assigned, you'll see a hint reading
-   *"Inherits from domain — <person>"*. The row still renders with
-   the domain's owner as the effective one. Same for Stewards.
-   Pick a specific person only when the asset has its own
-   accountable person (regulatory scope, cross-functional dataset,
-   delegation) — the hint switches to *"Overrides domain (…) —
-   Reset to domain owner"*. In the table above, only Meter Reads
-   and Generation Output override the domain owner — the other two
-   inherit cleanly. Set the Domain first in step 4.3 below.
+4. Assign Owners and Stewards using the person picker — but only when the asset needs someone different from the domain's default. By default, an asset inherits its Owner and Stewards from its Data Domain. Look under the Owner picker: if you leave it empty and the domain has an owner assigned, you'll see a hint reading *"Inherits from domain — <person>"*. The row still renders with the domain's owner as the effective one. Same for Stewards. Pick a specific person only when the asset has its own accountable person (regulatory scope, cross-functional dataset, delegation) — the hint switches to *"Overrides domain (…) — Reset to domain owner"*. In the table above, only Meter Reads and Generation Output override the domain owner — the other two inherit cleanly. Set the Domain first in step 4.3 below.
 
 ### 4.2 Connect Assets to Systems
 
-In each asset's edit form, set **System of Record** (e.g. Outage Logs
-→ SCADA; Customer Master → CIS; Meter Reads → AMI). This is how
-Procela knows which system carries the canonical copy.
+In each asset's edit form, set **System of Record** (e.g. Outage Logs → SCADA; Customer Master → CIS; Meter Reads → AMI). This is how Procela knows which system carries the canonical copy.
 
 ### 4.3 Data Domains
 
-1. **Data Domains** page → create three domains with these exact
-   owners and stewards — each pick matches a real person on the
-   imported roster and matches how a mid-sized utility organises
-   accountability:
+1. **Data Domains** page → create three domains with these exact owners and stewards — each pick matches a real person on the imported roster and matches how a mid-sized utility organises accountability:
 
 | Domain | Owner | Steward(s) |
 |---|---|---|
@@ -550,65 +340,23 @@ Procela knows which system carries the canonical copy.
 | Operational Data | **Jennifer Vasquez** (Director Transmission & Distribution Ops) | **Brandon Willis** (Data Steward Grid Operations) + **Deborah Kwon** (Data Steward Generation) |
 | Regulatory Data | **Lorraine Kimura** (Director Regulatory Affairs) | **Phillip Rosenberg** (Data Steward Compliance Evidence) |
 
-   While you're here, set **Criticality** on each domain — mark
-   *Customer Data* and *Regulatory Data* as **Tier-1 (critical)** and
-   leave *Operational Data* at a lower tier. Tier-1 is what the Council
-   Scorecard (Module 10.4) measures for coverage, so this flag is what
-   makes a domain count toward the enterprise report card.
+   While you're here, set **Criticality** on each domain — mark *Customer Data* and *Regulatory Data* as **Tier-1 (critical)** and leave *Operational Data* at a lower tier. Tier-1 is what the Council Scorecard (Module 10.4) measures for coverage, so this flag is what makes a domain count toward the enterprise report card.
 
-2. Go back to each asset from step 4.1 and assign it to its domain.
-   Watch the Owner picker on **Outage Logs** and **Customer Master**
-   — the hint reads *"Inherits from domain — Jennifer Vasquez"* and
-   *"Inherits from domain — Devon Kershaw"* respectively. That's
-   the inheritance model doing its job: two assets, zero explicit
-   owner assignments, still accountable.
+2. Go back to each asset from step 4.1 and assign it to its domain. Watch the Owner picker on **Outage Logs** and **Customer Master** — the hint reads *"Inherits from domain — Jennifer Vasquez"* and *"Inherits from domain — Devon Kershaw"* respectively. That's the inheritance model doing its job: two assets, zero explicit owner assignments, still accountable.
 
-3. On **Meter Reads** and **Generation Output**, pick the override
-   owners from the 4.1 table. The hint switches to *"Overrides
-   domain — Reset to domain owner"* — a one-click undo if you
-   change your mind.
+3. On **Meter Reads** and **Generation Output**, pick the override owners from the 4.1 table. The hint switches to *"Overrides domain — Reset to domain owner"* — a one-click undo if you change your mind.
 
-**Navigating the domain tree.** The left index nests each parent
-domain with its sub-domains indented beneath it. Once you've added
-sub-domains (or generated them with *Suggest sub-domains*), each
-parent with children shows a **▾/▸ caret** — click it to fold that
-branch, or use **Collapse all / Expand all** at the top of the index
-to tame a long catalog. The fold state is remembered per
-organization. Long domain and sub-domain names clip to one line and
-reveal the full label on hover, so the rows stay a uniform height.
-When you use the *Generate domains* wand, its review tree lets you
-edit, add, or drop rows **and move a sub-domain to a different parent**
-(a *Move to…* picker on each sub-domain row) before you apply — so a
-misfiled sub-domain is a one-click reparent, not a delete-and-re-add.
+**Navigating the domain tree.** The left index nests each parent domain with its sub-domains indented beneath it. Once you've added sub-domains (or generated them with *Suggest sub-domains*), each parent with children shows a **▾/▸ caret** — click it to fold that branch, or use **Collapse all / Expand all** at the top of the index to tame a long catalog. The fold state is remembered per organization. Long domain and sub-domain names clip to one line and reveal the full label on hover, so the rows stay a uniform height. When you use the *Generate domains* wand, its review tree lets you edit, add, or drop rows **and move a sub-domain to a different parent** (a *Move to…* picker on each sub-domain row) before you apply — so a misfiled sub-domain is a one-click reparent, not a delete-and-re-add.
 
 The domain assignments feed the Governance Groups page in Module 8.
 
 ### 4.4 The Data Asset 360 view — Sensitivity + Impact
 
-Click any asset in the list to open the **Data Asset 360** modal.
-Two panels there are worth pausing on because they're the ones a
-steward reaches for during a real change:
+Click any asset in the list to open the **Data Asset 360** modal. Two panels there are worth pausing on because they're the ones a steward reaches for during a real change:
 
-**Sensitivity — Suggest & Review.** Click *Suggest sensitivity
-tags* on the Sensitivity chip row. Procela AI reads the asset's
-name + description and proposes tags (PII, PHI, PCI, FINANCIAL,
-CREDENTIAL, CONFIDENTIAL, PUBLIC) with a confidence label. Each
-suggestion has its own **Accept / Reject** button — you don't
-have to swallow all of them or none. Rejected tags stay
-rejected across re-runs so a subsequent *Suggest* doesn't re-
-propose the same thing. Try it on **Customer Master** — the
-AI reliably suggests PII on the account/address content.
+**Sensitivity — Suggest & Review.** Click *Suggest sensitivity tags* on the Sensitivity chip row. Procela AI reads the asset's name + description and proposes tags (PII, PHI, PCI, FINANCIAL, CREDENTIAL, CONFIDENTIAL, PUBLIC) with a confidence label. Each suggestion has its own **Accept / Reject** button — you don't have to swallow all of them or none. Rejected tags stay rejected across re-runs so a subsequent *Suggest* doesn't re- propose the same thing. Try it on **Customer Master** — the AI reliably suggests PII on the account/address content.
 
-**Impact analysis — "If this asset changes, what breaks?"** The
-*Impact* panel below the Sensitivity row runs
-`GET /data-assets/:id/impact` and returns four counts: how many
-activities consume the asset, how many processes those roll up
-to, how many value streams that touches, and how many people
-need to be told. The **Notify** list expands to a per-person
-row — each entry shows *why* they'd be notified (Owner on
-Outage triage, Domain steward for Customer Data, etc.). Use
-this before deprecating a system or retiring a field: the
-Notify list is your change-comms distribution list.
+**Impact analysis — "If this asset changes, what breaks?"** The *Impact* panel below the Sensitivity row runs `GET /data-assets/:id/impact` and returns four counts: how many activities consume the asset, how many processes those roll up to, how many value streams that touches, and how many people need to be told. The **Notify** list expands to a per-person row — each entry shows *why* they'd be notified (Owner on Outage triage, Domain steward for Customer Data, etc.). Use this before deprecating a system or retiring a field: the Notify list is your change-comms distribution list.
 
 ### 4.5 How real Data Assets arrive in production
 
@@ -636,35 +384,23 @@ Try it on the Tidewater fixture: **Meter Reads** is seeded PENDING_REVIEW — si
 
 ### 5.1 Inline mapping on the catalog
 
-The day-to-day mapping workflow is **inside the Process Catalog**, not
-on the Mappings page.
+The day-to-day mapping workflow is **inside the Process Catalog**, not on the Mappings page.
 
-1. Open the **Outage Management → Outage triage** activity — the
-   one Melissa Patel is Responsible for from Module 3.3.
-2. In the **Inputs / Outputs** panel, click **+ Add Input** → tab
-   *Data Asset* → pick *Outage Logs*.
-3. Add an output: **+ Add Output** → *Customer Master* (the activity
-   updates the customer record with the outage event).
-4. Repeat with two more mappings to give the map in step 5.4
-   something to draw:
-   - **Meter Reading → Interval read ingest** (or the closest
-     activity the wand generated) → **Input: Meter Reads**
-   - **Customer Onboarding → Account creation** (or equivalent) →
-     **Output: Customer Master**
+1. Open the **Outage Management → Outage triage** activity — the one Melissa Patel is Responsible for from Module 3.3.
+2. In the **Inputs / Outputs** panel, click **+ Add Input** → tab *Data Asset* → pick *Outage Logs*.
+3. Add an output: **+ Add Output** → *Customer Master* (the activity updates the customer record with the outage event).
+4. Repeat with two more mappings to give the map in step 5.4 something to draw:
+   - **Meter Reading → Interval read ingest** (or the closest activity the wand generated) → **Input: Meter Reads**
+   - **Customer Onboarding → Account creation** (or equivalent) → **Output: Customer Master**
 
 ### 5.2 Cross-process review
 
-1. Navigate to **Insights → Explore → Process ↔ Data Map** and stay on the
-   **Table** view (the default — the Visual toggle is 5.4). There's no separate
-   "Data Mapping" item any more; the old `/mappings` link redirects here.
+1. Navigate to **Insights → Explore → Process ↔ Data Map** and stay on the **Table** view (the default — the Visual toggle is 5.4). There's no separate "Data Mapping" item any more; the old `/mappings` link redirects here.
 2. You'll see your mappings as a flat audit list. Three column highlights:
-   - **Process Activity** — full breadcrumb (Value Stream → Process →
-     Activity)
-   - **Target** — typed tag (ASSET / DOCUMENT / ATTACHMENT) plus the
-     target name and sub-detail
+   - **Process Activity** — full breadcrumb (Value Stream → Process → Activity)
+   - **Target** — typed tag (ASSET / DOCUMENT / ATTACHMENT) plus the target name and sub-detail
    - **Link Type** — `INPUT` / `OUTPUT` / `REFERENCE`
-3. Try the **Batch Mapping Wizard** (top action) — matrix interface
-   for creating many mappings at once.
+3. Try the **Batch Mapping Wizard** (top action) — matrix interface for creating many mappings at once.
 
 ### 5.3 Cross-division warning
 
@@ -673,87 +409,48 @@ This is the moment most platforms fail silently. Try this:
 1. Working in… **Tidewater Water**.
 2. Open a Water activity (e.g. *Water Quality Sampling*).
 3. Add an input — try picking *Outage Logs* (an Electric asset).
-4. Procela warns: *"Outage Logs is owned by Tidewater Electric, but
-   Water Quality Sampling sits in Tidewater Water. Cross-division
-   links usually mean the wrong target was picked — pick again, or
-   confirm if this is genuinely a shared dependency."*
+4. Procela warns: *"Outage Logs is owned by Tidewater Electric, but Water Quality Sampling sits in Tidewater Water. Cross-division links usually mean the wrong target was picked — pick again, or confirm if this is genuinely a shared dependency."*
 
-Cancel out. The default is **warn, not block** — confirming creates
-the link normally.
+Cancel out. The default is **warn, not block** — confirming creates the link normally.
 
 ### 5.4 The Process ↔ Data map (visualization)
 
-Now that you have a few mappings, switch the **Process ↔ Data Map** page
-to its **Visual** view (the Table view from 5.2 and this picture are two
-toggles on one page — same data, different read: the table is the audit
-list, this is the picture).
-You'll see a bipartite SVG: activities on the left grouped
-by parent process, mapped data assets on the right grouped by system,
-and a coloured curve for every mapping — green for produces, blue for
-consumes, purple for transforms.
+Now that you have a few mappings, switch the **Process ↔ Data Map** page to its **Visual** view (the Table view from 5.2 and this picture are two toggles on one page — same data, different read: the table is the audit list, this is the picture). You'll see a bipartite SVG: activities on the left grouped by parent process, mapped data assets on the right grouped by system, and a coloured curve for every mapping — green for produces, blue for consumes, purple for transforms.
 
-- The header reads `N activities · N mapped assets · N mappings ·
-  M/N activities have at least one mapping`. Watch that ratio as you
-  add mappings — that's your coverage in one number.
-- Click an activity. Connected rows stay bright; the rest fade. The
-  Clear focus button appears above the legend. Click an asset and
-  the reverse holds — you see every step that touches it.
-- Use the System filter to answer "what processes use SCADA" in two
-  clicks.
+- The header reads `N activities · N mapped assets · N mappings · M/N activities have at least one mapping`. Watch that ratio as you add mappings — that's your coverage in one number.
+- Click an activity. Connected rows stay bright; the rest fade. The Clear focus button appears above the legend. Click an asset and the reverse holds — you see every step that touches it.
+- Use the System filter to answer "what processes use SCADA" in two clicks.
 
 This is the live view of what Module 5.2 audits in table form.
 
 ### 5.5 Phase 3 suggestion accept (loop closure)
 
-Back on the Process Catalog, expand an activity that doesn't yet have
-all its mappings. The **Suggested data assets** panel (from Module
-3.5) should now offer the assets we created. Click **Accept** on a
-high-confidence row — Procela adds the mapping, the suggestion
-disappears, and the Process ↔ Data Map (Module 5.4) gains a new
-edge. Refresh the map page if you want to see it.
+Back on the Process Catalog, expand an activity that doesn't yet have all its mappings. The **Suggested data assets** panel (from Module 3.5) should now offer the assets we created. Click **Accept** on a high-confidence row — Procela adds the mapping, the suggestion disappears, and the Process ↔ Data Map (Module 5.4) gains a new edge. Refresh the map page if you want to see it.
 
 ### 5.6 Enterprise View — the whole graph + impact analysis
 
-The Process ↔ Data Map (5.4) shows activities against assets. **Insights
-→ Explore → Enterprise View** zooms out to the full picture in one
-pane — value streams, processes, systems, data assets and the people who
-own them, all in a single diagram with a depth control to drill in or
-pull back.
+The Process ↔ Data Map (5.4) shows activities against assets. **Insights → Explore → Enterprise View** zooms out to the full picture in one pane — value streams, processes, systems, data assets and the people who own them, all in a single diagram with a depth control to drill in or pull back.
 
-Its payoff is **impact analysis**: click a node — say the **SCADA**
-system — and Procela highlights everything connected to it, answering
-"if we deprecate SCADA, what processes and data does that hit?" without
-tracing the graph by hand. This is the single-pane view a CDO or an
-architect opens to reason about blast radius before a change.
+Its payoff is **impact analysis**: click a node — say the **SCADA** system — and Procela highlights everything connected to it, answering "if we deprecate SCADA, what processes and data does that hit?" without tracing the graph by hand. This is the single-pane view a CDO or an architect opens to reason about blast radius before a change.
 
 ---
 
 ## Module 6 — Exercise the skill value-loops (15 min)
 
-The four cross-page workflows that turn the Skills catalog from data
-into something operational. All four are exercised below.
+The four cross-page workflows that turn the Skills catalog from data into something operational. All four are exercised below.
 
 ### 6.1 Tag activities with required skills
 
-1. Back on the **Outage triage** activity from Module 3.3 / 5.1.
-   In the right panel, **Required Skills** is a multi-select.
-2. Add these three: `Anomaly Detection`, `Stakeholder Management`,
-   `Incident Response`.
-3. Notice the amber chip that appears next to the picker:
-   ***Responsible person lacks N required skills*** — Melissa Patel
-   (the Responsible Person) doesn't hold these yet. This is the
-   **qualified-person check**.
+1. Back on the **Outage triage** activity from Module 3.3 / 5.1. In the right panel, **Required Skills** is a multi-select.
+2. Add these three: `Anomaly Detection`, `Stakeholder Management`, `Incident Response`.
+3. Notice the amber chip that appears next to the picker: ***Responsible person lacks N required skills*** — Melissa Patel (the Responsible Person) doesn't hold these yet. This is the **qualified-person check**.
 
 ### 6.2 Skills on people
 
 1. *Organizations → People* with *Working in…* = **Tidewater Electric**.
 2. Click **Melissa Patel** to open her detail.
-3. In the Skills panel, add `Anomaly Detection` and `Incident
-   Response` — leave `Stakeholder Management` off on purpose.
-4. Return to the Outage triage activity — the amber chip should
-   now read ***lacks 1 required skill*** instead of 3. Hover for
-   the tooltip that names the missing one (`Stakeholder
-   Management`).
+3. In the Skills panel, add `Anomaly Detection` and `Incident Response` — leave `Stakeholder Management` off on purpose.
+4. Return to the Outage triage activity — the amber chip should now read ***lacks 1 required skill*** instead of 3. Hover for the tooltip that names the missing one (`Stakeholder Management`).
 
 ### 6.3 Find people by skill
 
@@ -763,27 +460,17 @@ into something operational. All four are exercised below.
 
 ### 6.4 Skill gaps column
 
-Now the **Skill gaps** column on the People table is meaningful — it
-shows the number of activities each person is responsible for that
-require a skill they don't hold. Hover a number for the tooltip with
-sample activity names.
+Now the **Skill gaps** column on the People table is meaningful — it shows the number of activities each person is responsible for that require a skill they don't hold. Hover a number for the tooltip with sample activity names.
 
 ### 6.5 Role recommendations
 
-1. Click any DAMA role chip anywhere in the app (try **Governance →
-   Roles** → click *Data Owner*).
-2. The Role Detail drawer opens. Below "Skills typically needed" is
-   **Best-matching people** — ranked by how many of the role's
-   required skills each person already holds.
-3. Click a row → jumps to that person's profile. Useful for filling
-   unfilled roles.
+1. Click any DAMA role chip anywhere in the app (try **Governance → Roles** → click *Data Owner*).
+2. The Role Detail drawer opens. Below "Skills typically needed" is **Best-matching people** — ranked by how many of the role's required skills each person already holds.
+3. Click a row → jumps to that person's profile. Useful for filling unfilled roles.
 
 ### 6.6 Skill-gap report on the dashboard
 
-Back to Dashboard. The **Skill Gaps** widget ranks the org's most
-under-staffed required skills. Red = zero coverage (critical), amber
-= tight, green = healthy. The link **Find people by skill →** jumps to
-the People page.
+Back to Dashboard. The **Skill Gaps** widget ranks the org's most under-staffed required skills. Red = zero coverage (critical), amber = tight, green = healthy. The link **Find people by skill →** jumps to the People page.
 
 ---
 
@@ -792,89 +479,59 @@ the People page.
 ### 7.1 Governance Roles
 
 1. **Governance → Roles** → **Assignments tab**.
-2. Expand a category (Executive / Business / Technical) using the
-   chevron. Note the **Expand all / Collapse all** controls at the
-   top.
-3. Click **CDO** (unfilled) → use the inline **+ Assign** → pick
-   Susan Chen (from the executives import). Save.
+2. Expand a category (Executive / Business / Technical) using the chevron. Note the **Expand all / Collapse all** controls at the top.
+3. Click **CDO** (unfilled) → use the inline **+ Assign** → pick Susan Chen (from the executives import). Save.
 4. Try the same for *Data Governance Lead* → Marisol Hadid.
-5. Open the **Role Detail drawer** by clicking the *CDO* badge —
-   you'll see the role definition, required skills, currently-held by,
-   and best-matching people.
+5. Open the **Role Detail drawer** by clicking the *CDO* badge — you'll see the role definition, required skills, currently-held by, and best-matching people.
 
 ### 7.2 Per-division Data Owners
 
 1. *Working in…* → **Tidewater Electric**.
 2. **Governance → Roles** → click **Data Owner** in the sidebar.
 3. **+ Assign** → Devon Kershaw, scope = **Tidewater Electric**.
-4. Repeat for Tidewater Water (Yusuf Bashir) and Shared Services
-   (Camille Petersen).
+4. Repeat for Tidewater Water (Yusuf Bashir) and Shared Services (Camille Petersen).
 
-Data Owner is intentionally **per-division** in this fixture; one
-person isn't responsible for the whole enterprise's data.
+Data Owner is intentionally **per-division** in this fixture; one person isn't responsible for the whole enterprise's data.
 
-After assigning, notice each holder row shows a small kind tag next
-to their scope: `ORG: Tidewater Electric` (indigo), or `DOMAIN:
-Customer Data` (green) if you scoped them to a domain instead, or
-`SYSTEM` / `ASSET` for entity-attached roles like System Owner.
-Any holder row whose tag reads `UNKNOWN: unresolved` (amber) means
-the scoped entity has been deleted — the same dangling-reference
-signal you'll see on the Process ↔ Data Map page (Table view).
+After assigning, notice each holder row shows a small kind tag next to their scope: `ORG: Tidewater Electric` (indigo), or `DOMAIN: Customer Data` (green) if you scoped them to a domain instead, or `SYSTEM` / `ASSET` for entity-attached roles like System Owner. Any holder row whose tag reads `UNKNOWN: unresolved` (amber) means the scoped entity has been deleted — the same dangling-reference signal you'll see on the Process ↔ Data Map page (Table view).
 
 ### 7.3 Domain coverage check
 
-Scroll down to a domain-scoped role card (Data Owner, Data Steward,
-Data Architect, etc.). Each card has a footer panel:
+Scroll down to a domain-scoped role card (Data Owner, Data Steward, Data Architect, etc.). Each card has a footer panel:
 
 > **UNFILLED FOR 2 DOMAINS**
 >   [Operational Data] [Regulatory Data]
 
-That's every data domain in the org that has no holder of this
-role scoped to it. Pair it with the inline holder list above
-(`Devon Kershaw — DOMAIN: Customer Data`) and you can read the
-coverage gap end-to-end without leaving the page.
+That's every data domain in the org that has no holder of this role scoped to it. Pair it with the inline holder list above (`Devon Kershaw — DOMAIN: Customer Data`) and you can read the coverage gap end-to-end without leaving the page.
 
-To exercise this: assign the same trio you used in Module 4.3 as
-Data Owner (scope = domain):
+To exercise this: assign the same trio you used in Module 4.3 as Data Owner (scope = domain):
 
 - *Customer Data* → **Devon Kershaw**
 - *Operational Data* → **Jennifer Vasquez**
 - *Regulatory Data* → **Lorraine Kimura**
 
-Each chip should move out of the amber *Unfilled* panel into the
-holder list, and the sub-line under each name lists the domain
-they own. The Data Domains page and the DAMA-role assignment are
-two views on the same accountability — keeping them aligned is
-what closes the coverage gap.
+Each chip should move out of the amber *Unfilled* panel into the holder list, and the sub-line under each name lists the domain they own. The Data Domains page and the DAMA-role assignment are two views on the same accountability — keeping them aligned is what closes the coverage gap.
 
 ### 7.4 Governance Groups
 
 1. *Working in…* → **Tidewater Utilities**.
 2. **Governance → Groups** → click **Generate standard structure**.
-3. The DAMA hierarchy lands: Council → Office → Committee →
-   Stewardship → Working Groups → Communities of Practice.
+3. The DAMA hierarchy lands: Council → Office → Committee → Stewardship → Working Groups → Communities of Practice.
 4. Click the **Data Governance Committee**.
-5. The **Expected Roles** panel shows the roles the group should have.
-   Notice for domain-scoped roles (Data Owner, Domain Owner, Data
-   Steward, Domain Steward, Data Architect) a sub-line under each
-   holder lists their owned/stewarded domains, or `no data domains
-   assigned` in red if they have none.
+5. The **Expected Roles** panel shows the roles the group should have. Notice for domain-scoped roles (Data Owner, Domain Owner, Data Steward, Domain Steward, Data Architect) a sub-line under each holder lists their owned/stewarded domains, or `no data domains assigned` in red if they have none.
 
 ### 7.5 RACI Matrix
 
 1. **Governance → Roles** → **RACI Matrix tab**.
-2. The matrix is auto-derived from your role assignments and
-   ownership data.
+2. The matrix is auto-derived from your role assignments and ownership data.
 3. Click any cell to cycle R → A → C → I → clear as a manual override.
-4. Look for **validation warnings** — rule violations (no R, no A,
-   multiple A's) surface inline.
+4. Look for **validation warnings** — rule violations (no R, no A, multiple A's) surface inline.
 
 ---
 
 ## Module 8 — Build a real report (10 min)
 
-The Report Builder (shipped recently). This is where you produce real
-artifacts for stakeholders.
+The Report Builder (shipped recently). This is where you produce real artifacts for stakeholders.
 
 ### 8.1 First report: Activities by Risk
 
@@ -883,15 +540,10 @@ artifacts for stakeholders.
 3. **Columns**: tick `Name`, `Level`, `Status`, `Risk Level`.
 4. Under **Joined fields → Responsible Person**: tick `Name`.
 5. Under **Joined fields → Required Skills**: tick `Name`.
-6. **Filters**: add → field = `Level`, op = `equals`, value =
-   `ACTIVITY`.
+6. **Filters**: add → field = `Level`, op = `equals`, value = `ACTIVITY`.
 7. **Sort**: Risk Level descending.
 8. The preview pane refreshes live (350 ms after each edit).
-9. **Name**: *Activities by Risk*, **Description**: *All electric +
-   water activities ranked by risk*. **Folder**: leave it in the
-   shared **Public** folder so the whole org can see it (a report's
-   folder is what drives its audience — a shared folder means
-   org-visible; "No folder" keeps it private to you).
+9. **Name**: *Activities by Risk*, **Description**: *All electric + water activities ranked by risk*. **Folder**: leave it in the shared **Public** folder so the whole org can see it (a report's folder is what drives its audience — a shared folder means org-visible; "No folder" keeps it private to you).
 10. Save.
 
 ### 8.2 Second report: Data Assets without Owners
@@ -906,29 +558,15 @@ artifacts for stakeholders.
 
 ### 8.3 Run, export, and schedule a saved report
 
-Back on **Insights → Review → Reports**, each saved report on the list
-has its own **Run & export** menu. Open the one on *Activities by Risk*
-and pick a format — CSV, Excel, JSON, PDF, or copy to clipboard. Procela
-runs the report against live data and downloads the rows in one step,
-without reopening the Builder.
+Back on **Insights → Review → Reports**, each saved report on the list has its own **Run & export** menu. Open the one on *Activities by Risk* and pick a format — CSV, Excel, JSON, PDF, or copy to clipboard. Procela runs the report against live data and downloads the rows in one step, without reopening the Builder.
 
-Notice the row now shows a **Last run … · N rows** line — running a saved
-report records it, so the catalog tells you when each report was last
-executed and how big the result was.
+Notice the row now shows a **Last run … · N rows** line — running a saved report records it, so the catalog tells you when each report was last executed and how big the result was.
 
-For a recurring report, open it in the Builder and turn on **Email this
-report weekly**, then add a recipient address. On the weekly sweep Procela
-emails the rendered report as a CSV attachment; the catalog marks it with
-a **WEEKLY EMAIL** badge. (Delivery needs SMTP configured for the
-deployment — without it the schedule is saved but nothing is sent.)
+For a recurring report, open it in the Builder and turn on **Email this report weekly**, then add a recipient address. On the weekly sweep Procela emails the rendered report as a CSV attachment; the catalog marks it with a **WEEKLY EMAIL** badge. (Delivery needs SMTP configured for the deployment — without it the schedule is saved but nothing is sent.)
 
 ### 8.4 What just happened
 
-Every Report Builder report reads from the same **Logical Data Model**
-(LDM) that the in-app pickers expose. When Procela later moves to
-Postgres, the same LDM will translate to database views that Power BI
-/ Tableau / Cognos can connect to with standard SQL credentials. The
-business model is the source of truth on both paths.
+Every Report Builder report reads from the same **Logical Data Model** (LDM) that the in-app pickers expose. When Procela later moves to Postgres, the same LDM will translate to database views that Power BI / Tableau / Cognos can connect to with standard SQL credentials. The business model is the source of truth on both paths.
 
 ---
 
@@ -939,84 +577,34 @@ business model is the source of truth on both paths.
 **Insights → Review → Gap Detection** surfaces:
 
 - **Unmapped activities** — activities with no data link
-- **Ungoverned assets** — assets below Silver / Gold tier supporting
-  critical processes
-- **Ungoverned columns** — a column an asset is bound to (it carries a
-  physical source) but with no quality rule — coverage you claimed but
-  never measure
-- **Gold but not certified** — assets flagged Gold tier with no
-  certification attestation (manual Gold, or legacy imports) — the nudge
-  to run them through the certification workflow (Module 4.6)
+- **Ungoverned assets** — assets below Silver / Gold tier supporting critical processes
+- **Ungoverned columns** — a column an asset is bound to (it carries a physical source) but with no quality rule — coverage you claimed but never measure
+- **Gold but not certified** — assets flagged Gold tier with no certification attestation (manual Gold, or legacy imports) — the nudge to run them through the certification workflow (Module 4.6)
 - **Ownerless items** — entities with no owner assigned
 
 Each gap clicks through to the item where you can resolve it.
 
-**Tip — narrow to what you actually govern.** If a governance program
-scope is defined (Governance → Foundation), the **All / In-scope** toggle
-in the header restricts the gaps to the entities the program governs, so
-"gaps" reads as "the work we committed to", not "everything catalogued".
-A note under the toggle confirms what it narrowed to — or, if no scope is
-set yet, that it's still showing everything and links you to define one.
+**Tip — narrow to what you actually govern.** If a governance program scope is defined (Governance → Foundation), the **All / In-scope** toggle in the header restricts the gaps to the entities the program governs, so "gaps" reads as "the work we committed to", not "everything catalogued". A note under the toggle confirms what it narrowed to — or, if no scope is set yet, that it's still showing everything and links you to define one.
 
-**Tip — work the coverage gap on the asset list.** The **Data Assets**
-page has a rules filter (*Has rules* / *No rules* / *Rules but
-unmeasured*, each with a live count). *No rules* is the same DQ-coverage
-gap Gap Detection surfaces, but filterable right on the registry;
-*Rules but unmeasured* catches the sneakier case — assets that *look*
-governed but where no rule has produced a real measured result yet, so
-their **health reads 0%** (health is earned from measured quality) and
-they're flagged *Est* in the filter. Point a connector (or a CSV upload)
-at those next.
+**Tip — work the coverage gap on the asset list.** The **Data Assets** page has a rules filter (*Has rules* / *No rules* / *Rules but unmeasured*, each with a live count). *No rules* is the same DQ-coverage gap Gap Detection surfaces, but filterable right on the registry; *Rules but unmeasured* catches the sneakier case — assets that *look* governed but where no rule has produced a real measured result yet, so their **health reads 0%** (health is earned from measured quality) and they're flagged *Est* in the filter. Point a connector (or a CSV upload) at those next.
 
 ### 9.2 Orphan mappings
 
-If you regenerated the process hierarchy in Module 3 (or deleted
-activities), the **Process ↔ Data Map** page (Table view) may show an
-orphan banner: *"N orphan mappings found"*. Click **Delete all orphans**
-to clean them.
+If you regenerated the process hierarchy in Module 3 (or deleted activities), the **Process ↔ Data Map** page (Table view) may show an orphan banner: *"N orphan mappings found"*. Click **Delete all orphans** to clean them.
 
 ### 9.3 Unmapped assets (reverse view)
 
-Different orphan, same page as your assets. On **Data → Data Assets**,
-set the **Mapping** filter to **Unmapped** — this folded in the old
-*Orphan Assets* page (`/data-assets?mapping=unmapped`, and the old link
-redirects here). It lists data assets that exist in the catalog but no
-process step references them — "what data do we have that nobody's
-using?". Each row's Unmapped badge links nowhere new; edit the asset to
-retire it or map it to a step that should be using it. The Dashboard's
-Governance Gaps card surfaces the count too.
+Different orphan, same page as your assets. On **Data → Data Assets**, set the **Mapping** filter to **Unmapped** — this folded in the old *Orphan Assets* page (`/data-assets?mapping=unmapped`, and the old link redirects here). It lists data assets that exist in the catalog but no process step references them — "what data do we have that nobody's using?". Each row's Unmapped badge links nowhere new; edit the asset to retire it or map it to a step that should be using it. The Dashboard's Governance Gaps card surfaces the count too.
 
-This is the reverse of the forward Discover loop (Suggested data
-assets from Module 3.5): forward asks "what data supports this
-step?", reverse asks "what step should use this asset?".
+This is the reverse of the forward Discover loop (Suggested data assets from Module 3.5): forward asks "what data supports this step?", reverse asks "what step should use this asset?".
 
 ### 9.4 Skill Gaps revisited
 
-Dashboard → **Skill Gaps** should now show real values now that
-activities have required-skill data and people have skills.
+Dashboard → **Skill Gaps** should now show real values now that activities have required-skill data and people have skills.
 
 ### 9.5 Data Quality auto-issues
 
-The **Quality** tab on **Data → Data Assets** (the old *Data Quality*
-page folded in here — `/data-assets?tab=quality`, and the old link
-redirects) lists rules per asset/column. When you add a
-rule, the *Column* picker (populated from the asset's columns) lets you
-target one specific column — the bound set — or the asset as a whole.
-Both the Quality and Rules tabs have a free-text search box, so you can
-find an asset by name or a rule by rule name / asset / column. Set a
-rule's *Frequency* to Hourly / Daily / Weekly and it runs
-automatically — no cron, no external orchestrator. When a run
-transitions a rule to FAILING, Procela auto-creates a
-governance issue (severity HIGH), assigns it to the domain
-steward, and pings the assignee via the notification bell.
-Beyond rule failures, a discovered asset whose **column set
-changes between scans** raises its own auto-resolving
-**SCHEMA_DRIFT** issue the same way — so schema drift and a
-sudden row-count drop are tracked, not silent.
-When the rule recovers, the same issue auto-resolves. The
-end-to-end shape: define the rule once, walk away, and the
-platform does the rest — see the Data Quality section of the
-Help Guide for the full mechanics.
+The **Quality** tab on **Data → Data Assets** (the old *Data Quality* page folded in here — `/data-assets?tab=quality`, and the old link redirects) lists rules per asset/column. When you add a rule, the *Column* picker (populated from the asset's columns) lets you target one specific column — the bound set — or the asset as a whole. Both the Quality and Rules tabs have a free-text search box, so you can find an asset by name or a rule by rule name / asset / column. Set a rule's *Frequency* to Hourly / Daily / Weekly and it runs automatically — no cron, no external orchestrator. When a run transitions a rule to FAILING, Procela auto-creates a governance issue (severity HIGH), assigns it to the domain steward, and pings the assignee via the notification bell. Beyond rule failures, a discovered asset whose **column set changes between scans** raises its own auto-resolving **SCHEMA_DRIFT** issue the same way — so schema drift and a sudden row-count drop are tracked, not silent. When the rule recovers, the same issue auto-resolves. The end-to-end shape: define the rule once, walk away, and the platform does the rest — see the Data Quality section of the Help Guide for the full mechanics.
 
 ### 9.6 Cross-page coherence
 
@@ -1024,8 +612,7 @@ Test this end-to-end:
 
 1. From the Dashboard's **Coverage** section, click the mapping row.
 2. You land on the Process ↔ Data Map with the unmapped-activity banner.
-3. Click an unmapped activity → drops you into Process Catalog on
-   that node.
+3. Click an unmapped activity → drops you into Process Catalog on that node.
 4. Add a data-asset input from the panel.
 5. Return to the Process ↔ Data Map → the count went down by one.
 
@@ -1038,207 +625,71 @@ The same data, different views — that's the Procela model.
 ### 10.1 Generate governance processes
 
 1. *Working in…* → **Tidewater Utilities** (parent company).
-2. **Processes** → **Generate governance processes** (a separate wand
-   from the operational one). It opens the **Process Wizard** in
-   governance mode — the same Review & Apply screen the operational
-   wizard uses, but pre-loaded with the standard framework instead of
-   an AI generation.
-3. Review the hierarchy, then click **Apply … to Catalog**. It creates
-   a *governance* value stream alongside the operational ones —
-   **Data Governance Management**, with six processes (Data Strategy &
-   Policy, Data Quality Management, Data Domain Management, Metadata &
-   Catalog Management, Data Access & Security, Issue & Change
-   Management) and their 30 DAMA-aligned activities.
+2. **Processes** → **Generate governance processes** (a separate wand from the operational one). It opens the **Process Wizard** in governance mode — the same Review & Apply screen the operational wizard uses, but pre-loaded with the standard framework instead of an AI generation.
+3. Review the hierarchy, then click **Apply … to Catalog**. It creates a *governance* value stream alongside the operational ones — **Data Governance Management**, with six processes (Data Strategy & Policy, Data Quality Management, Data Domain Management, Metadata & Catalog Management, Data Access & Security, Issue & Change Management) and their 30 DAMA-aligned activities.
 
-Now switch **Working in…** back to **Tidewater Electric**. Notice
-two things: the governance value stream you just created
-*doesn't appear* on the division's Process Catalog, and the
-**Generate governance processes** wand is not visible on this
-scope either. Both are by design: enterprise governance is one
-program for the whole org tree, so a division shouldn't be able
-to see it in its catalog counts *or* be able to accidentally
-create its own. Switch back up to Tidewater Utilities whenever
-you need to touch the enterprise governance program.
+Now switch **Working in…** back to **Tidewater Electric**. Notice two things: the governance value stream you just created *doesn't appear* on the division's Process Catalog, and the **Generate governance processes** wand is not visible on this scope either. Both are by design: enterprise governance is one program for the whole org tree, so a division shouldn't be able to see it in its catalog counts *or* be able to accidentally create its own. Switch back up to Tidewater Utilities whenever you need to touch the enterprise governance program.
 
 ### 10.2 Governance Documents
 
 1. **Governance → Documents**.
-2. The seed includes a **Charter** (CHA-001), **Data Policies**
-   (POL-001), **Data Standards** (STD-001), and a few starter
-   documents.
-3. Add controls to a Policy: expand the row → controls panel. Each
-   control has a type (Preventive / Detective / Corrective) and an
-   automation mode (Human / Agent / Hybrid).
+2. The seed includes a **Charter** (CHA-001), **Data Policies** (POL-001), **Data Standards** (STD-001), and a few starter documents.
+3. Add controls to a Policy: expand the row → controls panel. Each control has a type (Preventive / Detective / Corrective) and an automation mode (Human / Agent / Hybrid).
 
 ### 10.3 Governance Foundation
 
-The governance program has **no page of its own and no lifecycle to
-manage** — it is simply *live* once its Foundation is defined. There's no
-launch, pause, or complete step, and no phase tracker: governance is a
-continuous discipline, not a project with a start and end button. (The old
-`/governance-program` URL redirects to **Governance → Foundation**.)
+The governance program has **no page of its own and no lifecycle to manage** — it is simply *live* once its Foundation is defined. There's no launch, pause, or complete step, and no phase tracker: governance is a continuous discipline, not a project with a start and end button. (The old `/governance-program` URL redirects to **Governance → Foundation**.)
 
-Its scope, guiding principles, and operating model are authored on
-**Governance → Foundation**. Progress against the program is read directly
-from your catalog — on the Dashboard, the Council Scorecard (10.4), and Gap
-Detection (9.1) — rather than a launch flag or a phase checklist.
+Its scope, guiding principles, and operating model are authored on **Governance → Foundation**. Progress against the program is read directly from your catalog — on the Dashboard, the Council Scorecard (10.4), and Gap Detection (9.1) — rather than a launch flag or a phase checklist.
 
-**Scope is the "governed vs connected" boundary — and it's load-bearing.**
-On the Foundation **Scope** tab you don't just write prose: you pick the
-catalogued entities the program governs (systems, data domains, value
-streams), fine-tune the edges with include/exclude overrides, and read a
-live coverage read-out plus a "connected, not governed" backlog. That
-choice resolves to a concrete governed set that the rest of Procela treats
-as a lens: the **All / In-scope** toggle on Gap Detection (Module 9.1), an
-**All / Governed** lens on the Council page (10.4) and the Dashboard,
-per-row **"in scope / not governed"** badges on Data Assets, Systems, Data
-Domains, and the Process Catalog, and context for the AI assistant. A
-**scope version** is stamped whenever the governed set changes, so scorecard
-snapshots taken at different times stay comparable. It's an advisory
-view/coverage lens, not access control — and with no scope defined,
-everything is governed by default, so nothing is hidden until you choose to
-narrow.
+**Scope is the "governed vs connected" boundary — and it's load-bearing.** On the Foundation **Scope** tab you don't just write prose: you pick the catalogued entities the program governs (systems, data domains, value streams), fine-tune the edges with include/exclude overrides, and read a live coverage read-out plus a "connected, not governed" backlog. That choice resolves to a concrete governed set that the rest of Procela treats as a lens: the **All / In-scope** toggle on Gap Detection (Module 9.1), an **All / Governed** lens on the Council page (10.4) and the Dashboard, per-row **"in scope / not governed"** badges on Data Assets, Systems, Data Domains, and the Process Catalog, and context for the AI assistant. A **scope version** is stamped whenever the governed set changes, so scorecard snapshots taken at different times stay comparable. It's an advisory view/coverage lens, not access control — and with no scope defined, everything is governed by default, so nothing is hidden until you choose to narrow.
 
 ### 10.4 Council — scorecard, briefing & exceptions
 
-**Insights → Review → Council** is the governance council's home. It's
-one page now: a pre-meeting **briefing bar** across the top (the
-council roster + the next scheduled meeting) over the monthly
-**scorecard** grid, its ROI value story, a maturity trend, and what
-needs a decision. (The former Council Dashboard and Council Scorecard
-were merged; `/council-dashboard` and `/council-scorecard` redirect
-here.) Its page-header actions carry a **Print** icon, the **All /
-Governed** lens, a **Versions ▾** menu for past snapshots, and **Save
-snapshot**.
+**Insights → Review → Council** is the governance council's home. It's one page now: a pre-meeting **briefing bar** across the top (the council roster + the next scheduled meeting) over the monthly **scorecard** grid, its ROI value story, a maturity trend, and what needs a decision. (The former Council Dashboard and Council Scorecard were merged; `/council-dashboard` and `/council-scorecard` redirect here.) Its page-header actions carry a **Print** icon, the **All / Governed** lens, a **Versions ▾** menu for past snapshots, and **Save snapshot**.
 
-The **scorecard** is the monthly report card a governance council
-reads: each child
-division reports four measures — Tier-1 domain coverage, asset
-classification, open issues over 30 days, and exceptions past expiry —
-and they roll up to a true **Enterprise** total (computed across the
-whole subtree, not an average). Open it now and you'll see the two
-domains you flagged Tier-1 in Module 4.3 driving the coverage number,
-plus two auto-drafted narratives ("What moved this month", "For the
-council").
+The **scorecard** is the monthly report card a governance council reads: each child division reports four measures — Tier-1 domain coverage, asset classification, open issues over 30 days, and exceptions past expiry — and they roll up to a true **Enterprise** total (computed across the whole subtree, not an average). Open it now and you'll see the two domains you flagged Tier-1 in Module 4.3 driving the coverage number, plus two auto-drafted narratives ("What moved this month", "For the council").
 
-1. As a **CDO** or **Data Governance Lead** (or an org admin), click
-   **Edit** — every derived cell becomes editable and you can override
-   any measure or rewrite a narrative. An overridden cell keeps the
-   machine value underneath and is marked, so the council can see what
-   was adjusted; **Reset** puts it back to derived.
-2. Click **Save snapshot** to freeze this month as an immutable
-   version — one click from the read-only view, or **Publish snapshot**
-   from inside Edit. If a snapshot for this period already exists,
-   Procela asks whether to **Replace existing** (overwrite that version
-   in place) or **Save as a new snapshot** (keep both as separate dated
-   versions). The **Versions ▾** menu in the page header reopens any
-   past month read-only — that's your historical reference for how
-   governance moved quarter over quarter.
+1. As a **CDO** or **Data Governance Lead** (or an org admin), click **Edit** — every derived cell becomes editable and you can override any measure or rewrite a narrative. An overridden cell keeps the machine value underneath and is marked, so the council can see what was adjusted; **Reset** puts it back to derived.
+2. Click **Save snapshot** to freeze this month as an immutable version — one click from the read-only view, or **Publish snapshot** from inside Edit. If a snapshot for this period already exists, Procela asks whether to **Replace existing** (overwrite that version in place) or **Save as a new snapshot** (keep both as separate dated versions). The **Versions ▾** menu in the page header reopens any past month read-only — that's your historical reference for how governance moved quarter over quarter.
 
-A division with nothing to assess yet — no governed domains, no
-classified assets, and no open issues or exceptions — shows a neutral
-**No data** status rather than being flagged **Behind**, so an
-un-started division doesn't read as a failing one.
+A division with nothing to assess yet — no governed domains, no classified assets, and no open issues or exceptions — shows a neutral **No data** status rather than being flagged **Behind**, so an un-started division doesn't read as a failing one.
 
-The four thresholds the scorecard grades against (coverage %,
-classification %, max aged open issues, max past-expiry exceptions, and
-the open-issue age in days) ship with defaults of 80 / 70 / 0 / 0 / 30.
-An org admin can tune them under **Settings → Data → Council Scorecard
-targets**; the change re-derives the live scorecard on its next load,
-while already-saved snapshots keep the targets they were frozen with.
+The four thresholds the scorecard grades against (coverage %, classification %, max aged open issues, max past-expiry exceptions, and the open-issue age in days) ship with defaults of 80 / 70 / 0 / 0 / 30. An org admin can tune them under **Settings → Data → Council Scorecard targets**; the change re-derives the live scorecard on its next load, while already-saved snapshots keep the targets they were frozen with.
 
-**Governed lens.** If you defined a program scope on Foundation, the
-header's **All / Governed** toggle narrows every measure to the governed
-entities — the scorecard then reads against *what you committed to govern*,
-not the whole org tree. A "Governed scope · v{N} · changed {date}" note
-shows the basis, and a snapshot saved under the Governed lens stores its
-governed numbers stamped with the scope version, so comparing two months is
-apples-to-apples even if the scope moved between them.
+**Governed lens.** If you defined a program scope on Foundation, the header's **All / Governed** toggle narrows every measure to the governed entities — the scorecard then reads against *what you committed to govern*, not the whole org tree. A "Governed scope · v{N} · changed {date}" note shows the basis, and a snapshot saved under the Governed lens stores its governed numbers stamped with the scope version, so comparing two months is apples-to-apples even if the scope moved between them.
 
-**Governance ROI — the value the program returns.** Scroll below the
-measure table and you'll find the value story, built so it stays honest:
+**Governance ROI — the value the program returns.** Scroll below the measure table and you'll find the value story, built so it stays honest:
 
-1. **Governance value drivers** — leading indicators measured straight
-   from your catalog with *no assumed dollar figures*: **Ownership
-   coverage**, **Certified coverage** (share of in-scope assets with an
-   attested CERTIFIED certification, distinct from the Gold tier), a
-   **Value at risk** count to drive down (past-expiry exceptions + unowned
-   Tier-1 domains + unclassified assets), **Resolved (30 days)**, and **Avg
-   days to resolve**. These are the un-fakeable
-   signals a program is paying off, and they respect the All / Governed lens.
-2. **Estimated governance value** — put dollars on those drivers with your
-   *own* assumptions. Open **Governance → Foundation → Value model** and set
-   what an owned entity, a resolved issue, and an open-risk item are worth to
-   you (in your currency). The scorecard then shows an **Estimated annual
-   value**, **Ownership value**, **Resolution value (annualized)**, and
-   **Value at risk**, each stamped *your assumptions*. Before you set a
-   model the card shows a configure prompt, not a made-up number — Procela
-   never invents a figure. (Annual value = owned entities × your value-per-
-   entity + issues resolved in the last 30 days × your value-per-issue × 12;
-   value at risk = open-risk items × your exposure-per-item.)
-3. **By value stream** — with a model set, the same card breaks the value
-   down per value stream, attributed through each stream's process→data
-   mappings, so you can see which streams' data is banking value and which
-   are carrying risk. Because a shared asset counts in every stream it
-   supports and org-level exceptions / unmapped data aren't attributed, the
-   rows deliberately don't sum to the totals above (the panel says so).
+1. **Governance value drivers** — leading indicators measured straight from your catalog with *no assumed dollar figures*: **Ownership coverage**, **Certified coverage** (share of in-scope assets with an attested CERTIFIED certification, distinct from the Gold tier), a **Value at risk** count to drive down (past-expiry exceptions + unowned Tier-1 domains + unclassified assets), **Resolved (30 days)**, and **Avg days to resolve**. These are the un-fakeable signals a program is paying off, and they respect the All / Governed lens.
+2. **Estimated governance value** — put dollars on those drivers with your *own* assumptions. Open **Governance → Foundation → Value model** and set what an owned entity, a resolved issue, and an open-risk item are worth to you (in your currency). The scorecard then shows an **Estimated annual value**, **Ownership value**, **Resolution value (annualized)**, and **Value at risk**, each stamped *your assumptions*. Before you set a model the card shows a configure prompt, not a made-up number — Procela never invents a figure. (Annual value = owned entities × your value-per- entity + issues resolved in the last 30 days × your value-per-issue × 12; value at risk = open-risk items × your exposure-per-item.)
+3. **By value stream** — with a model set, the same card breaks the value down per value stream, attributed through each stream's process→data mappings, so you can see which streams' data is banking value and which are carrying risk. Because a shared asset counts in every stream it supports and org-level exceptions / unmapped data aren't attributed, the rows deliberately don't sum to the totals above (the panel says so).
 
-To feed the *Exceptions past expiry* measure, visit **Governance →
-Operate → Exceptions** and grant a waiver with an expiry date in the
-past — it flags red on that page and increments the exceptions column
-on the scorecard. Close it and the count drops. This is the auditable
-way a control gets waived instead of quietly going unmet.
+To feed the *Exceptions past expiry* measure, visit **Governance → Operate → Exceptions** and grant a waiver with an expiry date in the past — it flags red on that page and increments the exceptions column on the scorecard. Close it and the count drops. This is the auditable way a control gets waived instead of quietly going unmet.
 
-**The briefing bar & what needs a decision.** Across the top of the
-page sits a live briefing stitched from the surfaces that own each
-part, storing nothing of its own — what a council chair reads *before*
-the meeting starts:
+**The briefing bar & what needs a decision.** Across the top of the page sits a live briefing stitched from the surfaces that own each part, storing nothing of its own — what a council chair reads *before* the meeting starts:
 
-- **The council** — the roster: who sits on the council and in what seat
-  (Chair, Vice-chair, Secretary, Member), from the governance group you
-  built in 7.4, with a *Manage →* link into Groups.
-- **Next meeting** — the next scheduled council meeting, how many days
-  away, its cadence, and expected attendees, from the Calendar.
+- **The council** — the roster: who sits on the council and in what seat (Chair, Vice-chair, Secretary, Member), from the governance group you built in 7.4, with a *Manage →* link into Groups.
+- **Next meeting** — the next scheduled council meeting, how many days away, its cadence, and expected attendees, from the Calendar.
 
-Below the value story, two more panels round out the briefing: a
-**Maturity trend** — a sparkline of the overall maturity score plus the
-latest per-dimension scores (from 10.3), so you can see the direction —
-and **Needs a decision**, the auto-derived escalations for the period
-(each drilling back to where it's fixed) with the editable **Council
-note** beside them. The scorecard grid itself is your "governance
-health now" read — coverage / classification / status per division — so
-you walk in already knowing where things stand.
+Below the value story, two more panels round out the briefing: a **Maturity trend** — a sparkline of the overall maturity score plus the latest per-dimension scores (from 10.3), so you can see the direction — and **Needs a decision**, the auto-derived escalations for the period (each drilling back to where it's fixed) with the editable **Council note** beside them. The scorecard grid itself is your "governance health now" read — coverage / classification / status per division — so you walk in already knowing where things stand.
 
-Seed the demo and open the page as **Susan Chen**: the *Data Governance
-Committee* roster, the Weekly committee calendar event, and the
-Tidewater health numbers all populate it. Use the **Print** icon to
-export the whole thing as a branded, landscape council briefing.
+Seed the demo and open the page as **Susan Chen**: the *Data Governance Committee* roster, the Weekly committee calendar event, and the Tidewater health numbers all populate it. Use the **Print** icon to export the whole thing as a branded, landscape council briefing.
 
 ### 10.5 Audit Log — who changed what, when
 
-Every mutation you've made in this course — creating orgs, assigning
-owners, saving a scorecard snapshot, waiving an exception — was recorded.
-Open **Insights → Review → Audit Log** to see the chronological trail:
-actor, action, entity, and before/after. Two things matter for a
-compliance buyer:
+Every mutation you've made in this course — creating orgs, assigning owners, saving a scorecard snapshot, waiving an exception — was recorded. Open **Insights → Review → Audit Log** to see the chronological trail: actor, action, entity, and before/after. Two things matter for a compliance buyer:
 
-1. **Verify integrity.** The log is a hash-chained ledger; the
-   **Verify integrity** button re-checks the chain and reports
-   *Verified · N entries* (or the entry it broke at) — proof no record
-   was altered or removed after the fact.
-2. **Export.** Download the log as CSV for an auditor or a retention
-   archive; the full server-side export includes the `entryHash` column
-   so a reviewer can re-verify the chain offline.
+1. **Verify integrity.** The log is a hash-chained ledger; the **Verify integrity** button re-checks the chain and reports *Verified · N entries* (or the entry it broke at) — proof no record was altered or removed after the fact.
+2. **Export.** Download the log as CSV for an auditor or a retention archive; the full server-side export includes the `entryHash` column so a reviewer can re-verify the chain offline.
 
-This is the surface behind every "recorded in the audit log" note
-elsewhere in this guide.
+This is the surface behind every "recorded in the audit log" note elsewhere in this guide.
 
 ---
 
 ## Module 11 — Ask AI for grounded answers (5 min)
 
-The platform has an AI assistant that's grounded in *your* catalog —
-not training data — so it answers about the org you just built.
+The platform has an AI assistant that's grounded in *your* catalog — not training data — so it answers about the org you just built.
 
 > **Admin note — turning AI off.** This assistant and every other AI
 > integration feature (template generation, data/asset suggestions, the
@@ -1252,104 +703,60 @@ not training data — so it answers about the org you just built.
 
 ### 11.1 Open the panel
 
-Click **Ask AI** in the top bar. That's the only entry point — the
-floating bottom-right bubble is gone; the top-bar button is where
-you open, minimize, and resume the chat. Starter prompts appear when
-the chat is empty, and they're **page-aware** — they lead with
-questions relevant to the page you're standing on and fall back to the
-cross-catalog staples. From the Dashboard you'll see the general set:
+Click **Ask AI** in the top bar. That's the only entry point — the floating bottom-right bubble is gone; the top-bar button is where you open, minimize, and resume the chat. Starter prompts appear when the chat is empty, and they're **page-aware** — they lead with questions relevant to the page you're standing on and fall back to the cross-catalog staples. From the Dashboard you'll see the general set:
 
 - Where are our data gaps?
 - Which assets are below 80% health and linked to critical processes?
 - Which data assets do we have that no process uses?
 - Which systems run our customer-facing processes?
 
-Open the panel from **Gap Detection**, **Data Assets** (the Unmapped
-filter), or **Systems** and the top suggestions change to match that
-surface.
+Open the panel from **Gap Detection**, **Data Assets** (the Unmapped filter), or **Systems** and the top suggestions change to match that surface.
 
 ### 11.2 Try the orphan question
 
 Click **Which data assets do we have that no process uses?**.
 
-Watch the reply stream in token-by-token — there's no "Thinking…"
-pause. The assistant should name one or more of the orphan assets
-from Module 9.3. Each asset name is a **link** — click it and you
-land on the asset's page in the catalog. That's inline citation
-working: the assistant didn't just describe your data, it pointed at
-the rows you can act on.
+Watch the reply stream in token-by-token — there's no "Thinking…" pause. The assistant should name one or more of the orphan assets from Module 9.3. Each asset name is a **link** — click it and you land on the asset's page in the catalog. That's inline citation working: the assistant didn't just describe your data, it pointed at the rows you can act on.
 
 ### 11.3 Notice the navigation chip
 
-At the end of the same answer you should see a green pill-shaped
-chip — *Orphan Assets →*. That's the page-navigation chip: the
-assistant decided the right next step was opening the unmapped-assets
-view, and gave you a one-click handoff. Click it and you land on the
-Data Assets list filtered to Unmapped (the `/data-assets/orphans` path
-redirects there).
+At the end of the same answer you should see a green pill-shaped chip — *Orphan Assets →*. That's the page-navigation chip: the assistant decided the right next step was opening the unmapped-assets view, and gave you a one-click handoff. Click it and you land on the Data Assets list filtered to Unmapped (the `/data-assets/orphans` path redirects there).
 
-The chip is constrained to a fixed allowlist of Procela pages so a
-hallucinated route can't render as a broken button.
+The chip is constrained to a fixed allowlist of Procela pages so a hallucinated route can't render as a broken button.
 
 ### 11.4 Try a coverage question
 
-Type *"What systems run our Outage triage process?"*. The assistant
-answers from the activity ↔ system declarations you made in the
-Process Catalog (Module 3), with the system names rendered as links
-to the Systems page. Switch the **Working in…** scope to Water and
-ask the same question — the answer re-grounds to the new org.
+Type *"What systems run our Outage triage process?"*. The assistant answers from the activity ↔ system declarations you made in the Process Catalog (Module 3), with the system names rendered as links to the Systems page. Switch the **Working in…** scope to Water and ask the same question — the answer re-grounds to the new org.
 
 ### 11.5 Minimize, save, and revisit
 
-Click the `–` in the panel header to close the panel and keep
-working elsewhere in the app — the conversation is preserved. Notice
-the **Ask AI** top-bar button now shows a small count badge telling
-you a chat is paused. Click it to resume; every message is where you
-left it.
+Click the `–` in the panel header to close the panel and keep working elsewhere in the app — the conversation is preserved. Notice the **Ask AI** top-bar button now shows a small count badge telling you a chat is paused. Click it to resume; every message is where you left it.
 
-Conversations are now **saved as you go**, so they survive a page
-reload and a return visit — not just the current browser tab. Click
-**History** in the panel header to see your past conversations (each
-titled from its first question); pick one to re-open its full
-transcript, or delete a row with its ×. **New chat** starts a fresh
-thread — the current one is already saved and reachable from History,
-so nothing is thrown away. Conversations are private to you and scoped
-to the org you had active, so switching orgs starts a clean one.
+Conversations are now **saved as you go**, so they survive a page reload and a return visit — not just the current browser tab. Click **History** in the panel header to see your past conversations (each titled from its first question); pick one to re-open its full transcript, or delete a row with its ×. **New chat** starts a fresh thread — the current one is already saved and reachable from History, so nothing is thrown away. Conversations are private to you and scoped to the org you had active, so switching orgs starts a clean one.
 
 ### 11.6 What it won't do
 
-The assistant answers and points; it doesn't act. It won't delete an
-orphan, change ownership, or transition a process status — those
-stay manual. Use it as a navigation aid and a gap-detector, not as a
-mutation surface.
+The assistant answers and points; it doesn't act. It won't delete an orphan, change ownership, or transition a process status — those stay manual. Use it as a navigation aid and a gap-detector, not as a mutation surface.
 
 ---
 
 ## Module 12 — Weekly digest of gap deltas (5 min)
 
-Procela closes the loop by surfacing week-over-week movement in the
-same gap signals from Module 9. Instead of you remembering to check
-the dashboard every Monday, the platform pings the notifications
-bell when something meaningful changes.
+Procela closes the loop by surfacing week-over-week movement in the same gap signals from Module 9. Instead of you remembering to check the dashboard every Monday, the platform pings the notifications bell when something meaningful changes.
 
 ### 12.1 Take the baseline
 
-The first digest run for an org records a baseline; subsequent runs
-diff against it. For the prototype the trigger is manual — hit:
+The first digest run for an org records a baseline; subsequent runs diff against it. For the prototype the trigger is manual — hit:
 
 ```
 POST /api/v1/digest/run?orgId=<your-active-org-id>
 ```
 
-Use the API console or `curl` with your access token. The response
-includes `baseline: true` and `notificationsWritten: 0` — no bell
-ping yet, just a recorded starting point.
+Use the API console or `curl` with your access token. The response includes `baseline: true` and `notificationsWritten: 0` — no bell ping yet, just a recorded starting point.
 
 ### 12.2 Create a change worth noticing
 
-Add three more unmapped assets in **Data Assets** (or remove a few
-mappings to drop coverage by 5+ points), then run the digest endpoint
-again.
+Add three more unmapped assets in **Data Assets** (or remove a few mappings to drop coverage by 5+ points), then run the digest endpoint again.
 
 ### 12.3 Read the notification
 
@@ -1359,66 +766,27 @@ Open the bell in the top bar. New entries should land — for example:
 - *"Mapping coverage dropped to 72%"* → links to **Insights → Explore → Process ↔ Data Map**
 - *"2 new ownerless processes"* → links to **Processes**
 
-Each entry is one click from the affected page; thresholds are
-conservative (3+ orphans, 5+ percentage points, 1+ ownerless
-process) so small day-to-day noise doesn't accumulate noise in the
-bell.
+Each entry is one click from the affected page; thresholds are conservative (3+ orphans, 5+ percentage points, 1+ ownerless process) so small day-to-day noise doesn't accumulate noise in the bell.
 
 ### 12.4 Scheduling
 
-The digest doesn't need you to remember to run it. Procela ships a
-built-in scheduler that fires every hour and, on the first tick
-after Sunday 23:00 UTC each week, walks every org and runs the
-digest for you. The last-fired timestamp is persisted, so a restart
-in the firing window doesn't double-notify.
+The digest doesn't need you to remember to run it. Procela ships a built-in scheduler that fires every hour and, on the first tick after Sunday 23:00 UTC each week, walks every org and runs the digest for you. The last-fired timestamp is persisted, so a restart in the firing window doesn't double-notify.
 
-**Tune it per person.** Click the gear in the notifications dropdown
-to open your own **Weekly digest** settings: turn the digest on or
-off, choose which of the four gap-signal categories you want (new
-orphans, coverage drops, ungoverned-in-use, ownerless processes), and
-optionally **also email it to me**. Email is opt-in and only sends the
-categories you picked — it needs SMTP configured for the deployment,
-and it never changes the in-app bell notifications. Every signed-in
-user sets their own, so this isn't admin-gated.
+**Tune it per person.** Click the gear in the notifications dropdown to open your own **Weekly digest** settings: turn the digest on or off, choose which of the four gap-signal categories you want (new orphans, coverage drops, ungoverned-in-use, ownerless processes), and optionally **also email it to me**. Email is opt-in and only sends the categories you picked — it needs SMTP configured for the deployment, and it never changes the in-app bell notifications. Every signed-in user sets their own, so this isn't admin-gated.
 
-The same scheduler also runs an **overdue task sweep** every hour:
-any governance task with a due date in the past — status OPEN,
-IN_PROGRESS, or PENDING_APPROVAL — writes a *Task overdue: …*
-warning into the notifications bell for its assignee (or org-wide
-if the task is unassigned). It's idempotent — the sweep stamps the
-task after firing and re-arms itself only when the due date is
-pushed forward or the task cycles back to OPEN. `POST
-/api/v1/governance-tasks/sweep-overdue` triggers the same code
-synchronously if you want to drive it from the API console.
+The same scheduler also runs an **overdue task sweep** every hour: any governance task with a due date in the past — status OPEN, IN_PROGRESS, or PENDING_APPROVAL — writes a *Task overdue: …* warning into the notifications bell for its assignee (or org-wide if the task is unassigned). It's idempotent — the sweep stamps the task after firing and re-arms itself only when the due date is pushed forward or the task cycles back to OPEN. `POST /api/v1/governance-tasks/sweep-overdue` triggers the same code synchronously if you want to drive it from the API console.
 
-The manual `POST /api/v1/digest/run` trigger from 12.1 still works
-— use it for one-off runs (e.g., before a demo). Disable all
-background loops (this scheduler included) by setting
-`PROCELA_DISABLE_SCHEDULERS=1` — set it on every replica except the one
-designated to run scheduled work, so jobs fire once rather than once
-per replica.
+The manual `POST /api/v1/digest/run` trigger from 12.1 still works — use it for one-off runs (e.g., before a demo). Disable all background loops (this scheduler included) by setting `PROCELA_DISABLE_SCHEDULERS=1` — set it on every replica except the one designated to run scheduled work, so jobs fire once rather than once per replica.
 
 ---
 
 ## Module 13 — Agent access (MCP) (5 min)
 
-*Admin module.* Procela can expose the governed catalog you've built to
-external AI agents (Claude Desktop, IDE assistants, internal copilots) over
-the **Model Context Protocol** — so an agent can answer *"what process
-depends on this data, who owns it, is it governed?"* and, where you allow it,
-make audited changes. An agent sees only the business metadata and context
-this guide has been building (never raw source-system rows), scoped to its
-org and its role, with every call written to the audit log. Full reference:
-`docs/MCP_SERVER.md`.
+*Admin module.* Procela can expose the governed catalog you've built to external AI agents (Claude Desktop, IDE assistants, internal copilots) over the **Model Context Protocol** — so an agent can answer *"what process depends on this data, who owns it, is it governed?"* and, where you allow it, make audited changes. An agent sees only the business metadata and context this guide has been building (never raw source-system rows), scoped to its org and its role, with every call written to the audit log. Full reference: `docs/MCP_SERVER.md`.
 
 ### 13.1 Find the panel
 
-Go to **Settings → Integrations → Agent access (MCP)**. (Settings is
-admins-only.) The Tidewater demo fixture ships with MCP **already enabled**,
-so the *Enable MCP access* toggle is on. In a fresh tenant it's off — an org
-admin flips it here to opt the tenant in. The panel also tells you when the
-surface is turned off for the whole deployment (an operator sets
-`MCP_SERVER_ENABLED`); until then the toggle is saved but inert.
+Go to **Settings → Integrations → Agent access (MCP)**. (Settings is admins-only.) The Tidewater demo fixture ships with MCP **already enabled**, so the *Enable MCP access* toggle is on. In a fresh tenant it's off — an org admin flips it here to opt the tenant in. The panel also tells you when the surface is turned off for the whole deployment (an operator sets `MCP_SERVER_ENABLED`); until then the toggle is saved but inert.
 
 > **Three gates, all off by default.** Deployment (`MCP_SERVER_ENABLED` +
 > `AI_FEATURES_ENABLED`, plus `MCP_WRITE_ENABLED` for writes) → per-tenant
@@ -1427,10 +795,7 @@ surface is turned off for the whole deployment (an operator sets
 
 ### 13.2 Mint a service token
 
-In the **Service tokens** section, enter a label (e.g. *Claude Desktop —
-Analytics*), pick a role — **Viewer** (read-only) or **Editor** (also allows
-the write tools, when the deployment permits) — and click **Generate token**.
-The token is shown **once**; copy it now. Give each agent its own token.
+In the **Service tokens** section, enter a label (e.g. *Claude Desktop — Analytics*), pick a role — **Viewer** (read-only) or **Editor** (also allows the write tools, when the deployment permits) — and click **Generate token**. The token is shown **once**; copy it now. Give each agent its own token.
 
 ### 13.3 Point a client at it
 
@@ -1447,19 +812,11 @@ Hand the token to any MCP client as a bearer against the hosted endpoint:
 }
 ```
 
-The agent can now call read tools — the process hierarchy, reverse
-lookups ("what depends on this asset"), owners, gaps, asset health, and
-governance scope — plus search. With an Editor token on a write-enabled
-deployment it can also assign owners, change a process status, and open a
-governance task, each gated by the same permission and audited exactly like
-an in-app edit.
+The agent can now call read tools — the process hierarchy, reverse lookups ("what depends on this asset"), owners, gaps, asset health, and governance scope — plus search. With an Editor token on a write-enabled deployment it can also assign owners, change a process status, and open a governance task, each gated by the same permission and audited exactly like an in-app edit.
 
 ### 13.4 Revoke
 
-Back in the panel, every token lists its label, role, and last-used date.
-Click **Revoke** on any one and it stops authenticating immediately (the
-grant is checked on every call). Revocation is the day-to-day control; tokens
-also expire on their own (default 365 days, `MCP_SERVICE_TOKEN_TTL`).
+Back in the panel, every token lists its label, role, and last-used date. Click **Revoke** on any one and it stops authenticating immediately (the grant is checked on every call). Revocation is the day-to-day control; tokens also expire on their own (default 365 days, `MCP_SERVICE_TOKEN_TTL`).
 
 ---
 
@@ -1467,16 +824,7 @@ also expire on their own (default 365 days, `MCP_SERVICE_TOKEN_TTL`).
 
 ### The Procela model in one paragraph
 
-Procela's data model has three layers that meet in the middle. The
-**business layer** (Value Streams → Processes → Sub-Processes →
-Activities → Tasks) describes what the business does. The **data
-layer** (Data Assets, Systems, Data Domains) describes what powers
-it. **Mappings** are the bridge — they link activities to the data
-assets / governance documents / attachments they consume or produce.
-Wrapping all three are people (with their **skills** and **DAMA
-roles**), grouped into **Governance Groups**, governed by
-**Documents** (charters, policies, standards), and held accountable
-via the **RACI Matrix**.
+Procela's data model has three layers that meet in the middle. The **business layer** (Value Streams → Processes → Sub-Processes → Activities → Tasks) describes what the business does. The **data layer** (Data Assets, Systems, Data Domains) describes what powers it. **Mappings** are the bridge — they link activities to the data assets / governance documents / attachments they consume or produce. Wrapping all three are people (with their **skills** and **DAMA roles**), grouped into **Governance Groups**, governed by **Documents** (charters, policies, standards), and held accountable via the **RACI Matrix**.
 
 ### Where things live
 
@@ -1512,16 +860,9 @@ via the **RACI Matrix**.
 
 ### Three things to demo to a stakeholder
 
-1. **Generate processes for two divisions side-by-side.** Same wand,
-   same code; the electric output is electric-utility, the water
-   output is water-utility. That's active-org context driving AI.
-2. **Cross-page link traversal.** From a Data Asset, *Where Used* →
-   process steps consuming it. From a person, click a role chip →
-   drawer. The cross-references make the business-process-first
-   model tangible.
-3. **RACI auto-derivation.** Assignments on the Catalog → RACI rows
-   auto-derived → validation warnings flag rule violations (no R, no
-   A, multiple A's).
+1. **Generate processes for two divisions side-by-side.** Same wand, same code; the electric output is electric-utility, the water output is water-utility. That's active-org context driving AI.
+2. **Cross-page link traversal.** From a Data Asset, *Where Used* → process steps consuming it. From a person, click a role chip → drawer. The cross-references make the business-process-first model tangible.
+3. **RACI auto-derivation.** Assignments on the Catalog → RACI rows auto-derived → validation warnings flag rule violations (no R, no A, multiple A's).
 
 ---
 
@@ -1542,7 +883,5 @@ via the **RACI Matrix**.
 ## What to read next
 
 - `CLAUDE.md` (repo root) — the product brief; what Procela is for
-- `test-data/utility/README.md` — companion to this guide; the data
-  reference for the Tidewater Utilities demo fixture
-- In-app **Help** page — feature-by-feature reference (this guide is
-  a workflow walkthrough; Help is a manual)
+- `test-data/utility/README.md` — companion to this guide; the data reference for the Tidewater Utilities demo fixture
+- In-app **Help** page — feature-by-feature reference (this guide is a workflow walkthrough; Help is a manual)
