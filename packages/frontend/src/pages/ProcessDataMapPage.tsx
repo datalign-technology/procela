@@ -96,28 +96,6 @@ interface Asset {
   domainName?: string | null;
 }
 
-// One row in the right column: a data-domain header or an asset. Assets
-// roll up under their domain the way activities roll up under processes.
-type RightRow =
-  | { kind: 'domain'; name: string; rowKey: string }
-  | { kind: 'asset'; asset: Asset };
-
-// `showDomains` false drops the domain header rows entirely — the assets
-// just list flat (no domain grouping).
-function buildRightRows(assets: Asset[], showDomains: boolean): RightRow[] {
-  if (!showDomains) return assets.map((a) => ({ kind: 'asset' as const, asset: a }));
-  const rows: RightRow[] = [];
-  let lastDomain: string | null | undefined;
-  for (const a of assets) {
-    const dom = a.domainName || null;
-    if (dom !== lastDomain) {
-      rows.push({ kind: 'domain', name: dom || 'No domain', rowKey: `d-${dom ?? 'none'}-${rows.length}` });
-      lastDomain = dom;
-    }
-    rows.push({ kind: 'asset', asset: a });
-  }
-  return rows;
-}
 interface Edge {
   mappingId: string;
   activityId: string;
@@ -136,26 +114,46 @@ interface GraphResponse {
   };
 }
 
-// Colours per linkType. Matches the convention used on the mapping
-// cards elsewhere in the app — green = produces, blue = consumes,
-// purple = transforms, grey = references.
-const LINK_COLOR: Record<string, string> = {
-  produces:   '#059669',
-  consumes:   '#2563eb',
-  transforms: '#7c3aed',
-  references: '#64748b',
+// Per link-type cell marker for the matrix (board C4): a short code whose
+// colour encodes direction — Reads (input) blue, Writes (output) green,
+// Transforms outline, References dashed. The R/W hexes are the documented
+// blue/green info-badge pairs (kept literal so they don't drift).
+interface LinkMark { code: string; label: string; bg: string; fg: string; border?: string; dashed?: boolean }
+const LINK_MARK: Record<string, LinkMark> = {
+  consumes:   { code: 'R',   label: 'Reads (input)',   bg: '#E6EEF9', fg: '#24508F' },
+  produces:   { code: 'W',   label: 'Writes (output)', bg: '#DCEFE5', fg: '#17604B' },
+  transforms: { code: 'T',   label: 'Transforms',      bg: 'transparent', fg: 'var(--color-text-secondary)', border: 'var(--color-border)' },
+  references: { code: 'Ref', label: 'References',       bg: 'transparent', fg: 'var(--color-text-secondary)', border: 'var(--color-border)', dashed: true },
 };
+// Legend / cell render order.
+const LINK_MARK_ORDER = ['consumes', 'produces', 'transforms', 'references'];
+// A neutral marker for a mapping whose link type is none of the four (so a
+// mapping still reads as "linked" rather than silently showing an empty cell).
+const NEUTRAL_MARK: LinkMark = { code: '•', label: 'Linked', bg: 'var(--color-primary-light)', fg: 'var(--color-primary)' };
+// Resolve a stored link type to a marker. The field is a free string whose
+// values vary by source — the mapping UI writes consumes/produces/transforms/
+// references, while seeded/imported data uses INPUT/OUTPUT — so fold synonyms
+// to one of the four directional markers (unknown → neutral).
+function markFor(linkType: string): LinkMark {
+  switch ((linkType || '').toLowerCase()) {
+    case 'input': case 'consumes': case 'consume': case 'read': case 'reads':
+      return LINK_MARK.consumes;
+    case 'output': case 'produces': case 'produce': case 'write': case 'writes':
+      return LINK_MARK.produces;
+    case 'transform': case 'transforms':
+      return LINK_MARK.transforms;
+    case 'reference': case 'references': case 'ref':
+      return LINK_MARK.references;
+    default:
+      return NEUTRAL_MARK;
+  }
+}
 
-const TIER_COLOR: Record<Asset['governanceTier'], string> = {
-  BRONZE: '#92400e',
-  SILVER: '#475569',
-  GOLD:   '#b45309',
+const TIER_PILL: Record<Asset['governanceTier'], { bg: string; fg: string; label: string }> = {
+  BRONZE: { bg: '#FBE9D9', fg: '#9A4A0E', label: 'Bronze' },
+  SILVER: { bg: '#E8ECF1', fg: '#475569', label: 'Silver' },
+  GOLD:   { bg: '#FBF0DA', fg: '#8A6400', label: 'Gold' },
 };
-
-const ROW_HEIGHT = 36;
-const COL_WIDTH = 280;
-const GUTTER = 220;
-const PADDING_Y = 60;
 
 export default function ProcessDataMapPage() {
   const { activeOrgId, refreshKey } = useOrgContext();
@@ -258,9 +256,6 @@ export default function ProcessDataMapPage() {
 
   // Left column laid out as hierarchy headers + activity rows.
   const leftRows = useMemo(() => buildLeftRows(activities, hiddenLevels), [activities, hiddenLevels]);
-  // Assets sit flush when domains are hidden; otherwise they indent under
-  // their domain header. Used for the asset rects and the edge endpoints.
-  const assetIndent = hiddenLevels.has('DOMAIN') ? 0 : 18;
   // Which grouping levels actually exist in the data, so we only offer
   // chips that would do something.
   const presentLevels = useMemo(() => {
@@ -269,38 +264,31 @@ export default function ProcessDataMapPage() {
     if (assets.some((a) => a.domainName)) s.add('DOMAIN');
     return s;
   }, [activities, assets]);
-  const activityY = useMemo(() => {
-    const m = new Map<string, number>();
-    leftRows.forEach((row, i) => {
-      if (row.kind === 'activity') m.set(row.activity.id, PADDING_Y + i * ROW_HEIGHT);
-    });
-    return m;
-  }, [leftRows]);
-  // Right column laid out as data-domain headers + asset rows.
-  const rightRows = useMemo(() => buildRightRows(assets, !hiddenLevels.has('DOMAIN')), [assets, hiddenLevels]);
-  const assetY = useMemo(() => {
-    const m = new Map<string, number>();
-    rightRows.forEach((row, i) => {
-      if (row.kind === 'asset') m.set(row.asset.id, PADDING_Y + i * ROW_HEIGHT);
-    });
-    return m;
-  }, [rightRows]);
 
-  const svgHeight = Math.max(leftRows.length, rightRows.length) * ROW_HEIGHT + PADDING_Y * 2;
-  const svgWidth = COL_WIDTH * 2 + GUTTER;
-
-  // Edges connected to the focused node — separate Set so we can
-  // render them last (on top) and brighten them.
-  const focusedEdges = useMemo(() => {
-    if (!focus) return new Set<string>();
-    return new Set(
-      edges
-        .filter((e) =>
-          focus.kind === 'activity' ? e.activityId === focus.id : e.assetId === focus.id,
-        )
-        .map((e) => e.mappingId),
-    );
-  }, [edges, focus]);
+  // ── Matrix model (board C4) ──────────────────────────────────────────────
+  // Assets become columns grouped by data domain; each activity row carries a
+  // marker per asset it reads / writes / transforms / references.
+  const showDomains = !hiddenLevels.has('DOMAIN');
+  // Consecutive assets (already sorted by domain) folded into column groups.
+  const domainGroups = useMemo(() => {
+    if (!showDomains) return assets.length ? [{ name: '', assets }] : [];
+    const groups: { name: string; assets: Asset[] }[] = [];
+    let last: string | null | undefined;
+    for (const a of assets) {
+      const dom = a.domainName || null;
+      if (groups.length === 0 || dom !== last) { groups.push({ name: dom || 'No domain', assets: [] }); last = dom; }
+      groups[groups.length - 1].assets.push(a);
+    }
+    return groups;
+  }, [assets, showDomains]);
+  // (activityId|assetId) → linkType, first wins (one marker per cell).
+  const edgeMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of edges) { const k = `${e.activityId}|${e.assetId}`; if (!m.has(k)) m.set(k, e.linkType); }
+    return m;
+  }, [edges]);
+  const usedAssetIds = useMemo(() => new Set(edges.map((e) => e.assetId)), [edges]);
+  const colCount = 1 + assets.length;
 
   const focusedNodeIds = useMemo(() => {
     if (!focus) return new Set<string>();
@@ -339,7 +327,7 @@ export default function ProcessDataMapPage() {
       <PageHeader
         title="Process ↔ Data map"
         subtitle={viewMode === 'visual'
-          ? 'Visual bridge between the business hierarchy and the catalog — activities grouped under their value stream, process and sub-process; data assets grouped under their data domain. Click an activity or asset to focus its connections.'
+          ? 'Reconciliation matrix — activities down the side (grouped by value stream and process), data assets across the top (grouped by data domain). Each cell shows how the activity uses that asset: Reads, Writes, Transforms or References. Click an activity or asset to focus it.'
           : 'Flat, editable list of every activity ↔ data-asset mapping — bulk add / delete, a batch wizard, and orphan cleanup.'}
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -416,12 +404,16 @@ export default function ProcessDataMapPage() {
             Clear focus
           </button>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, fontSize: 11, color: 'var(--color-text-muted)' }}>
-          {Object.entries(LINK_COLOR).map(([k, v]) => (
-            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 12, height: 2, background: v, display: 'inline-block' }} /> {k}
-            </span>
-          ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11, color: 'var(--color-text-secondary)' }}>
+          {LINK_MARK_ORDER.map((k) => {
+            const mk = LINK_MARK[k];
+            return (
+              <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 22, height: 20, borderRadius: 4, fontSize: 10, fontWeight: 700, background: mk.bg, color: mk.fg, border: mk.border ? `1px ${mk.dashed ? 'dashed' : 'solid'} ${mk.border}` : undefined }}>{mk.code}</span>
+                {mk.label}
+              </span>
+            );
+          })}
         </div>
       </div>
 
@@ -474,151 +466,77 @@ export default function ProcessDataMapPage() {
       )}
 
       {data && (activities.length > 0 || assets.length > 0) && (
-        <div style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: 6, background: '#fff' }}>
-          <svg width={svgWidth} height={svgHeight} role="img" aria-label="Process to data asset map">
-            {/* Column headers */}
-            <text x={COL_WIDTH / 2} y={28} textAnchor="middle" fontSize={12} fontWeight={700} fill="#475569" style={{ textTransform: 'uppercase' }}>
-              Activities
-            </text>
-            <text x={COL_WIDTH + GUTTER + COL_WIDTH / 2} y={28} textAnchor="middle" fontSize={12} fontWeight={700} fill="#475569" style={{ textTransform: 'uppercase' }}>
-              Data assets
-            </text>
-
-            {/* Edges first so node rectangles sit on top. We split
-                into dim + focused passes so the focused edges land
-                above their neighbours, not just on top of nothing. */}
-            {edges.map((e) => {
-              const yA = activityY.get(e.activityId);
-              const yB = assetY.get(e.assetId);
-              if (yA == null || yB == null) return null;
-              const isFocused = focusedEdges.has(e.mappingId);
-              if (focus && !isFocused) {
+        <div style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
+          <table aria-label="Process to data asset map" style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, minWidth: '100%' }}>
+            <thead>
+              <tr>
+                <th rowSpan={2} style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--color-surface)', textAlign: 'left', padding: '12px 16px', minWidth: 300, borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', verticalAlign: 'bottom', color: 'var(--color-text-muted)', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Activity <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>&middot; grouped by value stream and process</span>
+                </th>
+                {showDomains
+                  ? domainGroups.map((g, gi) => (
+                      <th key={`dg-${gi}`} colSpan={g.assets.length} style={{ textAlign: 'left', padding: '10px 12px 6px', borderBottom: '1px solid var(--color-border)', borderLeft: '1px solid var(--color-border)', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{g.name}</th>
+                    ))
+                  : <th colSpan={assets.length} style={{ borderBottom: '1px solid var(--color-border)', borderLeft: '1px solid var(--color-border)' }} />}
+              </tr>
+              <tr>
+                {assets.map((a) => {
+                  const unused = !usedAssetIds.has(a.id);
+                  const tier = TIER_PILL[a.governanceTier];
+                  const focused = focus?.kind === 'asset' && focus.id === a.id;
+                  return (
+                    <th key={a.id} style={{ textAlign: 'left', padding: '8px 12px 10px', borderBottom: '1px solid var(--color-border)', borderLeft: '1px solid var(--color-border)', minWidth: 128, verticalAlign: 'top', background: focused ? 'var(--color-primary-light)' : 'var(--color-surface)' }}>
+                      <button type="button" onClick={() => setFocus((f) => f?.kind === 'asset' && f.id === a.id ? null : { kind: 'asset', id: a.id })} style={{ display: 'block', border: 0, background: 'transparent', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'var(--color-text)', fontWeight: 600, fontSize: 13 }}>{a.name}</button>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 400 }}>{a.systemName || 'no system'}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, height: 22, padding: '0 8px', borderRadius: 11, fontSize: 11, fontWeight: 600, background: tier.bg, color: tier.fg }}><span style={{ width: 6, height: 6, borderRadius: 3, background: tier.fg }} />{tier.label}</span>
+                      {unused && <span style={{ display: 'block', marginTop: 6, fontSize: 11, fontWeight: 600, color: 'var(--color-attention)' }}>Not used by any process</span>}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {leftRows.map((row) => {
+                if (row.kind === 'header') {
+                  const st = LEVEL_STYLE[row.level];
+                  return (
+                    <tr key={row.rowKey}>
+                      <td colSpan={colCount} style={{ padding: `10px 16px 6px ${16 + row.depth * 16}px`, background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', fontSize: 12 }}>
+                        <span style={{ color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginRight: 8 }}>{st ? st.label : row.level}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: 13 }}>{row.name}</span>
+                      </td>
+                    </tr>
+                  );
+                }
+                const act = row.activity;
+                const isGap = !mappedActivityIds.has(act.id);
+                const actFocused = focus?.kind === 'activity' && focus.id === act.id;
+                const dim = focus ? !focusedNodeIds.has(act.id) : false;
                 return (
-                  <EdgePath key={e.mappingId} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                    x2={COL_WIDTH + GUTTER + assetIndent} y2={yB + ROW_HEIGHT / 2}
-                    color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={0.08} />
+                  <tr key={act.id} style={{ opacity: dim ? 0.4 : 1 }}>
+                    <td style={{ position: 'sticky', left: 0, background: actFocused ? 'var(--color-primary-light)' : 'var(--color-surface)', padding: `10px 16px 10px ${16 + row.depth * 16}px`, borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)' }}>
+                      <button type="button" onClick={() => setFocus((f) => f?.kind === 'activity' && f.id === act.id ? null : { kind: 'activity', id: act.id })} style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', textAlign: 'left', fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{act.name}</button>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)' }}>Activity</span>
+                      {isGap && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 4, height: 22, padding: '0 8px', borderRadius: 11, background: 'var(--color-attention-bg)', color: 'var(--color-attention)', fontSize: 11, fontWeight: 600 }}><span style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--color-attention)' }} />No data linked</span>}
+                    </td>
+                    {assets.map((a) => {
+                      const lt = edgeMap.get(`${act.id}|${a.id}`);
+                      const mk = lt ? markFor(lt) : null;
+                      return (
+                        <td key={a.id} style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-border)', borderLeft: '1px solid var(--color-border)', textAlign: 'center' }}>
+                          {mk ? (
+                            <span title={`${mk.label} — ${act.name} / ${a.name}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 26, height: 24, padding: '0 6px', borderRadius: 5, fontSize: 11, fontWeight: 700, background: mk.bg, color: mk.fg, border: mk.border ? `1px ${mk.dashed ? 'dashed' : 'solid'} ${mk.border}` : undefined }}>{mk.code}</span>
+                          ) : (
+                            <button type="button" aria-label={`Add mapping: ${act.name} and ${a.name}`} title={`Add mapping: ${act.name} and ${a.name}`} onClick={() => setViewMode('table')} style={{ width: 26, height: 24, border: '1px dashed var(--color-border)', background: 'transparent', borderRadius: 5, color: 'var(--color-text-muted)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', opacity: 0.55, fontSize: 14, lineHeight: 1 }}>+</button>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
                 );
-              }
-              if (focus && isFocused) return null;
-              return (
-                <EdgePath key={e.mappingId} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                  x2={COL_WIDTH + GUTTER + assetIndent} y2={yB + ROW_HEIGHT / 2}
-                  color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={focus ? 0.15 : 0.45} />
-              );
-            })}
-            {focus && edges.filter((e) => focusedEdges.has(e.mappingId)).map((e) => {
-              const yA = activityY.get(e.activityId);
-              const yB = assetY.get(e.assetId);
-              if (yA == null || yB == null) return null;
-              return (
-                <EdgePath key={`f-${e.mappingId}`} x1={COL_WIDTH} y1={yA + ROW_HEIGHT / 2}
-                  x2={COL_WIDTH + GUTTER + assetIndent} y2={yB + ROW_HEIGHT / 2}
-                  color={LINK_COLOR[e.linkType] || '#94a3b8'} opacity={0.9} strokeWidth={2} />
-              );
-            })}
-
-            {/* Left column: hierarchy headers (Value Stream → Process →
-                Sub-process) interleaved with the activity rows nested under
-                them. Activities indent by their depth so the tree reads
-                top-to-bottom; edges still leave the column's right edge. */}
-            {leftRows.map((row, i) => {
-              const y = PADDING_Y + i * ROW_HEIGHT;
-              if (row.kind === 'header') {
-                const st = LEVEL_STYLE[row.level] || { label: row.level, size: 10, weight: 600, color: '#64748b' };
-                const x = 8 + row.depth * 16;
-                return (
-                  <g key={row.rowKey}>
-                    <rect x={x} y={y + 3} width={2} height={ROW_HEIGHT - 10} fill={st.color} rx={1} />
-                    <text x={x + 8} y={y + 13} fontSize={8} fontWeight={600} fill="#94a3b8" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      {st.label}
-                    </text>
-                    <text x={x + 8} y={y + 25} fontSize={st.size} fontWeight={st.weight} fill={st.color} style={st.upper ? { textTransform: 'uppercase', letterSpacing: '0.03em' } : undefined}>
-                      {truncate(row.name, 40 - row.depth * 3)}
-                    </text>
-                  </g>
-                );
-              }
-              const a = row.activity;
-              const indent = 8 + row.depth * 16;
-              const dim = focus && !focusedNodeIds.has(a.id);
-              const isGap = !mappedActivityIds.has(a.id);
-              const isActiveFocus = focus?.kind === 'activity' && focus.id === a.id;
-              return (
-                <g key={a.id}
-                  onClick={() => setFocus((f) => f?.kind === 'activity' && f.id === a.id ? null : { kind: 'activity', id: a.id })}
-                  style={{ cursor: 'pointer', opacity: dim ? 0.35 : 1 }}
-                >
-                  <title>{isGap ? `${a.name} — no data asset mapped` : a.name}</title>
-                  <rect x={indent} y={y} width={COL_WIDTH - indent} height={ROW_HEIGHT - 4}
-                    fill={isActiveFocus ? '#d1fae5' : 'var(--color-bg)'}
-                    stroke={isGap ? 'var(--color-attention)' : '#cbd5e1'}
-                    strokeWidth={isGap ? 1.5 : 1}
-                    strokeDasharray={isGap ? '4 3' : undefined} rx={3} />
-                  <text x={indent + 10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
-                    {truncate(a.name, 32 - row.depth * 2)}
-                  </text>
-                  <text x={indent + 10} y={y + 26} fontSize={9} fill="#64748b">
-                    Activity
-                  </text>
-                  {isGap && (
-                    <g>
-                      <rect x={indent + 52} y={y + 17} width={58} height={13} rx={3}
-                        fill="var(--color-attention-bg)" stroke="var(--color-attention-border)" />
-                      <text x={indent + 52 + 29} y={y + 26} textAnchor="middle" fontSize={8} fontWeight={700}
-                        fill="var(--color-attention)" style={{ textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                        No data
-                      </text>
-                    </g>
-                  )}
-                </g>
-              );
-            })}
-
-            {/* Right column: data-domain headers with their assets nested
-                beneath (assets roll up to domains like activities roll up
-                to processes). */}
-            {rightRows.map((row, i) => {
-              const y = PADDING_Y + i * ROW_HEIGHT;
-              const colX = COL_WIDTH + GUTTER;
-              if (row.kind === 'domain') {
-                return (
-                  <g key={row.rowKey}>
-                    <rect x={colX + 8} y={y + 3} width={2} height={ROW_HEIGHT - 10} fill="#dc2626" rx={1} />
-                    <text x={colX + 16} y={y + 13} fontSize={8} fontWeight={600} fill="#94a3b8" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Data Domain
-                    </text>
-                    <text x={colX + 16} y={y + 25} fontSize={11} fontWeight={700} fill="#b91c1c">
-                      {truncate(row.name, 38)}
-                    </text>
-                  </g>
-                );
-              }
-              const a = row.asset;
-              const indent = assetIndent;
-              const x = colX + indent;
-              const dim = focus && !focusedNodeIds.has(a.id);
-              return (
-                <g key={a.id}
-                  onClick={() => setFocus((f) => f?.kind === 'asset' && f.id === a.id ? null : { kind: 'asset', id: a.id })}
-                  style={{ cursor: 'pointer', opacity: dim ? 0.35 : 1 }}
-                >
-                  <rect x={x} y={y} width={COL_WIDTH - indent} height={ROW_HEIGHT - 4}
-                    fill={focus?.kind === 'asset' && focus.id === a.id ? '#d1fae5' : 'var(--color-bg)'}
-                    stroke="#cbd5e1" rx={3} />
-                  <text x={x + 10} y={y + 14} fontSize={11} fontWeight={600} fill="#0f172a">
-                    {truncate(a.name, 28)}
-                  </text>
-                  <text x={x + 10} y={y + 26} fontSize={9} fill="#64748b">
-                    {a.systemName || 'no system'}
-                  </text>
-                  <text x={x + (COL_WIDTH - indent) - 38} y={y + 22} fontSize={9} fontWeight={700}
-                    fill={TIER_COLOR[a.governanceTier]} textAnchor="start">
-                    {a.governanceTier}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -636,25 +554,3 @@ export default function ProcessDataMapPage() {
   );
 }
 
-// Cubic Bezier connector so adjacent edges don't all overlap. Control
-// points are pulled horizontally so the lines leave each node
-// horizontally then curve to the target.
-function EdgePath({
-  x1, y1, x2, y2, color, opacity, strokeWidth = 1,
-}: { x1: number; y1: number; x2: number; y2: number; color: string; opacity: number; strokeWidth?: number }) {
-  const cx1 = x1 + (x2 - x1) * 0.5;
-  const cx2 = x1 + (x2 - x1) * 0.5;
-  return (
-    <path
-      d={`M ${x1} ${y1} C ${cx1} ${y1}, ${cx2} ${y2}, ${x2} ${y2}`}
-      stroke={color}
-      strokeWidth={strokeWidth}
-      fill="none"
-      opacity={opacity}
-    />
-  );
-}
-
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + '…' : s;
-}
