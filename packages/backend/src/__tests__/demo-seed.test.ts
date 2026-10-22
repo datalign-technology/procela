@@ -389,6 +389,24 @@ describe('demo-seed endpoint', () => {
     assert.match(String(pairing.pairingCode), /^\d{8}$/, 'pairing code should be 8 digits');
   });
 
+  it('seeds the certification story — one CERTIFIED and one PENDING_REVIEW asset', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const npdes = dataAssets.find((a: any) => a.id === demoId('asset-npdes'));
+    const meter = dataAssets.find((a: any) => a.id === demoId('asset-meter-reads'));
+    assert.ok(npdes && meter);
+    // Certified asset: Gold, with a reviewer distinct from the requester and a recert date.
+    assert.strictEqual((npdes as any).certificationStatus, 'CERTIFIED');
+    assert.strictEqual((npdes as any).governanceTier, 'GOLD');
+    assert.strictEqual((npdes as any).certificationRequestedById, demoId('person-isabella'));
+    assert.strictEqual((npdes as any).certificationReviewedById, demoId('person-susan-chen'));
+    assert.notStrictEqual((npdes as any).certificationRequestedById, (npdes as any).certificationReviewedById);
+    assert.ok(new Date((npdes as any).certifiedUntil).getTime() > Date.now(), 'recert date is in the future');
+    // Pending asset: awaiting review, requested by its owner, no reviewer yet.
+    assert.strictEqual((meter as any).certificationStatus, 'PENDING_REVIEW');
+    assert.strictEqual((meter as any).certificationRequestedById, demoId('person-andre'));
+    assert.ok(!(meter as any).certificationReviewedById, 'pending asset has no reviewer yet');
+  });
+
   it('seeds a governance calendar event owned by Susan', async () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
     const ev = calendarEvents.find((c: any) => c.id === demoId('cal-dgc'));

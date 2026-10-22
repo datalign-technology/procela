@@ -16,6 +16,7 @@ import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
 import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
 import { systems } from './systems';
 import { dataDomains } from './data-domains';
+import { damaRoles } from './dama-roles';
 import { mappings } from './mappings';
 import { people } from './people';
 import { processNodes } from './process-catalog';
@@ -24,6 +25,7 @@ import { getMappingsRepository } from '../db/mappings.repo';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
 import { countMeasuredRulesByAsset, effectiveHealthScore } from '../lib/asset-health';
 import { computeRescanHealth } from '../lib/schema-drift';
 // Type-only import — the runtime function is require()'d lazily at the call
@@ -116,6 +118,18 @@ export interface StoredDataAsset {
    *  detect schema drift on the next scan. Undefined until a scan reports
    *  columns. */
   schemaFingerprint?: string | null;
+  /** Certification workflow (reviewed promotion to Gold). NONE = not in the
+   *  flow; PENDING_REVIEW = requested; CERTIFIED = attested (distinct from a raw
+   *  Gold tier edit). See docs/CERTIFICATION_DESIGN.md. */
+  certificationStatus?: 'NONE' | 'PENDING_REVIEW' | 'CERTIFIED';
+  /** Person id of the requester when linked to a Person, else the auth subject. */
+  certificationRequestedById?: string | null;
+  certificationRequestedAt?: string | null;
+  certificationReviewedById?: string | null;
+  certificationReviewedAt?: string | null;
+  /** Recertification due date (approve + 12 months by default). */
+  certifiedUntil?: string | null;
+  certificationNote?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -562,6 +576,8 @@ let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
 const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
 let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
 const processNodesRepo = () => (_processNodesRepo ??= getProcessNodesRepository(processNodes));
+let _damaRolesRepo: ReturnType<typeof getDamaRolesRepository> | null = null;
+const damaRolesRepo = () => (_damaRolesRepo ??= getDamaRolesRepository(damaRoles));
 
 /**
  * Resolve the primary binding for an asset, or undefined if it isn't linked
@@ -896,10 +912,17 @@ router.get('/:id/360', async (req: Request, res: Response) => {
 
   const assetHealth = await effectiveHealthForAsset(asset);
 
+  // Resolve certification actor names across the full people set (the client's
+  // people list is org-scoped and may exclude an actor in a child org).
+  const certRequestedByName = asset.certificationRequestedById
+    ? allPeople.find((p) => p.id === asset.certificationRequestedById)?.name || null : null;
+  const certReviewedByName = asset.certificationReviewedById
+    ? allPeople.find((p) => p.id === asset.certificationReviewedById)?.name || null : null;
+
   res.json({
     success: true,
     data: {
-      asset: { ...asset, healthScore: assetHealth },
+      asset: { ...asset, healthScore: assetHealth, certificationRequestedByName: certRequestedByName, certificationReviewedByName: certReviewedByName },
       system: system ? { id: system.id, name: system.name, systemType: system.systemType } : null,
       domain: domainInfo,
       mappings: assetMappings,
@@ -1078,6 +1101,55 @@ router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) =>
   res.status(204).send();
 });
 
+// ── Certification workflow (docs/CERTIFICATION_DESIGN.md) ──────────────────
+// A reviewed promotion to Gold: request → approve/reject, with segregation of
+// duties and an attestation (who/when/until) distinct from a raw tier edit.
+const CERT_RECERT_MONTHS = 12;
+
+/** Resolved certification context for one request: the caller's Person (by
+ *  email), a stable identity for segregation of duties (person id when linked,
+ *  else the auth subject), and the request/review grants — computed against the
+ *  repos so RBAC is correct under both the JSON store and Prisma. */
+async function certContext(req: Request, asset: StoredDataAsset) {
+  const user = (req as AuthenticatedRequest).user;
+  const email = (user?.email || '').toLowerCase();
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ORG_ADMIN';
+  const [allPeople, allDomains, allRoles] = await Promise.all([
+    peopleRepo().list(),
+    dataDomainsRepo().list(),
+    damaRolesRepo().list(),
+  ]);
+  const person = email ? allPeople.find((p) => p.email?.toLowerCase() === email) || null : null;
+  const identity = person?.id || user?.sub || null;
+  const domain = allDomains.find((d) => (d.dataAssetIds || []).includes(asset.id)) || null;
+
+  const canRequest = isAdmin || (!!person && (
+    asset.ownerPersonId === person.id || (asset.stewardIds || []).includes(person.id)
+  ));
+
+  let canReview = isAdmin;
+  if (!canReview && person) {
+    const pid = person.id;
+    if (allRoles.some((r) => r.personId === pid && (r.roleType === 'CDO' || r.roleType === 'DATA_GOVERNANCE_LEAD'))) {
+      canReview = true;
+    } else if (domain) {
+      if (domain.ownerId === pid) canReview = true;
+      else if (allRoles.some((r) => r.personId === pid && r.roleType === 'DATA_OWNER' && r.scopeType === 'DOMAIN' && r.scopeId === domain.id)) {
+        canReview = true;
+      }
+    }
+  }
+  return { user, person, isAdmin, identity, domain, canRequest, canReview };
+}
+
+/** GET /api/v1/data-assets/certification-queue — assets awaiting review.
+ *  Registered before /:id so the literal path isn't captured as an id. */
+router.get('/certification-queue', async (req: Request, res: Response) => {
+  const all = await dataAssetsRepo.list();
+  const scoped = scopeListForRequest(req, all);
+  res.json({ success: true, data: scoped.filter((a) => a.certificationStatus === 'PENDING_REVIEW') });
+});
+
 /** GET /api/v1/data-assets/:id */
 router.get('/:id', async (req: Request, res: Response) => {
   const asset = await dataAssetsRepo.get(String(req.params.id));
@@ -1221,6 +1293,101 @@ router.put('/:id', async (req: Request, res: Response) => {
   await syncBindingFromAssetFields(asset);
   auditService.log(asset.orgId, (req as AuthenticatedRequest).user?.sub || null, 'DataAsset', asset.id, 'UPDATE', before, asset);
   res.json({ success: true, data: asset });
+});
+
+/** POST /api/v1/data-assets/:id/certification/request */
+router.post('/:id/certification/request', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
+  const ctx = await certContext(req, asset);
+  if (!ctx.canRequest) { res.status(403).json({ success: false, error: 'Only the asset owner, a steward, or an admin can request certification.' }); return; }
+  if ((asset.certificationStatus || 'NONE') !== 'NONE') { res.status(409).json({ success: false, error: 'Certification is already requested or in place.' }); return; }
+  if (!asset.ownerPersonId && !(asset.owner && asset.owner.trim())) { res.status(422).json({ success: false, error: 'Assign an owner before requesting certification.' }); return; }
+  const before = { ...asset };
+  const updated = await dataAssetsRepo.update(asset.id, {
+    certificationStatus: 'PENDING_REVIEW',
+    certificationRequestedById: ctx.identity,
+    certificationRequestedAt: new Date().toISOString(),
+    certificationReviewedById: null,
+    certificationReviewedAt: null,
+    certificationNote: typeof req.body?.note === 'string' ? req.body.note : null,
+  });
+  auditService.log(asset.orgId, ctx.user?.sub || null, 'DataAsset', asset.id, 'CERT_REQUEST', before, updated);
+  res.json({ success: true, data: updated });
+});
+
+/** POST /api/v1/data-assets/:id/certification/approve */
+router.post('/:id/certification/approve', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
+  if ((asset.certificationStatus || 'NONE') !== 'PENDING_REVIEW') { res.status(409).json({ success: false, error: 'No pending certification request.' }); return; }
+  const ctx = await certContext(req, asset);
+  if (!ctx.canReview) { res.status(403).json({ success: false, error: 'Only a CDO, Governance Lead, the domain Data Owner, or an admin can review certification.' }); return; }
+  if (ctx.identity && asset.certificationRequestedById && ctx.identity === asset.certificationRequestedById) {
+    res.status(403).json({ success: false, error: 'The requester cannot approve their own certification.' }); return;
+  }
+  const months = Number.isFinite(req.body?.months) && req.body.months > 0 ? Math.trunc(req.body.months) : CERT_RECERT_MONTHS;
+  const until = new Date(); until.setMonth(until.getMonth() + months);
+  const before = { ...asset };
+  const updated = await dataAssetsRepo.update(asset.id, {
+    certificationStatus: 'CERTIFIED',
+    governanceTier: 'GOLD',
+    certificationReviewedById: ctx.identity,
+    certificationReviewedAt: new Date().toISOString(),
+    certifiedUntil: until.toISOString(),
+    ...(typeof req.body?.note === 'string' ? { certificationNote: req.body.note } : {}),
+  });
+  auditService.log(asset.orgId, ctx.user?.sub || null, 'DataAsset', asset.id, 'CERT_APPROVE', before, updated);
+  res.json({ success: true, data: updated });
+});
+
+/** POST /api/v1/data-assets/:id/certification/reject */
+router.post('/:id/certification/reject', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
+  if ((asset.certificationStatus || 'NONE') !== 'PENDING_REVIEW') { res.status(409).json({ success: false, error: 'No pending certification request.' }); return; }
+  const ctx = await certContext(req, asset);
+  if (!ctx.canReview) { res.status(403).json({ success: false, error: 'Only a CDO, Governance Lead, the domain Data Owner, or an admin can review certification.' }); return; }
+  if (ctx.identity && asset.certificationRequestedById && ctx.identity === asset.certificationRequestedById) {
+    res.status(403).json({ success: false, error: 'The requester cannot review their own certification.' }); return;
+  }
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+  if (!note) { res.status(422).json({ success: false, error: 'A reason is required to reject a certification request.' }); return; }
+  const before = { ...asset };
+  // Tier is left unchanged — rejection returns to NONE, not a demotion.
+  const updated = await dataAssetsRepo.update(asset.id, {
+    certificationStatus: 'NONE',
+    certificationReviewedById: ctx.identity,
+    certificationReviewedAt: new Date().toISOString(),
+    certificationNote: note,
+  });
+  auditService.log(asset.orgId, ctx.user?.sub || null, 'DataAsset', asset.id, 'CERT_REJECT', before, updated);
+  res.json({ success: true, data: updated });
+});
+
+/** POST /api/v1/data-assets/:id/certification/revoke */
+router.post('/:id/certification/revoke', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  if (!assertOrgAccess(req, res, asset.orgId, 'Data asset not found')) return;
+  if ((asset.certificationStatus || 'NONE') !== 'CERTIFIED') { res.status(409).json({ success: false, error: 'This asset is not certified.' }); return; }
+  const ctx = await certContext(req, asset);
+  if (!ctx.canReview) { res.status(403).json({ success: false, error: 'Only a CDO, Governance Lead, the domain Data Owner, or an admin can revoke certification.' }); return; }
+  const before = { ...asset };
+  // Revoking a certification demotes the attested Gold to Silver.
+  const updated = await dataAssetsRepo.update(asset.id, {
+    certificationStatus: 'NONE',
+    governanceTier: 'SILVER',
+    certifiedUntil: null,
+    certificationReviewedById: ctx.identity,
+    certificationReviewedAt: new Date().toISOString(),
+    ...(typeof req.body?.note === 'string' ? { certificationNote: req.body.note } : {}),
+  });
+  auditService.log(asset.orgId, ctx.user?.sub || null, 'DataAsset', asset.id, 'CERT_REVOKE', before, updated);
+  res.json({ success: true, data: updated });
 });
 
 /** DELETE /api/v1/data-assets/:id */

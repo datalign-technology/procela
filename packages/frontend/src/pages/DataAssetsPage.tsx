@@ -33,6 +33,7 @@ import ActivityFeed from '../components/ActivityFeed';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
+import { useAuthStore } from '../stores/authStore';
 import { useAiEnabled } from '../stores/aiConfigStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -140,6 +141,19 @@ interface DataAssetEntity {
    *  Advisory only — set by the backend, never persisted. The UI shows
    *  a Promote prompt when this exceeds the actual governanceTier. */
   suggestedTier?: 'BRONZE' | 'SILVER' | 'GOLD';
+  /** Certification workflow (docs/CERTIFICATION_DESIGN.md) — a reviewed
+   *  promotion to Gold, distinct from a raw manual tier edit. */
+  certificationStatus?: 'NONE' | 'PENDING_REVIEW' | 'CERTIFIED';
+  certificationRequestedById?: string | null;
+  certificationRequestedAt?: string | null;
+  certificationReviewedById?: string | null;
+  certificationReviewedAt?: string | null;
+  certifiedUntil?: string | null;
+  certificationNote?: string | null;
+  /** Actor names resolved server-side on the 360 endpoint (the client's
+   *  people list is org-scoped and may miss an actor in a child org). */
+  certificationRequestedByName?: string | null;
+  certificationReviewedByName?: string | null;
   /** True when no process-step mapping points at this asset — the
    *  "orphan" signal that used to live on its own page. Drives the
    *  Unmapped row badge and the mapping-status filter. */
@@ -389,8 +403,9 @@ const backLinkStyle: React.CSSProperties = {
 // matches against the domain-/filter-scoped set so the number always equals
 // "what clicking this shows". `tag: 'fix'` marks the two gaps that block an
 // asset from being trustworthy at all (no mapping, no owner) — they lead.
-type AttentionKey = 'unmapped' | 'noOwner' | 'uncertified' | 'noDomain' | 'unclassified';
+type AttentionKey = 'pendingCert' | 'unmapped' | 'noOwner' | 'uncertified' | 'noDomain' | 'unclassified';
 const ATTENTION_TESTS: Record<AttentionKey, (a: DataAssetEntity) => boolean> = {
+  pendingCert: (a) => a.certificationStatus === 'PENDING_REVIEW',
   unmapped: (a) => !!a.isOrphan,
   noOwner: (a) => !a.ownerName,
   uncertified: (a) => (a.governanceTier || 'BRONZE') === 'BRONZE',
@@ -420,6 +435,175 @@ function LockIcon() {
         <path d="M8 11V8a4 4 0 0 1 8 0v3" />
       </svg>
     </span>
+  );
+}
+
+// ── Certification (docs/CERTIFICATION_DESIGN.md) ──────────────────────────
+// A reviewed promotion to Gold: request → approve / reject, with a recert
+// term and an attestation (who / when / until) kept distinct from a raw tier
+// edit. Rendered on the asset detail Overview tab.
+
+const CERT_HEALTH_BAR = 80; // mirrors backend HEALTH_SCORE_THRESHOLD
+
+/** Date-only (no time) formatting for recertification dates. */
+function certDate(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? d.toLocaleDateString(undefined, { dateStyle: 'medium' }) : '';
+}
+
+type CertStatus = 'NONE' | 'PENDING_REVIEW' | 'CERTIFIED';
+
+function certStatusPill(status: CertStatus, certifiedUntil?: string | null): { label: string; bg: string; color: string } | null {
+  if (status === 'PENDING_REVIEW') return { label: 'Certification pending', bg: '#fef3c7', color: '#92400e' };
+  if (status === 'CERTIFIED') {
+    const overdue = certifiedUntil ? new Date(certifiedUntil).getTime() < Date.now() : false;
+    return overdue
+      ? { label: 'Certified · recert due', bg: '#fef3c7', color: '#92400e' }
+      : { label: 'Certified', bg: '#dcfce7', color: '#166534' };
+  }
+  return null;
+}
+
+function ReadinessCheck({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <li style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+      <span aria-hidden="true" style={{ display: 'inline-flex', width: 16, height: 16, flexShrink: 0, borderRadius: 999, alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: ok ? '#dcfce7' : 'var(--color-bg)', color: ok ? 'var(--color-success)' : 'var(--color-text-muted)', border: ok ? 'none' : '1px solid var(--color-border)' }}>
+        {ok ? '✓' : '·'}
+      </span>
+      <span>{label}</span>
+    </li>
+  );
+}
+
+function CertificationPanel({
+  asset, domainName, canWrite, inherited, myPersonId, nameById, onChanged,
+}: {
+  asset: DataAssetEntity;
+  domainName: string | null;
+  canWrite: boolean;
+  inherited: boolean;
+  myPersonId: string | null;
+  nameById: (id: string | null | undefined) => string;
+  onChanged: () => void | Promise<void>;
+}) {
+  const { addToast } = useToastStore();
+  const [note, setNote] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const status: CertStatus = (asset.certificationStatus || 'NONE') as CertStatus;
+
+  const hasOwner = !!(asset.ownerPersonId || (asset.owner && asset.owner.trim()) || asset.ownerName);
+  const checks = [
+    { ok: hasOwner, label: 'Owner assigned' },
+    { ok: !!(asset.stewardIds && asset.stewardIds.length) || !!asset.stewardName, label: 'Steward assigned' },
+    { ok: !!domainName, label: 'In a data domain' },
+    { ok: !!(asset.sensitivityTags && asset.sensitivityTags.length), label: 'Sensitivity classified' },
+    { ok: !!(asset.description && asset.description.trim()), label: 'Business definition present' },
+    { ok: (asset.healthScore ?? 0) >= CERT_HEALTH_BAR, label: `Health score ≥ ${CERT_HEALTH_BAR} (Gold bar)` },
+  ];
+  const unmet = checks.filter((c) => !c.ok).length;
+
+  const act = async (action: 'request' | 'approve' | 'reject' | 'revoke', body?: Record<string, unknown>) => {
+    setBusy(true);
+    try {
+      await apiClient.post(`/data-assets/${asset.id}/certification/${action}`, body || {});
+      const msg = action === 'request' ? 'Certification requested' : action === 'approve' ? 'Asset certified' : action === 'reject' ? 'Request rejected' : 'Certification revoked';
+      addToast('success', msg);
+      setNote(''); setRejecting(false);
+      await onChanged();
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Certification action failed'));
+    } finally { setBusy(false); }
+  };
+
+  const pill = certStatusPill(status, asset.certifiedUntil);
+  const iAmRequester = !!myPersonId && asset.certificationRequestedById === myPersonId;
+  const btn = (primary: boolean): React.CSSProperties => ({
+    height: 34, padding: '0 14px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: busy ? 0.6 : 1,
+    border: primary ? 'none' : '1px solid var(--color-border)',
+    background: primary ? 'var(--color-primary)' : 'transparent',
+    color: primary ? '#fff' : 'var(--color-text-secondary)',
+  });
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <SectionLabel marginBottom={0}>Certification</SectionLabel>
+        {pill && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 10px', borderRadius: 999, background: pill.bg, color: pill.color, fontSize: 12, fontWeight: 600 }}>{pill.label}</span>
+        )}
+      </div>
+
+      {status === 'NONE' && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '10px 0 12px' }}>
+            Certification is a reviewed promotion to Gold — a named reviewer attests the asset meets the governance bar, recorded with a recertification date. The checklist below shows readiness; a reviewer is the final gate.
+          </p>
+          <ul style={{ listStyle: 'none', margin: '0 0 14px', padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 6 }}>
+            {checks.map((c) => <ReadinessCheck key={c.label} ok={c.ok} label={c.label} />)}
+          </ul>
+          {canWrite && !inherited && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button disabled={busy || !hasOwner} onClick={() => act('request', note.trim() ? { note: note.trim() } : {})} style={{ ...btn(true), opacity: (busy || !hasOwner) ? 0.5 : 1, cursor: (busy || !hasOwner) ? 'not-allowed' : 'pointer' }}>
+                Request certification
+              </button>
+              {!hasOwner && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Assign an owner first.</span>}
+              {hasOwner && unmet > 0 && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{unmet} check{unmet === 1 ? '' : 's'} below the bar — you can still request; the reviewer decides.</span>}
+            </div>
+          )}
+        </>
+      )}
+
+      {status === 'PENDING_REVIEW' && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '10px 0 10px' }}>
+            Requested by <strong style={{ color: 'var(--color-text)' }}>{asset.certificationRequestedByName || nameById(asset.certificationRequestedById)}</strong>
+            {asset.certificationRequestedAt ? <> · {relativeTime(asset.certificationRequestedAt)}</> : null}.
+            {asset.certificationNote ? <> “{asset.certificationNote}”</> : null}
+          </p>
+          <ul style={{ listStyle: 'none', margin: '0 0 14px', padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 6 }}>
+            {checks.map((c) => <ReadinessCheck key={c.label} ok={c.ok} label={c.label} />)}
+          </ul>
+          {canWrite && !inherited && (
+            iAmRequester ? (
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>You requested this certification — a different reviewer must approve it.</p>
+            ) : rejecting ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason for rejection (required)" rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button disabled={busy || !note.trim()} onClick={() => act('reject', { note: note.trim() })} style={{ ...btn(true), background: 'var(--color-error)', opacity: (busy || !note.trim()) ? 0.5 : 1 }}>Confirm rejection</button>
+                  <button disabled={busy} onClick={() => { setRejecting(false); setNote(''); }} style={btn(false)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button disabled={busy} onClick={() => act('approve')} style={btn(true)}>Approve &amp; certify</button>
+                <button disabled={busy} onClick={() => setRejecting(true)} style={btn(false)}>Reject…</button>
+              </div>
+            )
+          )}
+        </>
+      )}
+
+      {status === 'CERTIFIED' && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '10px 0 12px' }}>
+            Certified by <strong style={{ color: 'var(--color-text)' }}>{asset.certificationReviewedByName || nameById(asset.certificationReviewedById)}</strong>
+            {asset.certificationReviewedAt ? <> · {relativeTime(asset.certificationReviewedAt)}</> : null}.
+            {asset.certifiedUntil ? (
+              new Date(asset.certifiedUntil).getTime() < Date.now()
+                ? <> <strong style={{ color: 'var(--color-warning)' }}>Recertification overdue</strong> (due {certDate(asset.certifiedUntil)}).</>
+                : <> Recertification due {certDate(asset.certifiedUntil)}.</>
+            ) : null}
+            {asset.certificationNote ? <> “{asset.certificationNote}”</> : null}
+          </p>
+          {canWrite && !inherited && (
+            <button disabled={busy} onClick={() => act('revoke', note.trim() ? { note: note.trim() } : {})} style={btn(false)}>Revoke certification</button>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -459,9 +643,20 @@ export default function DataAssetsPage({
   const highlightId = searchParams.get('highlight');
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
-  const [peopleList, setPeopleList] = useState<{ id: string; name: string }[]>([]);
+  const [peopleList, setPeopleList] = useState<{ id: string; name: string; email?: string }[]>([]);
   const [domainsList, setDomainsList] = useState<{ id: string; name: string; parentDomainId?: string | null; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }[]>([]);
   const [standardDataTypes, setStandardDataTypes] = useState<string[]>([]);
+  // Current user's Person id (resolved by email) — gates certification
+  // segregation of duties in the UI; the server is the real authority.
+  const authEmail = useAuthStore((s) => s.user?.email);
+  const myPersonId = useMemo(
+    () => peopleList.find((p) => p.email && authEmail && p.email.toLowerCase() === authEmail.toLowerCase())?.id ?? null,
+    [peopleList, authEmail],
+  );
+  const nameById = useCallback(
+    (id: string | null | undefined) => (id ? peopleList.find((p) => p.id === id)?.name || 'Someone' : 'Someone'),
+    [peopleList],
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -625,7 +820,7 @@ export default function DataAssetsPage({
       const [assetRes, connRes, peopleRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/connections${query}`),
-        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/people${query}`),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; email?: string }> }>(`/people${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; parentDomainId?: string | null; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }> }>(`/data-domains${query}`),
       ]);
       setPeopleList(peopleRes.data || []);
@@ -790,7 +985,7 @@ export default function DataAssetsPage({
 
   // Per-card counts for the "Needs attention" strip, over the scoped set.
   const attentionCounts = useMemo<Record<AttentionKey, number>>(() => {
-    const out = { unmapped: 0, noOwner: 0, uncertified: 0, noDomain: 0, unclassified: 0 } as Record<AttentionKey, number>;
+    const out = { pendingCert: 0, unmapped: 0, noOwner: 0, uncertified: 0, noDomain: 0, unclassified: 0 } as Record<AttentionKey, number>;
     for (const a of baseFiltered) {
       (Object.keys(ATTENTION_TESTS) as AttentionKey[]).forEach((k) => { if (ATTENTION_TESTS[k](a)) out[k] += 1; });
     }
@@ -1911,6 +2106,7 @@ export default function DataAssetsPage({
           caption="Click a card to filter the list"
           minCardWidth={150}
           cards={([
+            ...(attentionCounts.pendingCert > 0 ? [{ key: 'pendingCert' as AttentionKey, label: 'Pending certification', hint: 'Awaiting a reviewer’s sign-off', priority: true }] : []),
             { key: 'unmapped',     label: 'Unmapped',          hint: 'Not linked to a process step', priority: true },
             { key: 'noOwner',      label: 'No owner',          hint: 'Nobody accountable yet',        priority: true },
             { key: 'uncertified',  label: tierLabel('BRONZE'), hint: 'Not reviewed for trust' },
@@ -2024,7 +2220,7 @@ export default function DataAssetsPage({
           // Active "Needs attention" card as a removable chip, so it's clear
           // which card is driving the current view and easy to drop.
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 4px 2px 10px', borderRadius: 999, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 11, fontWeight: 600 }}>
-            {{ unmapped: 'Unmapped', noOwner: 'No owner', uncertified: tierLabel('BRONZE'), noDomain: 'No domain', unclassified: 'Sensitivity not set' }[attention]}
+            {{ pendingCert: 'Pending certification', unmapped: 'Unmapped', noOwner: 'No owner', uncertified: tierLabel('BRONZE'), noDomain: 'No domain', unclassified: 'Sensitivity not set' }[attention]}
             <button
               type="button"
               aria-label="Clear needs-attention filter"
@@ -2688,6 +2884,12 @@ export default function DataAssetsPage({
                 {/* Status pills — tier, sensitivity, and mapping at a glance. */}
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                   <TierBadge tier={viewing360.asset.governanceTier} />
+                  {(() => {
+                    const cp = certStatusPill((viewing360.asset.certificationStatus || 'NONE') as CertStatus, viewing360.asset.certifiedUntil);
+                    return cp ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', borderRadius: 999, background: cp.bg, color: cp.color, fontSize: 12, fontWeight: 600 }}>{cp.label}</span>
+                    ) : null;
+                  })()}
                   {viewing360.asset.sensitivityTags && viewing360.asset.sensitivityTags.length > 0 && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 999, background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>
                       {viewing360.asset.sensitivityTags[0]}{viewing360.asset.sensitivityTags.length > 1 ? ` +${viewing360.asset.sensitivityTags.length - 1}` : ''}
@@ -2804,6 +3006,19 @@ export default function DataAssetsPage({
                     setViewing360((prev) => prev ? { ...prev, asset: { ...prev.asset, sensitivityTags: next } } : prev);
                     setAssets((prev) => prev.map((a) => a.id === viewing360.asset.id ? { ...a, sensitivityTags: next } : a));
                   }}
+                />
+                )}
+
+                {/* Certification — reviewed promotion to Gold (Overview tab). */}
+                {detailTab === 'overview' && (
+                <CertificationPanel
+                  asset={viewing360.asset}
+                  domainName={viewing360.domain?.name ?? null}
+                  canWrite={canWrite}
+                  inherited={isInheritedAsset(viewing360.asset.orgId, activeOrgId)}
+                  myPersonId={myPersonId}
+                  nameById={nameById}
+                  onChanged={() => { void open360(viewing360.asset.id); void fetchData(); }}
                 />
                 )}
 
