@@ -479,6 +479,8 @@ router.get('/:id/360', async (req: Request, res: Response) => {
       id: a.id,
       name: a.name,
       governanceTier: a.governanceTier,
+      certificationStatus: a.certificationStatus || 'NONE',
+      certifiedUntil: a.certifiedUntil ?? null,
       healthScore: effectiveHealthScore(a.healthScore, measuredCounts.get(a.id) || 0),
     }));
 
