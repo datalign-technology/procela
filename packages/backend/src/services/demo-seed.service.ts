@@ -898,12 +898,17 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   const assetDistPressure = { id: demoId('asset-dist-pressure'), orgId: orgWater.id, name: 'Distribution Pressure Reads', description: 'Continuous pressure telemetry from PRV stations and district metered areas.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
   const assetWaterQuality = { id: demoId('asset-water-quality'), orgId: orgWater.id, name: 'Water Quality Results', description: 'Lab and in-line water quality samples — turbidity, chlorine residual, coliform, pH.', systemId: sysLIMS.id, owner: '', ownerPersonId: sophie.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 79, createdAt: ts, updatedAt: ts };
   const assetNPDES = { id: demoId('asset-npdes'), orgId: orgWater.id, name: 'NPDES Discharge Records', description: 'Wastewater effluent discharge monitoring reports for state and EPA submissions.', systemId: sysLIMS.id, owner: '', ownerPersonId: isabella.id, stewardIds: [phillip.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, certificationStatus: 'CERTIFIED' as const, certificationRequestedById: isabella.id, certificationRequestedAt: daysFromNow(-40), certificationReviewedById: susan.id, certificationReviewedAt: daysFromNow(-35), certifiedUntil: daysFromNow(330), certificationNote: 'Owner-attested for the EPA submission cycle; DQ rules green and definition approved.', createdAt: ts, updatedAt: ts };
-  await createAll(repos.dataAssets, [assetOutageLogs, assetCustomerMaster, assetMeterReads, assetGeneration, orphanLegacyBilling, orphanMeterCsv, assetDistPressure, assetWaterQuality, assetNPDES]);
+  // Manual Gold, never certified: tagged GOLD on import from the legacy
+  // finance system, but no one has run it through the certification workflow.
+  // Owned + stewarded + in a domain, so its only governance gap is the missing
+  // attestation — the "Gold but not certified" nudge Gap Detection surfaces.
+  const assetRateBase = { id: demoId('asset-rate-base'), orgId: orgTidewater.id, name: 'Rate Base Register', description: 'Regulated asset base + depreciation schedules imported from the legacy finance system for rate-case filings. Tagged Gold on import; never formally certified.', systemId: sysWarehouse.id, owner: '', ownerPersonId: lorraine.id, stewardIds: [phillip.id] as string[], governanceTier: 'GOLD' as const, healthScore: 74, origin: 'IMPORTED' as const, certificationStatus: 'NONE' as const, createdAt: ts, updatedAt: ts };
+  await createAll(repos.dataAssets, [assetOutageLogs, assetCustomerMaster, assetMeterReads, assetGeneration, orphanLegacyBilling, orphanMeterCsv, assetDistPressure, assetWaterQuality, assetNPDES, assetRateBase]);
 
   // Wire the domain → asset backrefs so the Domains page shows counts.
   await repos.dataDomains.update(domCustomer.id, { dataAssetIds: [assetCustomerMaster.id] });
   await repos.dataDomains.update(domOps.id, { dataAssetIds: [assetOutageLogs.id, assetMeterReads.id, assetGeneration.id, assetDistPressure.id, assetWaterQuality.id] });
-  await repos.dataDomains.update(domRegulatory.id, { dataAssetIds: [assetNPDES.id] });
+  await repos.dataDomains.update(domRegulatory.id, { dataAssetIds: [assetNPDES.id, assetRateBase.id] });
 
   // ── Process hierarchy (Tidewater Electric) ──
   // Compact but meaningful: one value stream, two processes, one
