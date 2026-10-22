@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
+import CertifiedBadge from '../components/CertifiedBadge';
 import AttentionCards from '../components/AttentionCards';
 import MappingsPage from './MappingsPage';
 import { apiClient } from '../api/client';
@@ -91,6 +92,8 @@ interface Asset {
   systemId: string;
   systemName: string | null;
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
+  certificationStatus?: string;
+  certifiedUntil?: string | null;
   /** Data domain the asset rolls up to (null when ungrouped). */
   domainId?: string | null;
   domainName?: string | null;
@@ -489,6 +492,9 @@ export default function ProcessDataMapPage() {
                       <button type="button" onClick={() => setFocus((f) => f?.kind === 'asset' && f.id === a.id ? null : { kind: 'asset', id: a.id })} style={{ display: 'block', border: 0, background: 'transparent', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'var(--color-text)', fontWeight: 600, fontSize: 13 }}>{a.name}</button>
                       <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 400 }}>{a.systemName || 'no system'}</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, height: 22, padding: '0 8px', borderRadius: 11, fontSize: 11, fontWeight: 600, background: tier.bg, color: tier.fg }}><span style={{ width: 6, height: 6, borderRadius: 3, background: tier.fg }} />{tier.label}</span>
+                      {(a.certificationStatus === 'CERTIFIED' || a.certificationStatus === 'PENDING_REVIEW') && (
+                        <span style={{ display: 'inline-block', marginTop: 6, marginLeft: 5 }}><CertifiedBadge compact status={a.certificationStatus} certifiedUntil={a.certifiedUntil} /></span>
+                      )}
                       {unused && <span style={{ display: 'block', marginTop: 6, fontSize: 11, fontWeight: 600, color: 'var(--color-attention)' }}>Not used by any process</span>}
                     </th>
                   );

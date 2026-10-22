@@ -297,7 +297,7 @@ export interface MappingInfo {
    *  strategy" while the linked entity is "Q4 Strategy Plan.pdf",
    *  bypassing the fuzzy substring match. */
   fulfillsExpected?: string;
-  assetInfo: { assetId: string; assetName: string; ownerName: string | null; stewardName: string | null; governanceTier: string; healthScore: number } | null;
+  assetInfo: { assetId: string; assetName: string; ownerName: string | null; stewardName: string | null; governanceTier: string; certificationStatus?: string; certifiedUntil?: string | null; healthScore: number } | null;
   policyInfo: { policyId: string; policyName: string; policyCode: string; documentType: string; status: string } | null;
   attachmentInfo: { attachmentId: string; name: string; type: 'FILE' | 'URL'; fileName?: string; url?: string; mimeType?: string; fileSize?: number } | null;
 }

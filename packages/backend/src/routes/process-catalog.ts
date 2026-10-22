@@ -1826,6 +1826,8 @@ router.get('/data-graph', async (req: Request, res: Response) => {
         systemId: a.systemId,
         systemName: sysName,
         governanceTier: a.governanceTier,
+        certificationStatus: a.certificationStatus || 'NONE',
+        certifiedUntil: a.certifiedUntil ?? null,
         // Data domain the asset belongs to (null when ungrouped) so the
         // map can roll assets up under domain headers like activities roll
         // up under processes.

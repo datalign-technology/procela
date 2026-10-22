@@ -18,6 +18,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import { clickable } from '../lib/a11y';
 import { badgeColor } from '../lib/badgeColors';
+import { certStatusPill } from '../components/CertifiedBadge';
 import HelpPopover from '../components/HelpPopover';
 import EnterpriseDiagram from '../components/EnterpriseDiagram';
 import EntityTypeFilter from '../components/EntityTypeFilter';
@@ -473,6 +474,10 @@ export default function EnterpriseViewPage() {
             {n.meta.governanceTier && (() => {
               const c = badgeColor('tier', n.meta.governanceTier);
               return <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>{tierLabel(n.meta.governanceTier)}</span>;
+            })()}
+            {(() => {
+              const cp = certStatusPill(n.meta.certificationStatus, n.meta.certifiedUntil);
+              return cp ? <span title={cp.title} style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: cp.bg, color: cp.color }}>{cp.label.startsWith('Certified · ') ? 'Recert due' : cp.label === 'Certification pending' ? 'Pending' : cp.label}</span> : null;
             })()}
             {n.meta.healthScore != null && (() => {
               const c = badgeColor('health', n.meta.healthScore);
