@@ -172,6 +172,8 @@ function findAssetInfo(assetId: string | undefined, ctx: EnrichContext) {
     assetName: asset.name,
     assetDescription: asset.description,
     governanceTier: asset.governanceTier,
+    certificationStatus: asset.certificationStatus || 'NONE',
+    certifiedUntil: asset.certifiedUntil ?? null,
     healthScore: effectiveHealthScore(asset.healthScore, ctx.measuredHealthByAsset.get(asset.id) || 0),
     ownerName: owner?.name || null,
     stewardName,

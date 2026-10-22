@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
+import CertifiedBadge from '../components/CertifiedBadge';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -43,6 +44,8 @@ interface AssetInfo {
   assetName: string;
   assetDescription: string;
   governanceTier: string;
+  certificationStatus?: string;
+  certifiedUntil?: string | null;
   healthScore: number;
 }
 
@@ -123,7 +126,7 @@ function formatStepPath(info: StepInfo): string {
 }
 
 type MappingTarget =
-  | { kind: 'asset';      label: string; sub: string | null }
+  | { kind: 'asset';      label: string; sub: string | null; certStatus?: string; certifiedUntil?: string | null }
   | { kind: 'policy';     label: string; sub: string | null }
   | { kind: 'attachment'; label: string; sub: string | null }
   | { kind: 'orphan';     label: string; sub: string | null }
@@ -136,7 +139,7 @@ type MappingTarget =
  *  meaningfully. */
 function resolveTarget(m: Mapping): MappingTarget {
   if (m.assetInfo) {
-    return { kind: 'asset', label: m.assetInfo.assetName, sub: m.assetInfo.governanceTier || null };
+    return { kind: 'asset', label: m.assetInfo.assetName, sub: m.assetInfo.governanceTier || null, certStatus: m.assetInfo.certificationStatus, certifiedUntil: m.assetInfo.certifiedUntil };
   }
   if (m.policyInfo) {
     const sub = [m.policyInfo.policyCode, m.policyInfo.documentType].filter(Boolean).join(' · ') || null;
@@ -527,7 +530,10 @@ export default function MappingsPage({
               {kindLabel}
             </span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 500 }}>{t.label}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 500 }}>{t.label}</span>
+                {t.kind === 'asset' && <CertifiedBadge compact status={t.certStatus} certifiedUntil={t.certifiedUntil} />}
+              </div>
               {t.sub && (
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.sub}</div>
               )}

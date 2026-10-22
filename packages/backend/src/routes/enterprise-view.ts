@@ -130,6 +130,8 @@ router.get('/', async (req: Request, res: Response) => {
       label: a.name, status: undefined,
       meta: {
         governanceTier: a.governanceTier,
+        certificationStatus: a.certificationStatus || 'NONE',
+        certifiedUntil: a.certifiedUntil ?? null,
         healthScore: effectiveHealthScore(a.healthScore, measuredRuleCount),
         systemId: a.systemId,
         rulesCount: assetRules.length,

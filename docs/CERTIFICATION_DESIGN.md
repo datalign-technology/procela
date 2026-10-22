@@ -137,8 +137,12 @@ Both phases have shipped.
   - *Scorecard + Gap Detection (#983)* — a "Certified coverage" value driver on
     the Council scorecard (honours the All / Governed lens) and a "Gold but not
     certified" Gap Detection check.
+  - *Relationship/graph surfaces* — a compact certification pill on the
+    process↔data map (C4 matrix headers), the activity IO panel, the Mappings
+    list, and the Enterprise View asset cards. The Data Lineage view is left
+    out by design: it maps system→system flows where the asset is an optional
+    edge attribute, with no governance metadata shown, so a pill has nowhere
+    legible to sit.
 
-### Possible follow-ups (not built)
-
-- The badge on the remaining relationship/graph surfaces (process↔data map,
-  lineage, enterprise view) if that density ever proves wanted.
+Everything in the design — MVP, all Phase 2 items, and both reporting-surface
+follow-ups — has shipped.

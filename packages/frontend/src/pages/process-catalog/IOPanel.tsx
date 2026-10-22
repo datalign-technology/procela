@@ -7,6 +7,7 @@ import SectionLabel from '../../components/SectionLabel';
 import { tierLabel } from '../../lib/governanceTier';
 import { clickable } from '../../lib/a11y';
 import { badgeColor } from '../../lib/badgeColors';
+import { certStatusPill } from '../../components/CertifiedBadge';
 import { useToastStore } from '../../stores/toastStore';
 import type { MappingInfo, DataAssetRef, PolicyRef } from '../ProcessCatalogPage';
 
@@ -157,6 +158,10 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierC.bg, color: tierC.color }}>
             {tierLabel(m.assetInfo.governanceTier)}
           </span>
+          {(() => {
+            const cp = certStatusPill(m.assetInfo.certificationStatus, m.assetInfo.certifiedUntil);
+            return cp ? <span title={cp.title} style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: cp.bg, color: cp.color }}>{cp.label.startsWith('Certified · ') ? 'Recert due' : cp.label === 'Certification pending' ? 'Pending' : cp.label}</span> : null;
+          })()}
         </>
       );
     }
@@ -371,6 +376,10 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierC.bg, color: tierC.color }}>
             {tierLabel(m.assetInfo.governanceTier)}
           </span>
+          {(() => {
+            const cp = certStatusPill(m.assetInfo.certificationStatus, m.assetInfo.certifiedUntil);
+            return cp ? <span title={cp.title} style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: cp.bg, color: cp.color }}>{cp.label.startsWith('Certified · ') ? 'Recert due' : cp.label === 'Certification pending' ? 'Pending' : cp.label}</span> : null;
+          })()}
           {m.assetInfo.ownerName && (
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Owner: {m.assetInfo.ownerName}</span>
           )}
