@@ -1290,6 +1290,9 @@ model GlossaryTerm {
   exampleValues String   @default("") @db.Text
   businessRules String   @default("") @db.Text
   sourceOfTruth String   @default("")
+  // Data assets this term defines/applies to. Soft references (DataAsset ids);
+  // dangling ids are tolerated and filtered out on read.
+  linkedAssetIds String[] @default([])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

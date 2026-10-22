@@ -39,11 +39,14 @@ interface GlossaryTerm {
   domainName: string | null;
   ownerAssignmentId: string | null;
   ownerName: string | null;
+  linkedAssetIds?: string[];
+  linkedAssets?: AssetRef[];
   updatedAt?: string;
 }
 interface DomainRef { id: string; name: string }
 interface TermRef { id: string; term: string; synonyms?: string[] }
 interface PersonRef { id: string; name: string }
+interface AssetRef { id: string; name: string }
 
 interface TermEditable {
   term: string;
@@ -125,6 +128,7 @@ export default function GlossaryTermDetailPage() {
   const [domains, setDomains] = useState<DomainRef[]>([]);
   const [people, setPeople] = useState<PersonRef[]>([]);
   const [allTerms, setAllTerms] = useState<TermRef[]>([]);
+  const [assets, setAssets] = useState<AssetRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -140,16 +144,18 @@ export default function GlossaryTermDetailPage() {
     setError(null);
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [res, domRes, peopleRes, termsRes] = await Promise.all([
+      const [res, domRes, peopleRes, termsRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GlossaryTerm }>(`/business-glossary/${id}`),
         apiClient.get<{ success: boolean; data: DomainRef[] }>(`/data-domains${query}`),
         apiClient.get<{ success: boolean; data: PersonRef[] }>('/people'),
         apiClient.get<{ success: boolean; data: TermRef[] }>(`/business-glossary${query}`),
+        apiClient.get<{ success: boolean; data: AssetRef[] }>(`/data-assets${query}`),
       ]);
       setTerm(res.data);
       setDomains(domRes.data || []);
       setPeople(peopleRes.data || []);
       setAllTerms(termsRes.data || []);
+      setAssets(assetsRes.data || []);
     } catch (err) {
       setError(errorMessage(err, 'Could not load glossary term'));
     } finally {
@@ -172,6 +178,25 @@ export default function GlossaryTermDetailPage() {
       addToast('success', `Status set to ${status.charAt(0) + status.slice(1).toLowerCase()}`);
       fetchTerm();
     } catch (err) { errorToast(err, 'Failed to update status'); }
+  };
+  // Link / unlink a data asset — persist the whole id set through the same PUT
+  // the editor uses, then refresh so the resolved names come back.
+  const saveLinkedAssets = async (ids: string[]) => {
+    if (!id) return;
+    try {
+      await apiClient.put(`/business-glossary/${id}`, { linkedAssetIds: ids });
+      await fetchTerm();
+    } catch (err) { errorToast(err, 'Failed to update linked assets'); }
+  };
+  const linkAsset = (assetId: string) => {
+    if (!term || !assetId) return;
+    const cur = term.linkedAssetIds || [];
+    if (cur.includes(assetId)) return;
+    saveLinkedAssets([...cur, assetId]);
+  };
+  const unlinkAsset = (assetId: string) => {
+    if (!term) return;
+    saveLinkedAssets((term.linkedAssetIds || []).filter((x) => x !== assetId));
   };
 
   useEffect(() => { fetchTerm(); }, [fetchTerm]);
@@ -246,6 +271,11 @@ export default function GlossaryTermDetailPage() {
   const relatedTerms = nameWords.size === 0 ? [] : allTerms
     .filter((o) => o.id !== t.id && o.term.toLowerCase().split(/\s+/).some((w) => nameWords.has(w)))
     .slice(0, 3);
+  // Linked data assets (resolved names come back from the detail endpoint);
+  // the picker offers assets not already linked.
+  const linkedAssets = t.linkedAssets || [];
+  const linkedAssetIdSet = new Set(t.linkedAssetIds || []);
+  const unlinkedAssets = assets.filter((a) => !linkedAssetIdSet.has(a.id));
 
   return (
     <div>
@@ -357,7 +387,7 @@ export default function GlossaryTermDetailPage() {
 
             {/* The four detail fields collapse into one "How to use it" list */}
             {extras.length > 0 && (
-              <Card padding={24}>
+              <Card padding={24} marginBottom={16}>
                 <SectionLabel marginBottom={12}>How to use it</SectionLabel>
                 <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'minmax(140px, 180px) 1fr', columnGap: 20 }}>
                   {extras.map(([label, value], i) => (
@@ -369,6 +399,37 @@ export default function GlossaryTermDetailPage() {
                 </dl>
               </Card>
             )}
+
+            {/* Linked data assets (board D8) — the catalog assets this term
+                defines or applies to. Link/unlink persists via the same PUT. */}
+            <Card padding={24}>
+              <SectionLabel marginBottom={linkedAssets.length ? 12 : 8}>Linked data assets ({linkedAssets.length})</SectionLabel>
+              {linkedAssets.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {linkedAssets.map((a) => (
+                    <span key={a.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 10px', borderRadius: 999, fontSize: 13, fontWeight: 500, background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
+                      <Link to={`/data-assets/${a.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>{a.name}</Link>
+                      {canWrite && <button type="button" aria-label={`Unlink ${a.name}`} onClick={() => unlinkAsset(a.id)} style={{ background: 'none', border: 0, cursor: 'pointer', color: 'inherit', padding: '0 2px', fontSize: 15, lineHeight: 1 }}>&times;</button>}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div style={emptyStyle}>No data assets linked yet.{canWrite ? ' Link the assets this term defines or applies to.' : ''}</div>
+              )}
+              {canWrite && unlinkedAssets.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <select
+                    aria-label="Link to assets"
+                    value=""
+                    onChange={(e) => { if (e.target.value) linkAsset(e.target.value); }}
+                    style={{ fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '6px 10px', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                  >
+                    <option value="">+ Link to assets…</option>
+                    {unlinkedAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </Card>
           </div>
 
           {/* ── Facts rail ─────────────────────────────────────────────────── */}

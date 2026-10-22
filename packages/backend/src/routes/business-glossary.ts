@@ -9,6 +9,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import logger from '../lib/logger';
 import { people } from './people';
 import { dataDomains } from './data-domains';
+import { dataAssets } from './data-assets';
 import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
@@ -27,6 +28,10 @@ export interface StoredGlossaryTerm {
   exampleValues: string;
   businessRules: string;
   sourceOfTruth: string;
+  // Data assets this term defines/applies to. Soft references (DataAsset ids);
+  // dangling ids are tolerated and filtered out when the detail view resolves
+  // names.
+  linkedAssetIds: string[];
   // Data-sync tracking — set by the sync engine when this row was created or
   // updated from a SyncConnection source. Soft reference; absent when unsynced.
   syncConnectionId?: string | null;
@@ -54,13 +59,24 @@ function enrichTerm(
   term: StoredGlossaryTerm,
   allPeople: typeof people,
   allDomains: typeof dataDomains,
+  allAssets?: typeof dataAssets,
 ) {
   const owner = term.ownerPersonId ? allPeople.find((p) => p.id === term.ownerPersonId) : null;
   const domain = term.domainId ? allDomains.find((d) => d.id === term.domainId) : null;
+  // Resolve linked-asset names only when the caller supplies the asset list
+  // (the detail endpoints); dangling ids drop out. The list endpoint skips
+  // this to avoid loading every asset per row — the raw ids still ride along.
+  const linkedAssets = allAssets
+    ? (term.linkedAssetIds || [])
+        .map((id) => allAssets.find((a) => a.id === id))
+        .filter((a): a is typeof dataAssets[number] => !!a)
+        .map((a) => ({ id: a.id, name: a.name }))
+    : undefined;
   return {
     ...term,
     ownerName: owner?.name || null,
     domainName: domain?.name || null,
+    ...(linkedAssets ? { linkedAssets } : {}),
   };
 }
 
@@ -233,7 +249,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     return;
   }
   if (!assertOrgAccess(req, res, term.orgId, 'Glossary term not found')) return;
-  res.json({ success: true, data: enrichTerm(term, allPeople, allDomains) });
+  res.json({ success: true, data: enrichTerm(term, allPeople, allDomains, dataAssets) });
 });
 
 /** POST /api/v1/business-glossary — create */
@@ -241,7 +257,7 @@ router.post('/', async (req: Request, res: Response) => {
   const {
     term, orgId, definition, context, synonyms,
     domainId, ownerPersonId, status, category,
-    exampleValues, businessRules, sourceOfTruth,
+    exampleValues, businessRules, sourceOfTruth, linkedAssetIds,
   } = req.body;
 
   if (!term || typeof term !== 'string') {
@@ -276,6 +292,7 @@ router.post('/', async (req: Request, res: Response) => {
     exampleValues: exampleValues || '',
     businessRules: businessRules || '',
     sourceOfTruth: sourceOfTruth || '',
+    linkedAssetIds: Array.isArray(linkedAssetIds) ? linkedAssetIds.filter((x: unknown): x is string => typeof x === 'string') : [],
     createdAt: now,
     updatedAt: now,
   };
@@ -284,7 +301,7 @@ router.post('/', async (req: Request, res: Response) => {
   auditService.log(orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', newTerm.id, 'CREATE', null, newTerm);
   logger.info({ id: newTerm.id, term: newTerm.term }, 'Created glossary term');
   const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
-  res.status(201).json({ success: true, data: enrichTerm(newTerm, allPeople, allDomains) });
+  res.status(201).json({ success: true, data: enrichTerm(newTerm, allPeople, allDomains, dataAssets) });
 });
 
 /** PUT /api/v1/business-glossary/:id — update */
@@ -299,7 +316,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const {
     term, definition, context, synonyms,
     domainId, ownerPersonId, status, category,
-    exampleValues, businessRules, sourceOfTruth,
+    exampleValues, businessRules, sourceOfTruth, linkedAssetIds,
   } = req.body;
 
   if (term !== undefined && term.trim().toLowerCase() !== existing.term.trim().toLowerCase()) {
@@ -324,13 +341,16 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (exampleValues !== undefined) existing.exampleValues = exampleValues;
   if (businessRules !== undefined) existing.businessRules = businessRules;
   if (sourceOfTruth !== undefined) existing.sourceOfTruth = sourceOfTruth;
+  if (linkedAssetIds !== undefined && Array.isArray(linkedAssetIds)) {
+    existing.linkedAssetIds = linkedAssetIds.filter((x: unknown): x is string => typeof x === 'string');
+  }
 
   existing.updatedAt = new Date().toISOString();
   await glossaryTermsRepo.update(existing.id, existing);
   auditService.log(existing.orgId, (req as AuthenticatedRequest).user?.sub || null, 'GlossaryTerm', existing.id, 'UPDATE', before, existing);
   logger.info({ id: existing.id, term: existing.term }, 'Updated glossary term');
   const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
-  res.json({ success: true, data: enrichTerm(existing, allPeople, allDomains) });
+  res.json({ success: true, data: enrichTerm(existing, allPeople, allDomains, dataAssets) });
 });
 
 /** DELETE /api/v1/business-glossary/:id — delete */
@@ -402,6 +422,7 @@ router.post('/seed', async (req: Request, res: Response) => {
       exampleValues: '',
       businessRules: '',
       sourceOfTruth: '',
+      linkedAssetIds: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -602,6 +623,7 @@ router.post('/import', async (req: Request, res: Response) => {
         exampleValues: row.exampleValues || '',
         businessRules: row.businessRules || '',
         sourceOfTruth: row.sourceOfTruth || '',
+        linkedAssetIds: [],
         createdAt: now,
         updatedAt: now,
       };

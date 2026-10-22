@@ -575,7 +575,7 @@ suite('live-db repository round-trips', () => {
       context: '', synonyms: ['reading'],
       domainId: null, ownerPersonId: personId,
       status: 'APPROVED', category: 'BUSINESS',
-      exampleValues: '', businessRules: '', sourceOfTruth: '',
+      exampleValues: '', businessRules: '', sourceOfTruth: '', linkedAssetIds: [],
       createdAt: now, updatedAt: now,
     });
     const opmId = randomUUID();

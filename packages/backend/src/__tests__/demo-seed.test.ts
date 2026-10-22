@@ -836,6 +836,18 @@ describe('demo-seed endpoint', () => {
       // SOPs carry ordered steps; glossary has an approved term.
       assert.ok(demo(sops).every((s: any) => Array.isArray(s.steps) && s.steps.length > 0));
       assert.ok(demo(glossaryTerms).some((t: any) => t.status === 'APPROVED'));
+      // The Golden Record term carries a linkedAssetIds array. The utilities
+      // profile links it to its Customer Master asset (so the term→asset
+      // relation ships with live demo data that resolves to a real asset);
+      // other profiles leave it empty rather than point at an absent asset.
+      const golden = demo(glossaryTerms).find((t: any) => t.term === 'Golden Record');
+      assert.ok(golden && Array.isArray(golden.linkedAssetIds), 'Golden Record has a linkedAssetIds array');
+      if (industry === 'utilities') {
+        assert.strictEqual(golden.linkedAssetIds.length, 1, 'utilities links Golden Record to one asset');
+        assert.ok(demo(dataAssets).some((a: any) => a.id === golden.linkedAssetIds[0]), 'linked id resolves to a seeded asset');
+      } else {
+        assert.strictEqual(golden.linkedAssetIds.length, 0, 'non-utilities profiles leave Golden Record unlinked');
+      }
     });
 
     it(`seeds lineage + trend history for ${industry}`, async () => {
