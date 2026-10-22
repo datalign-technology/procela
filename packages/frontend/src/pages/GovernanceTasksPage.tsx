@@ -539,6 +539,42 @@ export default function GovernanceTasksPage({
     }
   };
 
+  // Bulk setters (board G5): reassign / change status / set due date across the
+  // selection, through the same PUT the per-task editor uses.
+  const bulkReassign = async (assigneeId: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/governance-tasks/${id}`, { assigneeId })));
+      const name = people.find((p) => p.id === assigneeId)?.name || 'selected assignee';
+      addToast('success', `Assigned ${ids.length} task${ids.length === 1 ? '' : 's'} to ${name}`);
+      sel.clear();
+      fetchData();
+    } catch (err) { errorToast(err, 'Failed to reassign'); fetchData(); }
+  };
+
+  const bulkSetStatus = async (status: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/governance-tasks/${id}`, { status })));
+      addToast('success', `Set ${ids.length} task${ids.length === 1 ? '' : 's'} to ${status.replace(/_/g, ' ').toLowerCase()}`);
+      sel.clear();
+      fetchData();
+    } catch (err) { errorToast(err, 'Failed to set status'); fetchData(); }
+  };
+
+  const bulkSetDueDate = async (dueDate: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0 || !dueDate) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/governance-tasks/${id}`, { dueDate })));
+      addToast('success', `Set due date on ${ids.length} task${ids.length === 1 ? '' : 's'}`);
+      sel.clear();
+      fetchData();
+    } catch (err) { errorToast(err, 'Failed to set due date'); fetchData(); }
+  };
+
   // ── Helpers ──
   const isOverdue = (t: GovernanceTask) => {
     if (t.status === 'COMPLETED' || t.status === 'CANCELLED') return false;
@@ -779,6 +815,30 @@ export default function GovernanceTasksPage({
       )}
 
       <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <select
+          aria-label="Reassign"
+          onChange={(e) => { if (e.target.value) bulkReassign(e.target.value); e.target.value = ''; }}
+          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        >
+          <option value="">Reassign…</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+        </select>
+        <select
+          aria-label="Change status"
+          onChange={(e) => { if (e.target.value) bulkSetStatus(e.target.value); e.target.value = ''; }}
+          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        >
+          <option value="">Change status…</option>
+          {TASK_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+        </select>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--color-primary)', fontWeight: 600 }}>
+          Due
+          <input
+            type="date" aria-label="Set due date"
+            onChange={(e) => { if (e.target.value) bulkSetDueDate(e.target.value); }}
+            style={{ padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          />
+        </label>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 
