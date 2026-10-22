@@ -76,7 +76,8 @@ Once business intent is defined, Procela uses that context to help find, validat
 - Users define data assets in business terms (not technical schemas)
 - Users define the systems that hold that data (ERP, CRM, GIS, etc.)
 - Each asset has: name, description, owning system, business owner, data steward, governance tier
-- Governance tiers: Bronze (raw/minimal), Silver (managed), Gold (fully governed and certified)
+- Governance tiers: Bronze (raw/minimal), Silver (managed), Gold (fully governed)
+- Certification: a reviewed promotion to Gold — `certificationStatus` (NONE | PENDING_REVIEW | CERTIFIED) + `certifiedUntil` (12-month recert) with requester/reviewer stamps. An attestation (who/when/until), distinct from the raw Gold tier: owner/steward request → CDO / Governance Lead / domain Data Owner approve/reject/revoke (segregation of duties), with an auto-opened review task + notification, an hourly recert sweep, and a shared `CertifiedBadge` across the asset surfaces. See `docs/CERTIFICATION_DESIGN.md`.
 
 ### 4. Process-to-Data Mapping
 - Link data assets and systems to specific process steps
@@ -88,6 +89,7 @@ Once business intent is defined, Procela uses that context to help find, validat
 ### 5. Gap Detection
 - Automatically identifies process steps with no linked data assets
 - Surfaces ungoverned or low-tier assets supporting critical processes
+- Flags assets at **Gold tier but not certified** (manual Gold with no attestation), nudging them into the certification workflow
 - Dashboard view of coverage across the full process catalog
 - **All / In-scope toggle**: narrow gaps to the entities the governance program governs (see Governance Scope, below) so "gaps" means "what we committed to govern", not "everything catalogued"
 
@@ -96,7 +98,7 @@ Once business intent is defined, Procela uses that context to help find, validat
 - Governance tier badge (Bronze / Silver / Gold)
 - Portfolio-level health dashboard
 - **Governance ROI on the Council Scorecard** — the value the program returns, built in three layers so the story is always honest:
-  - *Value drivers (leading indicators)* — un-fakeable signals measured from the catalog with no assumed dollars: ownership coverage, a "value at risk" count, and remediation velocity (resolved-in-30-days + avg days to resolve). Respect the All / Governed lens.
+  - *Value drivers (leading indicators)* — un-fakeable signals measured from the catalog with no assumed dollars: ownership coverage, **certified coverage** (share of in-scope assets with an attested `certificationStatus = CERTIFIED`), a "value at risk" count, and remediation velocity (resolved-in-30-days + avg days to resolve). Respect the All / Governed lens.
   - *Tenant value model* — each org sets its own dollar assumptions (value per owned entity, per resolved issue, exposure per open-risk item; own currency) on **Governance → Foundation → Value model**; the scorecard monetizes the drivers into an estimated annual value + value at risk, stamped "your assumptions". Procela invents no figures — unset ⇒ a configure prompt, not a fabricated number. Stored per-tenant on the org (`roiModel`), resolved up the org tree like `scorecardTargets`.
   - *Per-value-stream attribution* — the monetized value broken down by value stream via the process→data mappings, so leaders see which streams bank value vs. carry risk. Rows deliberately don't sum to the org total (shared assets count in each; org-level exceptions and unmapped data aren't attributed).
 
@@ -119,6 +121,7 @@ Once business intent is defined, Procela uses that context to help find, validat
 ### 9. Reporting & Dashboards
 - Executive dashboard: portfolio health, gap summary, governance tier breakdown
 - Operational dashboard: process coverage, ownership gaps, data health alerts
+- Report builder: `certificationStatus` and `certifiedUntil` are selectable columns/filters on the dataAssets entity
 - Export capabilities (PDF, CSV) for compliance and audit use
 
 ### 10. Governance Scope (Governed vs Connected)
@@ -323,7 +326,11 @@ System
 
 DataAsset
   id, org_id, name, description, system_id, owner_id, steward_id,
-  governance_tier (bronze|silver|gold), health_score, created_at, updated_at
+  governance_tier (bronze|silver|gold), health_score, created_at, updated_at,
+  certification_status (NONE|PENDING_REVIEW|CERTIFIED, default NONE),
+  certification_requested_by_id, certification_requested_at,
+  certification_reviewed_by_id, certification_reviewed_at,
+  certified_until, certification_note
 
 ProcessDataLink
   id, org_id, process_step_id, data_asset_id, link_type, notes,
@@ -522,6 +529,15 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
   ellipsis + hover tooltip. Combined with the global
   `table th, table td { white-space: nowrap; }` rule, this keeps
   every list uniform-height.
+- `<CertifiedBadge>` — the shared pill for an asset's certification
+  state: green "Certified", amber "recert due" (past `certifiedUntil`),
+  neutral "Pending"; renders nothing when `certificationStatus` is NONE.
+  Compose it wherever an asset's attestation is shown — Data Assets
+  registry, Data Domains, Systems detail, asset 360, Process↔Data map
+  (C4 matrix), activity IO panel, Mappings list, Enterprise View cards.
+  Distinct from the Bronze/Silver/Gold `TierBadge` (an asset has both a
+  tier and a certification state). Dense flow/graph views (Data Lineage)
+  deliberately omit it. Do NOT hand-roll a certification pill.
 
 **List primitives:**
 
