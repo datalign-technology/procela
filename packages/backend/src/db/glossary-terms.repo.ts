@@ -24,6 +24,7 @@ type PrismaGlossaryTermRow = {
   exampleValues: string;
   businessRules: string;
   sourceOfTruth: string;
+  linkedAssetIds: string[];
   syncConnectionId?: string | null;
   syncStatus?: string | null;
   createdAt: Date;
@@ -53,6 +54,7 @@ function fromPrisma(r: PrismaGlossaryTermRow): StoredGlossaryTerm {
     exampleValues: r.exampleValues ?? '',
     businessRules: r.businessRules ?? '',
     sourceOfTruth: r.sourceOfTruth ?? '',
+    linkedAssetIds: r.linkedAssetIds ?? [],
     syncConnectionId: r.syncConnectionId ?? null,
     syncStatus: r.syncStatus ?? null,
     createdAt: r.createdAt.toISOString(),
@@ -75,6 +77,7 @@ function toPrismaData(row: Partial<StoredGlossaryTerm>): Record<string, unknown>
   if (row.exampleValues !== undefined) d.exampleValues = row.exampleValues;
   if (row.businessRules !== undefined) d.businessRules = row.businessRules;
   if (row.sourceOfTruth !== undefined) d.sourceOfTruth = row.sourceOfTruth;
+  if (row.linkedAssetIds !== undefined) d.linkedAssetIds = row.linkedAssetIds;
   if (row.syncConnectionId !== undefined) d.syncConnectionId = row.syncConnectionId;
   if (row.syncStatus !== undefined) d.syncStatus = row.syncStatus;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);

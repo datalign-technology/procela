@@ -543,10 +543,14 @@ interface DocsDepthCtx {
   ownerId: string;
   cdoId: string;
   domainId: string;
+  /** An asset in this profile to link the "Golden Record" term to, so the
+   *  term→asset relation ships with live demo data. Omitted ⇒ no link (avoids
+   *  a dangling reference for profiles that don't define a master asset). */
+  linkAssetId?: string;
 }
 
 async function seedDocsDepth(repos: DemoRepos, ts: string, ctx: DocsDepthCtx): Promise<void> {
-  const { orgId, ownerId, cdoId, domainId } = ctx;
+  const { orgId, ownerId, cdoId, domainId, linkAssetId } = ctx;
 
   // SOPs (3).
   await createAll(repos.sops, [
@@ -557,10 +561,10 @@ async function seedDocsDepth(repos: DemoRepos, ts: string, ctx: DocsDepthCtx): P
 
   // Glossary terms (4).
   await createAll(repos.glossaryTerms, [
-    { id: demoId('term-golden-record'), orgId, term: 'Golden Record', definition: 'The single authoritative version of an entity, reconciled across source systems.', context: 'Master data management.', synonyms: ['System of Record', 'Single Source of Truth'], domainId, ownerPersonId: ownerId, status: 'APPROVED', category: 'BUSINESS', exampleValues: 'The reconciled customer master row for account 10432.', businessRules: 'One golden record per real-world entity; conflicts resolved by survivorship rules.', sourceOfTruth: 'Master Data Management hub', createdAt: ts, updatedAt: ts },
-    { id: demoId('term-governance-tier'), orgId, term: 'Governance Tier', definition: 'The maturity level at which an asset is governed: Bronze, Silver, or Gold.', context: 'Data governance.', synonyms: ['Data Tier'], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: 'Bronze, Silver, Gold', businessRules: 'Gold requires an owner, DQ rules, and a certified definition.', sourceOfTruth: 'Data Governance Standard', createdAt: ts, updatedAt: ts },
-    { id: demoId('term-data-owner'), orgId, term: 'Data Owner', definition: 'The person accountable for an asset or domain — its quality, access, and lifecycle.', context: 'Accountability model.', synonyms: [], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: '', businessRules: 'Exactly one owner per asset; must be a named person, not a team.', sourceOfTruth: 'Data Governance Charter', createdAt: ts, updatedAt: ts },
-    { id: demoId('term-data-domain'), orgId, term: 'Data Domain', definition: 'A logical grouping of related data assets under a single stewardship remit.', context: 'Domain model.', synonyms: ['Subject Area'], domainId: null, ownerPersonId: ownerId, status: 'PROPOSED', category: 'TECHNICAL', exampleValues: 'Customer Data, Operational Data', businessRules: 'Every asset belongs to exactly one domain.', sourceOfTruth: 'Domain catalogue', createdAt: ts, updatedAt: ts },
+    { id: demoId('term-golden-record'), orgId, term: 'Golden Record', definition: 'The single authoritative version of an entity, reconciled across source systems.', context: 'Master data management.', synonyms: ['System of Record', 'Single Source of Truth'], domainId, ownerPersonId: ownerId, status: 'APPROVED', category: 'BUSINESS', exampleValues: 'The reconciled customer master row for account 10432.', businessRules: 'One golden record per real-world entity; conflicts resolved by survivorship rules.', sourceOfTruth: 'Master Data Management hub', linkedAssetIds: linkAssetId ? [linkAssetId] : [], createdAt: ts, updatedAt: ts },
+    { id: demoId('term-governance-tier'), orgId, term: 'Governance Tier', definition: 'The maturity level at which an asset is governed: Bronze, Silver, or Gold.', context: 'Data governance.', synonyms: ['Data Tier'], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: 'Bronze, Silver, Gold', businessRules: 'Gold requires an owner, DQ rules, and a certified definition.', sourceOfTruth: 'Data Governance Standard', linkedAssetIds: [], createdAt: ts, updatedAt: ts },
+    { id: demoId('term-data-owner'), orgId, term: 'Data Owner', definition: 'The person accountable for an asset or domain — its quality, access, and lifecycle.', context: 'Accountability model.', synonyms: [], domainId: null, ownerPersonId: cdoId, status: 'APPROVED', category: 'GENERAL', exampleValues: '', businessRules: 'Exactly one owner per asset; must be a named person, not a team.', sourceOfTruth: 'Data Governance Charter', linkedAssetIds: [], createdAt: ts, updatedAt: ts },
+    { id: demoId('term-data-domain'), orgId, term: 'Data Domain', definition: 'A logical grouping of related data assets under a single stewardship remit.', context: 'Domain model.', synonyms: ['Subject Area'], domainId: null, ownerPersonId: ownerId, status: 'PROPOSED', category: 'TECHNICAL', exampleValues: 'Customer Data, Operational Data', businessRules: 'Every asset belongs to exactly one domain.', sourceOfTruth: 'Domain catalogue', linkedAssetIds: [], createdAt: ts, updatedAt: ts },
   ]);
 
   // Operations manuals (3) — per DAMA role.
@@ -1427,7 +1431,7 @@ async function seedUtilities(repos: DemoRepos, ts: string): Promise<DemoSeedRepo
   });
 
   // Docs depth — SOPs, glossary terms, operations manuals.
-  await seedDocsDepth(repos, ts, { orgId: orgTidewater.id, ownerId: natalie.id, cdoId: susan.id, domainId: domCustomer.id });
+  await seedDocsDepth(repos, ts, { orgId: orgTidewater.id, ownerId: natalie.id, cdoId: susan.id, domainId: domCustomer.id, linkAssetId: demoId('asset-customer-master') });
 
   // Lineage + trend history.
   await seedLineageAndTrends(repos, ts, {
