@@ -716,7 +716,7 @@ async function seedCollabAndReporting(repos: DemoRepos, ts: string, ctx: CollabR
   // Reports (report-builder definitions).
   await createAll(repos.reports, [
     { id: demoId('report-ungoverned'), orgId, name: 'Ungoverned critical assets', description: 'Bronze-tier assets that support critical processes.', ownerId: personId, visibility: 'org', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }, { field: 'healthScore' }], filters: [], sort: { field: 'healthScore', direction: 'asc' }, limit: 100 }, createdAt: ts, updatedAt: ts },
-    { id: demoId('report-tiers'), orgId, name: 'Assets by governance tier', description: 'All assets with their tier and health.', ownerId: personId, visibility: 'private', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }], filters: [], limit: 500 }, createdAt: ts, updatedAt: ts },
+    { id: demoId('report-tiers'), orgId, name: 'Assets by governance tier', description: 'All assets with their tier and certification state.', ownerId: personId, visibility: 'private', definition: { entity: 'dataAssets', columns: [{ field: 'name' }, { field: 'governanceTier' }, { field: 'certificationStatus' }], filters: [], limit: 500 }, createdAt: ts, updatedAt: ts },
   ]);
 
   // Analysis report (pivot config). Dims must be real analysis dimensions
