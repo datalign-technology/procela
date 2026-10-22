@@ -73,7 +73,11 @@ describe('Data asset certification workflow', () => {
   const otherId = 'cert-other';
   const assetId = 'cert-asset';
   const noOwnerAssetId = 'cert-asset-noowner';
+  const expiredAssetId = 'cert-asset-expired';
+  const currentAssetId = 'cert-asset-current';
   const domainId = 'cert-domain';
+  const pastIso = new Date(Date.now() - 86400_000).toISOString();
+  const futureIso = new Date(Date.now() + 86400_000 * 60).toISOString();
 
   function resetAsset() {
     const a = dataAssets.find((x: any) => x.id === assetId);
@@ -110,6 +114,8 @@ describe('Data asset certification workflow', () => {
     dataAssets.push(
       { id: assetId, orgId: ORG, name: 'Cert Target', description: 'An asset under certification.', systemId: '', owner: '', ownerPersonId: ownerId, stewardIds: [], governanceTier: 'SILVER', healthScore: 90, certificationStatus: 'NONE', createdAt: ts, updatedAt: ts },
       { id: noOwnerAssetId, orgId: ORG, name: 'Unowned Asset', description: 'No owner assigned.', systemId: '', owner: '', ownerPersonId: null, stewardIds: [], governanceTier: 'BRONZE', healthScore: 20, certificationStatus: 'NONE', createdAt: ts, updatedAt: ts },
+      { id: expiredAssetId, orgId: ORG, name: 'Lapsed Cert', description: 'Certified but past its recert date.', systemId: '', owner: '', ownerPersonId: ownerId, stewardIds: [], governanceTier: 'GOLD', healthScore: 90, certificationStatus: 'CERTIFIED', certificationReviewedById: cdoId, certifiedUntil: pastIso, createdAt: ts, updatedAt: ts },
+      { id: currentAssetId, orgId: ORG, name: 'Fresh Cert', description: 'Certified and within term.', systemId: '', owner: '', ownerPersonId: ownerId, stewardIds: [], governanceTier: 'GOLD', healthScore: 90, certificationStatus: 'CERTIFIED', certificationReviewedById: cdoId, certifiedUntil: futureIso, createdAt: ts, updatedAt: ts },
     );
     dataDomains.push({ id: domainId, orgId: ORG, code: 'CRT', name: 'Cert Domain', description: '', ownerId: null, stewardIds: [], dataAssetIds: [assetId], status: 'ACTIVE', createdAt: ts, updatedAt: ts });
   });
@@ -249,5 +255,32 @@ describe('Data asset certification workflow', () => {
     const ids = res.body.data.map((a: any) => a.id);
     assert.ok(ids.includes(assetId), 'pending asset is in the queue');
     assert.ok(!ids.includes(noOwnerAssetId), 'a NONE asset is not in the queue');
+  });
+
+  it('a non-admin cannot run the recert sweep', async () => {
+    const res = await request(port, 'POST', `/data-assets/certification/sweep-expired`, { email: 'owner@cert.test' });
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('the recert sweep flags lapsed certs (task + notification), never in-term ones, idempotently', async () => {
+    const res = await request(port, 'POST', `/data-assets/certification/sweep-expired`, { email: 'admin@cert.test', role: 'SUPER_ADMIN' });
+    assert.strictEqual(res.status, 200);
+    assert.ok(res.body.data.flagged.includes(expiredAssetId), 'the lapsed cert is flagged');
+    assert.ok(!res.body.data.flagged.includes(currentAssetId), 'an in-term cert is not flagged');
+
+    // A recert REVIEW task was opened, assigned to the CDO reviewer, and the asset stays CERTIFIED (no silent demotion).
+    const task = governanceTasks.find((t: any) => t.linkedObjectId === expiredAssetId && t.taskType === 'REVIEW' && t.status === 'OPEN' && String(t.title).startsWith('Recertify:'));
+    assert.ok(task, 'a Recertify review task is opened for the lapsed cert');
+    assert.strictEqual(task.assigneeId, cdoId);
+    const stillCertified = dataAssets.find((a: any) => a.id === expiredAssetId);
+    assert.strictEqual(stillCertified.certificationStatus, 'CERTIFIED', 'expiry flags but does not demote');
+    const note = notifications.find((n: any) => n.link === `/data-assets/${expiredAssetId}` && n.type === 'WARNING');
+    assert.ok(note, 'a WARNING recert notification is fired');
+
+    // Idempotent: a second sweep does not re-flag while the recert task is open.
+    const again = await request(port, 'POST', `/data-assets/certification/sweep-expired`, { email: 'admin@cert.test', role: 'SUPER_ADMIN' });
+    assert.ok(!again.body.data.flagged.includes(expiredAssetId), 'no duplicate flag while a recert task is open');
+    const recertTasks = governanceTasks.filter((t: any) => t.linkedObjectId === expiredAssetId && String(t.title).startsWith('Recertify:'));
+    assert.strictEqual(recertTasks.length, 1, 'exactly one recert task, not one per sweep');
   });
 });
