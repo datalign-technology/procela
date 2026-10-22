@@ -267,4 +267,29 @@ describe('executeReport — data assets', () => {
     assert.strictEqual(result.totalMatched, 1);
     assert.strictEqual(result.rows[0].name, 'Healthy');
   });
+
+  it('projects the Certification column and filters on it', async () => {
+    dataAssets.push(asset('c1', 'Attested', { certificationStatus: 'CERTIFIED', certifiedUntil: '2027-09-17T00:00:00.000Z' }));
+    dataAssets.push(asset('c2', 'Awaiting', { certificationStatus: 'PENDING_REVIEW' }));
+    dataAssets.push(asset('c3', 'Uncertified', { certificationStatus: 'NONE' }));
+
+    const all = await executeReport({
+      entity: 'dataAssets',
+      columns: [{ field: 'name' }, { field: 'certificationStatus' }, { field: 'certifiedUntil' }],
+      filters: [],
+      sort: { field: 'name', direction: 'asc' },
+    }, ORG);
+    const byName = Object.fromEntries(all.rows.map((r) => [r.name, r]));
+    assert.strictEqual(byName['Attested'].certificationStatus, 'CERTIFIED');
+    assert.strictEqual(byName['Attested'].certifiedUntil, '2027-09-17T00:00:00.000Z');
+    assert.strictEqual(byName['Awaiting'].certificationStatus, 'PENDING_REVIEW');
+
+    const certifiedOnly = await executeReport({
+      entity: 'dataAssets',
+      columns: [{ field: 'name' }, { field: 'certificationStatus' }],
+      filters: [{ field: 'certificationStatus', op: 'eq', value: 'CERTIFIED' }],
+    }, ORG);
+    assert.strictEqual(certifiedOnly.totalMatched, 1);
+    assert.strictEqual(certifiedOnly.rows[0].name, 'Attested');
+  });
 });

@@ -140,7 +140,5 @@ Both phases have shipped.
 
 ### Possible follow-ups (not built)
 
-- A distinct "Certified" column in the report builder (register the fields on
-  the `dataAssets` report entity).
 - The badge on the remaining relationship/graph surfaces (process↔data map,
   lineage, enterprise view) if that density ever proves wanted.
