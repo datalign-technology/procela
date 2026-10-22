@@ -532,7 +532,7 @@ change inside `Sortable.tsx`, not at the call sites.
 
 Small display primitives for the recurring "value that should read as a
 visual, not raw text" cases. `<StatusBadge>` (documented above where it's
-first used) covers semantic state pills; these three cover the other
+first used) covers semantic state pills; the ones below cover the other
 recurring ones.
 
 ### `<Avatar>`
@@ -629,6 +629,31 @@ Use it for the **read-only** display of a tier; keep an inline `<select>`
 for the editable case (as Data Assets does — badge for viewers/inherited
 rows, select for editors). Do NOT render a tier as plain `tierLabel(...)`
 text.
+
+### `<CertifiedBadge>`
+
+The coloured pill for a data asset's **certification** state — the
+attestation workflow, distinct from the governance tier `<TierBadge>`
+shows. Three variants: green **Certified**, amber **recert due** (a
+CERTIFIED asset past its `certifiedUntil` date), and neutral **Pending**
+(PENDING_REVIEW). Renders nothing when `certificationStatus` is `NONE`,
+so it drops in next to a tier unconditionally. `compact` shortens the
+labels ("Recert due" / "Pending") for dense rows.
+
+```tsx
+import CertifiedBadge from '@/components/CertifiedBadge';
+
+<CertifiedBadge status={asset.certificationStatus} certifiedUntil={asset.certifiedUntil} />
+```
+
+In use on the Data Assets registry, Data Domains, Systems detail, the
+asset 360 view, the Process ↔ Data map (C4 matrix), the activity IO
+panel, the Mappings list, and the Enterprise View asset cards. The Data
+Lineage view deliberately omits it (system→system flows carry no
+governance metadata). Pair it with `<TierBadge>`, don't replace it — an
+asset has both a tier and a certification state. `certStatusPill(status,
+certifiedUntil)` and `certDate(iso)` are exported from the same module
+for the few dense surfaces that render their own inline pill.
 
 ### `<ScopeBadge>` + `useScopeMembership`
 

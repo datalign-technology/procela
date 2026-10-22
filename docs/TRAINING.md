@@ -624,6 +624,12 @@ Both discovery paths also watch for change over time. Each scanned asset carries
 
 If you're rolling out to a customer now, keep going with the training as-is, then read the **6. Systems → On-prem connectors** section of the Help Guide for the install commands and the pairing flow.
 
+### 4.6 Certify an asset
+
+Certification is a *reviewed* promotion to Gold — an attestation (who approved, when, and a 12-month recert date), separate from manually flagging the tier Gold. On an asset's 360 view, an owner or steward clicks **Request certification**; that opens an APPROVAL governance task for the reviewer and notifies them. A **CDO**, **Data Governance Lead**, or the domain's **Data Owner** (never the requester — segregation of duties) then approves — flipping the tier to Gold with a `certifiedUntil` 12 months out — or rejects with a reason. A certified asset shows a green **Certified** pill across the registry, domains, systems, and maps; past its recert date the pill turns amber **recert due** (an hourly sweep re-opens a task — it never auto-demotes).
+
+Try it on the Tidewater fixture: **Meter Reads** is seeded PENDING_REVIEW — sign in as a reviewer and approve it. **NPDES Discharge Records** is seeded CERTIFIED — note its recert date. **Rate Base Register** is manual Gold with no attestation, which is exactly what the "Gold but not certified" Gap Detection check (Module 9.1) flags.
+
 ---
 
 ## Module 5 — Connect processes to data (10 min)
@@ -938,6 +944,9 @@ business model is the source of truth on both paths.
 - **Ungoverned columns** — a column an asset is bound to (it carries a
   physical source) but with no quality rule — coverage you claimed but
   never measure
+- **Gold but not certified** — assets flagged Gold tier with no
+  certification attestation (manual Gold, or legacy imports) — the nudge
+  to run them through the certification workflow (Module 4.6)
 - **Ownerless items** — entities with no owner assigned
 
 Each gap clicks through to the item where you can resolve it.
@@ -1151,9 +1160,11 @@ measure table and you'll find the value story, built so it stays honest:
 
 1. **Governance value drivers** — leading indicators measured straight
    from your catalog with *no assumed dollar figures*: **Ownership
-   coverage**, a **Value at risk** count to drive down (past-expiry
-   exceptions + unowned Tier-1 domains + unclassified assets), **Resolved
-   (30 days)**, and **Avg days to resolve**. These are the un-fakeable
+   coverage**, **Certified coverage** (share of in-scope assets with an
+   attested CERTIFIED certification, distinct from the Gold tier), a
+   **Value at risk** count to drive down (past-expiry exceptions + unowned
+   Tier-1 domains + unclassified assets), **Resolved (30 days)**, and **Avg
+   days to resolve**. These are the un-fakeable
    signals a program is paying off, and they respect the All / Governed lens.
 2. **Estimated governance value** — put dollars on those drivers with your
    *own* assumptions. Open **Governance → Foundation → Value model** and set

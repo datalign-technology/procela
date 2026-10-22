@@ -163,6 +163,31 @@ The shared predicate now recognises `ownerPersonId` / `userId` /
 `responsiblePersonId` / `createdBy`. With collaboration covered, every
 `CONTRIBUTOR`-writable surface is layer-2 scoped.
 
+## Certification (data-asset sub-workflow)
+
+The data-asset certification endpoints
+(`POST /data-assets/:id/certification/{request,approve,reject,revoke}`,
+`GET /data-assets/certification-queue`) mount under the `data-asset`
+bucket, so **layer 1** admits `EDITOR`+ to the routes. On top of that, the
+handlers enforce a finer role + segregation check, independent of the
+read/write bucket:
+
+- **Request:** the asset's owner or steward, or an admin. Hard-blocked
+  when the asset has no owner (certifying an unowned asset is meaningless).
+- **Approve / reject:** a CDO or Data Governance Lead (org-scoped DAMA
+  role), or the asset's **domain Data Owner** (the domain's owner, or a
+  `DATA_OWNER` role scoped to that domain), or an admin — and never the
+  same person who requested it (segregation of duties holds for admins
+  too). The actor identity is the resolved person id, or the auth subject
+  when the caller has no linked Person.
+- **Revoke:** a reviewer or an admin, on a `CERTIFIED` asset.
+- Every transition is written to the hash-chained audit log
+  (before/after), like all mutations.
+
+So although certification lives in the `data-asset:write` bucket, an
+`EDITOR` who is neither owner/steward nor a governance reviewer cannot
+drive the workflow — the sub-workflow guard, not the bucket, is the gate.
+
 ## MCP surface (agent access)
 
 The MCP server (`docs/MCP_SERVER.md`) reuses this exact model — it adds

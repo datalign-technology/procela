@@ -27,7 +27,7 @@ in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-19.*
 
 ## Snapshot
 
-- **Functionally near-complete.** Of ~83 tracked capabilities, **68 are Built**;
+- **Functionally near-complete.** Of ~84 tracked capabilities, **69 are Built**;
   15 are not (4 Partial · 2 Designed · 9 Not Started). Phases 1 (Define) and 2
   (Connect) ship in full; Phase 3 (Discover) is built for direct-connect and
   needs a real-customer pilot. The Postgres cutover and the GA tightening audit
@@ -63,6 +63,17 @@ in-app **/roadmap** page renders this file live. **Last reconciled: 2026-09-19.*
   attribution* — the value broken down by value stream through the process→data
   mappings, so leaders see which streams bank value vs. carry risk (rows don't
   sum to the org total by design). All three respect the All / Governed lens.
+- **Data-asset certification ships end-to-end.** A reviewed promotion to Gold —
+  `certificationStatus` (NONE | PENDING_REVIEW | CERTIFIED) + `certifiedUntil`
+  (12-month recert) with requester/reviewer stamps, distinct from the raw Gold
+  tier. Lifecycle: owner/steward request → CDO / Governance Lead / domain Data
+  Owner approve/reject/revoke (segregation of duties); a request auto-opens an
+  APPROVAL task + notifies the reviewer; an hourly sweep flags lapsed certs
+  (never auto-demotes). A shared `CertifiedBadge` surfaces it across the asset
+  lists + maps, a "Pending certification" reviewer queue sits on Data Assets, a
+  "Certified coverage" value driver on the Council scorecard, a "Gold but not
+  certified" Gap Detection check closes the loop, and `certificationStatus` /
+  `certifiedUntil` are report-builder columns (design: `CERTIFICATION_DESIGN.md`).
 - Everything else is a deliberate P2/P3 defer, a go-to-market-gated bet, or
   polish-level backlog. Sequencing Tracks A / B / C is a go-to-market call, not a
   technical one, and is intentionally left open.
@@ -338,6 +349,7 @@ incumbents' comparable coverage.*
 | Data assets · Origin tracking | Built | P1 | Limited | Limited | Limited | Limited |
 | Data assets · Suggested-source flow | Built | P1 | No | No | Limited | No |
 | Data assets · Tier-promotion suggestions | Built | P1 | No | No | No | Limited |
+| Data assets · Certification workflow (request/approve/recert) | Built | P1 | Yes | Limited | Limited | Yes |
 | Data assets · DQ / health score | Built | P1 | Add-on | Add-on | Partner | Best-in-class |
 | Data assets · Classification / sensitivity | Built | P0 | Yes | Yes | Yes | Yes |
 | Data assets · Retention policy | Built | P1 | Yes | Partial | Partial | Yes |

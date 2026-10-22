@@ -46,6 +46,7 @@ Standalone documents that don't belong in the app or the code.
 | [`POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md`](./POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md) | File-level conversion design for the riskiest cutover step — routing the report engine through repositories without per-row N+1 joins. |
 | [`DATA_OWNERSHIP.md`](./DATA_OWNERSHIP.md) | Which tables and columns are written by the interactive UI / REST API versus the on-prem edge agent (`@procela/connector`) — the four co-managed tables, their column-level split, the audit-only write stance, and how the connector (Option 2) maps onto a direct Connection (Option 1) as the metadata-only subset of the same catalog. |
 | [`RBAC_PERMISSION_MATRIX.md`](./RBAC_PERMISSION_MATRIX.md) | Authoritative reference for role-based authorization. `packages/backend/src/lib/permissions.ts` is the source of truth; this explains it. |
+| [`CERTIFICATION_DESIGN.md`](./CERTIFICATION_DESIGN.md) | Design + shipped-state record for **data-asset certification** — the reviewed-promotion-to-Gold workflow (request / approve / reject / revoke), RBAC + segregation of duties, the 12-month recert sweep, and the badge / scorecard / Gap Detection / report-builder integration. MVP + Phase 2 both shipped. |
 
 ### Integrations & agents
 

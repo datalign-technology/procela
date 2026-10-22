@@ -57,7 +57,7 @@ per-report counts in the `data` JSON. The UI only reads them
 |---|---|
 | `name`, `description`, `systemId` | **UI** — but the agent will **create** a new asset (as `BRONZE`) with these if `/report` discovers a table not yet in the catalog |
 | `healthScore`, `healthScoreAt`, `lastSyncedByConnectorId`, `lastSyncedAt` | **agent** (`/report` freshness refresh) |
-| `ownerPersonId`, `stewardIds`, `dataDomainId`, `governanceTier`, `sensitivityTags`, `rejectedSensitivityTags`, `dataClassification`, `dataType`, `refreshFrequency`, `origin`, `retentionDuration`, `retentionReason` | **UI only** — the agent never touches any governance / ownership field |
+| `ownerPersonId`, `stewardIds`, `dataDomainId`, `governanceTier`, `certificationStatus`, `certificationRequestedById`, `certificationRequestedAt`, `certificationReviewedById`, `certificationReviewedAt`, `certifiedUntil`, `certificationNote`, `sensitivityTags`, `rejectedSensitivityTags`, `dataClassification`, `dataType`, `refreshFrequency`, `origin`, `retentionDuration`, `retentionReason` | **UI only** — the agent never touches any governance / ownership field (`certificationStatus` defaults to `NONE` on create; the certification workflow is driven only through the reviewed request/approve endpoints) |
 
 ### `data_asset_columns` — co-managed; the agent is the primary populator
 | Column | Written by |

@@ -87,9 +87,16 @@ content differs — so a demo of any tenant lights up every page:
   skills and skill assignments, and a RACI override.
 - **8 systems**, **5 agents** (one per agent type, with schedules +
   executions), **6 data domains** (3 top-level + 3 sub-domains).
-- **9 data assets** — mixed Bronze/Silver/Gold, including **2 planted
-  orphans** (`healthScore: 0`, unmapped) so Ask-AI orphan detection and
-  gap views have something to find.
+- **10 data assets** (utilities fixture) — mixed Bronze/Silver/Gold,
+  including **2 planted orphans** (`healthScore: 0`, unmapped) so Ask-AI
+  orphan detection and gap views have something to find, plus a
+  **certification story**: one asset **CERTIFIED** (NPDES Discharge
+  Records — owner-attested, recert date set), one **PENDING_REVIEW**
+  (Meter Reads — awaiting a reviewer), and a **manual-Gold-but-uncertified**
+  asset (Rate Base Register — tagged Gold on import, never run through the
+  workflow) that lights up the "Gold but not certified" Gap Detection
+  check. The certification seed is utilities-specific; other industry
+  fixtures seed their assets without a certification state.
 - **16 process nodes** (the Utilities default — other industries seed
   15) across **2 value streams** (Value Stream → Process → Sub-Process →
   Activity) with flow relationships, and **7 process↔data mappings**.
