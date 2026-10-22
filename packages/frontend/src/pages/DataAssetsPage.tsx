@@ -46,6 +46,7 @@ import BulkSelectHint from '../components/BulkSelectHint';
 import { useSortedList } from '../hooks/useSortedList';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
+import { exportData } from '../lib/export';
 import DataTable, { type DataTableColumn } from '../components/DataTable';
 import ScopeBadge from '../components/ScopeBadge';
 import { useScopeMembership } from '../hooks/useScopeMembership';
@@ -1242,6 +1243,51 @@ export default function DataAssetsPage({
     } catch (err) {
       errorToast(err, 'Failed to assign system');
     }
+  };
+
+  // Set domain across the selection (board Main). Domain membership lives on
+  // the domain's dataAssetIds (not a field on the asset), so move the selected
+  // ids into the target domain and out of any other domain — one PUT per
+  // affected domain, not one per asset.
+  const bulkSetDomain = async (domainId: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    const target = domainsList.find((d) => d.id === domainId);
+    if (!target) return;
+    const idSet = new Set(ids);
+    try {
+      // Pull the selected ids out of every other domain that holds them.
+      await Promise.all(
+        domainsList
+          .filter((d) => d.id !== domainId && (d.dataAssetIds || []).some((aid) => idSet.has(aid)))
+          .map((d) => apiClient.put(`/data-domains/${d.id}`, { dataAssetIds: (d.dataAssetIds || []).filter((aid) => !idSet.has(aid)) })),
+      );
+      // Add them to the target domain.
+      const merged = Array.from(new Set([...(target.dataAssetIds || []), ...ids]));
+      await apiClient.put(`/data-domains/${domainId}`, { dataAssetIds: merged });
+      addToast('success', `Moved ${ids.length} asset${ids.length === 1 ? '' : 's'} into ${target.name}`);
+      sel.clear();
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Failed to set domain');
+      fetchData();
+    }
+  };
+
+  // Export just the selected assets — same columns as the toolbar export.
+  const bulkExport = () => {
+    const chosen = assets.filter((a) => sel.isSelected(a.id));
+    if (chosen.length === 0) return;
+    exportData('csv', {
+      filenameBase: 'data-assets-selection',
+      sheetName: 'Data Assets',
+      headers: ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'],
+      rows: chosen.map((a) => [
+        a.name, a.description, systemName(a.systemId),
+        a.sourceAsset ? `${a.sourceAsset}${a.sourceColumn ? '.' + a.sourceColumn : ''}` : '',
+        a.domainName || '', a.ownerName || '', a.stewardName || '',
+      ]),
+    });
   };
 
   const inlineSaveField = async (assetId: string, field: string, value: string) => {
@@ -2472,6 +2518,21 @@ export default function DataAssetsPage({
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
+        <select
+          aria-label="Set domain"
+          onChange={(e) => { if (e.target.value) bulkSetDomain(e.target.value); e.target.value = ''; }}
+          style={{
+            padding: '5px 12px', fontSize: 12, fontWeight: 500,
+            background: 'var(--color-surface)', color: 'var(--color-text)',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+          }}
+        >
+          <option value="">Set domain…</option>
+          {domainsList.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
+        <BulkActionButton onClick={bulkExport}>Export</BulkActionButton>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 

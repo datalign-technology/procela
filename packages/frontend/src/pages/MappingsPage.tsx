@@ -22,6 +22,7 @@ import ColumnPicker from '../components/ColumnPicker';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
+import { exportData } from '../lib/export';
 import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
 import BatchMappingWizard from '../components/BatchMappingWizard';
@@ -369,6 +370,38 @@ export default function MappingsPage({
       addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
       fetchData();
     }
+  };
+
+  // Bulk setter (board C5): change the link type across the selection via the
+  // same PUT the per-row editor uses.
+  const bulkSetLinkType = async (newType: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/mappings/${id}`, { linkType: newType })));
+      addToast('success', `Set ${ids.length} mapping${ids.length === 1 ? '' : 's'} to ${newType}`);
+      sel.clear();
+      fetchData();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to change link type');
+      fetchData();
+    }
+  };
+
+  // Export just the selected mappings — same columns as the toolbar export.
+  const bulkExport = () => {
+    const chosen = mappings.filter((m) => sel.isSelected(m.id));
+    if (chosen.length === 0) return;
+    exportData('csv', {
+      filenameBase: 'mappings-selection',
+      sheetName: 'Mappings',
+      headers: ['Process Activity', 'Target Kind', 'Target', 'Link Type', 'AI Suggested', 'Notes'],
+      rows: chosen.map((m) => {
+        const t = resolveTarget(m);
+        const activityLabel = m.stepInfo ? formatStepPath(m.stepInfo) : `(deleted activity ${shortId(m.processStepId)})`;
+        return [activityLabel, t.kind, t.label, m.linkType, m.aiSuggested ? 'Yes' : 'No', m.notes];
+      }),
+    });
   };
 
   // Orphans = mappings whose linked entity has been deleted. The activity
@@ -821,6 +854,15 @@ export default function MappingsPage({
 
 
       <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <select
+          aria-label="Change link type"
+          onChange={(e) => { if (e.target.value) bulkSetLinkType(e.target.value); e.target.value = ''; }}
+          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        >
+          <option value="">Change link type…</option>
+          {LINK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <BulkActionButton onClick={bulkExport}>Export</BulkActionButton>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 

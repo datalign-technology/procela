@@ -521,6 +521,31 @@ export default function GovernanceIssuesPage({
     }
   };
 
+  // Bulk setters (board G5): reassign / change status across the selection,
+  // through the same PUT the per-issue editor uses.
+  const bulkReassign = async (assignedTo: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/governance-issues/${id}`, { assignedTo })));
+      const name = people.find((p) => p.id === assignedTo)?.name || 'selected assignee';
+      addToast('success', `Assigned ${ids.length} issue${ids.length === 1 ? '' : 's'} to ${name}`);
+      sel.clear();
+      fetchData();
+    } catch (err) { errorToast(err, 'Failed to reassign'); fetchData(); }
+  };
+
+  const bulkSetStatus = async (status: string) => {
+    const ids = Array.from(sel.selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/governance-issues/${id}`, { status })));
+      addToast('success', `Set ${ids.length} issue${ids.length === 1 ? '' : 's'} to ${status.replace(/_/g, ' ').toLowerCase()}`);
+      sel.clear();
+      fetchData();
+    } catch (err) { errorToast(err, 'Failed to set status'); fetchData(); }
+  };
+
   const mutedDash = <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>;
   const issueColumns = ([
     issueCols.isVisible('title') && {
@@ -744,6 +769,22 @@ export default function GovernanceIssuesPage({
       )}
 
       <BulkActionBar count={sel.count} onClear={sel.clear}>
+        <select
+          aria-label="Reassign"
+          onChange={(e) => { if (e.target.value) bulkReassign(e.target.value); e.target.value = ''; }}
+          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        >
+          <option value="">Reassign…</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+        </select>
+        <select
+          aria-label="Change status"
+          onChange={(e) => { if (e.target.value) bulkSetStatus(e.target.value); e.target.value = ''; }}
+          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        >
+          <option value="">Change status…</option>
+          {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+        </select>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete selected</BulkActionButton>
       </BulkActionBar>
 
