@@ -343,7 +343,7 @@ describe('Council Scorecard — value drivers', () => {
     );
     // 2 assets: one classified + owned, one neither.
     dataAssets.push(
-      { id: V + 'aC', orgId: org, name: 'AC', description: '', governanceTier: 'GOLD', healthScore: 0, ownerPersonId: 'p1', sensitivityTags: ['PII'], createdAt: iso(now), updatedAt: iso(now) },
+      { id: V + 'aC', orgId: org, name: 'AC', description: '', governanceTier: 'GOLD', healthScore: 0, ownerPersonId: 'p1', sensitivityTags: ['PII'], certificationStatus: 'CERTIFIED', certifiedUntil: iso(now + 300 * 864e5), createdAt: iso(now), updatedAt: iso(now) },
       { id: V + 'aU', orgId: org, name: 'AU', description: '', governanceTier: 'BRONZE', healthScore: 0, createdAt: iso(now), updatedAt: iso(now) },
     );
     // One past-expiry exception.
@@ -370,6 +370,8 @@ describe('Council Scorecard — value drivers', () => {
     const vd = d.valueDrivers;
     // 1 of 2 domains + 1 of 2 assets owned ⇒ 2/4 = 50%.
     assert.deepStrictEqual(vd.ownership, { covered: 2, total: 4, pct: 50 });
+    // 1 of 2 assets carries an attested certification ⇒ 50%.
+    assert.deepStrictEqual(vd.certified, { covered: 1, total: 2, pct: 50 });
     // 1 past-expiry exception + 1 unowned tier-1 domain + 1 unclassified asset.
     assert.strictEqual(vd.openRisk, 3);
     // The resolved issue closed 2 days ago; the open one does not count.

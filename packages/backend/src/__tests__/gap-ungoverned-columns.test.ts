@@ -35,6 +35,12 @@ describe('gap-detection: ungoverned bound columns', () => {
       systemId: '', owner: '', steward: '', governanceTier: 'SILVER', healthScore: 0,
       createdAt: now, updatedAt: now,
     });
+    // Gold-but-not-certified: one GOLD asset pending review (a gap) and one
+    // GOLD asset already attested (must NOT be flagged).
+    dataAssets.push(
+      { id: 'gapcol-gold-pending', orgId: 'gapcol-org', name: 'Gold Pending', description: '', systemId: '', owner: '', steward: '', governanceTier: 'GOLD', healthScore: 0, certificationStatus: 'PENDING_REVIEW', createdAt: now, updatedAt: now },
+      { id: 'gapcol-gold-certified', orgId: 'gapcol-org', name: 'Gold Certified', description: '', systemId: '', owner: '', steward: '', governanceTier: 'GOLD', healthScore: 0, certificationStatus: 'CERTIFIED', createdAt: now, updatedAt: now },
+    );
     // Two bound columns (physical source pointer set); one will get a rule.
     dataAssetColumns.push(
       { id: 'gapcol-amount', dataAssetId: assetId, columnName: 'amount', sourceColumn: 'amount', sourceAsset: 'invoices', createdAt: now, updatedAt: now },
@@ -56,6 +62,7 @@ describe('gap-detection: ungoverned bound columns', () => {
   });
 
   after(async () => {
+    for (let i = dataAssets.length - 1; i >= 0; i--) if (String(dataAssets[i].id).startsWith('gapcol-gold')) dataAssets.splice(i, 1);
     const ai = dataAssets.findIndex((a: any) => a.id === assetId);
     if (ai !== -1) dataAssets.splice(ai, 1);
     for (let i = dataAssetColumns.length - 1; i >= 0; i--) if (dataAssetColumns[i].dataAssetId === assetId) dataAssetColumns.splice(i, 1);
@@ -72,5 +79,14 @@ describe('gap-detection: ungoverned bound columns', () => {
     // 'note' has no source pointer → not a bound column → excluded.
     assert.deepStrictEqual(group.columns, ['status']);
     assert.strictEqual(group.count, 1);
+  });
+
+  it('flags Gold assets without an attested certification, but not certified ones', async () => {
+    const res = await get(port, '/gaps');
+    assert.strictEqual(res.status, 200);
+    const ids = res.body.data.goldNotCertified.map((a: any) => a.id);
+    assert.ok(ids.includes('gapcol-gold-pending'), 'a pending GOLD asset is a gap');
+    assert.ok(!ids.includes('gapcol-gold-certified'), 'an attested GOLD asset is not a gap');
+    assert.ok(res.body.summary.goldNotCertified >= 1, 'summary counts the gap');
   });
 });
