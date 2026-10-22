@@ -80,6 +80,10 @@ export interface ValueDrivers {
   // Efficiency: share of in-scope domains + assets that have a named owner —
   // fewer "who owns this?" escalations, faster time-to-trust.
   ownership: ValueDriverRatio;
+  // Assurance: share of in-scope assets with an *attested* certification
+  // (certificationStatus === CERTIFIED) — a reviewed, audit-ready sign-off,
+  // not merely the GOLD tier. The number governance should drive UP.
+  certified: ValueDriverRatio;
   // Risk reduced: a "value at risk" proxy governance should drive DOWN —
   // exceptions past expiry + Tier-1 domains without an owner + unclassified
   // assets. A falling number is the value.
@@ -257,7 +261,7 @@ function childDivisions(parentId: string): { id: string; name: string }[] {
 
 interface Sources {
   domains: Array<{ id: string; orgId: string; ownerId: string | null; criticality?: string; dataAssetIds?: string[] }>;
-  assets: Array<{ id: string; orgId: string; ownerPersonId?: string | null; owner?: string | null; sensitivityTags?: unknown[] }>;
+  assets: Array<{ id: string; orgId: string; ownerPersonId?: string | null; owner?: string | null; sensitivityTags?: unknown[]; certificationStatus?: string }>;
   issues: Array<{ orgId: string; status: string; createdAt?: string; closedAt?: string | null; domainId?: string | null; dataAssetId?: string | null }>;
   exceptions: typeof governanceExceptions;
   now: number;
@@ -324,6 +328,9 @@ function computeValueDrivers(scope: Set<string>, s: Sources): ValueDrivers {
   const ownTotal = domains.length + assets.length;
   const ownership: ValueDriverRatio = { covered: owned, total: ownTotal, pct: ownTotal ? Math.round((100 * owned) / ownTotal) : 0 };
 
+  const certifiedCount = assets.filter((a) => a.certificationStatus === 'CERTIFIED').length;
+  const certified: ValueDriverRatio = { covered: certifiedCount, total: assets.length, pct: assets.length ? Math.round((100 * certifiedCount) / assets.length) : 0 };
+
   const exceptions = s.exceptions.filter((e) => scope.has(e.orgId) && isPastExpiry(e, s.now)).length;
   const tier1Unowned = domains.filter((d) => d.criticality === 'TIER_1' && !d.ownerId).length;
   const unclassified = assets.filter((a) => !(Array.isArray(a.sensitivityTags) && a.sensitivityTags.length > 0)).length;
@@ -337,7 +344,7 @@ function computeValueDrivers(scope: Set<string>, s: Sources): ValueDrivers {
     .filter((n) => Number.isFinite(n) && n >= 0);
   const avgResolutionDays = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null;
 
-  return { ownership, openRisk, resolvedLast30, avgResolutionDays };
+  return { ownership, certified, openRisk, resolvedLast30, avgResolutionDays };
 }
 
 // Monetize the value drivers with the tenant's own model (ROI Phase 2). No

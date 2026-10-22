@@ -324,9 +324,18 @@ router.get('/', async (req: Request, res: Response) => {
     count: columns.length,
   }));
 
+  // Gold but not certified — assets promoted to the GOLD tier that have not
+  // completed the certification workflow (manual Gold, or an expired/revoked
+  // attestation). The scorecard counts only attested certs, so this is the
+  // backlog that closes the gap between "looks Gold" and "signed off".
+  const goldNotCertified = assets
+    .filter((a) => a.governanceTier === 'GOLD' && (a.certificationStatus || 'NONE') !== 'CERTIFIED')
+    .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, certificationStatus: a.certificationStatus || 'NONE' }));
+
   const summary = {
     unmappedSteps: unmappedSteps.length,
     ungovernedAssets: ungovernedAssets.length,
+    goldNotCertified: goldNotCertified.length,
     ungovernedColumns: ungovernedColumns.reduce((s, g) => s + g.count, 0),
     lowHealthAssets: lowHealthAssets.length,
     ownerlessProcesses: ownerlessProcesses.length,
@@ -341,7 +350,7 @@ router.get('/', async (req: Request, res: Response) => {
     totalGaps: unmappedSteps.length + ungovernedAssets.length + ownerlessProcesses.length
       + unownedDomains.length + orphanedAssets.length + unlinkedAssets.length
       + unassignedConnections.length + ownerlessSystems.length
-      + duplicateAssetNames.length + copiesWithoutSor.length
+      + duplicateAssetNames.length + copiesWithoutSor.length + goldNotCertified.length
       + ungovernedColumns.reduce((s, g) => s + g.count, 0),
   };
 
@@ -367,6 +376,7 @@ router.get('/', async (req: Request, res: Response) => {
     data: {
       unmappedSteps,
       ungovernedAssets,
+      goldNotCertified,
       lowHealthAssets,
       ownerlessProcesses,
       unownedDomains,

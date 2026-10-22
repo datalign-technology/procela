@@ -82,9 +82,17 @@ interface UngovernedColumnGroup {
   count: number;
 }
 
+interface GoldNotCertifiedAsset {
+  id: string;
+  name: string;
+  governanceTier: string;
+  certificationStatus: string;
+}
+
 interface GapData {
   unmappedSteps: UnmappedStep[];
   ungovernedAssets: UngovervedAsset[];
+  goldNotCertified: GoldNotCertifiedAsset[];
   lowHealthAssets: LowHealthAsset[];
   ownerlessProcesses: OwnerlessProcess[];
   unownedDomains: UnownedDomain[];
@@ -98,6 +106,7 @@ interface GapData {
 interface GapSummary {
   unmappedSteps: number;
   ungovernedAssets: number;
+  goldNotCertified: number;
   lowHealthAssets: number;
   ownerlessProcesses: number;
   unownedDomains: number;
@@ -185,6 +194,17 @@ const GAP_SECTIONS: GapSection[] = [
     description: 'Uncertified data assets linked to process activities. Critical processes depend on minimally governed data.',
     why: 'Live processes are running on data nobody has certified for trust.',
     fix: 'Start certification',
+    severity: 'warning',
+    icon: gapIcon('/data-assets'),
+  },
+  {
+    key: 'goldNotCertified',
+    title: 'Gold but not certified',
+    group: 'Data governance',
+    short: 'Top-tier assets without an attested sign-off',
+    description: 'Assets at the Gold tier whose certification is missing, pending, or lapsed. Gold signals "trusted", but only an attested certification is audit-ready.',
+    why: 'An asset reads as top-tier without a reviewed sign-off behind it — the scorecard counts only attested certifications.',
+    fix: 'Request certification',
     severity: 'warning',
     icon: gapIcon('/data-assets'),
   },
@@ -738,6 +758,19 @@ function renderItems(key: string, items: any[], fix: string) {
           <span style={{ fontWeight: 500, flex: 1 }}>{a.name}</span>
           <span style={badgeStyle('#fed7aa', '#9a3412')}>{tierLabel('BRONZE')}</span>
           <span style={mutedStyle}>{a.healthScore}% health</span>
+        </Row>
+      ));
+
+    case 'goldNotCertified':
+      return items.map((a: GoldNotCertifiedAsset) => (
+        <Row
+          key={a.id}
+          to={`/data-assets?highlight=${encodeURIComponent(a.id)}`}
+          title={`Open ${a.name} on Data Assets to request certification`}
+        >
+          <span style={{ fontWeight: 500, flex: 1 }}>{a.name}</span>
+          <span style={badgeStyle('#fde68a', '#92400e')}>{tierLabel('GOLD')}</span>
+          <span style={mutedStyle}>{a.certificationStatus === 'PENDING_REVIEW' ? 'Pending review' : 'Not certified'}</span>
         </Row>
       ));
 

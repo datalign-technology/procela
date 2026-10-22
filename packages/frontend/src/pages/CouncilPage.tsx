@@ -41,7 +41,7 @@ interface Row {
 interface Narrative { whatMoved?: string; forCouncil?: string; whatMovedAuto?: boolean; forCouncilAuto?: boolean }
 interface ScopeInfo { lens: 'all' | 'governed'; applied: boolean; version: number | null; changedAt: string | null }
 interface ValueDriverRatio { covered: number; total: number; pct: number }
-interface ValueDrivers { ownership: ValueDriverRatio; openRisk: number; resolvedLast30: number; avgResolutionDays: number | null }
+interface ValueDrivers { ownership: ValueDriverRatio; certified: ValueDriverRatio; openRisk: number; resolvedLast30: number; avgResolutionDays: number | null }
 interface RoiModel { currency: string; riskCostPerItem: number; resolutionValuePerIssue: number; ownershipValuePerEntity: number }
 interface ValueStreamRoi { valueStreamId: string; name: string; assets: number; ownershipValue: number; resolutionValueAnnualized: number; annualValue: number; valueAtRisk: number }
 interface RoiEstimate {
@@ -790,6 +790,7 @@ export default function CouncilPage() {
             const v = derived.valueDrivers;
             const tiles: Array<{ label: string; value: string; tip: string; tone?: 'good' | 'risk'; num: number }> = [
               { label: 'Ownership coverage', value: `${v.ownership.pct}%`, tip: `${v.ownership.covered}/${v.ownership.total} domains & assets have a named owner`, tone: 'good', num: v.ownership.pct },
+              { label: 'Certified coverage', value: `${v.certified.pct}%`, tip: `${v.certified.covered}/${v.certified.total} assets carry an attested certification (reviewed sign-off, not just the Gold tier)`, tone: 'good', num: v.certified.pct },
               { label: 'Open risk items', value: `${v.openRisk}`, tip: 'Count of past-expiry exceptions + unowned tier-1 domains + unclassified assets — drive down', tone: 'risk', num: v.openRisk },
               { label: 'Resolved (30 days)', value: `${v.resolvedLast30}`, tip: 'Governance issues moved to a terminal status', tone: 'good', num: v.resolvedLast30 },
               { label: 'Avg days to resolve', value: v.avgResolutionDays == null ? '—' : `${v.avgResolutionDays}`, tip: v.avgResolutionDays == null ? 'No resolved issues yet' : 'Mean cycle time across resolved issues', num: v.avgResolutionDays ?? 0 },
