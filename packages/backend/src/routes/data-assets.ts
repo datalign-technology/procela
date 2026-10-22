@@ -7,6 +7,7 @@ import { isOwnershipLevel, getCachedOrgList } from '../lib/org-scope';
 import { scopeListForRequest, assertOrgAccess } from '../lib/tenant-scope';
 import { REGULATORY_SENSITIVITY_TAGS } from '../services/ai.service';
 import { auditService } from '../services/audit.service';
+import { createNotification } from './notifications';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { getAiServiceForOrg, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
 import logger from '../lib/logger';
@@ -1139,7 +1140,84 @@ async function certContext(req: Request, asset: StoredDataAsset) {
       }
     }
   }
-  return { user, person, isAdmin, identity, domain, canRequest, canReview };
+
+  // Suggested reviewer to assign the certification review task to — the domain
+  // Data Owner first (closest accountable), then a domain-scoped DATA_OWNER
+  // role, then the org CDO / Governance Lead. Never the requester (segregation);
+  // null ⇒ the task/notification goes to the review queue unassigned.
+  let reviewerId: string | null = null;
+  if (domain?.ownerId) reviewerId = domain.ownerId;
+  if (!reviewerId && domain) {
+    reviewerId = allRoles.find((r) => r.roleType === 'DATA_OWNER' && r.scopeType === 'DOMAIN' && r.scopeId === domain.id)?.personId || null;
+  }
+  if (!reviewerId) {
+    reviewerId = allRoles.find((r) => r.roleType === 'CDO')?.personId
+      || allRoles.find((r) => r.roleType === 'DATA_GOVERNANCE_LEAD')?.personId
+      || null;
+  }
+  if (reviewerId && identity && reviewerId === identity) reviewerId = null; // never assign to the requester
+
+  return { user, person, isAdmin, identity, domain, canRequest, canReview, reviewerId };
+}
+
+type CertCtx = Awaited<ReturnType<typeof certContext>>;
+
+/** Lazily build the governance-tasks repo — a direct top-level import would
+ *  close a circular import with the governance-tasks router. */
+function certTasksRepo() {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { governanceTasks } = require('./governance-tasks') as { governanceTasks: unknown[] };
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getGovernanceTasksRepository } = require('../db/governance-tasks.repo') as typeof import('../db/governance-tasks.repo');
+  return getGovernanceTasksRepository(governanceTasks as never);
+}
+
+/** Open a certification-review task when a request is raised, so the reviewer
+ *  finds it in their governance-work queue. Best-effort: a task failure never
+ *  fails the certification request itself. */
+async function openCertReviewTask(asset: StoredDataAsset, ctx: CertCtx): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+    const due = new Date(); due.setDate(due.getDate() + 14);
+    await certTasksRepo().create({
+      id: uuid(),
+      orgId: asset.orgId,
+      title: `Review certification: ${asset.name}`,
+      description: `${ctx.person?.name || 'A requester'} requested Gold certification for "${asset.name}". Review the readiness checklist, then approve or reject.`,
+      taskType: 'APPROVAL',
+      status: 'OPEN',
+      priority: 'MEDIUM',
+      assigneeId: ctx.reviewerId || null,
+      dueDate: due.toISOString(),
+      linkedObjectType: 'DataAsset',
+      linkedObjectId: asset.id,
+      automationMode: 'HUMAN',
+      createdBy: ctx.identity || null,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
+    } as never);
+  } catch (err) {
+    logger.error({ err, assetId: asset.id }, 'Failed to open certification review task');
+  }
+}
+
+/** Resolve the open certification-review task(s) for an asset when the review
+ *  concludes — COMPLETED on approve, CANCELLED on reject/revoke. */
+async function closeCertReviewTasks(assetId: string, outcome: 'COMPLETED' | 'CANCELLED'): Promise<void> {
+  try {
+    const repo = certTasksRepo();
+    const all = await repo.list();
+    const now = new Date().toISOString();
+    const open = (all as Array<{ id: string; linkedObjectType?: string | null; linkedObjectId?: string | null; taskType?: string; status?: string }>)
+      .filter((t) => t.linkedObjectType === 'DataAsset' && t.linkedObjectId === assetId && t.taskType === 'APPROVAL'
+        && t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.status !== 'REJECTED');
+    for (const t of open) {
+      await repo.update(t.id, { status: outcome, completedAt: outcome === 'COMPLETED' ? now : null, updatedAt: now } as never);
+    }
+  } catch (err) {
+    logger.error({ err, assetId }, 'Failed to resolve certification review task');
+  }
 }
 
 /** GET /api/v1/data-assets/certification-queue — assets awaiting review.
@@ -1314,6 +1392,17 @@ router.post('/:id/certification/request', async (req: Request, res: Response) =>
     certificationNote: typeof req.body?.note === 'string' ? req.body.note : null,
   });
   auditService.log(asset.orgId, ctx.user?.sub || null, 'DataAsset', asset.id, 'CERT_REQUEST', before, updated);
+  // Open a review task + notify the reviewer so the request lands in a queue,
+  // not just on the asset page.
+  await openCertReviewTask(asset, ctx);
+  createNotification({
+    orgId: asset.orgId,
+    userId: ctx.reviewerId,
+    type: 'ACTION',
+    title: `Certification requested: ${asset.name}`,
+    message: `${ctx.person?.name || 'A requester'} requested Gold certification. Review the readiness checklist, then approve or reject.`,
+    link: `/data-assets/${asset.id}`,
+  });
   res.json({ success: true, data: updated });
 });
 
@@ -1340,6 +1429,17 @@ router.post('/:id/certification/approve', async (req: Request, res: Response) =>
     ...(typeof req.body?.note === 'string' ? { certificationNote: req.body.note } : {}),
   });
   auditService.log(asset.orgId, ctx.user?.sub || null, 'DataAsset', asset.id, 'CERT_APPROVE', before, updated);
+  await closeCertReviewTasks(asset.id, 'COMPLETED');
+  if (asset.certificationRequestedById) {
+    createNotification({
+      orgId: asset.orgId,
+      userId: asset.certificationRequestedById,
+      type: 'INFO',
+      title: `Certified: ${asset.name}`,
+      message: `Your certification request was approved by ${ctx.person?.name || 'a reviewer'}. Recertification due ${until.toLocaleDateString()}.`,
+      link: `/data-assets/${asset.id}`,
+    });
+  }
   res.json({ success: true, data: updated });
 });
 
@@ -1365,6 +1465,17 @@ router.post('/:id/certification/reject', async (req: Request, res: Response) => 
     certificationNote: note,
   });
   auditService.log(asset.orgId, ctx.user?.sub || null, 'DataAsset', asset.id, 'CERT_REJECT', before, updated);
+  await closeCertReviewTasks(asset.id, 'CANCELLED');
+  if (asset.certificationRequestedById) {
+    createNotification({
+      orgId: asset.orgId,
+      userId: asset.certificationRequestedById,
+      type: 'WARNING',
+      title: `Certification rejected: ${asset.name}`,
+      message: `${ctx.person?.name || 'A reviewer'} rejected the certification request: “${note}”`,
+      link: `/data-assets/${asset.id}`,
+    });
+  }
   res.json({ success: true, data: updated });
 });
 

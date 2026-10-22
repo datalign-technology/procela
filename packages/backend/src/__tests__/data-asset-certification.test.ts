@@ -27,6 +27,10 @@ const { dataDomains } = require('../routes/data-domains');
 const { damaRoles } = require('../routes/dama-roles');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { organizations } = require('../routes/organizations');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governanceTasks } = require('../routes/governance-tasks');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { notifications } = require('../routes/notifications');
 
 const ORG = 'cert-test-org';
 
@@ -127,6 +131,39 @@ describe('Data asset certification workflow', () => {
     assert.strictEqual(res.body.data.certificationStatus, 'PENDING_REVIEW');
     assert.strictEqual(res.body.data.certificationRequestedById, ownerId);
     assert.strictEqual(res.body.data.certificationNote, 'Ready for Gold');
+  });
+
+  it('requesting opens an APPROVAL review task assigned to the reviewer + notifies', async () => {
+    resetAsset();
+    await request(port, 'POST', `/data-assets/${assetId}/certification/request`, { email: 'owner@cert.test' });
+    const task = governanceTasks.find((t: any) => t.linkedObjectType === 'DataAsset' && t.linkedObjectId === assetId && t.taskType === 'APPROVAL' && t.status === 'OPEN');
+    assert.ok(task, 'expected an open APPROVAL review task linked to the asset');
+    assert.strictEqual(task.assigneeId, cdoId, 'task is assigned to the CDO reviewer (domain has no owner)');
+    const note = notifications.find((n: any) => n.link === `/data-assets/${assetId}` && n.type === 'ACTION');
+    assert.ok(note, 'expected an ACTION notification to the reviewer');
+    assert.strictEqual(note.userId, cdoId);
+  });
+
+  it('approving resolves the review task (COMPLETED) + notifies the requester', async () => {
+    resetAsset();
+    await request(port, 'POST', `/data-assets/${assetId}/certification/request`, { email: 'owner@cert.test' });
+    await request(port, 'POST', `/data-assets/${assetId}/certification/approve`, { email: 'cdo@cert.test' });
+    const openTask = governanceTasks.find((t: any) => t.linkedObjectId === assetId && t.taskType === 'APPROVAL' && t.status === 'OPEN');
+    assert.ok(!openTask, 'the review task should no longer be OPEN');
+    const done = governanceTasks.find((t: any) => t.linkedObjectId === assetId && t.taskType === 'APPROVAL' && t.status === 'COMPLETED');
+    assert.ok(done, 'the review task should be COMPLETED');
+    const note = notifications.find((n: any) => n.link === `/data-assets/${assetId}` && n.userId === ownerId && n.type === 'INFO');
+    assert.ok(note, 'requester gets an INFO notification on approval');
+  });
+
+  it('rejecting cancels the review task', async () => {
+    resetAsset();
+    await request(port, 'POST', `/data-assets/${assetId}/certification/request`, { email: 'owner@cert.test' });
+    await request(port, 'POST', `/data-assets/${assetId}/certification/reject`, { email: 'cdo@cert.test', body: { note: 'Not yet' } });
+    const openTask = governanceTasks.find((t: any) => t.linkedObjectId === assetId && t.taskType === 'APPROVAL' && t.status === 'OPEN');
+    assert.ok(!openTask, 'the review task should no longer be OPEN');
+    const cancelled = governanceTasks.find((t: any) => t.linkedObjectId === assetId && t.taskType === 'APPROVAL' && t.status === 'CANCELLED');
+    assert.ok(cancelled, 'the review task should be CANCELLED');
   });
 
   it('a non-owner, non-admin cannot request', async () => {
