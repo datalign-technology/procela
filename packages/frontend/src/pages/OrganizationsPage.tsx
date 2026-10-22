@@ -17,6 +17,7 @@ import ExportMenu from '../components/ExportMenu';
 import ListToolbar from '../components/ListToolbar';
 import ConfirmDialog from '../components/ConfirmDialog';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
+import { exportData } from '../lib/export';
 import type { CleanupActions } from '../components/OrgDeleteCleanupDialog';
 // Lazy: only renders when the user confirms an org delete.
 const OrgDeleteCleanupDialog = lazy(() => import('../components/OrgDeleteCleanupDialog'));
@@ -520,6 +521,21 @@ export default function OrganizationsPage() {
       addToast('error', `Could not delete the selected organizations: ${lastError}`);
     }
   };
+  // Export just the selected organizations — same columns as the toolbar export.
+  const bulkExportOrgs = () => {
+    const chosen = flatOrgs.filter((o) => selectedIds.has(o.id));
+    if (chosen.length === 0) return;
+    exportData('csv', {
+      filenameBase: 'organizations-selection',
+      sheetName: 'Organizations',
+      headers: ['Name', 'Type', 'Parent', 'Industry', 'Description', 'People'],
+      rows: chosen.map((o) => [
+        o.name, o.type, flatOrgs.find((p) => p.id === o.parentId)?.name || '',
+        o.industry, o.description, peopleCounts[o.id] || 0,
+      ]),
+    });
+  };
+
   const handleImport = async () => {
     if (!importText.trim()) return;
     try {
@@ -761,6 +777,7 @@ export default function OrganizationsPage() {
       )}
 
       <BulkActionBar count={selectedIds.size} onClear={() => setSelectedIds(new Set())}>
+        <BulkActionButton onClick={bulkExportOrgs}>Export</BulkActionButton>
         <BulkActionButton variant="danger" onClick={() => setConfirmBulkDelete(true)}>Delete Selected</BulkActionButton>
         <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
           Note: deleting a parent removes its descendants too.
