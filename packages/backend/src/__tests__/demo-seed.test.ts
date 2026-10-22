@@ -266,7 +266,7 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(systems), 8, 'systems');
     assert.strictEqual(demoCount(agents), 5, 'agents');
     assert.strictEqual(demoCount(dataDomains), 6, 'domains');
-    assert.strictEqual(demoCount(dataAssets), 9, 'assets');
+    assert.strictEqual(demoCount(dataAssets), 10, 'assets');
     // 16 operational (Electric + Water hierarchies) + 37 governance nodes
     // (the standard DAMA program: 1 value stream + 6 processes + 30 activities).
     assert.strictEqual(demoCount(processNodes), 53, 'process nodes');
@@ -317,7 +317,7 @@ describe('demo-seed endpoint', () => {
     // Counts should match the single-seed expectations.
     assert.strictEqual(demoCount(organizations), 10);
     assert.strictEqual(demoCount(people), 24);
-    assert.strictEqual(demoCount(dataAssets), 9);
+    assert.strictEqual(demoCount(dataAssets), 10);
   });
 
   it('populates Susan Chen persona with tasks + issue', async () => {
@@ -405,6 +405,21 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual((meter as any).certificationStatus, 'PENDING_REVIEW');
     assert.strictEqual((meter as any).certificationRequestedById, demoId('person-andre'));
     assert.ok(!(meter as any).certificationReviewedById, 'pending asset has no reviewer yet');
+  });
+
+  it('seeds a manual-Gold-but-uncertified asset (the Gap Detection nudge)', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const rateBase = dataAssets.find((a: any) => a.id === demoId('asset-rate-base'));
+    assert.ok(rateBase, 'Rate Base Register is seeded');
+    // Gold tier, but never run through certification — the drift the
+    // "Gold but not certified" gap check surfaces.
+    assert.strictEqual((rateBase as any).governanceTier, 'GOLD');
+    assert.strictEqual((rateBase as any).certificationStatus, 'NONE');
+    // Otherwise governed: owner, steward, and a domain — so certification is its only gap.
+    assert.strictEqual((rateBase as any).ownerPersonId, demoId('person-lorraine'));
+    assert.ok(((rateBase as any).stewardIds || []).includes(demoId('person-phillip')));
+    const regDomain = dataDomains.find((d: any) => d.id === demoId('domain-regulatory'));
+    assert.ok((regDomain as any).dataAssetIds.includes(demoId('asset-rate-base')), 'rate base sits in the Regulatory domain');
   });
 
   it('seeds a governance calendar event owned by Susan', async () => {
