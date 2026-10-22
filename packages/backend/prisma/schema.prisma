@@ -597,6 +597,17 @@ model DataAsset {
   // scan. Compared against the next scan's fingerprint to detect schema drift
   // — a column added, removed, or retyped. Null until a scan reports columns.
   schemaFingerprint       String?
+  // Certification workflow (reviewed promotion to Gold). NONE = not in the
+  // flow; PENDING_REVIEW = requested, awaiting a reviewer; CERTIFIED = attested
+  // (distinct from a raw Gold tier edit). The *ById identities are a person id
+  // when the caller is linked to a Person, else the auth subject.
+  certificationStatus         String    @default("NONE")
+  certificationRequestedById  String?
+  certificationRequestedAt    DateTime?
+  certificationReviewedById   String?
+  certificationReviewedAt     DateTime?
+  certifiedUntil              DateTime?
+  certificationNote           String?   @db.Text
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 

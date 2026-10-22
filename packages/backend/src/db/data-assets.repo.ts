@@ -63,6 +63,13 @@ type PrismaAssetRow = {
   // back to a plain number (row counts are far below 2^53).
   rowCount: bigint | null;
   schemaFingerprint?: string | null;
+  certificationStatus?: string | null;
+  certificationRequestedById?: string | null;
+  certificationRequestedAt?: Date | null;
+  certificationReviewedById?: string | null;
+  certificationReviewedAt?: Date | null;
+  certifiedUntil?: Date | null;
+  certificationNote?: string | null;
   createdAt: Date;
   updatedAt: Date;
   stewards?: Array<{ personId: string }>;
@@ -108,6 +115,13 @@ function fromPrisma(r: PrismaAssetRow): StoredDataAsset {
     ...(r.lastSyncedAt ? { lastSyncedAt: r.lastSyncedAt.toISOString() } : {}),
     ...(r.rowCount !== null && r.rowCount !== undefined ? { rowCount: Number(r.rowCount) } : {}),
     ...(r.schemaFingerprint ? { schemaFingerprint: r.schemaFingerprint } : {}),
+    certificationStatus: (r.certificationStatus as StoredDataAsset['certificationStatus']) ?? 'NONE',
+    ...(r.certificationRequestedById ? { certificationRequestedById: r.certificationRequestedById } : {}),
+    ...(r.certificationRequestedAt ? { certificationRequestedAt: r.certificationRequestedAt.toISOString() } : {}),
+    ...(r.certificationReviewedById ? { certificationReviewedById: r.certificationReviewedById } : {}),
+    ...(r.certificationReviewedAt ? { certificationReviewedAt: r.certificationReviewedAt.toISOString() } : {}),
+    ...(r.certifiedUntil ? { certifiedUntil: r.certifiedUntil.toISOString() } : {}),
+    ...(r.certificationNote ? { certificationNote: r.certificationNote } : {}),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -145,6 +159,13 @@ function toPrismaData(row: Partial<StoredDataAsset>): Record<string, unknown> {
     data.rowCount = row.rowCount === null ? null : BigInt(Math.trunc(row.rowCount));
   }
   if (row.schemaFingerprint !== undefined) data.schemaFingerprint = row.schemaFingerprint ?? null;
+  if (row.certificationStatus !== undefined) data.certificationStatus = row.certificationStatus ?? 'NONE';
+  if (row.certificationRequestedById !== undefined) data.certificationRequestedById = row.certificationRequestedById ?? null;
+  if (row.certificationRequestedAt !== undefined) data.certificationRequestedAt = row.certificationRequestedAt ? new Date(row.certificationRequestedAt) : null;
+  if (row.certificationReviewedById !== undefined) data.certificationReviewedById = row.certificationReviewedById ?? null;
+  if (row.certificationReviewedAt !== undefined) data.certificationReviewedAt = row.certificationReviewedAt ? new Date(row.certificationReviewedAt) : null;
+  if (row.certifiedUntil !== undefined) data.certifiedUntil = row.certifiedUntil ? new Date(row.certifiedUntil) : null;
+  if (row.certificationNote !== undefined) data.certificationNote = row.certificationNote ?? null;
   if (row.createdAt !== undefined) data.createdAt = new Date(row.createdAt);
   // updatedAt is Prisma-managed via @updatedAt.
   return data;
