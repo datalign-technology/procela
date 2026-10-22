@@ -1036,6 +1036,35 @@ function UserReportsTab({ focusReportId, reportCols }: { focusReportId?: string;
                   <Link to="/reports" style={backLinkStyle}>{'←'} Back to Reports</Link>
                   <Button size="sm" variant="primary" leadingIcon={<Icon name="play" size={13} />} disabled={inlineRunning || !detail} onClick={() => { setDetailTab('results'); runInline(); }}>{inlineRunning ? 'Running…' : 'Run'}</Button>
                   <Button size="sm" leadingIcon={<Icon name="edit" size={13} />} onClick={() => navigate(`/reports/builder/${r.id}`)}>Edit</Button>
+                  {/* Board H3: a "More actions" menu for duplicate / move / delete.
+                      Reuses the list handlers; the list table isn't rendered in
+                      focus mode, so rowMenuId doubles as this menu's open state. */}
+                  <span style={{ position: 'relative', display: 'inline-flex' }}>
+                    <button
+                      type="button" aria-label="More actions" aria-haspopup="menu"
+                      onClick={(e) => { e.stopPropagation(); setRowMenuId(rowMenuId === r.id ? null : r.id); }}
+                      style={rowMenuBtnStyle}
+                    >⋯</button>
+                    {rowMenuId === r.id && (
+                      <div role="menu" onClick={(e) => e.stopPropagation()} style={rowMenuStyle}>
+                        <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); setMoveReport(r); setMoveTarget(r.folderId || ''); }}>Move to folder</button>
+                        <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setRowMenuId(null); duplicate(r); navigate('/reports'); }}>Duplicate</button>
+                        <div role="separator" style={{ height: 1, background: 'var(--color-border-subtle)', margin: '4px 0' }} />
+                        <button
+                          type="button" role="menuitem" style={{ ...menuItemStyle, color: 'var(--color-error)' }}
+                          onClick={async () => {
+                            setRowMenuId(null);
+                            if (!confirm(`Delete "${r.name}"? This can't be undone.`)) return;
+                            try {
+                              await apiClient.delete(`/reports/${r.id}`);
+                              addToast('success', `Deleted "${r.name}".`);
+                              navigate('/reports');
+                            } catch { addToast('error', 'Delete failed.'); }
+                          }}
+                        >Delete report</button>
+                      </div>
+                    )}
+                  </span>
                 </>
               }
             />

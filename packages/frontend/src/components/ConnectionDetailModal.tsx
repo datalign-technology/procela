@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
 import PageHeader from './PageHeader';
 import { useBreadcrumbLeaf } from './BreadcrumbContext';
@@ -51,6 +52,9 @@ interface Props {
   onDiscover?: () => void;
   /** asPage only: a test is currently running. */
   testing?: boolean;
+  /** asPage only: delete this connection (drives the header "More actions"
+   *  menu). The caller owns the confirm + navigate-back. */
+  onDelete?: () => void;
 }
 
 const badgeStyle = (palette: { bg: string; color: string }): CSSProperties => ({
@@ -86,7 +90,17 @@ function configEntries(conn: ConnectionProfile): Array<{ label: string; value: s
   return out;
 }
 
-export default function ConnectionDetailModal({ conn, systems, canWrite, onClose, onEdit, onSaved, asPage = false, onTest, onDiscover, testing = false }: Props) {
+export default function ConnectionDetailModal({ conn, systems, canWrite, onClose, onEdit, onSaved, asPage = false, onTest, onDiscover, testing = false, onDelete }: Props) {
+  // "More actions" overflow menu (asPage header). Closes on outside click.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDoc = (e: MouseEvent) => { if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [moreOpen]);
+
   const systemNameMap: Record<string, string> = {};
   systems.forEach((s) => { systemNameMap[s.id] = s.name; });
 
@@ -340,6 +354,18 @@ export default function ConnectionDetailModal({ conn, systems, canWrite, onClose
               <button type="button" onClick={onDiscover} style={ghostBtn}>Discover assets</button>
             )}
             {editActionsCore}
+            {/* Board E4: a "More actions" menu so Delete is reachable from the
+                detail page (Copy ID already lives in the header). */}
+            {!m.isEditing && canWrite && onDelete && (
+              <span ref={moreRef} style={{ position: 'relative', display: 'inline-flex' }}>
+                <button type="button" aria-label="More actions" aria-haspopup="menu" onClick={() => setMoreOpen((v) => !v)} style={{ ...ghostBtn, width: 40, padding: 0, justifyContent: 'center', fontSize: 18 }}>⋯</button>
+                {moreOpen && (
+                  <div role="menu" style={{ position: 'absolute', top: 44, right: 0, zIndex: 30, minWidth: 180, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg, 0 12px 24px rgba(0,0,0,0.12))', padding: 6 }}>
+                    <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); onDelete(); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', fontSize: 13, color: 'var(--color-error)', background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Delete connection</button>
+                  </div>
+                )}
+              </span>
+            )}
           </>}
         />
 
