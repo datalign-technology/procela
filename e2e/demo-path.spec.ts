@@ -141,9 +141,9 @@ test.describe('Procela demo path', () => {
     // Data Map page as evidence that the catalog + mapping data made
     // it through both read paths.
     await gotoWithOrg(page, '/processes/data-map', orgId, 'Demo Path Beat3');
-    const mapSvg = page.getByRole('img', { name: /Process to data asset map/i });
-    await expect(mapSvg).toContainText('Beat3 Outage triage', { timeout: 10_000 });
-    await expect(mapSvg).toContainText('Beat3 Outage Logs', { timeout: 10_000 });
+    const mapTable = page.getByRole('table', { name: /Process to data asset map/i });
+    await expect(mapTable).toContainText('Beat3 Outage triage', { timeout: 10_000 });
+    await expect(mapTable).toContainText('Beat3 Outage Logs', { timeout: 10_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

@@ -467,7 +467,7 @@ export default function ProcessDataMapPage() {
 
       {data && (activities.length > 0 || assets.length > 0) && (
         <div style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
-          <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, minWidth: '100%' }}>
+          <table aria-label="Process to data asset map" style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, minWidth: '100%' }}>
             <thead>
               <tr>
                 <th rowSpan={2} style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--color-surface)', textAlign: 'left', padding: '12px 16px', minWidth: 300, borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', verticalAlign: 'bottom', color: 'var(--color-text-muted)', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>

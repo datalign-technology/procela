@@ -214,12 +214,13 @@ test.describe('Procela smoke', () => {
     expect(errors, errors.join('\n')).toEqual([]);
   });
 
-  test('Process ↔ Data map renders the bipartite graph for a mapped activity', async ({ page }) => {
+  test('Process ↔ Data map renders the matrix for a mapped activity', async ({ page }) => {
     // Phase 3 visualization. Seeds a value stream → process → activity
     // tree with one mapping via the API, then walks the user to the
-    // map and asserts the activity name + the asset name appear in
-    // the SVG. Catches regressions where /processes/data-map renders
-    // an empty canvas even when there are real mappings to draw.
+    // map and asserts the activity name (a row) + the asset name (a
+    // column header) appear in the matrix. Catches regressions where
+    // /processes/data-map renders an empty table even when there are
+    // real mappings to draw.
     const errors = attachConsoleWatcher(page);
     const token = await loginAsEleanor(page);
     const orgId = await createOrg(token, uniqueName('Data Map Smoke'));
@@ -252,11 +253,11 @@ test.describe('Procela smoke', () => {
     });
 
     await gotoWithOrg(page, '/processes/data-map', orgId, 'Data Map Smoke');
-    // Target the data-map's SVG specifically — the page has many other
-    // icon SVGs in nav and chrome that would match a bare locator('svg').
-    const mapSvg = page.getByRole('img', { name: /Process to data asset map/i });
-    await expect(mapSvg).toContainText('Map Smoke Activity', { timeout: 10_000 });
-    await expect(mapSvg).toContainText('Map Smoke Asset', { timeout: 10_000 });
+    // Target the data-map's matrix specifically — activities run down the
+    // rows, data assets across the column headers.
+    const mapTable = page.getByRole('table', { name: /Process to data asset map/i });
+    await expect(mapTable).toContainText('Map Smoke Activity', { timeout: 10_000 });
+    await expect(mapTable).toContainText('Map Smoke Asset', { timeout: 10_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 
