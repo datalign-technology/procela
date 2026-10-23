@@ -417,6 +417,65 @@ flat table (e.g. the Business Glossary's formatted term sheet) adds
 `html` on the `ExportPayload` — the `html` formatter saves that verbatim,
 and falls back to a generic table document when it's omitted.
 
+### `<AttentionCards>`
+
+The "Needs attention" tile strip above an entity list — a row of count
+cards that each double as a one-click action (toggle a list filter, or
+jump to a related view). Registry pages hand-rolled drifting copies of
+this (counts at 24/26/28px, `auto-fill` vs `auto-fit`, a hardcoded
+`borderRadius:10`, captions split between "filter the list" and "the
+table", a non-interactive `<div>` card); the consistency sweep migrated
+all ten onto this one source of truth. New pages compose it instead of
+re-rolling the markup.
+
+```tsx
+import AttentionCards from '@/components/AttentionCards';
+
+<AttentionCards
+  caption="Click a card to filter the list"
+  cards={[
+    { key: 'unmapped', count: 4, label: 'Unmapped',
+      hint: 'Not linked to a process step', priority: true,
+      active: attention === 'unmapped', onClick: () => toggle('unmapped') },
+    { key: 'noDomain', count: 2, label: 'Assets in no domain',
+      hint: 'Opens Data Assets → Unassigned',
+      onClick: () => navigate('/data-assets?attention=noDomain') },
+  ]}
+/>
+```
+
+Per-card props:
+
+- `key` / `count` / `label` / `hint` — identity (+ React key), the
+  number, the title, the one-line sub-note (also the tooltip).
+- `active` — present (a boolean) ⇒ the card is a **filter**: it renders
+  `aria-pressed` and goes disabled when its count is 0 and it isn't the
+  active one (you can't select an empty bucket). Absent ⇒ a **link** card
+  (always clickable; the count is informational, the click navigates).
+- `priority` — leads with the amber **"Fix first"** tag when count > 0.
+  Reserve it for the gaps that make a row untrustworthy outright (no
+  owner, no mapping).
+- `tag` — a custom amber tag label that **overrides** the `priority`
+  "Fix first" default, for a softer worklist — e.g. `'Review'` for an
+  approval-pending / awaiting-sign-off card (Agents' "Output awaiting
+  review", Business Glossary's "Waiting for approval", Data Assets'
+  "Pending certification").
+- `loading` — the card's (best-effort) source hasn't resolved yet:
+  renders the count as **"—"**, suppresses the tag, and disables the card
+  (distinct from a real 0). Skills uses it for its people / process /
+  agent signals.
+- `disabled` — force-disable regardless of the derived rule.
+
+Strip props: `title` (section heading, default "Needs attention"),
+`caption` (muted text to the right of the heading), `minCardWidth`
+(default 170 — the tiles pack left with `auto-fill`, so a short set stays
+tile-sized instead of stretching full width). Renders nothing when
+`cards` is empty.
+
+In use on Data Assets, Data Quality, Data Domains, Process ↔ Data Map,
+Systems, SOPs, Agents, People, Skills, and Business Glossary. Do NOT
+hand-roll a "Needs attention" strip.
+
 ### `<TruncatedText>`
 
 Single-line ellipsis + hover tooltip for list-row cells. Combined
