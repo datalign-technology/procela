@@ -2086,19 +2086,20 @@ export default function DataAssetsPage({
           Counts are over the current (domain-/filter-) scope, so each number
           equals what clicking it shows. The two gaps that make an asset
           untrustworthy outright (no mapping, no owner) lead with a "Fix first"
-          tag. Clicking a card toggles the attention filter. */}
+          tag; pending certification is a review already in flight, so it wears
+          the softer "Review" tag instead. Clicking a card toggles the filter. */}
       {assets.length > 0 && (
         <AttentionCards
           caption="Click a card to filter the list"
           minCardWidth={150}
           cards={([
-            ...(attentionCounts.pendingCert > 0 ? [{ key: 'pendingCert' as AttentionKey, label: 'Pending certification', hint: 'Awaiting a reviewer’s sign-off', priority: true }] : []),
+            ...(attentionCounts.pendingCert > 0 ? [{ key: 'pendingCert' as AttentionKey, label: 'Pending certification', hint: 'Awaiting a reviewer’s sign-off', tag: 'Review' }] : []),
             { key: 'unmapped',     label: 'Unmapped',          hint: 'Not linked to a process step', priority: true },
             { key: 'noOwner',      label: 'No owner',          hint: 'Nobody accountable yet',        priority: true },
             { key: 'uncertified',  label: tierLabel('BRONZE'), hint: 'Not reviewed for trust' },
             { key: 'noDomain',     label: 'No domain',         hint: 'Missing from the domain tree' },
             { key: 'unclassified', label: 'Sensitivity not set', hint: 'Classification never recorded' },
-          ] as Array<{ key: AttentionKey; label: string; hint: string; priority?: boolean }>).map((c) => ({
+          ] as Array<{ key: AttentionKey; label: string; hint: string; priority?: boolean; tag?: string }>).map((c) => ({
             ...c,
             count: attentionCounts[c.key],
             active: attention === c.key,
