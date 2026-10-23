@@ -105,8 +105,11 @@ content differs — so a demo of any tenant lights up every page:
   business-critical asset** so the story stays coherent).
 - **2 connectors** (one ONLINE, one PAIRING) + 5 connector events,
   **1 weekly governance-calendar event**, **40 weekly stats snapshots**,
-  governance / docs / lineage / agent-ops / collaboration depth, and
-  **2 pre-warmed AI-template cache** entries.
+  governance depth (policies, controls, groups, program, decision rights,
+  and **3 governance exceptions** — one ACTIVE-and-past-expiry that drives
+  the Council Scorecard's "exceptions past expiry" measure, one expiring
+  within 30 days, one closed), docs / lineage / agent-ops / collaboration
+  depth, and **2 pre-warmed AI-template cache** entries.
 
 ## Behavior
 

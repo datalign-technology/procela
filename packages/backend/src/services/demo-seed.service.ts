@@ -29,6 +29,7 @@ import { calendarEvents } from '../routes/governance-calendar';
 import { statsSnapshots, type StatsSnapshot } from '../routes/dashboard';
 import { aiTemplateCache } from '../routes/ai';
 import { governancePolicies } from '../routes/governance-policies';
+import { governanceExceptions } from '../routes/governance-exceptions';
 import { governanceControls } from '../routes/governance-controls';
 import { governanceGroups } from '../routes/governance-groups';
 import { governancePrograms } from '../routes/governance-program';
@@ -77,6 +78,7 @@ import { getConnectorEventsRepository } from '../db/connector-events.repo';
 import { getCalendarEventsRepository } from '../db/calendar-events.repo';
 import { getStatsSnapshotsRepository } from '../db/stats-snapshots.repo';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getGovernanceExceptionsRepository } from '../db/governance-exceptions.repo';
 import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
 import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
 import { getGovernanceProgramsRepository } from '../db/governance-programs.repo';
@@ -218,6 +220,7 @@ interface DemoRepos {
   governanceControls: Repository<any>;
   governanceGroups: Repository<any>;
   governancePrograms: Repository<any>;
+  governanceExceptions: Repository<any>;
   decisionRights: Repository<any>;
   skills: Repository<any>;
   damaRoles: Repository<any>;
@@ -265,6 +268,7 @@ function buildRepos(): DemoRepos {
     governanceControls: getGovernanceControlsRepository(governanceControls as any),
     governanceGroups: getGovernanceGroupsRepository(governanceGroups as any),
     governancePrograms: getGovernanceProgramsRepository(governancePrograms as any),
+    governanceExceptions: getGovernanceExceptionsRepository(governanceExceptions as any),
     decisionRights: getDecisionRightsRepository(decisionRights as any),
     skills: getSkillsRepository(skills as any),
     damaRoles: getDamaRolesRepository(damaRoles as any),
@@ -381,6 +385,7 @@ async function sweep(repos: DemoRepos): Promise<void> {
   await sweepRepo(repos.damaRoles);
   await sweepRepo(repos.skills);
   await sweepRepo(repos.decisionRights);
+  await sweepRepo(repos.governanceExceptions);
   await sweepRepo(repos.governancePrograms);
   await sweepHierarchy(repos.governanceGroups);
   await sweepRepo(repos.governanceControls);
@@ -462,6 +467,20 @@ async function seedGovernanceDepth(repos: DemoRepos, ts: string, ctx: GovDepthCt
   await createAll(repos.decisionRights, [
     { id: demoId('dr-classification'), orgId, decision: 'Approve data classification changes', description: 'Who signs off when an asset\'s sensitivity tier changes.', category: 'CLASSIFICATION', decider: cdoId, deciderType: 'PERSON', recommends: ['DATA_GOVERNANCE_LEAD'], approves: ['CDO'], informed: ['DATA_OWNER'], escalationPath: 'Council → CDO', createdAt: ts, updatedAt: ts },
     { id: demoId('dr-dispute'), orgId, decision: 'Resolve cross-domain data disputes', description: 'Escalation path when two domains disagree on ownership.', category: 'ISSUE', decider: grpCouncil.id, deciderType: 'GROUP', recommends: ['DATA_OWNER'], approves: ['DATA_GOVERNANCE_LEAD'], informed: ['CDO'], escalationPath: 'Domain owners → Council', createdAt: ts, updatedAt: ts },
+  ]);
+
+  // Governance exceptions (3) — time-boxed policy waivers. Content is kept
+  // industry-neutral (like the policies above) so it reads correctly for
+  // every profile. One is ACTIVE and already PAST its expiry (the red row
+  // that drives the Council Scorecard's "exceptions past expiry" measure, and
+  // the one Module 10.4 of the training has you close), one is ACTIVE and
+  // expiring within the month (amber "expiring soon"), and one is already
+  // CLOSED. Dates are date-only to match the register's date inputs; policyId
+  // soft-links to a seeded policy.
+  await createAll(repos.governanceExceptions, [
+    { id: demoId('exc-pii-retention'), orgId, title: 'Legacy extract retains PII past policy', description: 'A legacy extract still carries full personal data while its masked replacement feed is built; the classification policy requires masking at rest.', policyId: polClassification.id, ownerId: dataOwnerId, reason: 'Masking now would break month-end reconciliation; the masked replacement feed lands next sprint.', status: 'ACTIVE', grantedAt: daysFromNow(-120).slice(0, 10), expiresAt: daysFromNow(-25).slice(0, 10), createdBy: govLeadId, updatedBy: govLeadId, createdAt: ts, updatedAt: ts },
+    { id: demoId('exc-encryption-at-rest'), orgId, title: 'Legacy system exempt from encryption-at-rest', description: 'A legacy system predates the encryption-at-rest standard; compensating network isolation is in place until the scheduled upgrade.', policyId: polClassification.id, ownerId: stewardIds[1], reason: 'Vendor firmware that adds at-rest encryption is scheduled; network isolation compensates in the interim.', status: 'ACTIVE', grantedAt: daysFromNow(-40).slice(0, 10), expiresAt: daysFromNow(20).slice(0, 10), createdBy: cdoId, updatedBy: cdoId, createdAt: ts, updatedAt: ts },
+    { id: demoId('exc-dq-waiver'), orgId, title: 'Temporary data-quality threshold waiver during migration', description: 'An asset dipped below the quality standard during a source-system migration window.', policyId: polQuality.id, ownerId: stewardIds[0], reason: 'One-time backfill gap during the migration; closed once historical records were loaded.', status: 'CLOSED', grantedAt: daysFromNow(-90).slice(0, 10), expiresAt: daysFromNow(-30).slice(0, 10), createdBy: stewardIds[0], updatedBy: stewardIds[0], createdAt: ts, updatedAt: ts },
   ]);
 }
 
