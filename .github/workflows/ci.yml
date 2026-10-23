@@ -1,11 +1,15 @@
 name: CI
 
 # Runs typecheck, unit tests, and the e2e smoke on every push and PR.
-# Four jobs fan out in parallel after their own fast `npm ci`; total
-# wall-clock is set by the slowest (e2e, ~90s). Failures upload the
-# Playwright report + traces so reviewers can replay the failing run
-# locally with `npx playwright show-trace` — no more "works on my
-# machine" arguments.
+# Jobs fan out in parallel after their own fast `npm ci`. The smoke
+# suite itself is ~90s, but the e2e job's wall-clock is dominated by
+# the one-time Chromium download in "Install Playwright" when the
+# browser cache misses (eviction / a new Playwright version) — that
+# download has been seen to take 6–10 min, so the job timeout must
+# leave room for it or the job is spuriously *cancelled*, not failed.
+# Failures upload the Playwright report + traces so reviewers can
+# replay the failing run locally with `npx playwright show-trace` —
+# no more "works on my machine" arguments.
 #
 # Branch protection lives in repo Settings → Branches → require
 # these check names to pass before merging. Not configured here on
@@ -361,7 +365,13 @@ jobs:
   e2e:
     name: E2E smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 20 min, not the old 10: the smoke suite is ~90s, but a cold
+    # Playwright browser download (cache miss) has been seen to take
+    # 6–10 min on its own and was blowing a 10-min cap, cancelling the
+    # whole job. The install step below carries its own tighter bound
+    # so a genuinely stuck download fails fast and is attributed there,
+    # rather than silently eating the job budget.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -387,8 +397,13 @@ jobs:
       # --with-deps installs the Linux system libraries Chromium
       # links against (libnss3, libdbus-1-3, etc.). On a cache hit
       # the browser binary is skipped but the system deps still need
-      # verifying — the command is idempotent.
+      # verifying — the command is idempotent. On a cache miss it
+      # downloads the pinned Chromium (~6–10 min observed), so give
+      # this step a generous bound: enough to absorb a cold download,
+      # but low enough that a truly stuck install fails here (clearly
+      # attributed) instead of running out the 20-min job budget.
       - name: Install Playwright
+        timeout-minutes: 14
         run: npx playwright install --with-deps chromium
 
       - name: Run smoke suite
