@@ -14,6 +14,7 @@ import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
+import AttentionCards from '../components/AttentionCards';
 import Button from '../components/Button';
 import { useOrgContext } from '../stores/orgContext';
 import AttachmentsPanel from '../components/AttachmentsPanel';
@@ -365,6 +366,9 @@ export default function SopsPage({
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterOwner, setFilterOwner] = useState('');
+  // "Needs attention" one-click filter — mutually exclusive, independent of
+  // the status/owner dropdowns (mirrors Data Assets / Agents / People).
+  const [attention, setAttention] = useState<'' | 'draft' | 'noOwner'>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
@@ -494,6 +498,8 @@ export default function SopsPage({
     if (filterCategory && s.category !== filterCategory) return false;
     if (filterStatus && s.status !== filterStatus) return false;
     if (filterOwner && (s.ownerPersonId || '') !== filterOwner) return false;
+    if (attention === 'draft' && s.status !== 'DRAFT') return false;
+    if (attention === 'noOwner' && s.ownerPersonId) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       if (
@@ -713,30 +719,21 @@ export default function SopsPage({
         Procedures (also called <strong style={{ fontWeight: 600 }}>SOPs</strong>, standard operating procedures) are step-by-step instructions for recurring governance jobs.
       </p>
 
-      {/* Needs attention — drafts (click to filter) and ownerless procedures. */}
-      {sops.length > 0 && (() => {
-        const draftCount = sops.filter((s) => s.status === 'DRAFT').length;
-        const noOwner = sops.filter((s) => !s.ownerPersonId).length;
-        const draftActive = filterStatus === 'DRAFT';
-        return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 14 }}>
-            <button type="button" onClick={() => setFilterStatus(draftActive ? '' : 'DRAFT')} aria-pressed={draftActive}
-              style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, border: `1px solid ${draftActive ? 'var(--color-primary)' : 'var(--color-border)'}`, background: draftActive ? 'var(--color-primary-light)' : 'var(--color-surface)' }}>
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <span style={{ fontSize: 28, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{draftCount}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>Fix first</span>
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>Still in draft</span>
-              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Not yet approved — publish when the steps are final.</span>
-            </button>
-            <div style={{ borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, border: `1px ${noOwner ? 'solid' : 'dashed'} var(--color-border)`, background: noOwner ? 'var(--color-surface)' : 'transparent' }}>
-              <span style={{ fontSize: 28, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: noOwner ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{noOwner}</span>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>No owner</span>
-              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Every procedure should have an owner.</span>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Needs attention — drafts and ownerless procedures as one-click filters. */}
+      {sops.length > 0 && (
+        <AttentionCards
+          caption="Click a card to filter the list"
+          minCardWidth={220}
+          cards={[
+            { key: 'draft', count: sops.filter((s) => s.status === 'DRAFT').length,
+              label: 'Still in draft', hint: 'Not yet approved — publish when the steps are final.', priority: true,
+              active: attention === 'draft', onClick: () => setAttention(attention === 'draft' ? '' : 'draft') },
+            { key: 'noOwner', count: sops.filter((s) => !s.ownerPersonId).length,
+              label: 'No owner', hint: 'Every procedure should have an owner.',
+              active: attention === 'noOwner', onClick: () => setAttention(attention === 'noOwner' ? '' : 'noOwner') },
+          ]}
+        />
+      )}
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -761,12 +758,12 @@ export default function SopsPage({
             .sort((a, b) => a[1].localeCompare(b[1]))
             .map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
-        {(filterCategory || filterStatus || filterOwner || searchQuery) && (
+        {(filterCategory || filterStatus || filterOwner || searchQuery || attention) && (
           <>
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterOwner(''); setSearchQuery(''); }}
+              onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterOwner(''); setSearchQuery(''); setAttention(''); }}
             >
               Clear Filters
             </Button>

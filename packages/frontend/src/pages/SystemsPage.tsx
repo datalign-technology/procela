@@ -8,6 +8,7 @@ import OwnerCell from '../components/OwnerCell';
 import { relativeTime, absoluteTime } from '../lib/relativeTime';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
+import AttentionCards from '../components/AttentionCards';
 import { useOrgContext } from '../stores/orgContext';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
@@ -1124,47 +1125,21 @@ export default function SystemsPage({
       {/* Full-width content — System Types is now a top facet (was a left-rail tree) */}
       <div>
 
-        {/* Needs attention — one-click filters for the two commonest gaps. */}
+        {/* Needs attention — one-click filters for the two commonest gaps.
+            Hidden when both counts are zero so the strip never shows all-empty. */}
         {systems.length > 0 && (notConnectedCount > 0 || noCriticalityCount > 0) && (
-          <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-              <SectionLabel>Needs attention</SectionLabel>
-              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Click a card to filter the table</span>
-            </div>
-            {/* auto-fill (not auto-fit) so a short card set stays tile-sized and
-                left-aligned instead of ballooning to full width — matches the
-                Data Assets needs-attention tiles. */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-              {([
-                { key: 'notConnected' as const, count: notConnectedCount, label: 'Not connected', hint: 'Procela cannot read data or measure health', tag: 'Fix first' },
-                { key: 'noCriticality' as const, count: noCriticalityCount, label: 'Criticality not set', hint: 'Impact of an outage is unknown', tag: '' },
-              ]).map((c) => {
-                const active = attentionFilter === c.key;
-                const disabled = c.count === 0;
-                return (
-                  <button
-                    key={c.key} type="button" disabled={disabled} aria-pressed={active}
-                    onClick={() => setAttentionFilter(active ? '' : c.key)}
-                    style={{
-                      textAlign: 'left', cursor: disabled ? 'default' : 'pointer', borderRadius: 'var(--radius-md)',
-                      padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
-                      border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                      boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
-                      opacity: disabled ? 0.6 : 1,
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                      <span style={{ fontSize: 26, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
-                      {c.tag && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-warning)' }}>{c.tag}</span>}
-                    </span>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                    <span className="na-card-hint" title={c.hint}>{c.hint}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          <AttentionCards
+            caption="Click a card to filter the list"
+            minCardWidth={220}
+            cards={[
+              { key: 'notConnected', count: notConnectedCount, label: 'Not connected',
+                hint: 'Procela cannot read data or measure health', priority: true,
+                active: attentionFilter === 'notConnected', onClick: () => setAttentionFilter(attentionFilter === 'notConnected' ? '' : 'notConnected') },
+              { key: 'noCriticality', count: noCriticalityCount, label: 'Criticality not set',
+                hint: 'Impact of an outage is unknown',
+                active: attentionFilter === 'noCriticality', onClick: () => setAttentionFilter(attentionFilter === 'noCriticality' ? '' : 'noCriticality') },
+            ]}
+          />
         )}
 
         {/* Content Area */}
