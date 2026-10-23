@@ -26,7 +26,10 @@ import SectionLabel from './SectionLabel';
 // undefined (always clickable — the count is informational and the click
 // navigates elsewhere). `priority` adds the amber "Fix first" tag when the
 // count is non-zero — reserve it for the gaps that make a row untrustworthy
-// outright (no owner, no mapping).
+// outright (no owner, no mapping). `tag` overrides that label for a softer
+// worklist (e.g. 'Review'). `loading` renders the count as "—" and disables
+// the card while its (best-effort) source is still resolving — distinct from
+// a real 0.
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface AttentionCard {
@@ -38,10 +41,16 @@ export interface AttentionCard {
   hint: string;
   /** Lead with the amber "Fix first" tag when count > 0. */
   priority?: boolean;
+  /** Amber tag label shown when count > 0. Overrides the `priority`
+   *  "Fix first" default — e.g. pass 'Review' for a soft worklist. */
+  tag?: string;
   /** Filter cards pass their selected state here; link cards leave it unset. */
   active?: boolean;
   /** Force-disable regardless of the derived rule. */
   disabled?: boolean;
+  /** Data for this card isn't available yet: render the count as "—",
+   *  suppress the tag, and disable the card (distinct from a real 0). */
+  loading?: boolean;
   onClick: () => void;
 }
 
@@ -69,7 +78,9 @@ export default function AttentionCards({ cards, title = 'Needs attention', capti
         {cards.map((c) => {
           const isFilter = typeof c.active === 'boolean';
           const zero = c.count === 0;
-          const disabled = c.disabled ?? (isFilter && zero && !c.active);
+          const loading = c.loading ?? false;
+          const disabled = c.disabled ?? (loading || (isFilter && zero && !c.active));
+          const tagLabel = c.tag ?? (c.priority ? 'Fix first' : undefined);
           return (
             <button
               key={c.key}
@@ -88,9 +99,9 @@ export default function AttentionCards({ cards, title = 'Needs attention', capti
               }}
             >
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
-                {c.priority && c.count > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Fix first</span>
+                <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: (loading || zero) ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{loading ? '—' : c.count}</span>
+                {tagLabel && !loading && c.count > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{tagLabel}</span>
                 )}
               </span>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>

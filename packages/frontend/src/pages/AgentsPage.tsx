@@ -9,6 +9,7 @@ import { useRowSelection } from '../hooks/useRowSelection';
 import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import AttentionCards from '../components/AttentionCards';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -625,51 +626,22 @@ export default function AgentsPage() {
 
         {/* Toolbar + agent list */}
         <div>
-      {/* Needs attention — a governance worklist over the agent fleet.
-          Clicking a card narrows the table to the matching agents. */}
+      {/* Needs attention — a governance worklist over the agent fleet. */}
       {agents.length > 0 && (
-        <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the list</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-            {([
-              { key: 'review', count: attnCounts.review, label: 'Output awaiting review', hint: 'Agent output pending sign-off', tag: 'Review' },
-              { key: 'failed', count: attnCounts.failed, label: 'Failed runs', hint: 'Agent has a run that failed', tag: 'Fix first' },
-              { key: 'noRole', count: attnCounts.noRole, label: 'No governance role', hint: "Agent isn't assigned a DAMA role", tag: '' },
-              { key: 'noSkills', count: attnCounts.noSkills, label: 'No skills', hint: 'No skills set on this agent', tag: '' },
-            ] as Array<{ key: Exclude<AgentAttention, ''>; count: number; label: string; hint: string; tag: string }>).map((c) => {
-              const active = attentionFilter === c.key;
-              const zero = c.count === 0;
-              return (
-                <button
-                  key={c.key}
-                  type="button"
-                  aria-pressed={active}
-                  disabled={zero && !active}
-                  onClick={() => setAttentionFilter(active ? '' : c.key)}
-                  style={{
-                    textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
-                    borderRadius: 'var(--radius-md)', padding: '12px 14px',
-                    display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
-                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
-                    opacity: zero && !active ? 0.6 : 1,
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                    <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
-                    {c.tag && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{c.tag}</span>}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                  <span className="na-card-hint" title={c.hint}>{c.hint}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        <AttentionCards
+          caption="Click a card to filter the list"
+          minCardWidth={220}
+          cards={([
+            { key: 'review' as const, count: attnCounts.review, label: 'Output awaiting review', hint: 'Agent output pending sign-off', tag: 'Review' },
+            { key: 'failed' as const, count: attnCounts.failed, label: 'Failed runs', hint: 'Agent has a run that failed', priority: true },
+            { key: 'noRole' as const, count: attnCounts.noRole, label: 'No governance role', hint: "Agent isn't assigned a DAMA role" },
+            { key: 'noSkills' as const, count: attnCounts.noSkills, label: 'No skills', hint: 'No skills set on this agent' },
+          ]).map((c) => ({
+            ...c,
+            active: attentionFilter === c.key,
+            onClick: () => setAttentionFilter(attentionFilter === c.key ? '' : c.key),
+          }))}
+        />
       )}
 
       {/* Filters (left-aligned, mirrors Data Assets) */}

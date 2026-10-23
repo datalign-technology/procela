@@ -6,6 +6,7 @@ import { activateOnKeyStop } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import NotInSourceBadge from '../components/NotInSourceBadge';
 import Card from '../components/Card';
+import AttentionCards from '../components/AttentionCards';
 import TruncatedText from '../components/TruncatedText';
 import FacetChips from '../components/FacetChips';
 import OwnerCell from '../components/OwnerCell';
@@ -759,49 +760,18 @@ export default function BusinessGlossaryPage() {
           {/* Needs attention — one-click worklists: proposed terms awaiting
               approval, and terms with no accountable owner. */}
           {terms.length > 0 && (
-            <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
-                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the table</span>
-              </div>
-              {/* auto-fill (not auto-fit) so a short card set stays tile-sized
-                  and left-aligned instead of ballooning to full width — matches
-                  the Data Assets needs-attention tiles. */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-                {([
-                  { key: 'proposed' as const, count: proposedCount, label: 'Waiting for approval', hint: 'Proposed terms to review', priority: true },
-                  { key: 'noOwner' as const, count: noOwnerCount, label: 'No owner assigned', hint: 'Nobody accountable for the definition' },
-                ]).map((c) => {
-                  const active = attentionFilter === c.key;
-                  const zero = c.count === 0;
-                  return (
-                    <button
-                      key={c.key}
-                      type="button"
-                      aria-pressed={active}
-                      disabled={zero && !active}
-                      onClick={() => setAttentionFilter(active ? '' : c.key)}
-                      style={{
-                        textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
-                        borderRadius: 'var(--radius-md)', padding: '12px 14px',
-                        display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
-                        background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                        boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
-                        opacity: zero && !active ? 0.6 : 1,
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                        <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
-                        {('priority' in c && c.priority) && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>Review</span>}
-                      </span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                      <span className="na-card-hint" title={c.hint}>{c.hint}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+            <AttentionCards
+              caption="Click a card to filter the list"
+              minCardWidth={220}
+              cards={([
+                { key: 'proposed' as const, count: proposedCount, label: 'Waiting for approval', hint: 'Proposed terms to review', tag: 'Review' },
+                { key: 'noOwner' as const, count: noOwnerCount, label: 'No owner assigned', hint: 'Nobody accountable for the definition' },
+              ]).map((c) => ({
+                ...c,
+                active: attentionFilter === c.key,
+                onClick: () => setAttentionFilter(attentionFilter === c.key ? '' : c.key),
+              }))}
+            />
           )}
           {/* Category chips — only rendered when the facet actually splits the
               list (≥2 populated categories), to save vertical space. */}

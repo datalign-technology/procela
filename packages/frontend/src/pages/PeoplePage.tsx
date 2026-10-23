@@ -5,6 +5,7 @@ import { thStyle, tdStyle } from '../lib/tableStyles';
 import { clickable } from '../lib/a11y';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
+import AttentionCards from '../components/AttentionCards';
 import Button from '../components/Button';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
@@ -774,47 +775,19 @@ export default function PeoplePage() {
 
               {/* Needs attention — directory-hygiene gaps as one-click filters. */}
               {people.length > 0 && (
-                <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the list</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-                    {([
-                      { key: 'gap', count: attnCounts.gap, label: 'Steward or owner without a role', hint: 'Title says steward/owner, but no governance role', tag: 'Fix first' },
-                      { key: 'dup', count: attnCounts.dup, label: 'Possible duplicates', hint: 'Two records share one email address', tag: 'Fix first' },
-                      { key: 'legacy', count: attnCounts.legacy, label: 'Outside current tree', hint: 'Only in an organization not in the structure', tag: '' },
-                    ] as Array<{ key: 'gap' | 'dup' | 'legacy'; count: number; label: string; hint: string; tag: string }>).map((c) => {
-                      const active = attentionFilter === c.key;
-                      const zero = c.count === 0;
-                      return (
-                        <button
-                          key={c.key}
-                          type="button"
-                          aria-pressed={active}
-                          disabled={zero && !active}
-                          onClick={() => setAttentionFilter(active ? '' : c.key)}
-                          style={{
-                            textAlign: 'left', cursor: zero && !active ? 'default' : 'pointer',
-                            borderRadius: 'var(--radius-md)', padding: '12px 14px',
-                            display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
-                            background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                            border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                            boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
-                            opacity: zero && !active ? 0.6 : 1,
-                          }}
-                        >
-                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                            <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: zero ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.count}</span>
-                            {c.tag && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{c.tag}</span>}
-                          </span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                          <span className="na-card-hint" title={c.hint}>{c.hint}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
+                <AttentionCards
+                  caption="Click a card to filter the list"
+                  minCardWidth={220}
+                  cards={([
+                    { key: 'gap' as const, count: attnCounts.gap, label: 'Steward or owner without a role', hint: 'Title says steward/owner, but no governance role', priority: true },
+                    { key: 'dup' as const, count: attnCounts.dup, label: 'Possible duplicates', hint: 'Two records share one email address', priority: true },
+                    { key: 'legacy' as const, count: attnCounts.legacy, label: 'Outside current tree', hint: 'Only in an organization not in the structure' },
+                  ]).map((c) => ({
+                    ...c,
+                    active: attentionFilter === c.key,
+                    onClick: () => setAttentionFilter(attentionFilter === c.key ? '' : c.key),
+                  }))}
+                />
               )}
 
               {/* Filters (left-aligned, mirrors Data Assets) */}

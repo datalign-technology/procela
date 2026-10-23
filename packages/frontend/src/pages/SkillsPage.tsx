@@ -8,6 +8,7 @@ import BulkActionBar, { BulkActionButton } from '../components/BulkActionBar';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import AttentionCards from '../components/AttentionCards';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext, VALUE_STREAM_LEVELS } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -481,47 +482,19 @@ export default function SkillsPage() {
       {/* Needs attention — capability-risk gaps as one-click filters. Each
           card's data is best-effort; an unavailable source shows "—". */}
       {skills.length > 0 && (
-        <section aria-label="Needs attention" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Needs attention</div>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Click a card to filter the list</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-            {([
-              { key: 'single', count: attnCounts.single, label: 'Held by one person', hint: 'No backup if that person leaves', tag: 'Fix first', loaded: auxLoaded.people },
-              { key: 'unused', count: attnCounts.unused, label: 'Not required by any step', hint: 'Not linked to a process step', tag: '', loaded: auxLoaded.proc },
-              { key: 'noAgent', count: attnCounts.noAgent, label: 'No agent holds it', hint: 'No agent has this skill set', tag: '', loaded: auxLoaded.agents },
-            ] as Array<{ key: 'single' | 'unused' | 'noAgent'; count: number; label: string; hint: string; tag: string; loaded: boolean }>).map((c) => {
-              const active = attentionFilter === c.key;
-              const disabled = !c.loaded || (c.count === 0 && !active);
-              return (
-                <button
-                  key={c.key}
-                  type="button"
-                  aria-pressed={active}
-                  disabled={disabled}
-                  onClick={() => setAttentionFilter(active ? '' : c.key)}
-                  style={{
-                    textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
-                    borderRadius: 'var(--radius-md)', padding: '12px 14px',
-                    display: 'flex', flexDirection: 'column', gap: 3, minHeight: 82,
-                    background: active ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    boxShadow: active ? '0 0 0 1px var(--color-primary)' : 'var(--shadow-sm)',
-                    opacity: disabled ? 0.6 : 1,
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                    <span style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: (!c.loaded || c.count === 0) ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{c.loaded ? c.count : '—'}</span>
-                    {c.tag && c.loaded && c.count > 0 && <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em', color: 'var(--color-warning)' }}>{c.tag}</span>}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                  <span className="na-card-hint" title={c.hint}>{c.hint}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        <AttentionCards
+          caption="Click a card to filter the list"
+          minCardWidth={220}
+          cards={([
+            { key: 'single' as const, count: attnCounts.single, label: 'Held by one person', hint: 'No backup if that person leaves', priority: true, loading: !auxLoaded.people },
+            { key: 'unused' as const, count: attnCounts.unused, label: 'Not required by any step', hint: 'Not linked to a process step', loading: !auxLoaded.proc },
+            { key: 'noAgent' as const, count: attnCounts.noAgent, label: 'No agent holds it', hint: 'No agent has this skill set', loading: !auxLoaded.agents },
+          ]).map((c) => ({
+            ...c,
+            active: attentionFilter === c.key,
+            onClick: () => setAttentionFilter(attentionFilter === c.key ? '' : c.key),
+          }))}
+        />
       )}
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
