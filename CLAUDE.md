@@ -607,6 +607,17 @@ pages must adopt them from day one. Do NOT hand-roll equivalents.
 - `<BulkActionBar>` — the selected-rows action bar (`count` + `onClear`,
   with `<BulkActionButton>` children). Do NOT hand-roll the off-brand
   blue selected-count bar.
+- `<AttentionCards>` — the "Needs attention" count-tile strip above an
+  entity list; each tile toggles a list filter (pass an `active` boolean)
+  or links elsewhere (omit `active`). `priority` adds the amber "Fix
+  first" tag — reserve it for the gaps that make a row untrustworthy
+  outright (no owner, no mapping); `tag` overrides that label for a
+  softer worklist (e.g. `'Review'` for approval-pending); `loading`
+  renders the count as "—" and disables the tile while a best-effort
+  source resolves. All ten pages with the strip (Data Assets, Data
+  Quality, Data Domains, Process↔Data Map, Systems, SOPs, Agents, People,
+  Skills, Business Glossary) compose it. Do NOT hand-roll a "Needs
+  attention" strip. (Full props in `components/README.md`.)
 - `<OrgSidebarTree>` — the collapsible organization-hierarchy left rail
   used to filter an entity list by org (People, Agents). Pass `nodes`
   (the org `tree`), `selectedId`, `onSelect`, and a `counts` map for the
