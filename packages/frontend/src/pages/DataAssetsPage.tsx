@@ -359,7 +359,7 @@ function RowCountChip({ rowCount }: { rowCount?: number | null }) {
 // 'description' is not a column here. It's kept off the list entirely to
 // keep rows single-line and dense; the full text lives in the 360 detail
 // modal and the edit form. (It's still searchable via the search box.)
-type ColumnId = 'system' | 'source' | 'sensitivity' | 'mapping' | 'tier' | 'health' | 'domain' | 'owner' | 'steward' | 'created';
+type ColumnId = 'system' | 'source' | 'sensitivity' | 'mapping' | 'tier' | 'certified' | 'health' | 'domain' | 'owner' | 'steward' | 'created';
 const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean }> = [
   { id: 'system',      label: 'System',      defaultVisible: true  },
   { id: 'source',      label: 'Source',      defaultVisible: false },
@@ -370,6 +370,10 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
   // a filter dropdown). Carries the inline "Map" affordance on orphan rows.
   { id: 'mapping',     label: 'Mapping',     defaultVisible: true  },
   { id: 'tier',        label: 'Tier',        defaultVisible: true  },
+  // Certification is its own column (not a pill stacked under the tier) so
+  // every row stays single-line — an asset has both a tier and a separate
+  // certification state. Blank for assets outside the workflow.
+  { id: 'certified',   label: 'Certified',   defaultVisible: true  },
   // Health is off by default here — it's the Quality tab's focus (with the
   // rule breakdown). Registry leads with catalog/governance attributes
   // (Tier, Domain, Owner); health stays one click away in the column picker.
@@ -1011,6 +1015,11 @@ export default function DataAssetsPage({
       // Unmapped (orphan) rows sort first — they're the ones needing action.
       mapping: (a, b) => (a.isOrphan ? 0 : 1) - (b.isOrphan ? 0 : 1),
       tier: (a, b) => compareTier(a.governanceTier, b.governanceTier),
+      // Certified first, then pending, then the uncertified rest.
+      certified: (a, b) => {
+        const rank = (s?: string) => (s === 'CERTIFIED' ? 2 : s === 'PENDING_REVIEW' ? 1 : 0);
+        return rank(a.certificationStatus) - rank(b.certificationStatus);
+      },
       health: (a, b) => (a.healthScore ?? 0) - (b.healthScore ?? 0),
       domain: (a, b) => (a.domainName || '').localeCompare(b.domainName || ''),
       owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
@@ -1697,8 +1706,11 @@ export default function DataAssetsPage({
       key: 'tier', header: 'Tier', sortable: true,
       render: (asset: DataAssetEntity) => {
         const inherited = isInheritedAsset(asset.orgId, activeOrgId);
+        // Single-line, horizontal: the tier pill + (when earned) a compact
+        // Promote nudge. The certification state lives in its own column, so
+        // nothing stacks under the tier and every row stays one line tall.
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
             {canWrite && !inherited ? (
               // Editable tier: a native <select> styled to read as the same
               // coloured tier pill as the read-only TierBadge, so the column
@@ -1711,7 +1723,7 @@ export default function DataAssetsPage({
                     aria-label="Governance tier"
                     value={asset.governanceTier || 'BRONZE'}
                     onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
-                    style={{ fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 999, background: tc.bg, color: tc.color, border: `1px solid ${tc.bg}`, cursor: 'pointer', alignSelf: 'flex-start' }}
+                    style={{ fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 999, background: tc.bg, color: tc.color, border: `1px solid ${tc.bg}`, cursor: 'pointer' }}
                   >
                     {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
                   </select>
@@ -1720,23 +1732,27 @@ export default function DataAssetsPage({
             ) : (
               <TierBadge tier={asset.governanceTier} />
             )}
-            {(asset.certificationStatus === 'CERTIFIED' || asset.certificationStatus === 'PENDING_REVIEW') && (
-              <span style={{ alignSelf: 'flex-start' }}>
-                <CertifiedBadge compact status={asset.certificationStatus} certifiedUntil={asset.certifiedUntil} />
-              </span>
-            )}
             {canWrite && !inherited && asset.suggestedTier && compareTier(asset.suggestedTier, asset.governanceTier) > 0 && (
               <button
                 onClick={() => inlineSaveField(asset.id, 'governanceTier', asset.suggestedTier!)}
                 title={`This asset meets the criteria for ${tierLabel(asset.suggestedTier)}. Click to promote.`}
-                style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 999, background: '#dcfce7', color: '#166534', border: '1px solid #86efac', cursor: 'pointer', alignSelf: 'flex-start' }}
+                style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 999, background: '#dcfce7', color: '#166534', border: '1px solid #86efac', cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
-                {'↑'} Promote to {tierLabel(asset.suggestedTier)}
+                {'↑'} Promote
               </button>
             )}
           </div>
         );
       },
+    },
+    isVisible('certified') && {
+      key: 'certified', header: 'Certified', sortable: true,
+      render: (asset: DataAssetEntity) => (
+        // Own column — one compact pill, one line (the header supplies the
+        // context, so "Pending" / "Recert due" / "Certified" read fine).
+        // Renders nothing for assets outside the workflow, so rows stay uniform.
+        <CertifiedBadge compact status={asset.certificationStatus} certifiedUntil={asset.certifiedUntil} />
+      ),
     },
     isVisible('health') && {
       key: 'health', header: 'Health', sortable: true,
